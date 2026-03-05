@@ -1,3 +1,28 @@
+export interface MelodyNote {
+  midi: number;
+  onset: number;
+  duration: number;
+}
+
+export interface MelodyPitchRange {
+  min: number | null;
+  max: number | null;
+}
+
+export interface MelodyDetail {
+  noteCount: number;
+  notes: MelodyNote[];
+  dominantNotes: number[];
+  pitchRange: MelodyPitchRange;
+  pitchConfidence: number;
+  midiFile: string | null;
+  sourceSeparated: boolean;
+  vibratoPresent: boolean;
+  vibratoExtent: number;
+  vibratoRate: number;
+  vibratoConfidence: number;
+}
+
 export interface Phase1Result {
   bpm: number;
   bpmConfidence: number;
@@ -17,6 +42,7 @@ export interface Phase1Result {
     highs: number;
     brilliance: number;
   };
+  melodyDetail?: MelodyDetail;
 }
 
 export type RecommendationCategory =

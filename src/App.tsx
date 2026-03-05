@@ -89,27 +89,33 @@ export default function App() {
     setCurrentPhase(1);
     setError(null);
 
-    await analyzeAudio(
-      audioFile,
-      selectedModel,
-      validJson,
-      (result, log) => {
-        setPhase1Result(result);
-        setLogs(prev => [...prev, log]);
-        setCurrentPhase(2);
-      },
-      (result, log) => {
-        setPhase2Result(result);
-        setLogs(prev => [...prev, log]);
-        setCurrentPhase(0);
-        setIsAnalyzing(false);
-      },
-      (err) => {
-        setError(err.message);
-        setIsAnalyzing(false);
-        setCurrentPhase(0);
-      }
-    );
+    try {
+      await analyzeAudio(
+        audioFile,
+        selectedModel,
+        validJson,
+        (result, log) => {
+          setPhase1Result(result);
+          setLogs(prev => [...prev, log]);
+          setCurrentPhase(2);
+        },
+        (result, log) => {
+          setPhase2Result(result);
+          setLogs(prev => [...prev, log]);
+          setCurrentPhase(0);
+          setIsAnalyzing(false);
+        },
+        (err) => {
+          setError(err.message);
+          setIsAnalyzing(false);
+          setCurrentPhase(0);
+        }
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setIsAnalyzing(false);
+      setCurrentPhase(0);
+    }
   };
 
   return (
@@ -249,7 +255,7 @@ export default function App() {
             )}
 
             {/* Results Section */}
-            <AnalysisResults phase1={phase1Result} phase2={phase2Result} />
+            <AnalysisResults phase1={phase1Result} phase2={phase2Result} sourceFileName={audioFile?.name ?? null} />
 
             {/* Diagnostic Log */}
             <DiagnosticLog logs={logs} />

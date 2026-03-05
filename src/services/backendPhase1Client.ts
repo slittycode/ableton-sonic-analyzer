@@ -147,6 +147,7 @@ export function mapBackendError(error: unknown): BackendClientError {
 function parsePhase1Result(value: unknown): Phase1Result {
   const phase1 = expectRecord(value, "phase1");
   const spectralBalance = expectRecord(phase1.spectralBalance, "phase1.spectralBalance");
+  const melodyDetail = parseOptionalMelodyDetail(phase1);
 
   return {
     bpm: expectNumber(phase1, "bpm"),
@@ -167,7 +168,116 @@ function parsePhase1Result(value: unknown): Phase1Result {
       highs: expectNumber(spectralBalance, "highs", "spectralBalance.highs"),
       brilliance: expectNumber(spectralBalance, "brilliance", "spectralBalance.brilliance"),
     },
+    melodyDetail,
   };
+}
+
+function parseOptionalMelodyDetail(phase1: UnknownRecord): Phase1Result["melodyDetail"] | undefined {
+  const raw = phase1.melodyDetail;
+  if (!isRecord(raw)) return undefined;
+
+  const notes = parseMelodyNotes(raw.notes);
+  const dominantNotes = parseDominantNotes(raw.dominantNotes);
+  const pitchRange = parsePitchRange(raw.pitchRange, notes);
+  const noteCountRaw = toNumber(raw.noteCount);
+  const noteCount = noteCountRaw === null ? notes.length : Math.max(0, Math.round(noteCountRaw));
+
+  return {
+    noteCount,
+    notes,
+    dominantNotes,
+    pitchRange,
+    pitchConfidence: clamp01(toNumberOrFallback(raw.pitchConfidence, 0)),
+    midiFile: toOptionalStringOrNull(raw.midiFile),
+    sourceSeparated: toBooleanOrFallback(raw.sourceSeparated, false),
+    vibratoPresent: toBooleanOrFallback(raw.vibratoPresent, false),
+    vibratoExtent: toNumberOrFallback(raw.vibratoExtent, 0),
+    vibratoRate: toNumberOrFallback(raw.vibratoRate, 0),
+    vibratoConfidence: clamp01(toNumberOrFallback(raw.vibratoConfidence, 0)),
+  };
+}
+
+function parseMelodyNotes(value: unknown): NonNullable<Phase1Result["melodyDetail"]>["notes"] {
+  if (!Array.isArray(value)) return [];
+
+  const parsed = value
+    .map((entry) => {
+      if (!isRecord(entry)) return null;
+      const midiRaw = toNumber(entry.midi);
+      const onsetRaw = toNumber(entry.onset);
+      const durationRaw = toNumber(entry.duration);
+      if (midiRaw === null || onsetRaw === null || durationRaw === null) return null;
+      if (durationRaw <= 0) return null;
+
+      return {
+        midi: Math.max(0, Math.min(127, Math.round(midiRaw))),
+        onset: Math.max(0, onsetRaw),
+        duration: durationRaw,
+      };
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+
+  return parsed.sort((a, b) => a.onset - b.onset);
+}
+
+function parseDominantNotes(value: unknown): number[] {
+  if (!Array.isArray(value)) return [];
+
+  const normalized = value
+    .map((entry) => toNumber(entry))
+    .filter((entry): entry is number => entry !== null)
+    .map((entry) => Math.max(0, Math.min(127, Math.round(entry))));
+
+  return Array.from(new Set(normalized)).slice(0, 5);
+}
+
+function parsePitchRange(
+  value: unknown,
+  notes: NonNullable<Phase1Result["melodyDetail"]>["notes"],
+): NonNullable<Phase1Result["melodyDetail"]>["pitchRange"] {
+  if (isRecord(value)) {
+    const parsedMin = value.min === null ? null : toNumber(value.min);
+    const parsedMax = value.max === null ? null : toNumber(value.max);
+    return {
+      min: parsedMin === null ? null : Math.max(0, Math.min(127, Math.round(parsedMin))),
+      max: parsedMax === null ? null : Math.max(0, Math.min(127, Math.round(parsedMax))),
+    };
+  }
+
+  if (!notes.length) return { min: null, max: null };
+  const midiValues = notes.map((note) => note.midi);
+  return {
+    min: Math.min(...midiValues),
+    max: Math.max(...midiValues),
+  };
+}
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function toNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function toNumberOrFallback(value: unknown, fallback: number): number {
+  const parsed = toNumber(value);
+  return parsed === null ? fallback : parsed;
+}
+
+function toBooleanOrFallback(value: unknown, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+function toOptionalStringOrNull(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return normalized.length ? normalized : null;
 }
 
 function expectRecord(value: unknown, label: string): UnknownRecord {
