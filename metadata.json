@@ -1,0 +1,5 @@
+{
+  "name": "Ableton Live 12 Sonic Analyzer",
+  "description": "A two-phase audio analysis tool for Ableton Live 12 producers using Gemini AI.",
+  "requestFramePermissions": []
+}
