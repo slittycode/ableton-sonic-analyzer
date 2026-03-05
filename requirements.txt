@@ -1,2 +1,4 @@
+essentia
 demucs
 mido
+numpy

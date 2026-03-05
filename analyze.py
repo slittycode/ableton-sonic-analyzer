@@ -261,6 +261,61 @@ def _slice_segments(structure_data: dict | None, total_samples: int, sample_rate
         return None
 
 
+def _downsample_evenly(values: np.ndarray, max_points: int, decimals: int = 4) -> list[float]:
+    """Evenly subsample an array to max_points and round values."""
+    arr = np.asarray(values, dtype=np.float64)
+    if arr.size == 0 or max_points <= 0:
+        return []
+    if arr.size > max_points:
+        indices = np.linspace(0, arr.size - 1, max_points, dtype=int)
+        arr = arr[indices]
+    return [round(float(v), decimals) for v in arr]
+
+
+def _pick_novelty_peaks(
+    novelty: np.ndarray,
+    sample_rate: int,
+    hop_size: int,
+    max_peaks: int = 8,
+    min_spacing_sec: float = 2.0,
+) -> list[dict]:
+    """Pick strongest novelty peaks with minimum spacing."""
+    arr = np.asarray(novelty, dtype=np.float64)
+    if arr.size < 3 or sample_rate <= 0 or hop_size <= 0:
+        return []
+
+    mean_val = float(np.mean(arr))
+    std_val = float(np.std(arr))
+    threshold = mean_val + (0.5 * std_val if std_val > 0 else 0.0)
+
+    local_maxima = []
+    for i in range(1, arr.size - 1):
+        if arr[i] >= arr[i - 1] and arr[i] > arr[i + 1] and arr[i] >= threshold:
+            local_maxima.append(i)
+
+    if len(local_maxima) == 0:
+        return []
+
+    min_spacing_frames = max(1, int(round((min_spacing_sec * sample_rate) / float(hop_size))))
+    ranked = sorted(local_maxima, key=lambda idx: arr[idx], reverse=True)
+
+    selected = []
+    for idx in ranked:
+        if all(abs(idx - chosen) >= min_spacing_frames for chosen in selected):
+            selected.append(idx)
+        if len(selected) >= max_peaks:
+            break
+
+    selected.sort()
+    return [
+        {
+            "time": round(float((idx * hop_size) / float(sample_rate)), 3),
+            "strength": round(float(arr[idx]), 4),
+        }
+        for idx in selected
+    ]
+
+
 def _extract_beat_loudness_data(
     mono: np.ndarray,
     sample_rate: int = 44100,
@@ -452,11 +507,14 @@ def analyze_dynamics(mono: np.ndarray, sample_rate: int = 44100) -> dict:
         window = es.Windowing(type="hann", size=frame_size)
         spectrum = es.Spectrum(size=frame_size)
 
+        energy_band_algos = {
+            name: es.EnergyBand(startCutoffFrequency=lo, stopCutoffFrequency=hi, sampleRate=sample_rate)
+            for name, (lo, hi) in bands.items()
+        }
         band_energies = {name: [] for name in bands}
         for frame in es.FrameGenerator(mono, frameSize=frame_size, hopSize=hop_size):
             spec = spectrum(window(frame))
-            for name, (lo, hi) in bands.items():
-                eb = es.EnergyBand(startCutoffFrequency=lo, stopCutoffFrequency=hi, sampleRate=sample_rate)
+            for name, eb in energy_band_algos.items():
                 band_energies[name].append(float(eb(spec)))
 
         means = [np.mean(v) for v in band_energies.values() if v]
@@ -1070,6 +1128,57 @@ def analyze_melody(
         pitch_values = np.asarray(pitch_values, dtype=np.float64)
         pitch_confidence = np.asarray(pitch_confidence, dtype=np.float64)
         mean_conf = float(np.mean(pitch_confidence)) if pitch_confidence.size > 0 else 0.0
+        vibrato_metrics = {
+            "vibratoPresent": False,
+            "vibratoExtent": 0.0,
+            "vibratoRate": 0.0,
+            "vibratoConfidence": 0.0,
+        }
+
+        # Reuse existing pitch contour (do not re-run Melodia) for vibrato extraction.
+        try:
+            pitch_frame_rate = float(sample_rate) / 128.0 if sample_rate > 0 else 0.0
+            min_pitch_frames = int(np.ceil((2.0 * pitch_frame_rate) / 4.0)) if pitch_frame_rate > 0 else 0
+            voiced_pitch = pitch_values[np.isfinite(pitch_values) & (pitch_values > 0.0)]
+
+            if min_pitch_frames > 0 and voiced_pitch.size >= min_pitch_frames:
+                vibrato_algo = es.Vibrato(
+                    sampleRate=pitch_frame_rate,
+                    minFrequency=4.0,
+                    maxFrequency=8.0,
+                    minExtend=50.0,
+                    maxExtend=250.0,
+                )
+                vibrato_frequency, vibrato_extend = vibrato_algo(np.asarray(voiced_pitch, dtype=np.float32))
+                vibrato_frequency = np.asarray(vibrato_frequency, dtype=np.float64)
+                vibrato_extend = np.asarray(vibrato_extend, dtype=np.float64)
+
+                valid = (
+                    np.isfinite(vibrato_frequency)
+                    & np.isfinite(vibrato_extend)
+                    & (vibrato_frequency > 0.0)
+                    & (vibrato_extend > 0.0)
+                )
+                if vibrato_extend.size > 0:
+                    confidence = float(np.sum(valid)) / float(vibrato_extend.size)
+                else:
+                    confidence = 0.0
+
+                extent = float(np.mean(vibrato_extend[valid])) if np.any(valid) else 0.0
+                rate = float(np.mean(vibrato_frequency[valid])) if np.any(valid) else 0.0
+                vibrato_metrics = {
+                    "vibratoPresent": bool(extent > 50.0),
+                    "vibratoExtent": round(extent, 4),
+                    "vibratoRate": round(rate, 4),
+                    "vibratoConfidence": round(float(np.clip(confidence, 0.0, 1.0)), 4),
+                }
+        except Exception:
+            vibrato_metrics = {
+                "vibratoPresent": False,
+                "vibratoExtent": 0.0,
+                "vibratoRate": 0.0,
+                "vibratoConfidence": 0.0,
+            }
 
         contour_segmenter = es.PitchContourSegmentation(hopSize=128, sampleRate=sample_rate)
         onsets, durations, notes = contour_segmenter(pitch_values, audio_eq)
@@ -1089,6 +1198,10 @@ def analyze_melody(
                     "pitchConfidence": round(mean_conf, 4),
                     "midiFile": None,
                     "sourceSeparated": source_separated,
+                    "vibratoPresent": vibrato_metrics["vibratoPresent"],
+                    "vibratoExtent": vibrato_metrics["vibratoExtent"],
+                    "vibratoRate": vibrato_metrics["vibratoRate"],
+                    "vibratoConfidence": vibrato_metrics["vibratoConfidence"],
                 }
             }
 
@@ -1114,6 +1227,10 @@ def analyze_melody(
                     "pitchConfidence": round(mean_conf, 4),
                     "midiFile": None,
                     "sourceSeparated": source_separated,
+                    "vibratoPresent": vibrato_metrics["vibratoPresent"],
+                    "vibratoExtent": vibrato_metrics["vibratoExtent"],
+                    "vibratoRate": vibrato_metrics["vibratoRate"],
+                    "vibratoConfidence": vibrato_metrics["vibratoConfidence"],
                 }
             }
 
@@ -1181,6 +1298,10 @@ def analyze_melody(
                 "pitchConfidence": round(mean_conf, 4),
                 "midiFile": midi_file_path,
                 "sourceSeparated": source_separated,
+                "vibratoPresent": vibrato_metrics["vibratoPresent"],
+                "vibratoExtent": vibrato_metrics["vibratoExtent"],
+                "vibratoRate": vibrato_metrics["vibratoRate"],
+                "vibratoConfidence": vibrato_metrics["vibratoConfidence"],
             }
         }
     except Exception as e:
@@ -1421,6 +1542,185 @@ def analyze_sidechain_detail(
     except Exception as e:
         print(f"[warn] Sidechain analysis failed: {e}", file=sys.stderr)
         return {"sidechainDetail": None}
+
+
+def analyze_effects_detail(
+    mono: np.ndarray,
+    sample_rate: int = 44100,
+    rhythm_data: dict | None = None,
+    lufs_integrated: float | None = None,
+) -> dict:
+    """Detect rhythmic gating/stutter patterns using StartStopSilence."""
+    try:
+        mono_arr = np.asarray(mono, dtype=np.float32)
+        if mono_arr.ndim != 1 or mono_arr.size < 2:
+            return {"effectsDetail": None}
+
+        if lufs_integrated is not None and np.isfinite(float(lufs_integrated)):
+            gating_threshold = float(np.clip(float(lufs_integrated) - 15.0, -55.0, -20.0))
+        else:
+            gating_threshold = -40.0
+
+        frame_size = 1024
+        hop_size = 512
+        try:
+            silence_detector = es.StartStopSilence(threshold=float(gating_threshold))
+        except Exception:
+            silence_detector = es.StartStopSilence(threshold=int(round(gating_threshold)))
+
+        active_flags = []
+        prev_stop = None
+        for frame in es.FrameGenerator(mono_arr, frameSize=frame_size, hopSize=hop_size):
+            _start_frame, stop_frame = silence_detector(frame)
+            try:
+                stop_val = float(stop_frame)
+            except Exception:
+                stop_val = 0.0
+            if not np.isfinite(stop_val):
+                stop_val = 0.0
+            is_active = stop_val > 0.0 if prev_stop is None else stop_val > prev_stop
+            active_flags.append(1 if is_active else 0)
+            prev_stop = stop_val
+
+        if len(active_flags) < 3:
+            return {
+                "effectsDetail": {
+                    "gatingDetected": False,
+                    "gatingRate": None,
+                    "gatingRegularity": 0.0,
+                    "gatingEventCount": 0,
+                }
+            }
+
+        active_arr = np.asarray(active_flags, dtype=np.int32)
+        # Remove one-frame state flicker to reduce transient-induced false positives.
+        for i in range(1, active_arr.size - 1):
+            if active_arr[i - 1] == active_arr[i + 1] and active_arr[i] != active_arr[i - 1]:
+                active_arr[i] = active_arr[i - 1]
+
+        transition_indices = np.where((active_arr[1:] == 1) & (active_arr[:-1] == 0))[0] + 1
+        event_times = (transition_indices.astype(np.float64) * float(hop_size)) / float(sample_rate)
+        event_count = int(event_times.size)
+
+        gating_regularity = 0.0
+        gating_rate = None
+        ioi = np.array([], dtype=np.float64)
+        if event_times.size >= 2:
+            ioi = np.diff(event_times)
+            ioi = ioi[np.isfinite(ioi) & (ioi > 0.0)]
+            if ioi.size > 0:
+                mean_ioi = float(np.mean(ioi))
+                if mean_ioi > 0:
+                    gating_regularity = float(np.clip(1.0 - (np.std(ioi) / mean_ioi), 0.0, 1.0))
+
+                    bpm = None
+                    if rhythm_data is not None and rhythm_data.get("bpm") is not None:
+                        bpm = float(rhythm_data.get("bpm"))
+                    if bpm is not None and np.isfinite(bpm) and bpm > 0:
+                        quarter = 60.0 / bpm
+                        candidates = {
+                            "quarter": quarter,
+                            "8th": quarter / 2.0,
+                            "16th": quarter / 4.0,
+                        }
+                        best_label = None
+                        best_error = None
+                        for label, target in candidates.items():
+                            rel_error = abs(mean_ioi - target) / (target + 1e-9)
+                            if best_error is None or rel_error < best_error:
+                                best_error = rel_error
+                                best_label = label
+                        if best_label is not None and best_error is not None and best_error <= 0.20:
+                            gating_rate = best_label
+
+        gating_detected = bool(event_count >= 6 and gating_regularity >= 0.45 and gating_rate is not None)
+        return {
+            "effectsDetail": {
+                "gatingDetected": gating_detected,
+                "gatingRate": gating_rate,
+                "gatingRegularity": round(float(np.clip(gating_regularity, 0.0, 1.0)), 4),
+                "gatingEventCount": event_count,
+            }
+        }
+    except Exception as e:
+        print(f"[warn] Effects analysis failed: {e}", file=sys.stderr)
+        return {"effectsDetail": None}
+
+
+def analyze_arrangement_detail(mono: np.ndarray, sample_rate: int = 44100) -> dict:
+    """Novelty timeline from Bark bands to expose structural events."""
+    try:
+        mono_arr = np.asarray(mono, dtype=np.float32)
+        if mono_arr.ndim != 1 or mono_arr.size == 0:
+            return {"arrangementDetail": None}
+
+        frame_size = 2048
+        hop_size = 1024
+        if mono_arr.size < frame_size:
+            mono_arr = np.pad(mono_arr, (0, frame_size - mono_arr.size))
+
+        window = es.Windowing(type="hann", size=frame_size)
+        spectrum = es.Spectrum(size=frame_size)
+        bark_bands = es.BarkBands(numberBands=24, sampleRate=sample_rate)
+
+        bark_matrix = []
+        for frame in es.FrameGenerator(mono_arr, frameSize=frame_size, hopSize=hop_size):
+            spec = spectrum(window(frame))
+            bands = np.asarray(bark_bands(spec), dtype=np.float32)
+            if bands.size == 24 and np.all(np.isfinite(bands)):
+                bark_matrix.append(bands)
+
+        if len(bark_matrix) < 2:
+            return {
+                "arrangementDetail": {
+                    "noveltyCurve": [],
+                    "noveltyPeaks": [],
+                    "noveltyMean": 0.0,
+                    "noveltyStdDev": 0.0,
+                }
+            }
+
+        novelty_algo = es.NoveltyCurve(frameRate=float(sample_rate) / float(hop_size), normalize=True)
+        novelty = novelty_algo(np.asarray(bark_matrix, dtype=np.float32))
+        novelty = np.asarray(novelty, dtype=np.float64)
+        novelty = novelty[np.isfinite(novelty)]
+
+        if novelty.size == 0:
+            return {
+                "arrangementDetail": {
+                    "noveltyCurve": [],
+                    "noveltyPeaks": [],
+                    "noveltyMean": 0.0,
+                    "noveltyStdDev": 0.0,
+                }
+            }
+
+        max_val = float(np.max(np.abs(novelty)))
+        if max_val > 0.0:
+            novelty = novelty / max_val
+
+        novelty_mean = float(np.mean(novelty))
+        novelty_std = float(np.std(novelty))
+        novelty_curve = _downsample_evenly(novelty, max_points=64, decimals=4)
+        novelty_peaks = _pick_novelty_peaks(
+            novelty,
+            sample_rate=sample_rate,
+            hop_size=hop_size,
+            max_peaks=8,
+            min_spacing_sec=2.0,
+        )
+
+        return {
+            "arrangementDetail": {
+                "noveltyCurve": novelty_curve,
+                "noveltyPeaks": novelty_peaks,
+                "noveltyMean": round(novelty_mean, 4),
+                "noveltyStdDev": round(novelty_std, 4),
+            }
+        }
+    except Exception as e:
+        print(f"[warn] Arrangement detail analysis failed: {e}", file=sys.stderr)
+        return {"arrangementDetail": None}
 
 
 def analyze_synthesis_character(mono: np.ndarray, sample_rate: int = 44100) -> dict:
@@ -2026,6 +2326,14 @@ def main():
     # Groove detail
     result.update(analyze_groove(mono, sample_rate, rhythm_data, beat_data))
     result.update(analyze_sidechain_detail(mono, sample_rate, rhythm_data, beat_data))
+    result.update(
+        analyze_effects_detail(
+            mono,
+            sample_rate,
+            rhythm_data,
+            lufs_integrated=result.get("lufsIntegrated"),
+        )
+    )
 
     # Synthesis character
     result.update(analyze_synthesis_character(mono, sample_rate))
@@ -2035,6 +2343,7 @@ def main():
 
     # Structure
     result.update(analyze_structure(mono, sample_rate))
+    result.update(analyze_arrangement_detail(mono, sample_rate))
     result.update(analyze_segment_stereo(result.get("structure"), stereo, sample_rate))
     result.update(analyze_segment_loudness(result.get("structure"), stereo, sample_rate))
     result.update(
@@ -2080,11 +2389,14 @@ def main():
         "melodyDetail": result.get("melodyDetail"),
         "grooveDetail": result.get("grooveDetail"),
         "sidechainDetail": result.get("sidechainDetail"),
+        "effectsDetail": result.get("effectsDetail"),
         "synthesisCharacter": result.get("synthesisCharacter"),
         "danceability": result.get("danceability"),
         "structure": result.get("structure"),
+        "arrangementDetail": result.get("arrangementDetail"),
         "segmentLoudness": result.get("segmentLoudness"),
         "segmentSpectral": result.get("segmentSpectral"),
+        "segmentStereo": result.get("segmentStereo"),
         "segmentKey": result.get("segmentKey"),
         "chordDetail": result.get("chordDetail"),
         "perceptual": result.get("perceptual"),
