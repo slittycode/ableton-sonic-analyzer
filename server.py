@@ -296,6 +296,7 @@ def _build_success_response(
 async def estimate_analysis(
     track: UploadFile = File(...),
     dsp_json_override: str | None = Form(None),
+    transcribe: bool = Form(False),
     separate: bool = Query(False, description="Pass --separate to analyze.py when true"),
     separate_flag: bool = Query(
         False,
@@ -306,7 +307,7 @@ async def estimate_analysis(
     temp_path: str | None = None
     try:
         temp_path = _persist_upload(track)
-        _ = dsp_json_override
+        _ = dsp_json_override, transcribe
         run_separation = bool(separate or separate_flag)
         estimate = _build_backend_estimate(temp_path, run_separation)
         return JSONResponse(
@@ -324,6 +325,7 @@ async def estimate_analysis(
 async def analyze_audio(
     track: UploadFile = File(...),
     dsp_json_override: str | None = Form(None),
+    transcribe: bool = Form(False),
     separate: bool = Query(False, description="Pass --separate to analyze.py when true"),
     separate_flag: bool = Query(
         False,
@@ -343,6 +345,8 @@ async def analyze_audio(
         command = ["./venv/bin/python", "analyze.py", temp_path, "--yes"]
         if run_separation:
             command.append("--separate")
+        if transcribe:
+            command.append("--transcribe")
 
         timeout_seconds = _compute_timeout_seconds(estimate)
         started_at = time.perf_counter()
