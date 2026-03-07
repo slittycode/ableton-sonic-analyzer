@@ -1,7 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { AudioWaveform, Sparkles, Activity } from 'lucide-react';
 
-import { AnalysisResults } from './components/AnalysisResults';
 import { AnalysisStatusPanel } from './components/AnalysisStatusPanel';
 import { DiagnosticLog } from './components/DiagnosticLog';
 import { FileUpload } from './components/FileUpload';
@@ -29,6 +28,12 @@ const MODELS = [
   { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' },
   { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
 ];
+
+const AnalysisResults = lazy(() =>
+  import('./components/AnalysisResults').then((module) => ({
+    default: module.AnalysisResults,
+  })),
+);
 
 function buildAudioMetadata(file: File): DiagnosticLogEntry["audioMetadata"] {
   return {
@@ -71,9 +76,16 @@ export default function App() {
   const [estimateError, setEstimateError] = useState<string | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [transcribeEnabled, setTranscribeEnabled] = useState(false);
+  const [stemSeparationEnabled, setStemSeparationEnabled] = useState(false);
 
   const phase1CompletedRef = useRef(false);
   const analysisStartedAtRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!transcribeEnabled && stemSeparationEnabled) {
+      setStemSeparationEnabled(false);
+    }
+  }, [stemSeparationEnabled, transcribeEnabled]);
 
   useEffect(() => {
     if (!audioFile) {
@@ -88,7 +100,11 @@ export default function App() {
     setEstimateError(null);
     setIsEstimateLoading(true);
 
-    estimatePhase1WithBackend(audioFile, { apiBaseUrl: appConfig.apiBaseUrl, transcribe: false })
+    estimatePhase1WithBackend(audioFile, {
+      apiBaseUrl: appConfig.apiBaseUrl,
+      transcribe: transcribeEnabled,
+      separate: transcribeEnabled && stemSeparationEnabled,
+    })
       .then((result) => {
         if (isCancelled) return;
         setAnalysisEstimate(result.estimate);
@@ -107,7 +123,7 @@ export default function App() {
     return () => {
       isCancelled = true;
     };
-  }, [audioFile]);
+  }, [audioFile, stemSeparationEnabled, transcribeEnabled]);
 
   useEffect(() => {
     if (!isAnalyzing || analysisStartedAtRef.current === null) {
@@ -299,7 +315,7 @@ export default function App() {
           analysisStartedAtRef.current = null;
           setElapsedMs(0);
         },
-        { transcribe: transcribeEnabled },
+        { transcribe: transcribeEnabled, separate: transcribeEnabled && stemSeparationEnabled },
       );
     } catch (rawError) {
       const err = rawError instanceof Error ? rawError : new Error(String(rawError));
@@ -386,14 +402,47 @@ export default function App() {
                         <input
                           type="checkbox"
                           checked={transcribeEnabled}
-                          onChange={(e) => setTranscribeEnabled(e.target.checked)}
+                          onChange={(e) => {
+                            const nextEnabled = e.target.checked;
+                            setTranscribeEnabled(nextEnabled);
+                            if (!nextEnabled) {
+                              setStemSeparationEnabled(false);
+                            }
+                          }}
                           disabled={isAnalyzing}
+                          aria-label="MIDI TRANSCRIPTION"
                           className="mt-0.5 h-4 w-4 accent-accent"
                         />
                         <div className="space-y-1">
                           <p className="text-[10px] font-mono uppercase tracking-wider">MIDI TRANSCRIPTION</p>
                           <p className="text-[10px] font-mono uppercase tracking-wide opacity-80">
                             Basic Pitch polyphonic analysis (+30-60s)
+                          </p>
+                        </div>
+                      </div>
+                    </label>
+                    <label
+                      className={`mt-3 rounded-sm border px-3 py-3 transition-colors ${
+                        stemSeparationEnabled
+                          ? 'border-accent bg-accent/10 text-accent'
+                          : transcribeEnabled
+                            ? 'border-border bg-bg-panel text-text-secondary cursor-pointer'
+                            : 'border-border bg-bg-app text-text-secondary/50 cursor-not-allowed'
+                      } ${isAnalyzing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={transcribeEnabled && stemSeparationEnabled}
+                          onChange={(e) => setStemSeparationEnabled(e.target.checked)}
+                          disabled={!transcribeEnabled || isAnalyzing}
+                          aria-label="STEM SEPARATION"
+                          className="mt-0.5 h-4 w-4 accent-accent"
+                        />
+                        <div className="space-y-1">
+                          <p className="text-[10px] font-mono uppercase tracking-wider">STEM SEPARATION</p>
+                          <p className="text-[10px] font-mono uppercase tracking-wide opacity-80">
+                            Demucs pre-processing for better accuracy (+60-120s)
                           </p>
                         </div>
                       </div>
@@ -503,7 +552,11 @@ export default function App() {
               </div>
             )}
 
-            <AnalysisResults phase1={phase1Result} phase2={phase2Result} sourceFileName={audioFile?.name ?? null} />
+            {phase1Result ? (
+              <Suspense fallback={null}>
+                <AnalysisResults phase1={phase1Result} phase2={phase2Result} sourceFileName={audioFile?.name ?? null} />
+              </Suspense>
+            ) : null}
             <DiagnosticLog logs={logs} />
           </main>
         </div>

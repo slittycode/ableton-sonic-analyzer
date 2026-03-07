@@ -4,6 +4,12 @@ import { fileURLToPath } from 'node:url';
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 
+function hasMultipartBoolean(body: string, fieldName: string, expected: boolean): boolean {
+  const normalizedBody = body.replace(/\r?\n/g, '\n');
+  const pattern = new RegExp(`name="${fieldName}"\\n\\n${expected ? 'true' : 'false'}\\n`);
+  return pattern.test(normalizedBody);
+}
+
 async function stubGeminiPhase2(page: import('@playwright/test').Page) {
   await page.route('**://generativelanguage.googleapis.com/**', async (route) => {
     await route.fulfill({
@@ -70,7 +76,59 @@ async function stubGeminiPhase2(page: import('@playwright/test').Page) {
 
 test('phase1 dual-source session musician panel toggles between polyphonic and monophonic views', async ({ page }) => {
   await stubGeminiPhase2(page);
+  await page.route('**/api/analyze/estimate', async (route) => {
+    const body = route.request().postData() ?? '';
+    const transcribeEnabled = hasMultipartBoolean(body, 'transcribe', true);
+    const stemSeparationEnabled = hasMultipartBoolean(body, 'separate', true);
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        requestId: 'req_estimate_smoke_midi_001',
+        estimate: {
+          durationSeconds: 214.6,
+          totalLowMs: transcribeEnabled && stemSeparationEnabled ? 107000 : 22000,
+          totalHighMs: transcribeEnabled && stemSeparationEnabled ? 203000 : 38000,
+          stages: transcribeEnabled && stemSeparationEnabled
+            ? [
+                {
+                  key: 'local_dsp',
+                  label: 'Local DSP analysis',
+                  lowMs: 22000,
+                  highMs: 38000,
+                },
+                {
+                  key: 'demucs_separation',
+                  label: 'Demucs separation',
+                  lowMs: 45000,
+                  highMs: 90000,
+                },
+                {
+                  key: 'transcription_stems',
+                  label: 'Basic Pitch on bass + other stems',
+                  lowMs: 40000,
+                  highMs: 75000,
+                },
+              ]
+            : [
+                {
+                  key: 'local_dsp',
+                  label: 'Local DSP analysis',
+                  lowMs: 22000,
+                  highMs: 38000,
+                },
+              ],
+        },
+      }),
+    });
+  });
+
   await page.route('**/api/analyze', async (route) => {
+    const body = route.request().postData() ?? '';
+    expect(hasMultipartBoolean(body, 'transcribe', true)).toBe(true);
+    expect(hasMultipartBoolean(body, 'separate', true)).toBe(true);
+
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -159,6 +217,8 @@ test('phase1 dual-source session musician panel toggles between polyphonic and m
   await page.goto('/', { waitUntil: 'networkidle' });
   const fixturePath = path.resolve(testDir, './fixtures/silence.wav');
   await page.setInputFiles('#audio-upload', fixturePath);
+  await page.getByLabel('MIDI TRANSCRIPTION').check();
+  await page.getByLabel('STEM SEPARATION').check();
   await page.getByRole('button', { name: /Initiate Analysis/i }).click();
 
   const panel = page.locator('section').filter({ hasText: /SESSION MUSICIAN/i }).first();
@@ -169,6 +229,8 @@ test('phase1 dual-source session musician panel toggles between polyphonic and m
   await expect(panel.getByRole('button', { name: 'POLYPHONIC' })).toBeVisible();
   await expect(panel.getByRole('button', { name: 'MONOPHONIC' })).toBeVisible();
   await expect(panel.getByText('SOURCES: BASIC PITCH').first()).toBeVisible();
+  await expect(panel.getByText('STEM-AWARE')).toBeVisible();
+  await expect(panel.getByText('STEMS: bass, other')).toBeVisible();
   await expect(panel.getByText('Polyphonic transcription via Basic Pitch')).toBeVisible();
   await expect(panel.getByRole('button', { name: /Download \.mid/i })).toBeVisible();
   const swingSlider = panel.locator('input[type="range"]');

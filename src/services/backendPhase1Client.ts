@@ -44,6 +44,7 @@ export interface AnalyzePhase1Options {
   apiBaseUrl: string;
   timeoutMs?: number;
   transcribe?: boolean;
+  separate?: boolean;
 }
 
 type UnknownRecord = Record<string, unknown>;
@@ -54,7 +55,7 @@ export async function estimatePhase1WithBackend(
 ): Promise<BackendEstimateResponse> {
   const response = await postBackendMultipart(
     `${options.apiBaseUrl}/api/analyze/estimate`,
-    buildTrackFormData(file, null, false),
+    buildTrackFormData(file, null, options.transcribe ?? false, options.separate ?? false),
     options.timeoutMs ?? DEFAULT_ESTIMATE_TIMEOUT_MS,
   );
 
@@ -78,7 +79,12 @@ export async function analyzePhase1WithBackend(
 ): Promise<BackendAnalyzeResponse> {
   const response = await postBackendMultipart(
     `${options.apiBaseUrl}/api/analyze`,
-    buildTrackFormData(file, dspJsonOverride, options.transcribe ?? false),
+    buildTrackFormData(
+      file,
+      dspJsonOverride,
+      options.transcribe ?? false,
+      options.separate ?? false,
+    ),
     options.timeoutMs ?? DEFAULT_BACKEND_TIMEOUT_MS,
   );
 
@@ -275,10 +281,16 @@ function tryParseBackendErrorResponse(payloadText: string): BackendErrorResponse
   }
 }
 
-function buildTrackFormData(file: File, dspJsonOverride: string | null, transcribe = false): FormData {
+function buildTrackFormData(
+  file: File,
+  dspJsonOverride: string | null,
+  transcribe = false,
+  separate = false,
+): FormData {
   const formData = new FormData();
   formData.append("track", file);
   formData.append("transcribe", transcribe ? "true" : "false");
+  formData.append("separate", separate ? "true" : "false");
   if (dspJsonOverride?.trim()) {
     formData.append("dsp_json_override", dspJsonOverride);
   }

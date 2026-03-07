@@ -258,7 +258,13 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).toContain('Polyphonic transcription via Basic Pitch');
     expect(html).toContain('Range: C3 - G4');
     expect(html).toContain('Confidence: 83%');
+    expect(html).toContain('2 / 2 NOTES');
+    expect(html).toContain('CONFIDENCE');
+    expect(html).toContain('20%');
     expect(html).toContain('SOURCES: BASIC PITCH');
+    expect(html).toContain('STEM-AWARE');
+    expect(html).toContain('STEMS: bass, other');
+    expect(html).toContain('Adjust confidence threshold to filter noise before export.');
     expect(html).not.toContain('MIDI TRANSCRIPTION UNAVAILABLE');
   });
 
@@ -294,6 +300,45 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).not.toContain('MONOPHONIC');
     expect(html).toContain('SOURCES: ESSENTIA');
     expect(html).toContain('Monophonic pitch detection via Essentia');
+  });
+
+  it('renders full-mix provenance when transcription did not use Demucs stems', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: {
+          ...basePhase1,
+          transcriptionDetail: {
+            transcriptionMethod: 'basic-pitch',
+            noteCount: 1,
+            averageConfidence: 0.61,
+            stemSeparationUsed: false,
+            stemsTranscribed: ['full_mix'],
+            dominantPitches: [{ pitchMidi: 60, pitchName: 'C4', count: 3 }],
+            pitchRange: {
+              minMidi: 60,
+              maxMidi: 60,
+              minName: 'C4',
+              maxName: 'C4',
+            },
+            notes: [
+              {
+                pitchMidi: 60,
+                pitchName: 'C4',
+                onsetSeconds: 0.2,
+                durationSeconds: 0.5,
+                confidence: 0.61,
+                stemSource: 'full_mix',
+              },
+            ],
+          },
+        },
+        phase2: basePhase2,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).toContain('FULL MIX');
+    expect(html).not.toContain('STEM-AWARE');
   });
 
   it('renders arrangement novelty and spectral note labels with fixed segment palette colors', () => {

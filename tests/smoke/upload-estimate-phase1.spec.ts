@@ -4,8 +4,75 @@ import { fileURLToPath } from 'node:url';
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 
+function hasMultipartBoolean(body: string, fieldName: string, expected: boolean): boolean {
+  const normalizedBody = body.replace(/\r?\n/g, '\n');
+  const pattern = new RegExp(`name="${fieldName}"\\n\\n${expected ? 'true' : 'false'}\\n`);
+  return pattern.test(normalizedBody);
+}
+
 test('upload shows estimate and local DSP processing copy before phase1 completes', async ({ page }) => {
   await page.route('**/api/analyze/estimate', async (route) => {
+    const body = route.request().postData() ?? '';
+    const transcribeEnabled = hasMultipartBoolean(body, 'transcribe', true);
+    const stemSeparationEnabled = hasMultipartBoolean(body, 'separate', true);
+    const estimate =
+      transcribeEnabled && stemSeparationEnabled
+        ? {
+            totalLowMs: 107000,
+            totalHighMs: 203000,
+            stages: [
+              {
+                key: 'local_dsp',
+                label: 'Local DSP analysis',
+                lowMs: 22000,
+                highMs: 38000,
+              },
+              {
+                key: 'demucs_separation',
+                label: 'Demucs separation',
+                lowMs: 45000,
+                highMs: 90000,
+              },
+              {
+                key: 'transcription_stems',
+                label: 'Basic Pitch on bass + other stems',
+                lowMs: 40000,
+                highMs: 75000,
+              },
+            ],
+          }
+        : transcribeEnabled
+          ? {
+              totalLowMs: 47000,
+              totalHighMs: 113000,
+              stages: [
+                {
+                  key: 'local_dsp',
+                  label: 'Local DSP analysis',
+                  lowMs: 22000,
+                  highMs: 38000,
+                },
+                {
+                  key: 'transcription_full_mix',
+                  label: 'Basic Pitch on full mix',
+                  lowMs: 25000,
+                  highMs: 75000,
+                },
+              ],
+            }
+          : {
+              totalLowMs: 22000,
+              totalHighMs: 38000,
+              stages: [
+                {
+                  key: 'local_dsp',
+                  label: 'Local DSP analysis',
+                  lowMs: 22000,
+                  highMs: 38000,
+                },
+              ],
+            };
+
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -13,16 +80,7 @@ test('upload shows estimate and local DSP processing copy before phase1 complete
         requestId: 'req_estimate_smoke_001',
         estimate: {
           durationSeconds: 214.6,
-          totalLowMs: 22000,
-          totalHighMs: 38000,
-          stages: [
-            {
-              key: 'local_dsp',
-              label: 'Local DSP analysis',
-              lowMs: 22000,
-              highMs: 38000,
-            },
-          ],
+          ...estimate,
         },
       }),
     });
@@ -72,6 +130,26 @@ test('upload shows estimate and local DSP processing copy before phase1 complete
 
   await expect(page.getByText('Phase 2 Model')).toBeVisible();
   await expect(page.getByText(/Estimated local analysis/i)).toBeVisible();
+  await expect(page.getByText('22s-38s')).toBeVisible();
+
+  const transcribeToggle = page.getByLabel('MIDI TRANSCRIPTION');
+  const stemToggle = page.getByLabel('STEM SEPARATION');
+
+  await expect(transcribeToggle).not.toBeChecked();
+  await expect(stemToggle).toBeDisabled();
+
+  await transcribeToggle.check();
+  await expect(stemToggle).toBeEnabled();
+  await expect(page.getByText('47s-113s')).toBeVisible();
+
+  await stemToggle.check();
+  await expect(page.getByText('107s-203s')).toBeVisible();
+
+  await transcribeToggle.uncheck();
+  await expect(stemToggle).toBeDisabled();
+  await expect(stemToggle).not.toBeChecked();
+  await expect(page.getByText('22s-38s')).toBeVisible();
+
   await page.getByRole('button', { name: /Initiate Analysis/i }).click();
 
   await expect(page.getByRole('heading', { name: 'Phase 1: Local DSP analysis' })).toBeVisible();

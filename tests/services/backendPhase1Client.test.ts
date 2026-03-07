@@ -286,10 +286,11 @@ describe('estimatePhase1WithBackend', () => {
     expect(result.estimate.stages[0].key).toBe('local_dsp');
   });
 
-  it('always sends transcribe=false to the estimate endpoint', async () => {
+  it('sends the current transcribe and separate flags to the estimate endpoint', async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       const formData = init?.body as FormData;
-      expect(formData.get('transcribe')).toBe('false');
+      expect(formData.get('transcribe')).toBe('true');
+      expect(formData.get('separate')).toBe('true');
 
       return new Response(JSON.stringify(validEstimatePayload), {
         status: 200,
@@ -303,7 +304,7 @@ describe('estimatePhase1WithBackend', () => {
 
     await estimatePhase1WithBackend(
       new File(['wave'], 'track.mp3', { type: 'audio/mpeg' }),
-      { apiBaseUrl: 'http://localhost:8000', transcribe: true },
+      { apiBaseUrl: 'http://localhost:8000', transcribe: true, separate: true },
     );
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -362,6 +363,7 @@ describe('analyzePhase1WithBackend structured errors', () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       const formData = init?.body as FormData;
       expect(formData.get('transcribe')).toBe('false');
+      expect(formData.get('separate')).toBe('false');
 
       return new Response(JSON.stringify(validPayload), {
         status: 200,
@@ -382,10 +384,11 @@ describe('analyzePhase1WithBackend structured errors', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('sends transcribe=true when analysis transcription is enabled', async () => {
+  it('sends transcribe=true and separate=true when stem-aware analysis is enabled', async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       const formData = init?.body as FormData;
       expect(formData.get('transcribe')).toBe('true');
+      expect(formData.get('separate')).toBe('true');
 
       return new Response(JSON.stringify(validPayload), {
         status: 200,
@@ -400,7 +403,7 @@ describe('analyzePhase1WithBackend structured errors', () => {
     await analyzePhase1WithBackend(
       new File(['wave'], 'track.mp3', { type: 'audio/mpeg' }),
       null,
-      { apiBaseUrl: 'http://localhost:8000', transcribe: true },
+      { apiBaseUrl: 'http://localhost:8000', transcribe: true, separate: true },
     );
 
     expect(fetchMock).toHaveBeenCalledTimes(1);

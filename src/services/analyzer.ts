@@ -1,15 +1,15 @@
-import { appConfig } from "../config";
+import { appConfig, isGeminiPhase2Available } from "../config";
 import { analyzePhase1WithBackend, mapBackendError } from "./backendPhase1Client";
-import { analyzePhase2WithGemini, canRunGeminiPhase2 } from "./geminiPhase2Client";
 import { PHASE1_LABEL, PHASE2_SKIPPED_LABEL } from "./phaseLabels";
 import { DiagnosticLogEntry, Phase1Result, Phase2Result } from "../types";
 
 interface AnalyzeAudioOptions {
   transcribe?: boolean;
+  separate?: boolean;
 }
 
 export function isPhase2GeminiEnabled(): boolean {
-  return canRunGeminiPhase2();
+  return isGeminiPhase2Available();
 }
 
 export async function analyzeAudio(
@@ -33,6 +33,7 @@ export async function analyzeAudio(
     const backendResult = await analyzePhase1WithBackend(file, dspJson, {
       apiBaseUrl: appConfig.apiBaseUrl,
       transcribe: analysisOptions?.transcribe ?? false,
+      separate: analysisOptions?.separate ?? false,
     });
     const phase1End = Date.now();
 
@@ -55,7 +56,7 @@ export async function analyzeAudio(
     onPhase1Complete(backendResult.phase1, phase1Log);
     phase1Completed = true;
 
-    if (!canRunGeminiPhase2()) {
+    if (!isGeminiPhase2Available()) {
       const phase2SkippedLog: DiagnosticLogEntry = {
         model: "disabled",
         phase: PHASE2_SKIPPED_LABEL,
@@ -73,6 +74,7 @@ export async function analyzeAudio(
       return;
     }
 
+    const { analyzePhase2WithGemini } = await import("./geminiPhase2Client");
     const phase2 = await analyzePhase2WithGemini({
       file,
       modelName,
