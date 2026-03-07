@@ -1,183 +1,246 @@
-# Architecture (`analyze.py`)
+# Architecture
 
-## Purpose
+## Components
 
-`analyze.py` is a local DSP analysis pipeline designed to extract production-relevant metrics from a mixed audio file for Ableton Live 12 reconstruction workflows.
+| Component | Role |
+| --- | --- |
+| `analyze.py` | Raw CLI analyzer. Loads audio, runs DSP, optionally separates stems and transcribes notes, then prints JSON to `stdout`. |
+| `server.py` | FastAPI wrapper. Accepts uploads, computes an estimate, shells out to `analyze.py`, normalizes the result into the HTTP `phase1` contract, and returns diagnostics or structured errors. |
+| `tests/test_server.py` | Contract tests for estimate, timeout, and success envelopes. |
 
-The script is deliberately monolithic (single entrypoint) but internally segmented by self-contained analysis functions. Each function follows an error-safe pattern and returns a dictionary fragment merged into the final JSON.
+## Separation of Responsibilities
 
----
+### `analyze.py`
 
-## High-Level Flow
+Responsibilities:
 
-1. Parse CLI flags (`audio_path`, `--separate`, `--fast`).
-2. Load mono and stereo audio buffers.
-3. Optionally run Demucs source separation (`--separate`).
-4. Run `extract_rhythm()` once (shared resource).
-5. Execute all analysis functions, each returning a partial dictionary.
-6. Assemble final output object in fixed key order.
-7. Print JSON to `stdout`; status/warnings to `stderr`.
-8. Clean up temporary stem files if separation was used.
+- read the input file
+- optionally run Demucs separation
+- run the Phase 1 DSP analysis functions
+- optionally run Basic Pitch transcription
+- emit the raw analyzer JSON
 
----
+Interface:
 
-## Main Analysis Functions
+```bash
+./venv/bin/python analyze.py <audio_file> [--separate] [--transcribe] [--fast] [--yes]
+```
 
-## Tempo, Key, Timing
-- `extract_rhythm(mono)`
-  - Shared `RhythmExtractor2013` call.
-  - Provides `bpm`, beat ticks, confidence and auxiliary tempo data.
-- `analyze_bpm(rhythm_data, mono, sample_rate)`
-  - Uses shared rhythm BPM.
-  - Adds secondary `PercivalBpmEstimator` cross-check.
-- `analyze_key(mono)`
-  - Global key via `KeyExtractor(profileType="temperley")`.
-- `analyze_time_signature(rhythm_data)`
-  - Currently returns `"4/4"` when rhythm exists.
-- `analyze_duration_and_sr(mono, sample_rate)`
-  - Derives duration and sample rate metadata.
+### `server.py`
 
-## Loudness and Dynamics
-- `analyze_loudness(stereo)`
-  - `LoudnessEBUR128` integrated loudness and loudness range.
-- `analyze_true_peak(stereo)`
-  - True peak across channels.
-- `analyze_dynamics(mono, sample_rate)`
-  - Crest factor and broad-band dynamic spread.
-- `analyze_dynamic_character(mono, sample_rate)`
-  - `DynamicComplexity`, frame flatness, and attack-time descriptors.
+Responsibilities:
 
-## Spectral and Timbre
-- `analyze_spectral_balance(mono, sample_rate)`
-  - 6-band long-term spectral dB profile.
-- `analyze_spectral_detail(mono, sample_rate)`
-  - Global centroid/rolloff, MFCC, chroma, Bark, ERB, spectral contrast/valley.
-- `analyze_perceptual(mono, sample_rate)`
-  - Sharpness proxy and roughness proxy.
-- `analyze_essentia_features(mono)`
-  - Zero-crossing rate, HFC, spectral complexity, dissonance.
-- `analyze_synthesis_character(mono, sample_rate)`
-  - Inharmonicity and odd/even harmonic ratio.
+- receive multipart uploads
+- write the upload to a temporary file
+- compute a backend estimate and timeout
+- invoke `analyze.py` with `--yes`
+- translate raw analyzer output into the HTTP `phase1` envelope
+- return structured error diagnostics when the subprocess fails
+- clean up temporary files
 
-## Stereo
-- `analyze_stereo(stereo, sample_rate)`
-  - Global `stereoDetail`:
-    - `stereoWidth`
-    - `stereoCorrelation`
-    - `subBassCorrelation`
-    - `subBassMono`
-  - Sub-bass isolation uses `BandPass` when available; falls back to `LowPass(80 Hz)`.
+Custom routes:
 
-## Rhythm and Groove
-- `analyze_rhythm_detail(rhythm_data)`
-  - Beat-position and groove descriptors from shared rhythm data.
-- `analyze_groove(mono, sample_rate, rhythm_data, beat_data)`
-  - Beat-synchronous low/high accent and swing metrics.
-- `analyze_sidechain_detail(mono, sample_rate, rhythm_data, beat_data)`
-  - Pumping strength/regularity/rate and confidence score.
+- `POST /api/analyze/estimate`
+- `POST /api/analyze`
 
-## Melody and Harmony
-- `analyze_melody(audio_path, sample_rate, rhythm_data, stems)`
-  - `EqloudLoader` + `PredominantPitchMelodia` + `PitchContourSegmentation`.
-  - Optional source-separated melody extraction.
-  - Optional MIDI export via `mido`.
-- `analyze_chords(mono, sample_rate)`
-  - High-pass filtered chord extraction over HPCP and `ChordsDetection`.
+FastAPI-generated routes remain available at `/openapi.json`, `/docs`, and `/redoc`.
 
-## Structure and Segment-Level Analyses
-- `analyze_structure(mono, sample_rate)`
-  - SBic segmentation (with fallback path).
-- `analyze_segment_loudness(structure_data, stereo, sample_rate)`
-  - Per-segment LUFS/LRA.
-- `analyze_segment_stereo(structure_data, stereo, sample_rate)`
-  - Per-segment stereo width/correlation.
-- `analyze_segment_spectral(structure_data, mono, segment_stereo_data, sample_rate)`
-  - Per-segment Bark bands, centroid/rolloff, stereo metrics.
-- `analyze_segment_key(structure_data, mono, sample_rate)`
-  - Per-segment key and confidence.
+## CLI Flow
 
-## Danceability
-- `analyze_danceability(mono, sample_rate)`
-  - Danceability score and DFA.
+1. Parse the positional audio path and the optional flags `--separate`, `--transcribe`, `--fast`, and `--yes`.
+2. Read duration metadata with `get_audio_duration_seconds()`.
+3. If running in a TTY and `--yes` is not set, print a stage-by-stage estimate and prompt the user to continue.
+4. Load mono audio for most DSP features.
+5. Load stereo audio for loudness, true peak, stereo, and segment-loudness measurements.
+6. If `--separate` is enabled, run Demucs and keep the temporary stem paths.
+7. Run shared rhythm extraction once and reuse it across BPM, rhythm, groove, and sidechain analyses.
+8. Run the individual feature analyzers and merge their return dictionaries into a single result object.
+9. If `--transcribe` is enabled, run Basic Pitch:
+   - on `bass` and `other` stems when Demucs output is available
+   - otherwise on the full mix
+10. Print the final JSON to `stdout` and logs to `stderr`.
+11. Remove temporary stems after a separated run.
 
----
+## Raw Analyzer Output
 
-## Shared Helpers and Why They Exist
+`analyze.py` emits the full schema documented in [JSON_SCHEMA.md](JSON_SCHEMA.md).
 
-- `_slice_segments(structure_data, total_samples, sample_rate)`
-  - Single canonical segment slicing implementation.
-  - Prevents drift and mismatch between segment analyzers.
-  - Mandatory common source for segment boundaries in:
-    - `analyze_segment_spectral`
-    - `analyze_segment_key`
-    - `analyze_segment_stereo`
-    - (also reused by `analyze_segment_loudness`)
+Important sections:
 
-- `_compute_stereo_metrics(left, right)`
-  - Centralises stereo width/correlation maths.
-  - Ensures global and per-segment stereo values use identical formulae.
+- core metrics: tempo, key, duration, loudness, true peak
+- detail objects: `dynamicCharacter`, `stereoDetail`, `spectralDetail`, `rhythmDetail`, `melodyDetail`, `transcriptionDetail`, `effectsDetail`, `synthesisCharacter`, `danceability`, `perceptual`, `essentiaFeatures`
+- arrangement and segment data: `structure`, `arrangementDetail`, `segmentLoudness`, `segmentStereo`, `segmentSpectral`, `segmentKey`
 
-- `_extract_beat_loudness_data(mono, sample_rate, rhythm_data)`
-  - Shared beat-band loudness extraction for:
-    - `analyze_groove`
-    - `analyze_sidechain_detail`
-  - Avoids duplicate BeatLoudness logic and keeps beat-domain alignment consistent.
+## HTTP Flow
 
-Additional utility helpers:
-- `_safe_db(...)` and `_compute_bark_db(...)` standardise robust dB conversion/Bark averaging.
+### `POST /api/analyze/estimate`
 
----
+1. Persist the uploaded file to a temporary path.
+2. Read duration metadata with `get_audio_duration_seconds()`.
+3. Call `build_analysis_estimate(duration, run_separation, False)`.
+4. Normalize stage keys into the server contract:
+   - `dsp` -> `local_dsp`
+   - `separation` -> `demucs_separation`
+5. Return:
+   - `requestId`
+   - `estimate.durationSeconds`
+   - `estimate.totalLowMs`
+   - `estimate.totalHighMs`
+   - `estimate.stages[]`
+6. Close the upload and delete the temporary file.
 
-## CLI Flags
+Current caveat:
 
+- The estimate route ignores transcription cost because it always passes `run_transcribe=False`.
+
+### `POST /api/analyze`
+
+1. Persist the uploaded file to a temporary path.
+2. Build the same estimate object used by the estimate route.
+3. Convert the estimated upper bound into a timeout with a 15-second buffer.
+4. Build the subprocess command:
+   - base command: `./venv/bin/python analyze.py <temp_path> --yes`
+   - add `--separate` when the query parameter is present
+   - add `--transcribe` when the multipart form field is truthy
+5. Run the subprocess with `capture_output=True`.
+6. Handle failures with structured JSON error envelopes:
+   - timeout
+   - internal subprocess launch failure
+   - non-zero exit
+   - empty stdout
+   - malformed JSON
+   - non-object JSON
+7. On success, normalize the raw payload into `phase1` and attach diagnostics.
+8. Close the upload and delete the temporary file.
+
+## HTTP Contract
+
+### Shared Request Inputs
+
+Multipart form fields accepted by both routes:
+
+- `track` required
+- `dsp_json_override` optional and currently ignored
+- `transcribe` optional; only `POST /api/analyze` uses it
+
+Query parameters accepted by both routes:
+
+- `separate`
 - `--separate`
-  - Enables Demucs source separation before melody extraction.
-  - Uses `other` stem for melody when available.
-  - Adds noticeable runtime on CPU (commonly 30-60 seconds).
 
-- `--fast`
-  - Parser stub only.
-  - No current behaviour change (intent is future hop-size optimisation path).
+### Success Envelope
 
----
+`POST /api/analyze` returns:
 
-## Error-Safe Pattern Convention
+- `requestId`
+- `phase1`
+- `diagnostics`
 
-Every analysis function follows this pattern:
+`phase1` contains normalized scalars:
 
-1. Wrap algorithm logic in `try/except`.
-2. On recoverable internal errors, continue with fallback/default values.
-3. On function-level failure, return container key with `None`:
-   - e.g. `{"sidechainDetail": None}`
-4. Never raise unhandled exceptions that crash the whole script.
-5. Emit warning messages to `stderr`, never `stdout`.
+- `bpm`
+- `bpmConfidence`
+- `key`
+- `keyConfidence`
+- `timeSignature`
+- `durationSeconds`
+- `lufsIntegrated`
+- `lufsRange`
+- `truePeak`
+- `crestFactor`
+- `stereoWidth`
+- `stereoCorrelation`
+- `spectralBalance`
 
-This allows partial JSON output even when some algorithms are unavailable in a given Essentia build or fail on edge-case audio.
+`phase1` forwards these raw analyzer sections unchanged:
 
----
+- `stereoDetail`
+- `spectralDetail`
+- `rhythmDetail`
+- `melodyDetail`
+- `transcriptionDetail`
+- `grooveDetail`
+- `sidechainDetail`
+- `effectsDetail`
+- `synthesisCharacter`
+- `danceability`
+- `structure`
+- `arrangementDetail`
+- `segmentLoudness`
+- `segmentSpectral`
+- `segmentKey`
+- `chordDetail`
+- `perceptual`
 
-## Known Limitations
+The server does not currently expose these raw analyzer fields over HTTP:
 
-1. Pitch detection confidence is low on heavily processed electronic masters.
-- Typical `pitchConfidence` observed range: `0.04-0.09`.
+- `bpmPercival`
+- `bpmAgreement`
+- `sampleRate`
+- `dynamicSpread`
+- `dynamicCharacter`
+- `segmentStereo`
+- `essentiaFeatures`
 
-2. Chord detection is approximate on full-mix masters.
-- Typical `chordStrength` observed range: `0.65-0.70`.
+`diagnostics` currently contains:
 
-3. Sidechain detection is less reliable when kick and sub occupy similar frequency content.
-- `pumpingConfidence` should be used as the reliability gate.
+- `backendDurationMs`
+- `engineVersion`
+- `estimatedLowMs`
+- `estimatedHighMs`
+- `timeoutSeconds`
 
-4. Source separation (`--separate`) usually improves melody extraction but adds CPU processing time.
-- Common overhead: ~30-60 seconds.
+### Error Envelope
 
-5. Key detection uses the Temperley profile.
-- It may return a relative major/minor rather than the musical key a producer would label by ear.
+`server.py` returns a consistent error envelope with:
 
----
+- `requestId`
+- `error.code`
+- `error.message`
+- `error.phase`
+- `error.retryable`
+- `diagnostics`
 
-## Practical Integration Notes
+Error diagnostics can include:
 
-- JSON is emitted to `stdout` for pipeline compatibility.
-- Runtime logs and warnings go to `stderr`.
-- For reproducible automation, capture output with shell redirection and store raw JSON per source file.
+- `backendDurationMs`
+- `timeoutSeconds`
+- `estimatedLowMs`
+- `estimatedHighMs`
+- `stdoutSnippet`
+- `stderrSnippet`
 
+## Transcription Pipeline
+
+`transcriptionDetail` is produced only when `--transcribe` is active.
+
+Flow:
+
+1. Try to import Basic Pitch.
+2. Choose transcription sources:
+   - `bass` and `other` stems when Demucs succeeded
+   - otherwise `full_mix`
+3. Run `predict()` once per source.
+4. Normalize each note into:
+   - `pitchMidi`
+   - `pitchName`
+   - `onsetSeconds`
+   - `durationSeconds`
+   - `confidence`
+   - `stemSource`
+5. Merge notes, compute dominant pitches and pitch range, and return `transcriptionDetail`.
+
+## Current Caveats
+
+- `dsp_json_override` is a reserved field only. The backend accepts it but does not use it.
+- Server estimates and timeout calculations do not include transcription time today.
+- `--fast` is parsed by `analyze.py` but still does nothing.
+- The HTTP API is intentionally narrower than the raw CLI schema.
+
+## Verification Surface
+
+`tests/test_server.py` currently verifies:
+
+- estimate contract normalization
+- timeout error envelopes
+- success responses with diagnostics

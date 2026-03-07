@@ -2,6 +2,8 @@
 
 This document defines every field currently emitted by `analyze.py`.
 
+`server.py` does not return this raw object directly. The HTTP API wraps a normalized subset of it inside `phase1`. The raw CLI schema and the HTTP wrapper are intentionally different, so this document calls out both where that mapping matters.
+
 Conventions:
 - All feature functions are error-safe. On failure they return `null` (JSON `null`) for their container or field set.
 - Numeric values are rounded in code; do not assume infinite precision.
@@ -13,7 +15,82 @@ Conventions:
 
 Top-level keys:
 
-`bpm`, `bpmConfidence`, `bpmPercival`, `bpmAgreement`, `key`, `keyConfidence`, `timeSignature`, `durationSeconds`, `sampleRate`, `lufsIntegrated`, `lufsRange`, `truePeak`, `crestFactor`, `dynamicSpread`, `dynamicCharacter`, `stereoDetail`, `spectralBalance`, `spectralDetail`, `rhythmDetail`, `melodyDetail`, `grooveDetail`, `sidechainDetail`, `effectsDetail`, `synthesisCharacter`, `danceability`, `structure`, `arrangementDetail`, `segmentLoudness`, `segmentSpectral`, `segmentStereo`, `segmentKey`, `chordDetail`, `perceptual`, `essentiaFeatures`.
+`bpm`, `bpmConfidence`, `bpmPercival`, `bpmAgreement`, `key`, `keyConfidence`, `timeSignature`, `durationSeconds`, `sampleRate`, `lufsIntegrated`, `lufsRange`, `truePeak`, `crestFactor`, `dynamicSpread`, `dynamicCharacter`, `stereoDetail`, `spectralBalance`, `spectralDetail`, `rhythmDetail`, `melodyDetail`, `transcriptionDetail`, `grooveDetail`, `sidechainDetail`, `effectsDetail`, `synthesisCharacter`, `danceability`, `structure`, `arrangementDetail`, `segmentLoudness`, `segmentSpectral`, `segmentStereo`, `segmentKey`, `chordDetail`, `perceptual`, `essentiaFeatures`.
+
+## Relationship To `POST /api/analyze`
+
+The HTTP success envelope is:
+
+```json
+{
+  "requestId": "uuid",
+  "phase1": {
+    "bpm": 128.0,
+    "bpmConfidence": 0.92
+  },
+  "diagnostics": {
+    "backendDurationMs": 31842.14,
+    "engineVersion": "analyze.py"
+  }
+}
+```
+
+`phase1` includes normalized scalar fields:
+
+- `bpm`
+- `bpmConfidence`
+- `key`
+- `keyConfidence`
+- `timeSignature`
+- `durationSeconds`
+- `lufsIntegrated`
+- `lufsRange`
+- `truePeak`
+- `crestFactor`
+- `stereoWidth`
+- `stereoCorrelation`
+- `spectralBalance`
+
+`phase1` also forwards these 17 raw analyzer sections unchanged:
+
+- `stereoDetail`
+- `spectralDetail`
+- `rhythmDetail`
+- `melodyDetail`
+- `transcriptionDetail`
+- `grooveDetail`
+- `sidechainDetail`
+- `effectsDetail`
+- `synthesisCharacter`
+- `danceability`
+- `structure`
+- `arrangementDetail`
+- `segmentLoudness`
+- `segmentSpectral`
+- `segmentKey`
+- `chordDetail`
+- `perceptual`
+
+Raw `analyze.py` fields that are not present in the server `phase1` wrapper today:
+
+- `bpmPercival`
+- `bpmAgreement`
+- `sampleRate`
+- `dynamicSpread`
+- `dynamicCharacter`
+- `segmentStereo`
+- `essentiaFeatures`
+
+Two server-only convenience fields are derived from `stereoDetail`:
+
+- `phase1.stereoWidth`
+- `phase1.stereoCorrelation`
+
+Current server behavior that affects schema expectations:
+
+- `transcriptionDetail` is only populated when `analyze.py` runs with `--transcribe`
+- `danceability` is forwarded as the raw object shown below, not as a scalar
+- `dsp_json_override` is accepted by the server but does not alter the analyzer payload
 
 ---
 
