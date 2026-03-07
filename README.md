@@ -1,92 +1,217 @@
-# Sonic Analyzer UI
+# sonic-analyzer-UI
 
-Frontend UI/UX application for sonic analysis workflows.
+React and Vite frontend for the Sonic Analyzer workflow.
 
-## Architecture
+The app uploads a track to the local DSP backend, shows the estimate and execution status for Phase 1, optionally runs a Gemini advisory pass for Phase 2, and renders the returned analysis in a browser UI.
 
-The frontend runs a two-stage flow:
+## Current Features
 
-1. **Phase 1 (required):** upload track to local DSP backend via `POST /api/analyze`.
-2. **Phase 2 (optional):** run Gemini reconstruction advice in-browser when enabled.
+- file upload and local audio preview
+- automatic Phase 1 estimate request on file selection
+- local DSP execution status with elapsed time and stage estimates
+- optional Basic Pitch transcription toggle for the backend request
+- optional Gemini Phase 2 advisory pass with a selectable model
+- analysis result dashboard with arrangement, sonic, mix-chain, patch, and secret-sauce sections
+- Session Musician panel with:
+  - polyphonic Basic Pitch note view when `transcriptionDetail` exists
+  - monophonic Essentia note view when `melodyDetail` exists
+  - source toggle when both are available
+  - quantize grid and swing controls
+  - browser preview and `.mid` download
+- JSON export and markdown report export
+- diagnostic log with request IDs, durations, estimate ranges, and backend or Gemini status
 
-The frontend remains usable in **phase-1-only mode** when Gemini is disabled.
+## Tech Stack
+
+- React 19
+- TypeScript
+- Vite 6
+- Tailwind CSS v4
+- WaveSurfer.js
+- Google Gen AI SDK
+- MIDI Writer JS
+- Vitest
+- Playwright
 
 ## Prerequisites
 
 - Node.js 20+
 - npm
-- Local DSP backend running with `POST /api/analyze`
+- a running `sonic-analyzer` backend
+
+Recommended backend URL for the current Python server:
+
+- `http://localhost:8000`
 
 ## Environment
 
-Copy `.env.example` to `.env` and set values as needed.
+Copy `.env.example` to `.env` and set the values you want to use.
 
 ```bash
 cp .env.example .env
 ```
 
-Variables:
+### Variables
 
-- `VITE_API_BASE_URL`: local backend base URL, default `http://127.0.0.1:8787`
-- `VITE_ENABLE_PHASE2_GEMINI`: `true` or `false`
-- `VITE_GEMINI_API_KEY`: optional; required only when phase 2 is enabled
-- `DISABLE_HMR`: optional dev-server toggle
+| Variable | Meaning | Current behavior |
+| --- | --- | --- |
+| `VITE_API_BASE_URL` | Base URL for the backend API. | `src/config.ts` falls back to `http://localhost:8000` when unset. The checked-in `.env.example` still uses `http://127.0.0.1:8787`, so set this explicitly to match the backend you are actually running. |
+| `VITE_ENABLE_PHASE2_GEMINI` | Enables the optional Gemini pass. | Must be `"true"` to allow Phase 2. |
+| `VITE_GEMINI_API_KEY` | Gemini API key. | Phase 2 only runs when this value is non-empty and `VITE_ENABLE_PHASE2_GEMINI=true`. |
+| `DISABLE_HMR` | Vite dev-server knob. | `vite.config.ts` disables HMR only when this is `"true"`. |
 
-## Run locally
+## Running Locally
 
 ```bash
 npm install
 npm run dev
 ```
 
-App URL:
+Current dev server:
 
-- `http://127.0.0.1:3000`
+- URL: `http://localhost:3000`
+- Host binding: `0.0.0.0`
 
-## Backend API contract
+## Backend Contract Used by the UI
+
+The app talks to two backend routes.
+
+### `POST /api/analyze/estimate`
+
+When it runs:
+
+- automatically after the user selects a file
+
+What the UI sends today:
+
+- multipart `track`
+- multipart `transcribe=false`
+- no `separate` query parameter
+
+What the UI expects back:
+
+- `requestId`
+- `estimate.durationSeconds`
+- `estimate.totalLowMs`
+- `estimate.totalHighMs`
+- `estimate.stages[]` with `key`, `label`, `lowMs`, and `highMs`
+
+Current note:
+
+- the UI uses this response only for display
+- if this request fails, the app still lets the user start Phase 1
 
 ### `POST /api/analyze`
 
-Content type: `multipart/form-data`
+When it runs:
 
-Fields:
+- after the user clicks `Initiate Analysis`
 
-- `track` (required file)
-- `dsp_json_override` (optional JSON string)
+What the UI sends today:
 
-Example response:
+- multipart `track`
+- multipart `transcribe=true|false` based on the MIDI transcription toggle
+- multipart `dsp_json_override` only when the JSON text area contains valid JSON
+- no `separate` query parameter
 
-```json
-{
-  "requestId": "req_001",
-  "phase1": {
-    "bpm": 126,
-    "bpmConfidence": 0.93,
-    "key": "F minor",
-    "keyConfidence": 0.88,
-    "timeSignature": "4/4",
-    "durationSeconds": 210.6,
-    "lufsIntegrated": -7.9,
-    "truePeak": -0.2,
-    "stereoWidth": 0.69,
-    "stereoCorrelation": 0.84,
-    "spectralBalance": {
-      "subBass": -0.7,
-      "lowBass": 1.2,
-      "mids": -0.3,
-      "upperMids": 0.4,
-      "highs": 1.0,
-      "brilliance": 0.8
-    }
-  },
-  "diagnostics": {
-    "backendDurationMs": 980,
-    "engineVersion": "0.4.0"
-  }
-}
-```
+What the backend actually does with those fields today:
 
-## Validation commands
+- `track` is required and used
+- `transcribe` is used by `server.py`
+- `dsp_json_override` is accepted but ignored by the current backend
+
+### Success Response
+
+The UI expects the backend success envelope to contain:
+
+- `requestId`
+- `phase1`
+- `diagnostics`
+
+Core `phase1` fields the app depends on:
+
+- `bpm`
+- `bpmConfidence`
+- `key`
+- `keyConfidence`
+- `timeSignature`
+- `durationSeconds`
+- `lufsIntegrated`
+- `lufsRange`
+- `truePeak`
+- `crestFactor`
+- `stereoWidth`
+- `stereoCorrelation`
+- `spectralBalance`
+
+Expanded `phase1` sections the current app can consume:
+
+- `stereoDetail`
+- `spectralDetail`
+- `rhythmDetail`
+- `melodyDetail`
+- `transcriptionDetail`
+- `grooveDetail`
+- `sidechainDetail`
+- `effectsDetail`
+- `synthesisCharacter`
+- `structure`
+- `arrangementDetail`
+- `segmentLoudness`
+- `segmentSpectral`
+- `segmentKey`
+- `chordDetail`
+- `perceptual`
+
+Diagnostics fields the UI uses or preserves:
+
+- `backendDurationMs`
+- `engineVersion`
+- `estimatedLowMs`
+- `estimatedHighMs`
+- `timeoutSeconds`
+- `stdoutSnippet`
+- `stderrSnippet`
+
+Important current limitations:
+
+- the frontend does not send `separate`, so Demucs separation is not user-toggleable from this app today
+- the checked-in TypeScript model treats `danceability` as a scalar even though the backend returns an object; the UI does not currently render that section
+- the backend omits raw analyzer fields such as `bpmPercival`, `bpmAgreement`, `dynamicCharacter`, `segmentStereo`, and `essentiaFeatures`, so the UI never receives them from `server.py`
+
+### Error Response
+
+The UI also understands the backend error envelope:
+
+- `requestId`
+- `error.code`
+- `error.message`
+- `error.phase`
+- `error.retryable`
+- optional `diagnostics`
+
+This is what powers the visible backend error message and the diagnostic log entries.
+
+## Phase 2
+
+Phase 2 is optional and entirely frontend-owned.
+
+Current behavior:
+
+- Phase 2 is skipped when Gemini is disabled or `VITE_GEMINI_API_KEY` is missing.
+- The user can choose from the baked-in Gemini model list in `src/App.tsx`.
+- The prompt uses the uploaded audio file plus the completed `phase1` payload.
+- Phase 2 results drive the arrangement narrative, sonic element cards, mix chain, patch framework, secret sauce, and recommendation sections.
+
+## Export Behavior
+
+Available exports after Phase 1 completes:
+
+- `track-analysis.json`
+- `track-analysis.md`
+- `track-analysis.mid` from the Session Musician panel when note data is available
+
+## Validation
 
 ```bash
 npm run lint
@@ -95,8 +220,13 @@ npm run build
 npm run test:smoke
 ```
 
-Or run all checks:
+Or run everything:
 
 ```bash
 npm run verify
 ```
+
+Notes about tests:
+
+- most smoke tests stub the backend and Gemini calls
+- `tests/smoke/upload-phase1-live.spec.ts` checks a real backend if `VITE_API_BASE_URL` is reachable
