@@ -4,6 +4,8 @@ All notable changes to `sonic-analyzer-UI` are documented here in reverse chrono
 
 ## Unreleased
 
+## v0.4.0
+
 - Phase 1 analyze requests now derive the UI timeout budget from the backend estimate instead of a fixed 120s cutoff, so long-running transcription and stem-separation runs do not abort prematurely in the browser.
 - Browser-side request aborts now surface as `CLIENT_TIMEOUT` with explicit “UI timed out waiting” copy, while real backend `504` analyzer timeouts still report as `BACKEND_TIMEOUT`.
 - Added the Phase 1 MIDI transcription toggle and wired it through the backend request as `transcribe=true|false`.
@@ -21,6 +23,9 @@ All notable changes to `sonic-analyzer-UI` are documented here in reverse chrono
 - Backend timings contract synced to the frontend. `BackendTimingDiagnostics` type added. `backendPhase1Client` parses and validates the nested `diagnostics.timings` object on both success and error envelopes. Phase 1 success and backend error log entries now carry timings through to `DiagnosticLogEntry`. `DiagnosticLog` renders a full-width `TIMINGS:` row showing total, analysis, overhead, flags, and ms/s of audio.
 - Gemini Phase 2 audio transport now branches on file size. Files at or below 20MB are sent as inline base64 (existing path). Files above 20MB are uploaded via the Gemini Files API (`ai.files.upload`), referenced by URI in the prompt, and deleted after generation in a best-effort `finally`. Upload and generation durations are reported separately in the Phase 2 diagnostic log message.
 - Test suite expanded from 40 to 54 tests across 9 files. New coverage: confidence filtering helpers, monophonic mode guard, backend timings parsing and rendering, Phase 1 log propagation, and Gemini File API transport.
+- Fixed MIME type fallback for FLAC and WAV files in Phase 2 audio transport. Browser `File.type` is often blank for these formats; the client now infers `audio/flac` or `audio/wav` from the file extension before falling back to `audio/mpeg`.
+- Fixed stale Playwright smoke selector in `upload-phase1-midi.spec.ts` that was targeting a removed UI element and causing false negatives in the smoke suite.
+- End-to-end FLAC validation confirmed: full pipeline against a 46MB FLAC completed without premature timeout; Files API upload path used for Phase 2; backend timings and Gemini upload/generation durations rendered correctly in the diagnostic log.
 
 ## v0.3.0
 
