@@ -258,6 +258,8 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).toContain('Polyphonic transcription via Basic Pitch');
     expect(html).toContain('Range: C3 - G4');
     expect(html).toContain('Confidence: 83%');
+    expect(html.match(/Range: C3 - G4/g)?.length ?? 0).toBe(1);
+    expect(html.match(/Confidence: 83%/g)?.length ?? 0).toBe(1);
     expect(html).toContain('2 / 2 NOTES');
     expect(html).toContain('CONFIDENCE');
     expect(html).toContain('20%');

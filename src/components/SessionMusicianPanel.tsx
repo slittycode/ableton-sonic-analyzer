@@ -187,10 +187,12 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
     return [];
   }, [activeSource, melodyDetail, transcriptionDetail]);
 
-  const filteredNotes = useMemo(
-    () => filterNotesByConfidence(activeNotes, confidenceThreshold),
-    [activeNotes, confidenceThreshold],
-  );
+  const filteredNotes = useMemo(() => {
+    if (activeSource === 'polyphonic') {
+      return filterNotesByConfidence(activeNotes, confidenceThreshold);
+    }
+    return activeNotes;
+  }, [activeNotes, activeSource, confidenceThreshold]);
 
   const displayNotes = useMemo(
     () => quantizeNotes(filteredNotes, phase1.bpm || 120, quantizeOptions),
@@ -253,14 +255,15 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
         : melodyDetail?.pitchConfidence ?? 0) * 100,
     );
     const totalDuration = displayNotes.reduce((sum, note) => sum + note.duration, 0).toFixed(1);
+    const countThreshold = activeSource === 'polyphonic' ? confidenceThreshold : 0;
 
     return {
-      countLabel: formatFilteredNoteCount(displayNotes.length, activeNotes.length, confidenceThreshold),
+      countLabel: formatFilteredNoteCount(filteredNotes.length, activeNotes.length, countThreshold),
       range: minMidi === null || maxMidi === null ? 'n/a' : `${midiToNoteName(minMidi)} - ${midiToNoteName(maxMidi)}`,
       avgConfidence,
       totalDuration,
     };
-  }, [activeNotes.length, activeSource, confidenceThreshold, displayNotes, melodyDetail, transcriptionDetail]);
+  }, [activeNotes.length, activeSource, confidenceThreshold, displayNotes, filteredNotes, melodyDetail, transcriptionDetail]);
   const hasSourceNotes = activeNotes.length > 0;
   const hasNotes = displayNotes.length > 0;
   const confidenceThresholdPercent = Math.round(confidenceThreshold * 100);
@@ -434,23 +437,23 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
                   </div>
                 )}
 
-                <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono uppercase tracking-wide text-text-secondary">
-                  {!stats && (
+                {!stats && (
+                  <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono uppercase tracking-wide text-text-secondary">
                     <span className="px-2 py-1 rounded border border-border bg-bg-panel/40">
                       {activeSource === 'polyphonic' ? transcriptionDetail?.noteCount ?? 0 : melodyDetail?.noteCount ?? 0} notes
                     </span>
-                  )}
-                  <span className="px-2 py-1 rounded border border-border bg-bg-panel/40">Range: {rangeLabel}</span>
-                  <span className="px-2 py-1 rounded border border-border bg-bg-panel/40">Confidence: {confidencePercent}%</span>
-                  {sourceBadgeLabel && (
-                    <span className="px-2 py-1 rounded border border-border bg-bg-panel/40">{sourceBadgeLabel}</span>
-                  )}
-                  {isDraft && (
-                    <span className="px-2 py-1 rounded border border-yellow-500/30 text-yellow-400 bg-yellow-500/10">
-                      Draft transcription
-                    </span>
-                  )}
-                </div>
+                    <span className="px-2 py-1 rounded border border-border bg-bg-panel/40">Range: {rangeLabel}</span>
+                    <span className="px-2 py-1 rounded border border-border bg-bg-panel/40">Confidence: {confidencePercent}%</span>
+                    {sourceBadgeLabel && (
+                      <span className="px-2 py-1 rounded border border-border bg-bg-panel/40">{sourceBadgeLabel}</span>
+                    )}
+                    {isDraft && (
+                      <span className="px-2 py-1 rounded border border-yellow-500/30 text-yellow-400 bg-yellow-500/10">
+                        Draft transcription
+                      </span>
+                    )}
+                  </div>
+                )}
 
                 {dominantNoteNames.length > 0 && (
                   <div className="flex flex-wrap gap-2">
@@ -494,7 +497,10 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
                 ))}
               </div>
 
-              <div className="flex items-center gap-2 px-2 py-1 rounded border border-border bg-bg-card">
+              <div
+                className="flex items-center gap-2 px-2 py-1 rounded border border-border bg-bg-card"
+                title={activeSource === 'monophonic' ? 'Per-note confidence not available in monophonic mode' : undefined}
+              >
                 <span className="text-[10px] font-mono uppercase text-text-secondary">CONFIDENCE</span>
                 <input
                   type="range"
@@ -503,7 +509,7 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
                   step={0.05}
                   value={confidenceThreshold}
                   onChange={(event) => setConfidenceThreshold(Number(event.target.value))}
-                  disabled={!hasSourceNotes}
+                  disabled={!hasSourceNotes || activeSource === 'monophonic'}
                   className="w-20 h-1 accent-accent disabled:opacity-30"
                 />
                 <span className="text-[10px] font-mono text-text-secondary w-8 text-right">{confidenceThresholdPercent}%</span>
