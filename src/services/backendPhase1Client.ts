@@ -7,7 +7,9 @@ import {
   Phase1Result,
 } from "../types";
 
-const DEFAULT_BACKEND_TIMEOUT_MS = 120_000;
+const ANALYZE_TIMEOUT_FLOOR_MS = 180_000;
+const ANALYZE_TIMEOUT_PADDING_MS = 60_000;
+const DEFAULT_BACKEND_TIMEOUT_MS = 600_000;
 const DEFAULT_ESTIMATE_TIMEOUT_MS = 30_000;
 
 export type BackendErrorCode =
@@ -15,6 +17,7 @@ export type BackendErrorCode =
   | "BACKEND_HTTP_ERROR"
   | "BACKEND_BAD_RESPONSE"
   | "BACKEND_TIMEOUT"
+  | "CLIENT_TIMEOUT"
   | "BACKEND_UNKNOWN_ERROR";
 
 interface BackendClientErrorDetails {
@@ -26,6 +29,7 @@ interface BackendClientErrorDetails {
   serverCode?: string;
   phase?: string;
   retryable?: boolean;
+  timeoutMs?: number;
   diagnostics?: BackendDiagnostics;
 }
 
@@ -49,6 +53,14 @@ export interface AnalyzePhase1Options {
 }
 
 type UnknownRecord = Record<string, unknown>;
+
+export function deriveAnalyzeTimeoutMs(estimatedHighMs?: number): number {
+  if (typeof estimatedHighMs !== "number" || !Number.isFinite(estimatedHighMs) || estimatedHighMs <= 0) {
+    return DEFAULT_BACKEND_TIMEOUT_MS;
+  }
+
+  return Math.max(Math.round(estimatedHighMs) + ANALYZE_TIMEOUT_PADDING_MS, ANALYZE_TIMEOUT_FLOOR_MS);
+}
 
 export async function estimatePhase1WithBackend(
   file: File,
@@ -140,16 +152,19 @@ export function parseBackendEstimateResponse(payload: unknown): BackendEstimateR
   };
 }
 
-export function mapBackendError(error: unknown): BackendClientError {
+export function mapBackendError(
+  error: unknown,
+  context?: { timeoutMs?: number },
+): BackendClientError {
   if (error instanceof BackendClientError) {
     return error;
   }
 
   if (error instanceof DOMException && error.name === "AbortError") {
     return new BackendClientError(
-      "BACKEND_TIMEOUT",
-      "Local DSP analysis timed out before completion.",
-      { cause: error },
+      "CLIENT_TIMEOUT",
+      "The UI timed out waiting for the local DSP backend response.",
+      { cause: error, timeoutMs: context?.timeoutMs },
     );
   }
 
@@ -189,7 +204,7 @@ async function postBackendMultipart(
 
     return response;
   } catch (error) {
-    throw mapBackendError(error);
+    throw mapBackendError(error, { timeoutMs });
   } finally {
     clearTimeout(timeoutHandle);
   }

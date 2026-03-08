@@ -111,4 +111,22 @@ describe('DiagnosticLog rendering', () => {
     expect(html).toContain('Phase 2 advisory is disabled.');
     expect(html).not.toContain('animate-pulse');
   });
+
+  it('renders client timeout entries without pretending the backend timed out', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(DiagnosticLog, {
+        logs: [
+          {
+            ...baseLog,
+            message: 'The UI timed out waiting for the local DSP backend response.',
+            errorCode: 'CLIENT_TIMEOUT',
+          },
+        ],
+      }),
+    );
+
+    expect(html).toContain('CLIENT_TIMEOUT');
+    expect(html).toContain('The UI timed out waiting for the local DSP backend response.');
+    expect(html).not.toContain('ANALYZER_TIMEOUT');
+  });
 });

@@ -233,7 +233,10 @@ test('phase1 dual-source session musician panel toggles between polyphonic and m
   await expect(panel.getByText('STEMS: bass, other')).toBeVisible();
   await expect(panel.getByText('Polyphonic transcription via Basic Pitch')).toBeVisible();
   await expect(panel.getByRole('button', { name: /Download \.mid/i })).toBeVisible();
-  const swingSlider = panel.locator('input[type="range"]');
+  const sliders = panel.locator('input[type="range"]');
+  const confidenceSlider = sliders.nth(0);
+  const swingSlider = sliders.nth(1);
+  await expect(confidenceSlider).toBeEnabled();
   await expect(swingSlider).toBeDisabled();
 
   await panel.getByRole('button', { name: '1/16 note' }).click();
@@ -242,10 +245,12 @@ test('phase1 dual-source session musician panel toggles between polyphonic and m
   await panel.getByRole('button', { name: 'MONOPHONIC' }).click();
   await expect(panel.getByText('SOURCES: ESSENTIA').first()).toBeVisible();
   await expect(panel.getByText('Monophonic pitch detection via Essentia')).toBeVisible();
+  await expect(confidenceSlider).toBeDisabled();
 
   await panel.getByRole('button', { name: 'POLYPHONIC' }).click();
   await expect(panel.getByText('SOURCES: BASIC PITCH').first()).toBeVisible();
   await expect(panel.getByText('Polyphonic transcription via Basic Pitch')).toBeVisible();
+  await expect(confidenceSlider).toBeEnabled();
 
   await panel.getByRole('button', { name: /Collapse session musician panel/i }).click();
   await expect(panel.getByRole('button', { name: '1/16 note' })).toHaveCount(0);

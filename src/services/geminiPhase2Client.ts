@@ -271,7 +271,7 @@ ${JSON.stringify(phase1Result, null, 2)}`;
 
   if (file.size <= INLINE_SIZE_LIMIT) {
     const base64Audio = await fileToBase64(file);
-    const mimeType = file.type || "audio/mp3";
+    const mimeType = file.type || (file.name.toLowerCase().endsWith('.flac') ? 'audio/flac' : file.name.toLowerCase().endsWith('.wav') ? 'audio/wav' : 'audio/mpeg');
     const phase2StartTime = Date.now();
     const phase2Response = await generatePhase2Response(ai, modelName, phase2Prompt, {
       inlineData: {
@@ -297,7 +297,7 @@ ${JSON.stringify(phase1Result, null, 2)}`;
       ai.files.upload({
         file,
         config: {
-          mimeType: file.type || "audio/mpeg",
+          mimeType: file.type || (file.name.toLowerCase().endsWith('.flac') ? 'audio/flac' : file.name.toLowerCase().endsWith('.wav') ? 'audio/wav' : 'audio/mpeg'),
           displayName: file.name,
         },
       }),

@@ -9,6 +9,7 @@ import { appConfig } from './config';
 import { analyzeAudio, isPhase2GeminiEnabled } from './services/analyzer';
 import {
   BackendClientError,
+  deriveAnalyzeTimeoutMs,
   estimatePhase1WithBackend,
   mapBackendError,
 } from './services/backendPhase1Client';
@@ -203,6 +204,7 @@ export default function App() {
     const activeFile = audioFile;
     const activeModel = selectedModel;
     const activeEstimate = analysisEstimate;
+    const activeTimeoutMs = deriveAnalyzeTimeoutMs(activeEstimate?.totalHighMs);
     const audioMetadata = buildAudioMetadata(activeFile);
 
     setIsAnalyzing(true);
@@ -316,7 +318,11 @@ export default function App() {
           analysisStartedAtRef.current = null;
           setElapsedMs(0);
         },
-        { transcribe: transcribeEnabled, separate: transcribeEnabled && stemSeparationEnabled },
+        {
+          transcribe: transcribeEnabled,
+          separate: transcribeEnabled && stemSeparationEnabled,
+          timeoutMs: activeTimeoutMs,
+        },
       );
     } catch (rawError) {
       const err = rawError instanceof Error ? rawError : new Error(String(rawError));

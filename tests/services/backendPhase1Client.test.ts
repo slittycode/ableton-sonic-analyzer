@@ -3,6 +3,7 @@ import {
   estimatePhase1WithBackend,
   parseBackendAnalyzeResponse,
   BackendClientError,
+  deriveAnalyzeTimeoutMs,
   mapBackendError,
 } from '../../src/services/backendPhase1Client';
 import { afterEach, vi } from 'vitest';
@@ -285,6 +286,32 @@ describe('mapBackendError', () => {
     expect(mapped).toBe(original);
     expect(mapped.details?.status).toBe(502);
   });
+
+  it('maps AbortError to a client timeout with the configured timeout budget', () => {
+    const mapped = mapBackendError(
+      new DOMException('The operation was aborted.', 'AbortError'),
+      { timeoutMs: 456000 },
+    );
+
+    expect(mapped).toBeInstanceOf(BackendClientError);
+    expect(mapped.code).toBe('CLIENT_TIMEOUT');
+    expect(mapped.message).toBe('The UI timed out waiting for the local DSP backend response.');
+    expect(mapped.details?.timeoutMs).toBe(456000);
+  });
+});
+
+describe('deriveAnalyzeTimeoutMs', () => {
+  it('adds a one-minute buffer to larger estimate highs', () => {
+    expect(deriveAnalyzeTimeoutMs(396000)).toBe(456000);
+  });
+
+  it('enforces a minimum timeout floor for short estimate highs', () => {
+    expect(deriveAnalyzeTimeoutMs(38000)).toBe(180000);
+  });
+
+  it('falls back to the long default when no estimate is available', () => {
+    expect(deriveAnalyzeTimeoutMs()).toBe(600000);
+  });
 });
 
 describe('estimatePhase1WithBackend', () => {
@@ -452,5 +479,39 @@ describe('analyzePhase1WithBackend structured errors', () => {
     );
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('honors an explicit analysis timeout override when the browser aborts the request', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+        const signal = init?.signal;
+
+        return new Promise((_resolve, reject) => {
+          signal?.addEventListener('abort', () => {
+            reject(new DOMException('The operation was aborted.', 'AbortError'));
+          });
+        });
+      }),
+    );
+
+    const request = analyzePhase1WithBackend(
+      new File(['wave'], 'track.mp3', { type: 'audio/mpeg' }),
+      null,
+      { apiBaseUrl: 'http://localhost:8000', timeoutMs: 456000 },
+    );
+
+    const expectation = expect(request).rejects.toMatchObject({
+      code: 'CLIENT_TIMEOUT',
+      message: 'The UI timed out waiting for the local DSP backend response.',
+      details: {
+        timeoutMs: 456000,
+      },
+    });
+
+    await vi.advanceTimersByTimeAsync(456000);
+
+    await expectation;
   });
 });

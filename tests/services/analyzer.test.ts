@@ -86,4 +86,37 @@ describe('analyzeAudio', () => {
     expect(phase1Log?.requestId).toBe('req_123');
     expect(phase1Log?.timings).toEqual(backendResult.diagnostics?.timings);
   });
+
+  it('forwards an explicit timeout budget to the backend phase 1 client', async () => {
+    const backendResult: BackendAnalyzeResponse = {
+      requestId: 'req_456',
+      phase1: phase1Result,
+    };
+    analyzePhase1WithBackendMock.mockResolvedValue(backendResult);
+
+    const file = new File(['audio-data'], 'track.mp3', { type: 'audio/mpeg' });
+
+    await analyzeAudio(
+      file,
+      'gemini-2.5-pro',
+      null,
+      () => {},
+      () => {},
+      (error) => {
+        throw error;
+      },
+      { transcribe: true, separate: true, timeoutMs: 456000 },
+    );
+
+    expect(analyzePhase1WithBackendMock).toHaveBeenCalledWith(
+      file,
+      null,
+      expect.objectContaining({
+        apiBaseUrl: 'http://localhost:8000',
+        transcribe: true,
+        separate: true,
+        timeoutMs: 456000,
+      }),
+    );
+  });
 });

@@ -6,6 +6,7 @@ import { DiagnosticLogEntry, Phase1Result, Phase2Result } from "../types";
 interface AnalyzeAudioOptions {
   transcribe?: boolean;
   separate?: boolean;
+  timeoutMs?: number;
 }
 
 export function isPhase2GeminiEnabled(): boolean {
@@ -32,6 +33,7 @@ export async function analyzeAudio(
     const phase1Start = Date.now();
     const backendResult = await analyzePhase1WithBackend(file, dspJson, {
       apiBaseUrl: appConfig.apiBaseUrl,
+      timeoutMs: analysisOptions?.timeoutMs,
       transcribe: analysisOptions?.transcribe ?? false,
       separate: analysisOptions?.separate ?? false,
     });
