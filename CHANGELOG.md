@@ -4,8 +4,11 @@ All notable changes to `sonic-analyzer` are documented here in reverse chronolog
 
 ## Unreleased
 
-- `server.py` now respects the multipart `transcribe` form field on `POST /api/analyze` and appends `--transcribe` when requested.
-- The HTTP API still estimates only local DSP plus optional Demucs time; transcription runtime is not yet included in the estimate or timeout budget.
+## v0.8.0
+
+- `server.py` now respects the multipart `transcribe` form field on both `POST /api/analyze` and `POST /api/analyze/estimate`, so transcription runtime can be reflected in the estimate and timeout budget when requested.
+- `POST /api/analyze` diagnostics now include a nested `timings` breakdown covering total wall time, subprocess time, overhead, flags used, file size, analyzer-reported duration, and milliseconds per second of audio.
+- The server now prints a single `[TIMING]` summary line to `stderr` for every completed `POST /api/analyze` request, including structured error responses.
 
 ## v0.7.0
 
