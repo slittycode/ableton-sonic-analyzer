@@ -77,7 +77,7 @@ Important sections:
 
 1. Persist the uploaded file to a temporary path.
 2. Read duration metadata with `get_audio_duration_seconds()`.
-3. Call `build_analysis_estimate(duration, run_separation, False)`.
+3. Call `build_analysis_estimate(duration, run_separation, run_transcribe)`.
 4. Normalize stage keys into the server contract:
    - `dsp` -> `local_dsp`
    - `separation` -> `demucs_separation`
@@ -88,10 +88,6 @@ Important sections:
    - `estimate.totalHighMs`
    - `estimate.stages[]`
 6. Close the upload and delete the temporary file.
-
-Current caveat:
-
-- The estimate route ignores transcription cost because it always passes `run_transcribe=False`.
 
 ### `POST /api/analyze`
 
@@ -110,8 +106,10 @@ Current caveat:
    - empty stdout
    - malformed JSON
    - non-object JSON
-7. On success, normalize the raw payload into `phase1` and attach diagnostics.
-8. Close the upload and delete the temporary file.
+7. Build `diagnostics.timings` from request wall time, subprocess wall time, flag usage, upload size, and analyzer-reported duration.
+8. Emit a `[TIMING]` summary line to `stderr` for every completed request, including structured errors.
+9. On success, normalize the raw payload into `phase1` and attach diagnostics.
+10. Close the upload and delete the temporary file.
 
 ## HTTP Contract
 
@@ -121,7 +119,7 @@ Multipart form fields accepted by both routes:
 
 - `track` required
 - `dsp_json_override` optional and currently ignored
-- `transcribe` optional; only `POST /api/analyze` uses it
+- `transcribe` optional; `POST /api/analyze` forwards it to `analyze.py`, and `POST /api/analyze/estimate` uses it for runtime estimation
 
 Query parameters accepted by both routes:
 
@@ -184,11 +182,23 @@ The server does not currently expose these raw analyzer fields over HTTP:
 
 `diagnostics` currently contains:
 
+- `requestId`
 - `backendDurationMs`
 - `engineVersion`
 - `estimatedLowMs`
 - `estimatedHighMs`
 - `timeoutSeconds`
+- `timings.totalMs`
+- `timings.analysisMs`
+- `timings.serverOverheadMs`
+- `timings.flagsUsed`
+- `timings.fileSizeBytes`
+- `timings.fileDurationSeconds`
+- `timings.msPerSecondOfAudio`
+
+Compatibility note:
+
+- `backendDurationMs` remains the subprocess wall time for backward compatibility and mirrors `timings.analysisMs`.
 
 ### Error Envelope
 
@@ -203,12 +213,16 @@ The server does not currently expose these raw analyzer fields over HTTP:
 
 Error diagnostics can include:
 
+- `requestId`
 - `backendDurationMs`
 - `timeoutSeconds`
 - `estimatedLowMs`
 - `estimatedHighMs`
+- `timings`
 - `stdoutSnippet`
 - `stderrSnippet`
+
+When the analyzer never produces a valid JSON object, `timings.fileDurationSeconds` and `timings.msPerSecondOfAudio` are `null`.
 
 ## Transcription Pipeline
 
@@ -233,7 +247,6 @@ Flow:
 ## Current Caveats
 
 - `dsp_json_override` is a reserved field only. The backend accepts it but does not use it.
-- Server estimates and timeout calculations do not include transcription time today.
 - `--fast` is parsed by `analyze.py` but still does nothing.
 - The HTTP API is intentionally narrower than the raw CLI schema.
 

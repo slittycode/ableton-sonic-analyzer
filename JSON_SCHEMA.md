@@ -29,11 +29,32 @@ The HTTP success envelope is:
     "bpmConfidence": 0.92
   },
   "diagnostics": {
+    "requestId": "uuid",
     "backendDurationMs": 31842.14,
-    "engineVersion": "analyze.py"
+    "engineVersion": "analyze.py",
+    "timings": {
+      "totalMs": 32010.41,
+      "analysisMs": 31842.14,
+      "serverOverheadMs": 168.27,
+      "flagsUsed": ["--separate", "--transcribe"],
+      "fileSizeBytes": 12039487,
+      "fileDurationSeconds": 214.6,
+      "msPerSecondOfAudio": 148.38
+    }
   }
 }
 ```
+
+The wrapped HTTP diagnostics also include:
+
+- `estimatedLowMs`
+- `estimatedHighMs`
+- `timeoutSeconds`
+
+Compatibility note:
+
+- `backendDurationMs` remains the subprocess wall time for backward compatibility and matches `diagnostics.timings.analysisMs`.
+- `diagnostics.timings.fileDurationSeconds` and `diagnostics.timings.msPerSecondOfAudio` are `null` on timeout or malformed/invalid analyzer output.
 
 `phase1` includes normalized scalar fields:
 

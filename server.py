@@ -1,8 +1,9 @@
 import json
 import os
 import subprocess
+import sys
 import tempfile
-import time
+from datetime import datetime
 from math import ceil
 from math import isfinite
 from pathlib import Path
@@ -72,6 +73,26 @@ def _coerce_positive_int(value: Any, default: int = 0) -> int:
     return default
 
 
+def _coerce_nullable_number(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        numeric = float(value)
+        if isfinite(numeric):
+            return numeric
+    return None
+
+
+def _current_time() -> datetime:
+    return datetime.now()
+
+
+def _elapsed_ms(started_at: datetime | None, ended_at: datetime | None) -> float:
+    if started_at is None or ended_at is None:
+        return 0.0
+    return max((ended_at - started_at).total_seconds() * 1000, 0.0)
+
+
 def _build_phase1(payload: dict[str, Any]) -> dict[str, Any]:
     stereo_detail = payload.get("stereoDetail")
     if not isinstance(stereo_detail, dict):
@@ -122,16 +143,18 @@ def _build_phase1(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _persist_upload(track: UploadFile) -> str:
+def _persist_upload(track: UploadFile) -> tuple[str, int]:
     suffix = Path(track.filename or "upload.bin").suffix or ".bin"
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
         temp_path = temp_file.name
+        total_bytes = 0
         while True:
             chunk = track.file.read(1024 * 1024)
             if not chunk:
                 break
+            total_bytes += len(chunk)
             temp_file.write(chunk)
-    return temp_path
+    return temp_path, total_bytes
 
 
 def _cleanup_temp_path(temp_path: str | None) -> None:
@@ -181,14 +204,18 @@ def _normalize_estimate_stage(raw_stage: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _build_backend_estimate(audio_path: str, run_separation: bool) -> dict[str, Any]:
+def _build_backend_estimate(
+    audio_path: str,
+    run_separation: bool,
+    run_transcribe: bool,
+) -> dict[str, Any]:
     try:
         duration_seconds = get_audio_duration_seconds(audio_path)
     except Exception:
         duration_seconds = None
 
     safe_duration = duration_seconds if duration_seconds is not None else 0.0
-    raw_estimate = build_analysis_estimate(safe_duration, run_separation, False)
+    raw_estimate = build_analysis_estimate(safe_duration, run_separation, run_transcribe)
     raw_stages = raw_estimate.get("stages")
     stages = (
         [_normalize_estimate_stage(stage) for stage in raw_stages if isinstance(stage, dict)]
@@ -231,6 +258,103 @@ def _compact_dict(payload: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in payload.items() if value is not None}
 
 
+def _round_timing_value(value: float | None) -> float | None:
+    if value is None:
+        return None
+    return round(float(value), 2)
+
+
+def _format_timing_summary_value(value: float | None, suffix: str = "", digits: int = 1) -> str:
+    if value is None:
+        return "n/a"
+    return f"{value:.{digits}f}{suffix}"
+
+
+def _build_timings(
+    *,
+    request_started_at: datetime,
+    analysis_started_at: datetime | None,
+    analysis_completed_at: datetime | None,
+    flags_used: list[str],
+    file_size_bytes: int,
+    file_duration_seconds: float | None,
+) -> dict[str, Any]:
+    response_ready_at = _current_time()
+    total_ms = _elapsed_ms(request_started_at, response_ready_at)
+    analysis_ms = _elapsed_ms(analysis_started_at, analysis_completed_at)
+    server_overhead_ms = max(total_ms - analysis_ms, 0.0)
+    normalized_duration_seconds = _coerce_nullable_number(file_duration_seconds)
+    ms_per_second_of_audio = None
+    if normalized_duration_seconds is not None and normalized_duration_seconds > 0:
+        ms_per_second_of_audio = analysis_ms / normalized_duration_seconds
+
+    return {
+        "totalMs": _round_timing_value(total_ms),
+        "analysisMs": _round_timing_value(analysis_ms),
+        "serverOverheadMs": _round_timing_value(server_overhead_ms),
+        "flagsUsed": list(flags_used),
+        "fileSizeBytes": int(file_size_bytes),
+        "fileDurationSeconds": _round_timing_value(normalized_duration_seconds),
+        "msPerSecondOfAudio": _round_timing_value(ms_per_second_of_audio),
+    }
+
+
+def _log_timing_summary(timings: dict[str, Any]) -> None:
+    flags_used = timings.get("flagsUsed")
+    flags_label = f"[{', '.join(flags_used)}]" if isinstance(flags_used, list) and flags_used else "[]"
+    file_size_bytes = _coerce_positive_int(timings.get("fileSizeBytes"))
+    file_size_mb = file_size_bytes / (1024 * 1024)
+    print(
+        f"[TIMING] total={_format_timing_summary_value(timings.get('totalMs'), 'ms')} "
+        f"analysis={_format_timing_summary_value(timings.get('analysisMs'), 'ms')} "
+        f"overhead={_format_timing_summary_value(timings.get('serverOverheadMs'), 'ms')} "
+        f"flags={flags_label} "
+        f"fileSize={_format_timing_summary_value(file_size_mb, 'MB')} "
+        f"duration={_format_timing_summary_value(timings.get('fileDurationSeconds'), 's')} "
+        f"ms/s={_format_timing_summary_value(timings.get('msPerSecondOfAudio'), digits=2)}",
+        file=sys.stderr,
+    )
+
+
+def _build_diagnostics(
+    *,
+    request_id: str,
+    estimate: dict[str, Any],
+    timeout_seconds: int,
+    request_started_at: datetime,
+    analysis_started_at: datetime | None,
+    analysis_completed_at: datetime | None,
+    flags_used: list[str],
+    file_size_bytes: int,
+    file_duration_seconds: float | None,
+    engine_version: str | None = None,
+    stdout: Any = None,
+    stderr: Any = None,
+) -> dict[str, Any]:
+    timings = _build_timings(
+        request_started_at=request_started_at,
+        analysis_started_at=analysis_started_at,
+        analysis_completed_at=analysis_completed_at,
+        flags_used=flags_used,
+        file_size_bytes=file_size_bytes,
+        file_duration_seconds=file_duration_seconds,
+    )
+    _log_timing_summary(timings)
+    return _compact_dict(
+        {
+            "requestId": request_id,
+            "backendDurationMs": timings["analysisMs"],
+            "engineVersion": engine_version,
+            "estimatedLowMs": _coerce_positive_int(estimate.get("totalLowMs")),
+            "estimatedHighMs": _coerce_positive_int(estimate.get("totalHighMs")),
+            "timeoutSeconds": timeout_seconds,
+            "timings": timings,
+            "stdoutSnippet": _safe_snippet(stdout),
+            "stderrSnippet": _safe_snippet(stderr),
+        }
+    )
+
+
 def _build_error_response(
     *,
     request_id: str,
@@ -238,21 +362,29 @@ def _build_error_response(
     error_code: str,
     message: str,
     retryable: bool,
-    backend_duration_ms: float,
     timeout_seconds: int,
     estimate: dict[str, Any],
+    request_started_at: datetime,
+    analysis_started_at: datetime | None,
+    analysis_completed_at: datetime | None,
+    flags_used: list[str],
+    file_size_bytes: int,
+    file_duration_seconds: float | None,
     stdout: Any = None,
     stderr: Any = None,
 ) -> JSONResponse:
-    diagnostics = _compact_dict(
-        {
-            "backendDurationMs": round(float(backend_duration_ms), 2),
-            "timeoutSeconds": timeout_seconds,
-            "estimatedLowMs": _coerce_positive_int(estimate.get("totalLowMs")),
-            "estimatedHighMs": _coerce_positive_int(estimate.get("totalHighMs")),
-            "stdoutSnippet": _safe_snippet(stdout),
-            "stderrSnippet": _safe_snippet(stderr),
-        }
+    diagnostics = _build_diagnostics(
+        request_id=request_id,
+        estimate=estimate,
+        timeout_seconds=timeout_seconds,
+        request_started_at=request_started_at,
+        analysis_started_at=analysis_started_at,
+        analysis_completed_at=analysis_completed_at,
+        flags_used=flags_used,
+        file_size_bytes=file_size_bytes,
+        file_duration_seconds=file_duration_seconds,
+        stdout=stdout,
+        stderr=stderr,
     )
     return JSONResponse(
         status_code=status_code,
@@ -273,21 +405,31 @@ def _build_success_response(
     *,
     request_id: str,
     payload: dict[str, Any],
-    backend_duration_ms: float,
     timeout_seconds: int,
     estimate: dict[str, Any],
+    request_started_at: datetime,
+    analysis_started_at: datetime,
+    analysis_completed_at: datetime,
+    flags_used: list[str],
+    file_size_bytes: int,
 ) -> JSONResponse:
+    diagnostics = _build_diagnostics(
+        request_id=request_id,
+        estimate=estimate,
+        timeout_seconds=timeout_seconds,
+        request_started_at=request_started_at,
+        analysis_started_at=analysis_started_at,
+        analysis_completed_at=analysis_completed_at,
+        flags_used=flags_used,
+        file_size_bytes=file_size_bytes,
+        file_duration_seconds=payload.get("durationSeconds"),
+        engine_version=ENGINE_VERSION,
+    )
     return JSONResponse(
         content={
             "requestId": request_id,
             "phase1": _build_phase1(payload),
-            "diagnostics": {
-                "backendDurationMs": round(float(backend_duration_ms), 2),
-                "engineVersion": ENGINE_VERSION,
-                "estimatedLowMs": _coerce_positive_int(estimate.get("totalLowMs")),
-                "estimatedHighMs": _coerce_positive_int(estimate.get("totalHighMs")),
-                "timeoutSeconds": timeout_seconds,
-            },
+            "diagnostics": diagnostics,
         }
     )
 
@@ -297,7 +439,8 @@ async def estimate_analysis(
     track: UploadFile = File(...),
     dsp_json_override: str | None = Form(None),
     transcribe: bool = Form(False),
-    separate: bool = Query(False, description="Pass --separate to analyze.py when true"),
+    separate: bool = Form(False),
+    separate_query: bool = Query(False, alias="separate", description="Pass --separate to analyze.py when true"),
     separate_flag: bool = Query(
         False,
         alias="--separate",
@@ -306,10 +449,10 @@ async def estimate_analysis(
 ):
     temp_path: str | None = None
     try:
-        temp_path = _persist_upload(track)
-        _ = dsp_json_override, transcribe
-        run_separation = bool(separate or separate_flag)
-        estimate = _build_backend_estimate(temp_path, run_separation)
+        temp_path, _file_size_bytes = _persist_upload(track)
+        _ = dsp_json_override
+        run_separation = bool(separate or separate_query or separate_flag)
+        estimate = _build_backend_estimate(temp_path, run_separation, transcribe)
         return JSONResponse(
             content={
                 "requestId": str(uuid4()),
@@ -326,7 +469,8 @@ async def analyze_audio(
     track: UploadFile = File(...),
     dsp_json_override: str | None = Form(None),
     transcribe: bool = Form(False),
-    separate: bool = Query(False, description="Pass --separate to analyze.py when true"),
+    separate: bool = Form(False),
+    separate_query: bool = Query(False, alias="separate", description="Pass --separate to analyze.py when true"),
     separate_flag: bool = Query(
         False,
         alias="--separate",
@@ -335,21 +479,26 @@ async def analyze_audio(
 ):
     temp_path: str | None = None
     request_id = str(uuid4())
-    backend_duration_ms = 0.0
+    request_started_at = _current_time()
+    analysis_started_at: datetime | None = None
+    analysis_completed_at: datetime | None = None
     try:
-        temp_path = _persist_upload(track)
+        temp_path, file_size_bytes = _persist_upload(track)
         _ = dsp_json_override
-        run_separation = bool(separate or separate_flag)
-        estimate = _build_backend_estimate(temp_path, run_separation)
+        run_separation = bool(separate or separate_query or separate_flag)
+        estimate = _build_backend_estimate(temp_path, run_separation, transcribe)
 
         command = ["./venv/bin/python", "analyze.py", temp_path, "--yes"]
+        flags_used: list[str] = []
         if run_separation:
             command.append("--separate")
+            flags_used.append("--separate")
         if transcribe:
             command.append("--transcribe")
+            flags_used.append("--transcribe")
 
         timeout_seconds = _compute_timeout_seconds(estimate)
-        started_at = time.perf_counter()
+        analysis_started_at = _current_time()
         try:
             result = subprocess.run(
                 command,
@@ -359,33 +508,43 @@ async def analyze_audio(
                 timeout=timeout_seconds,
             )
         except subprocess.TimeoutExpired as exc:
-            backend_duration_ms = (time.perf_counter() - started_at) * 1000
+            analysis_completed_at = _current_time()
             return _build_error_response(
                 request_id=request_id,
                 status_code=504,
                 error_code="ANALYZER_TIMEOUT",
                 message="Local DSP analysis timed out before completion.",
                 retryable=True,
-                backend_duration_ms=backend_duration_ms,
                 timeout_seconds=timeout_seconds,
                 estimate=estimate,
+                request_started_at=request_started_at,
+                analysis_started_at=analysis_started_at,
+                analysis_completed_at=analysis_completed_at,
+                flags_used=flags_used,
+                file_size_bytes=file_size_bytes,
+                file_duration_seconds=None,
                 stdout=exc.stdout,
                 stderr=exc.stderr,
             )
         except Exception as exc:
-            backend_duration_ms = (time.perf_counter() - started_at) * 1000
+            analysis_completed_at = _current_time()
             return _build_error_response(
                 request_id=request_id,
                 status_code=500,
                 error_code="BACKEND_INTERNAL_ERROR",
                 message="Local DSP backend hit an unexpected server error.",
                 retryable=False,
-                backend_duration_ms=backend_duration_ms,
                 timeout_seconds=timeout_seconds,
                 estimate=estimate,
+                request_started_at=request_started_at,
+                analysis_started_at=analysis_started_at,
+                analysis_completed_at=analysis_completed_at,
+                flags_used=flags_used,
+                file_size_bytes=file_size_bytes,
+                file_duration_seconds=None,
                 stderr=exc,
             )
-        backend_duration_ms = (time.perf_counter() - started_at) * 1000
+        analysis_completed_at = _current_time()
 
         if result.returncode != 0:
             return _build_error_response(
@@ -394,9 +553,14 @@ async def analyze_audio(
                 error_code="ANALYZER_FAILED",
                 message="Local DSP analysis failed before a valid result was produced.",
                 retryable=True,
-                backend_duration_ms=backend_duration_ms,
                 timeout_seconds=timeout_seconds,
                 estimate=estimate,
+                request_started_at=request_started_at,
+                analysis_started_at=analysis_started_at,
+                analysis_completed_at=analysis_completed_at,
+                flags_used=flags_used,
+                file_size_bytes=file_size_bytes,
+                file_duration_seconds=None,
                 stdout=result.stdout,
                 stderr=result.stderr,
             )
@@ -409,9 +573,14 @@ async def analyze_audio(
                 error_code="ANALYZER_EMPTY_OUTPUT",
                 message="Local DSP analysis completed without returning any JSON.",
                 retryable=False,
-                backend_duration_ms=backend_duration_ms,
                 timeout_seconds=timeout_seconds,
                 estimate=estimate,
+                request_started_at=request_started_at,
+                analysis_started_at=analysis_started_at,
+                analysis_completed_at=analysis_completed_at,
+                flags_used=flags_used,
+                file_size_bytes=file_size_bytes,
+                file_duration_seconds=None,
                 stderr=result.stderr,
             )
 
@@ -424,9 +593,14 @@ async def analyze_audio(
                 error_code="ANALYZER_INVALID_JSON",
                 message="Local DSP analysis returned malformed JSON.",
                 retryable=False,
-                backend_duration_ms=backend_duration_ms,
                 timeout_seconds=timeout_seconds,
                 estimate=estimate,
+                request_started_at=request_started_at,
+                analysis_started_at=analysis_started_at,
+                analysis_completed_at=analysis_completed_at,
+                flags_used=flags_used,
+                file_size_bytes=file_size_bytes,
+                file_duration_seconds=None,
                 stdout=stdout,
                 stderr=result.stderr,
             )
@@ -438,9 +612,14 @@ async def analyze_audio(
                 error_code="ANALYZER_BAD_PAYLOAD",
                 message="Local DSP analysis returned a JSON payload that did not match the expected contract.",
                 retryable=False,
-                backend_duration_ms=backend_duration_ms,
                 timeout_seconds=timeout_seconds,
                 estimate=estimate,
+                request_started_at=request_started_at,
+                analysis_started_at=analysis_started_at,
+                analysis_completed_at=analysis_completed_at,
+                flags_used=flags_used,
+                file_size_bytes=file_size_bytes,
+                file_duration_seconds=None,
                 stdout=stdout,
                 stderr=result.stderr,
             )
@@ -448,9 +627,13 @@ async def analyze_audio(
         return _build_success_response(
             request_id=request_id,
             payload=payload,
-            backend_duration_ms=backend_duration_ms,
             timeout_seconds=timeout_seconds,
             estimate=estimate,
+            request_started_at=request_started_at,
+            analysis_started_at=analysis_started_at,
+            analysis_completed_at=analysis_completed_at,
+            flags_used=flags_used,
+            file_size_bytes=file_size_bytes,
         )
     finally:
         await track.close()

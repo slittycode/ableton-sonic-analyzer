@@ -112,7 +112,7 @@ Multipart form fields:
 
 - `track` required file upload
 - `dsp_json_override` optional string, accepted but ignored
-- `transcribe` optional boolean-like form value, accepted but currently ignored by the estimate path
+- `transcribe` optional boolean-like form value; when true the estimate includes transcription runtime
 
 Query parameters:
 
@@ -133,10 +133,8 @@ Current stage keys returned by the server:
 
 - `local_dsp`
 - `demucs_separation` when `separate` is enabled
-
-Current caveat:
-
-- The estimate endpoint always calls `build_analysis_estimate(..., run_transcribe=False)`, so transcription time is not represented in the estimate even if the caller sends `transcribe=true`.
+- `transcription_full_mix` when `transcribe` is enabled without `separate`
+- `transcription_stems` when both `transcribe` and `separate` are enabled
 
 Example:
 
@@ -153,6 +151,7 @@ Purpose:
 - Build a timeout from the backend estimate
 - Invoke `analyze.py` with `--yes` and any requested runtime flags
 - Return a normalized `phase1` object plus diagnostics
+- Emit a `[TIMING]` summary line to `stderr` for the completed request
 
 Multipart form fields:
 
@@ -177,11 +176,24 @@ Top-level fields:
 
 `diagnostics` currently contains:
 
+- `requestId` mirrors the top-level request ID
 - `backendDurationMs`
 - `engineVersion` currently `"analyze.py"`
 - `estimatedLowMs`
 - `estimatedHighMs`
 - `timeoutSeconds`
+- `timings`
+  - `totalMs` end-to-end wall time from request receipt to response construction
+  - `analysisMs` subprocess wall time for `analyze.py`
+  - `serverOverheadMs` `totalMs - analysisMs`
+  - `flagsUsed` optional runtime flags passed to `analyze.py` such as `--separate` and `--transcribe`
+  - `fileSizeBytes` uploaded file size after persistence
+  - `fileDurationSeconds` analyzer-reported duration when available
+  - `msPerSecondOfAudio` analyzer wall time divided by `fileDurationSeconds`, or `null`
+
+Compatibility note:
+
+- `backendDurationMs` remains the subprocess wall time for backward compatibility and matches `diagnostics.timings.analysisMs`.
 
 `phase1` currently contains these normalized scalar fields:
 
@@ -263,22 +275,27 @@ Possible backend error codes emitted by `server.py` today:
 
 `diagnostics` on error may include:
 
+- `requestId`
 - `backendDurationMs`
 - `timeoutSeconds`
 - `estimatedLowMs`
 - `estimatedHighMs`
+- `timings`
 - `stdoutSnippet`
 - `stderrSnippet`
+
+When the analyzer does not produce a valid payload, `diagnostics.timings.fileDurationSeconds` and `diagnostics.timings.msPerSecondOfAudio` are `null`.
 
 ## Known Behavior Worth Documenting
 
 - `dsp_json_override` is accepted by both endpoints but is currently ignored by the backend.
-- The server timeout budget is derived from the estimate path, so it also excludes transcription time today.
+- The server timeout budget is derived from the estimate path and now reflects requested separation and transcription work.
 - `transcriptionDetail` is only present when `analyze.py` runs with `--transcribe`; otherwise it is `null`.
 - `--fast` is accepted by the CLI but does not change analysis behavior yet.
 
 ## Validation
 
 ```bash
+./venv/bin/python -m py_compile server.py
 ./venv/bin/python -m unittest tests/test_server.py
 ```
