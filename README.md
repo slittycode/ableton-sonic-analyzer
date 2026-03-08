@@ -16,10 +16,13 @@ The app uploads a track to the local DSP backend, shows the estimate and executi
   - polyphonic Basic Pitch note view when `transcriptionDetail` exists
   - monophonic Essentia note view when `melodyDetail` exists
   - source toggle when both are available
+  - confidence threshold slider (polyphonic mode only; disabled in monophonic mode with tooltip)
+  - stem separation toggle (Demucs pre-processing)
   - quantize grid and swing controls
   - browser preview and `.mid` download
 - JSON export and markdown report export
 - diagnostic log with request IDs, durations, estimate ranges, and backend or Gemini status
+- optimised initial bundle: 48kB entry chunk via Vite manual chunk splitting and lazy-loaded result components
 
 ## Tech Stack
 
@@ -111,6 +114,7 @@ What the UI sends today:
 
 - multipart `track`
 - multipart `transcribe=true|false` based on the MIDI transcription toggle
+- multipart `separate=true|false` based on the stem separation toggle
 - multipart `dsp_json_override` only when the JSON text area contains valid JSON
 - no `separate` query parameter
 
@@ -170,12 +174,16 @@ Diagnostics fields the UI uses or preserves:
 - `estimatedLowMs`
 - `estimatedHighMs`
 - `timeoutSeconds`
+- `timings.totalMs`
+- `timings.analysisMs`
+- `timings.serverOverheadMs`
+- `timings.flagsUsed`
+- `timings.msPerSecondOfAudio`
 - `stdoutSnippet`
 - `stderrSnippet`
 
 Important current limitations:
 
-- the frontend does not send `separate`, so Demucs separation is not user-toggleable from this app today
 - the checked-in TypeScript model treats `danceability` as a scalar even though the backend returns an object; the UI does not currently render that section
 - the backend omits raw analyzer fields such as `bpmPercival`, `bpmAgreement`, `dynamicCharacter`, `segmentStereo`, and `essentiaFeatures`, so the UI never receives them from `server.py`
 
@@ -202,6 +210,7 @@ Current behavior:
 - The user can choose from the baked-in Gemini model list in `src/App.tsx`.
 - The prompt uses the uploaded audio file plus the completed `phase1` payload.
 - Phase 2 results drive the arrangement narrative, sonic element cards, mix chain, patch framework, secret sauce, and recommendation sections.
+- Audio files at or below 20MB are sent to Gemini as inline base64. Audio files above 20MB are uploaded via the Gemini Files API before generation and deleted immediately after; the diagnostic log shows upload and generation durations separately.
 
 ## Export Behavior
 
