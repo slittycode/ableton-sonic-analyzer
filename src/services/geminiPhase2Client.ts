@@ -3,6 +3,8 @@ import { appConfig, isGeminiPhase2Available } from "../config";
 import { DiagnosticLogEntry, Phase1Result, Phase2Result } from "../types";
 import { PHASE2_LABEL } from "./phaseLabels";
 
+const INLINE_SIZE_LIMIT = 20_971_520;
+
 interface AnalyzePhase2Args {
   file: File;
   modelName: string;
@@ -65,9 +67,6 @@ export async function analyzePhase2WithGemini({
       timeout: 5 * 60 * 1_000,
     },
   });
-
-  const base64Audio = await fileToBase64(file);
-  const mimeType = file.type || "audio/mp3";
   const phase2Prompt = `You are an expert Ableton Live 12 producer and sound designer 
 specialising in electronic music reconstruction. You receive:
 1. A structured JSON object of deterministic DSP measurements
@@ -270,163 +269,71 @@ justified by a specific measurement from the JSON.
 Phase 1 Measurements:
 ${JSON.stringify(phase1Result, null, 2)}`;
 
-  const phase2StartTime = Date.now();
-  const phase2Response = await withRetry(() =>
-    ai.models.generateContent({
-      model: modelName,
-      contents: [
-        {
-          parts: [
-            {
-              inlineData: {
-                data: base64Audio,
-                mimeType,
-              },
-            },
-            { text: phase2Prompt },
-          ],
-        },
-      ],
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            trackCharacter: { type: Type.STRING },
-            detectedCharacteristics: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  name: { type: Type.STRING },
-                  confidence: { type: Type.STRING },
-                  explanation: { type: Type.STRING },
-                },
-                required: ["name", "confidence", "explanation"],
-              },
-            },
-            arrangementOverview: {
-              type: SchemaType.OBJECT,
-              properties: {
-                summary: { type: SchemaType.STRING },
-                segments: {
-                  type: SchemaType.ARRAY,
-                  items: {
-                    type: SchemaType.OBJECT,
-                    properties: {
-                      index: { type: SchemaType.NUMBER },
-                      startTime: { type: SchemaType.NUMBER },
-                      endTime: { type: SchemaType.NUMBER },
-                      lufs: { type: SchemaType.NUMBER },
-                      description: { type: SchemaType.STRING },
-                      spectralNote: { type: SchemaType.STRING },
-                    },
-                    required: ["index", "startTime", "endTime", "description"],
-                  },
-                },
-                noveltyNotes: { type: SchemaType.STRING },
-              },
-              required: ["summary", "segments"],
-            },
-            sonicElements: {
-              type: Type.OBJECT,
-              properties: {
-                kick: { type: Type.STRING },
-                bass: { type: Type.STRING },
-                melodicArp: { type: Type.STRING },
-                grooveAndTiming: { type: Type.STRING },
-                effectsAndTexture: { type: Type.STRING },
-                widthAndStereo: { type: SchemaType.STRING },
-                harmonicContent: { type: SchemaType.STRING },
-              },
-              required: ["kick", "bass", "melodicArp", "grooveAndTiming", "effectsAndTexture"],
-            },
-            mixAndMasterChain: {
-              type: SchemaType.ARRAY,
-              items: {
-                type: SchemaType.OBJECT,
-                properties: {
-                  order: { type: SchemaType.NUMBER },
-                  device: { type: SchemaType.STRING },
-                  parameter: { type: SchemaType.STRING },
-                  value: { type: SchemaType.STRING },
-                  reason: { type: SchemaType.STRING },
-                },
-                required: ["order", "device", "parameter", "value", "reason"],
-              },
-            },
-            secretSauce: {
-              type: Type.OBJECT,
-              properties: {
-                title: { type: Type.STRING },
-                icon: { type: SchemaType.STRING },
-                explanation: { type: Type.STRING },
-                implementationSteps: { type: Type.ARRAY, items: { type: Type.STRING } },
-              },
-              required: ["title", "explanation", "implementationSteps"],
-            },
-            confidenceNotes: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  field: { type: Type.STRING },
-                  value: { type: Type.STRING },
-                  reason: { type: Type.STRING },
-                },
-                required: ["field", "value", "reason"],
-              },
-            },
-            abletonRecommendations: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  device: { type: Type.STRING },
-                  category: { type: Type.STRING },
-                  parameter: { type: Type.STRING },
-                  value: { type: Type.STRING },
-                  reason: { type: Type.STRING },
-                  advancedTip: { type: Type.STRING },
-                },
-                required: ["device", "category", "parameter", "value", "reason"],
-              },
-            },
-          },
-          required: [
-            "trackCharacter",
-            "detectedCharacteristics",
-            "arrangementOverview",
-            "sonicElements",
-            "mixAndMasterChain",
-            "secretSauce",
-            "confidenceNotes",
-            "abletonRecommendations",
-          ],
-        },
+  if (file.size <= INLINE_SIZE_LIMIT) {
+    const base64Audio = await fileToBase64(file);
+    const mimeType = file.type || "audio/mp3";
+    const phase2StartTime = Date.now();
+    const phase2Response = await generatePhase2Response(ai, modelName, phase2Prompt, {
+      inlineData: {
+        data: base64Audio,
+        mimeType,
       },
-    }),
+    });
+    const phase2EndTime = Date.now();
+
+    return buildPhase2Result({
+      modelName,
+      phase2Prompt,
+      phase2Response,
+      audioMetadata,
+      durationMs: phase2EndTime - phase2StartTime,
+      message: "Phase 2 advisory complete.",
+    });
+  }
+
+  const uploadStartTime = Date.now();
+  const uploadedFile = await withRetry(
+    () =>
+      ai.files.upload({
+        file,
+        config: {
+          mimeType: file.type || "audio/mpeg",
+          displayName: file.name,
+        },
+      }),
+    3,
+    2_000,
   );
+
+  let phase2Response;
+  const phase2StartTime = Date.now();
+  try {
+    phase2Response = await generatePhase2Response(ai, modelName, phase2Prompt, {
+      fileData: {
+        fileUri: uploadedFile.uri,
+        mimeType: uploadedFile.mimeType,
+      },
+    });
+  } finally {
+    try {
+      await ai.files.delete({ name: uploadedFile.name });
+    } catch {
+      // Files auto-expire; cleanup failures should not fail the analysis.
+    }
+  }
   const phase2EndTime = Date.now();
 
-  const result = JSON.parse(phase2Response.text || "{}") as Phase2Result;
-  const log: DiagnosticLogEntry = {
-    model: modelName,
-    phase: PHASE2_LABEL,
-    promptLength: phase2Prompt.length,
-    responseLength: phase2Response.text?.length || 0,
-    durationMs: phase2EndTime - phase2StartTime,
-    audioMetadata,
-    timestamp: new Date().toISOString(),
-    source: "gemini",
-    status: "success",
-    message: "Phase 2 advisory complete.",
-  };
+  const uploadMs = phase2StartTime - uploadStartTime;
+  const generateMs = phase2EndTime - phase2StartTime;
 
-  return {
-    result,
-    log,
-  };
+  return buildPhase2Result({
+    modelName,
+    phase2Prompt,
+    phase2Response,
+    audioMetadata,
+    durationMs: phase2EndTime - uploadStartTime,
+    message: `Phase 2 advisory complete. Upload: ${uploadMs}ms, Generate: ${generateMs}ms`,
+  });
 }
 
 function fileToBase64(file: File): Promise<string> {
@@ -448,4 +355,181 @@ function fileToBase64(file: File): Promise<string> {
 function formatError(error: unknown): string {
   if (error instanceof Error) return error.message;
   return String(error);
+}
+
+function generatePhase2Response(
+  ai: GoogleGenAI,
+  modelName: string,
+  phase2Prompt: string,
+  mediaPart: Record<string, unknown>,
+) {
+  return withRetry(
+    () =>
+      ai.models.generateContent({
+        model: modelName,
+        contents: [
+          {
+            parts: [
+              mediaPart,
+              { text: phase2Prompt },
+            ],
+          },
+        ],
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              trackCharacter: { type: Type.STRING },
+              detectedCharacteristics: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    name: { type: Type.STRING },
+                    confidence: { type: Type.STRING },
+                    explanation: { type: Type.STRING },
+                  },
+                  required: ["name", "confidence", "explanation"],
+                },
+              },
+              arrangementOverview: {
+                type: SchemaType.OBJECT,
+                properties: {
+                  summary: { type: SchemaType.STRING },
+                  segments: {
+                    type: SchemaType.ARRAY,
+                    items: {
+                      type: SchemaType.OBJECT,
+                      properties: {
+                        index: { type: SchemaType.NUMBER },
+                        startTime: { type: SchemaType.NUMBER },
+                        endTime: { type: SchemaType.NUMBER },
+                        lufs: { type: SchemaType.NUMBER },
+                        description: { type: SchemaType.STRING },
+                        spectralNote: { type: SchemaType.STRING },
+                      },
+                      required: ["index", "startTime", "endTime", "description"],
+                    },
+                  },
+                  noveltyNotes: { type: SchemaType.STRING },
+                },
+                required: ["summary", "segments"],
+              },
+              sonicElements: {
+                type: Type.OBJECT,
+                properties: {
+                  kick: { type: Type.STRING },
+                  bass: { type: Type.STRING },
+                  melodicArp: { type: Type.STRING },
+                  grooveAndTiming: { type: Type.STRING },
+                  effectsAndTexture: { type: Type.STRING },
+                  widthAndStereo: { type: SchemaType.STRING },
+                  harmonicContent: { type: SchemaType.STRING },
+                },
+                required: ["kick", "bass", "melodicArp", "grooveAndTiming", "effectsAndTexture"],
+              },
+              mixAndMasterChain: {
+                type: SchemaType.ARRAY,
+                items: {
+                  type: SchemaType.OBJECT,
+                  properties: {
+                    order: { type: SchemaType.NUMBER },
+                    device: { type: SchemaType.STRING },
+                    parameter: { type: SchemaType.STRING },
+                    value: { type: SchemaType.STRING },
+                    reason: { type: SchemaType.STRING },
+                  },
+                  required: ["order", "device", "parameter", "value", "reason"],
+                },
+              },
+              secretSauce: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                  icon: { type: SchemaType.STRING },
+                  explanation: { type: Type.STRING },
+                  implementationSteps: { type: Type.ARRAY, items: { type: Type.STRING } },
+                },
+                required: ["title", "explanation", "implementationSteps"],
+              },
+              confidenceNotes: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    field: { type: Type.STRING },
+                    value: { type: Type.STRING },
+                    reason: { type: Type.STRING },
+                  },
+                  required: ["field", "value", "reason"],
+                },
+              },
+              abletonRecommendations: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    device: { type: Type.STRING },
+                    category: { type: Type.STRING },
+                    parameter: { type: Type.STRING },
+                    value: { type: Type.STRING },
+                    reason: { type: Type.STRING },
+                    advancedTip: { type: Type.STRING },
+                  },
+                  required: ["device", "category", "parameter", "value", "reason"],
+                },
+              },
+            },
+            required: [
+              "trackCharacter",
+              "detectedCharacteristics",
+              "arrangementOverview",
+              "sonicElements",
+              "mixAndMasterChain",
+              "secretSauce",
+              "confidenceNotes",
+              "abletonRecommendations",
+            ],
+          },
+        },
+      }),
+    3,
+    2_000,
+  );
+}
+
+function buildPhase2Result({
+  modelName,
+  phase2Prompt,
+  phase2Response,
+  audioMetadata,
+  durationMs,
+  message,
+}: {
+  modelName: string;
+  phase2Prompt: string;
+  phase2Response: { text?: string };
+  audioMetadata: DiagnosticLogEntry["audioMetadata"];
+  durationMs: number;
+  message: string;
+}): AnalyzePhase2Result {
+  const result = JSON.parse(phase2Response.text || "{}") as Phase2Result;
+  const log: DiagnosticLogEntry = {
+    model: modelName,
+    phase: PHASE2_LABEL,
+    promptLength: phase2Prompt.length,
+    responseLength: phase2Response.text?.length || 0,
+    durationMs,
+    audioMetadata,
+    timestamp: new Date().toISOString(),
+    source: "gemini",
+    status: "success",
+    message,
+  };
+
+  return {
+    result,
+    log,
+  };
 }
