@@ -4,6 +4,7 @@ All notable changes to `sonic-analyzer-UI` are documented here in reverse chrono
 
 ## Unreleased
 
+- Fixed Phase 1 danceability handling to preserve the backend `{ danceability, dfa }` object and render a dedicated Danceability section in the results UI.
 - Fixed REPORT_MD export to serialize Arrangement Overview and Mix and Master Chain sections as human-readable markdown instead of object coercion output.
 
 ## v0.4.0

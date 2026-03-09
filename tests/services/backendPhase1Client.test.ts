@@ -106,7 +106,10 @@ const validPayload = {
     synthesisCharacter: {
       analogLike: true,
     },
-    danceability: 1.24,
+    danceability: {
+      danceability: 1.24,
+      dfa: 0.87,
+    },
     structure: {
       sections: 5,
     },
@@ -178,6 +181,7 @@ describe('parseBackendAnalyzeResponse', () => {
     expect(parsed.phase1.structure).toEqual(validPayload.phase1.structure);
     expect(parsed.phase1.segmentLoudness).toEqual(validPayload.phase1.segmentLoudness);
     expect(parsed.phase1.perceptual).toEqual(validPayload.phase1.perceptual);
+    expect(parsed.phase1.danceability).toEqual(validPayload.phase1.danceability);
   });
 
   it('throws when phase1 is missing', () => {
@@ -264,6 +268,21 @@ describe('parseBackendAnalyzeResponse', () => {
     expect(parsed.phase1.melodyDetail?.vibratoConfidence).toBe(0);
     expect(parsed.phase1.melodyDetail?.midiFile).toBeNull();
     expect(parsed.phase1.melodyDetail?.sourceSeparated).toBe(false);
+  });
+
+  it('treats malformed optional danceability objects as null', () => {
+    const parsed = parseBackendAnalyzeResponse({
+      ...validPayload,
+      phase1: {
+        ...validPayload.phase1,
+        danceability: {
+          danceability: 'high',
+          dfa: null,
+        },
+      },
+    });
+
+    expect(parsed.phase1.danceability).toBeNull();
   });
 });
 

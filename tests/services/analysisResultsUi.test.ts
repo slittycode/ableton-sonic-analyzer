@@ -177,6 +177,27 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).toContain('SCANNING...');
   });
 
+  it('renders a danceability section when backend danceability data is present', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: {
+          ...basePhase1,
+          danceability: {
+            danceability: 1.24,
+            dfa: 0.87,
+          },
+        } as Phase1Result,
+        phase2: basePhase2,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).toContain('Danceability');
+    expect(html).toContain('DFA');
+    expect(html).toContain('1.24');
+    expect(html).toContain('0.87');
+  });
+
   it('uses normalized midi download filename', () => {
     expect(MIDI_DOWNLOAD_FILE_NAME).toBe('track-analysis.mid');
   });

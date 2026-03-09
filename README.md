@@ -159,6 +159,7 @@ Expanded `phase1` sections the current app can consume:
 - `sidechainDetail`
 - `effectsDetail`
 - `synthesisCharacter`
+- `danceability`
 - `structure`
 - `arrangementDetail`
 - `segmentLoudness`
@@ -184,7 +185,6 @@ Diagnostics fields the UI uses or preserves:
 
 Important current limitations:
 
-- the checked-in TypeScript model treats `danceability` as a scalar even though the backend returns an object; the UI does not currently render that section
 - the backend omits raw analyzer fields such as `bpmPercival`, `bpmAgreement`, `dynamicCharacter`, `segmentStereo`, and `essentiaFeatures`, so the UI never receives them from `server.py`
 
 ### Error Response

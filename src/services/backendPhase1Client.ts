@@ -4,6 +4,7 @@ import {
   BackendTimingDiagnostics,
   BackendErrorResponse,
   BackendEstimateResponse,
+  DanceabilityResult,
   Phase1Result,
 } from "../types";
 
@@ -392,7 +393,7 @@ function parsePhase1Result(value: unknown): Phase1Result {
     sidechainDetail: isRecord(phase1.sidechainDetail) ? phase1.sidechainDetail : null,
     effectsDetail: isRecord(phase1.effectsDetail) ? phase1.effectsDetail : null,
     synthesisCharacter: isRecord(phase1.synthesisCharacter) ? phase1.synthesisCharacter : null,
-    danceability: toNumber(phase1.danceability),
+    danceability: parseOptionalDanceability(phase1.danceability),
     structure: isRecord(phase1.structure) ? phase1.structure : null,
     arrangementDetail: isRecord(phase1.arrangementDetail) ? phase1.arrangementDetail : null,
     segmentLoudness: Array.isArray(phase1.segmentLoudness) ? phase1.segmentLoudness : null,
@@ -401,6 +402,17 @@ function parsePhase1Result(value: unknown): Phase1Result {
     chordDetail: isRecord(phase1.chordDetail) ? phase1.chordDetail : null,
     perceptual: isRecord(phase1.perceptual) ? phase1.perceptual : null,
   };
+}
+
+function parseOptionalDanceability(value: unknown): DanceabilityResult | null {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value)) return null;
+
+  const danceability = toNumber(value.danceability);
+  const dfa = toNumber(value.dfa);
+  if (danceability === null || dfa === null) return null;
+
+  return { danceability, dfa };
 }
 
 function parseOptionalMelodyDetail(phase1: UnknownRecord): Phase1Result["melodyDetail"] | undefined {

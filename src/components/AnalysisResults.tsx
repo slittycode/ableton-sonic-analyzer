@@ -97,6 +97,10 @@ function withAlpha(hexColor: string, alphaHex: string): string {
   return `${hexColor}${alphaHex}`;
 }
 
+function formatMetricValue(value: number): string {
+  return value.toFixed(2);
+}
+
 export function AnalysisResults({ phase1, phase2, sourceFileName = null }: AnalysisResultsProps) {
   const [openArrangement, setOpenArrangement] = useState<Record<string, boolean>>({});
   const [openSonic, setOpenSonic] = useState<Set<string>>(new Set());
@@ -146,6 +150,7 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
   const characteristicPills = Array.isArray(phase2?.detectedCharacteristics)
     ? phase2.detectedCharacteristics.slice(0, 4)
     : [];
+  const danceability = phase1.danceability;
 
   return (
     <motion.div
@@ -268,6 +273,35 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
           </div>
         </div>
       </div>
+
+      {danceability && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between border-b border-border pb-2">
+            <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
+              <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
+              Danceability
+            </h2>
+            <span className="text-[10px] font-mono bg-bg-panel border border-border px-2 py-1 rounded font-bold text-text-secondary">
+              PHASE 1
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-bg-card border border-border rounded-sm p-4">
+              <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">Danceability</p>
+              <p className="text-2xl font-display font-bold text-text-primary mt-2">
+                {formatMetricValue(danceability.danceability)}
+              </p>
+            </div>
+            <div className="bg-bg-card border border-border rounded-sm p-4">
+              <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">DFA</p>
+              <p className="text-2xl font-display font-bold text-text-primary mt-2">
+                {formatMetricValue(danceability.dfa)}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {confidenceBadges.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 px-1">

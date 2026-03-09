@@ -52,6 +52,11 @@ export interface TranscriptionDetail {
   notes: TranscriptionNote[];
 }
 
+export interface DanceabilityResult {
+  danceability: number;
+  dfa: number;
+}
+
 export interface Phase1Result {
   bpm: number;
   bpmConfidence: number;
@@ -82,7 +87,7 @@ export interface Phase1Result {
   sidechainDetail?: Record<string, unknown> | null;
   effectsDetail?: Record<string, unknown> | null;
   synthesisCharacter?: Record<string, unknown> | null;
-  danceability?: number | null;
+  danceability?: DanceabilityResult | null;
   structure?: Record<string, unknown> | null;
   arrangementDetail?: Record<string, unknown> | null;
   segmentLoudness?: unknown[] | null;
