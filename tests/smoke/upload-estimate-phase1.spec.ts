@@ -60,6 +60,25 @@ test('upload shows estimate and local DSP processing copy before phase1 complete
                 },
               ],
             }
+          : stemSeparationEnabled
+            ? {
+                totalLowMs: 67000,
+                totalHighMs: 128000,
+                stages: [
+                  {
+                    key: 'local_dsp',
+                    label: 'Local DSP analysis',
+                    lowMs: 22000,
+                    highMs: 38000,
+                  },
+                  {
+                    key: 'demucs_separation',
+                    label: 'Demucs separation',
+                    lowMs: 45000,
+                    highMs: 90000,
+                  },
+                ],
+              }
           : {
               totalLowMs: 22000,
               totalHighMs: 38000,
@@ -87,6 +106,9 @@ test('upload shows estimate and local DSP processing copy before phase1 complete
   });
 
   await page.route('**/api/analyze', async (route) => {
+    const body = route.request().postData() ?? '';
+    expect(hasMultipartBoolean(body, 'transcribe', true)).toBe(false);
+    expect(hasMultipartBoolean(body, 'separate', true)).toBe(true);
     await new Promise((resolve) => setTimeout(resolve, 300));
     await route.fulfill({
       status: 200,
@@ -136,19 +158,26 @@ test('upload shows estimate and local DSP processing copy before phase1 complete
   const stemToggle = page.getByLabel('STEM SEPARATION');
 
   await expect(transcribeToggle).not.toBeChecked();
-  await expect(stemToggle).toBeDisabled();
+  await expect(stemToggle).not.toBeChecked();
+  await expect(stemToggle).toBeEnabled();
+
+  await stemToggle.check();
+  await expect(page.getByText('67s-128s')).toBeVisible();
 
   await transcribeToggle.check();
-  await expect(stemToggle).toBeEnabled();
+  await expect(stemToggle).toBeChecked();
+  await expect(page.getByText('107s-203s')).toBeVisible();
+
+  await stemToggle.uncheck();
   await expect(page.getByText('47s-113s')).toBeVisible();
 
   await stemToggle.check();
   await expect(page.getByText('107s-203s')).toBeVisible();
 
   await transcribeToggle.uncheck();
-  await expect(stemToggle).toBeDisabled();
-  await expect(stemToggle).not.toBeChecked();
-  await expect(page.getByText('22s-38s')).toBeVisible();
+  await expect(stemToggle).toBeChecked();
+  await expect(stemToggle).toBeEnabled();
+  await expect(page.getByText('67s-128s')).toBeVisible();
 
   await page.getByRole('button', { name: /Initiate Analysis/i }).click();
 

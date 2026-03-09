@@ -81,12 +81,6 @@ export default function App() {
   const analysisStartedAtRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!transcribeEnabled && stemSeparationEnabled) {
-      setStemSeparationEnabled(false);
-    }
-  }, [stemSeparationEnabled, transcribeEnabled]);
-
-  useEffect(() => {
     if (!audioFile) {
       setAnalysisEstimate(null);
       setIsEstimateLoading(false);
@@ -102,7 +96,7 @@ export default function App() {
     estimatePhase1WithBackend(audioFile, {
       apiBaseUrl: appConfig.apiBaseUrl,
       transcribe: transcribeEnabled,
-      separate: transcribeEnabled && stemSeparationEnabled,
+      separate: stemSeparationEnabled,
     })
       .then((result) => {
         if (isCancelled) return;
@@ -293,7 +287,7 @@ export default function App() {
         },
         {
           transcribe: transcribeEnabled,
-          separate: transcribeEnabled && stemSeparationEnabled,
+          separate: stemSeparationEnabled,
           timeoutMs: activeTimeoutMs,
         },
       );
@@ -382,13 +376,7 @@ export default function App() {
                         <input
                           type="checkbox"
                           checked={transcribeEnabled}
-                          onChange={(e) => {
-                            const nextEnabled = e.target.checked;
-                            setTranscribeEnabled(nextEnabled);
-                            if (!nextEnabled) {
-                              setStemSeparationEnabled(false);
-                            }
-                          }}
+                          onChange={(e) => setTranscribeEnabled(e.target.checked)}
                           disabled={isAnalyzing}
                           aria-label="MIDI TRANSCRIPTION"
                           className="mt-0.5 h-4 w-4 accent-accent"
@@ -402,20 +390,18 @@ export default function App() {
                       </div>
                     </label>
                     <label
-                      className={`mt-3 rounded-sm border px-3 py-3 transition-colors ${
+                      className={`mt-3 rounded-sm border px-3 py-3 transition-colors cursor-pointer ${
                         stemSeparationEnabled
                           ? 'border-accent bg-accent/10 text-accent'
-                          : transcribeEnabled
-                            ? 'border-border bg-bg-panel text-text-secondary cursor-pointer'
-                            : 'border-border bg-bg-app text-text-secondary/50 cursor-not-allowed'
+                          : 'border-border bg-bg-panel text-text-secondary'
                       } ${isAnalyzing ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                       <div className="flex items-start gap-3">
                         <input
                           type="checkbox"
-                          checked={transcribeEnabled && stemSeparationEnabled}
+                          checked={stemSeparationEnabled}
                           onChange={(e) => setStemSeparationEnabled(e.target.checked)}
-                          disabled={!transcribeEnabled || isAnalyzing}
+                          disabled={isAnalyzing}
                           aria-label="STEM SEPARATION"
                           className="mt-0.5 h-4 w-4 accent-accent"
                         />

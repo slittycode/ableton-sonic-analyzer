@@ -10,6 +10,7 @@ The app uploads a track to the local DSP backend, shows the estimate and executi
 - automatic Phase 1 estimate request on file selection
 - local DSP execution status with elapsed time and stage estimates
 - optional Basic Pitch transcription toggle for the backend request
+- optional Demucs stem separation toggle for the backend request, independent of MIDI transcription
 - optional Gemini Phase 2 advisory pass with a selectable model
 - analysis result dashboard with arrangement, sonic, mix-chain, patch, and secret-sauce sections
 - Session Musician panel with:
@@ -17,7 +18,6 @@ The app uploads a track to the local DSP backend, shows the estimate and executi
   - monophonic Essentia note view when `melodyDetail` exists
   - source toggle when both are available
   - confidence threshold slider (polyphonic mode only; disabled in monophonic mode with tooltip)
-  - stem separation toggle (Demucs pre-processing)
   - quantize grid and swing controls
   - browser preview and `.mid` download
 - JSON export and markdown report export
