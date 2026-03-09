@@ -139,13 +139,31 @@ IMPORTANT SPECTRAL NOTE:
 - Use spectralBalance only to inform EQ and filter 
   recommendations, not character descriptions
 
+GENRE INFERENCE AND ADAPTATION:
+- Infer the most likely genre from the combined evidence of 
+  bpm, synthesisCharacter (especially inharmonicity and 
+  oddToEvenRatio), crestFactor, spectral profile, grooveDetail, 
+  and any available melodic or harmonic data.
+- State the inferred genre explicitly at the very start of 
+  trackCharacter, including a confidence indicator in plain 
+  language and the specific measurements that support the inference.
+- Use the inferred genre to choose device types, production 
+  techniques, terminology, and secretSauce framing. Derive 
+  those conventions from the inferred genre, not from a fixed 
+  list of hard-coded genre assumptions.
+- If the DSP signature is ambiguous across genres, say so 
+  explicitly in trackCharacter and explain which measured 
+  characteristics point in different directions rather than guessing.
+
 OUTPUT REQUIREMENTS — QUANTITY AND DEPTH ARE MANDATORY:
 
 trackCharacter:
 Write 4-5 sentences. Reference at least 4 specific numeric values 
-from the JSON. Describe synthesis character, dynamic approach, 
-stereo philosophy, and spectral signature. Be specific and 
-production-focused, not generic.
+from the JSON. The opening sentence must name the inferred genre 
+and confidence. The next sentence(s) must justify that inference 
+with specific measurements. Describe synthesis character, dynamic 
+approach, stereo philosophy, and spectral signature. Be specific 
+and production-focused, not generic.
 
 detectedCharacteristics:
 Return exactly 5 items. Each must reference a specific measured 
@@ -180,7 +198,13 @@ Each must be at minimum 4 sentences with specific values referenced:
   with parameter values.
 - bass: reference synthesisCharacter oddToEvenRatio and 
   inharmonicity, subBassMono, spectralBalance subBass/lowBass. 
-  Suggest oscillator type, filter settings, mono routing.
+  Select synth architecture from inharmonicity:
+  - 0.1-0.25 = FM / Operator
+  - below 0.1 = subtractive / Analog
+  - above 0.25 = wavetable or noise / Wavetable plus noise oscillator
+  Explain why that instrument choice fits the measured synthesis 
+  character of THIS track using inharmonicity and oddToEvenRatio. 
+  Suggest oscillator type, filter settings, and mono routing.
 - melodicArp: convert dominantNotes MIDI to note names. Reference 
   pitchConfidence explicitly — if below 0.15 say so. Reference 
   chordDetail.dominantChords. Suggest synth approach and MIDI pattern.
@@ -212,6 +236,9 @@ Where applicable to the track, the chain must explicitly cover:
 - high-frequency air or presence
 - bus compression or glue
 - limiting/mastering
+At least one device entry must embody a technique native to the 
+inferred genre and must justify that technique using both the 
+genre inference and the measured DSP values for this track.
 Each object must include:
 - order: position in chain starting at 1
 - device: exact Ableton Live 12 device name
@@ -223,13 +250,16 @@ Each object must include:
 Never return fewer than 8 devices.
 
 secretSauce:
-Title: a specific named technique, not generic.
+Title: a specific named technique that is native to the inferred 
+genre and the measured characteristics of this track. Generic 
+production-technique titles are not acceptable.
 icon: one word describing the core technique type. 
 Must be exactly one of: DISTORTION, FILTER, COMPRESSION, 
 MODULATION, ROUTING, SATURATION, STEREO, SYNTHESIS
 Explanation: 4-5 sentences explaining what makes this technique 
-specific to THIS track based on its measurements. Reference at 
-least 3 specific JSON values.
+specific to THIS track based on its measurements. It must also 
+state why this technique is native to the inferred genre. Reference 
+at least 3 specific JSON values.
 implementationSteps: return exactly 6 steps. Each step must be 
 a complete sentence with specific Ableton device names, parameter 
 names, and numeric values. Steps must build on each other 
