@@ -4,8 +4,14 @@ All notable changes to `sonic-analyzer-UI` are documented here in reverse chrono
 
 ## Unreleased
 
+## v0.6.0
+
 - Tightened the Phase 2 Gemini prompt with explicit genre detection, genre-adaptive reconstruction guidance, and genre-native secret-sauce framing.
 - Fixed Phase 1 danceability handling to preserve the backend `{ danceability, dfa }` object and render a dedicated Danceability section in the results UI.
+- Fixed stem separation estimate: the estimate request now includes the `separate` flag so the displayed estimate range accounts for Demucs runtime when stem separation is toggled on.
+
+## v0.5.0
+
 - Fixed REPORT_MD export to serialize Arrangement Overview and Mix and Master Chain sections as human-readable markdown instead of object coercion output.
 
 ## v0.4.0
