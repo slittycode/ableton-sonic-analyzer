@@ -5,6 +5,8 @@ All notable changes to `sonic-analyzer-UI` are documented here in reverse chrono
 ## Unreleased
 
 - Corrected `.env.example` so `VITE_API_BASE_URL` points to `http://127.0.0.1:8000`, matching the current local backend server.
+- Removed the stale `bpmAgreement` reference from the Phase 2 Gemini prompt because the frontend Phase 1 payload never includes that field.
+- Removed the no-op DSP JSON override UI control from the App and documented the behavior as reserved transport support only.
 
 ## v0.6.0
 

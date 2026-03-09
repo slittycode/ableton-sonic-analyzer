@@ -116,14 +116,17 @@ What the UI sends today:
 - multipart `track`
 - multipart `transcribe=true|false` based on the MIDI transcription toggle
 - multipart `separate=true|false` based on the stem separation toggle
-- multipart `dsp_json_override` only when the JSON text area contains valid JSON
 - no `separate` query parameter
+
+### Known Behavior
+
+- the UI no longer exposes `dsp_json_override` because the current backend ignores it
+- the frontend client transport still supports `dsp_json_override` as a reserved multipart field, but the visible App flow does not send it
 
 What the backend actually does with those fields today:
 
 - `track` is required and used
 - `transcribe` is used by `server.py`
-- `dsp_json_override` is accepted but ignored by the current backend
 
 ### Success Response
 

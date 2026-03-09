@@ -70,8 +70,6 @@ export default function App() {
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
 
-  const [dspJsonInput, setDspJsonInput] = useState("");
-  const [dspJsonError, setDspJsonError] = useState<string | null>(null);
   const [analysisEstimate, setAnalysisEstimate] = useState<BackendAnalysisEstimate | null>(null);
   const [isEstimateLoading, setIsEstimateLoading] = useState(false);
   const [estimateError, setEstimateError] = useState<string | null>(null);
@@ -142,21 +140,6 @@ export default function App() {
     return () => window.clearInterval(intervalId);
   }, [isAnalyzing]);
 
-  const handleJsonChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value;
-    setDspJsonInput(val);
-    if (val.trim()) {
-      try {
-        JSON.parse(val);
-        setDspJsonError(null);
-      } catch {
-        setDspJsonError("Invalid JSON format. Will proceed with audio-only analysis if started.");
-      }
-    } else {
-      setDspJsonError(null);
-    }
-  };
-
   const handleFileSelect = (file: File) => {
     if (audioUrl) URL.revokeObjectURL(audioUrl);
     setAudioFile(file);
@@ -191,16 +174,6 @@ export default function App() {
   const handleStartAnalysis = async () => {
     if (!audioFile) return;
 
-    let validJson: string | null = null;
-    if (dspJsonInput.trim()) {
-      try {
-        JSON.parse(dspJsonInput);
-        validJson = dspJsonInput;
-      } catch {
-        validJson = null;
-      }
-    }
-
     const activeFile = audioFile;
     const activeModel = selectedModel;
     const activeEstimate = analysisEstimate;
@@ -217,7 +190,7 @@ export default function App() {
       {
         model: 'local-dsp-engine',
         phase: PHASE1_LABEL,
-        promptLength: validJson?.length ?? 0,
+        promptLength: 0,
         responseLength: 0,
         durationMs: 0,
         audioMetadata,
@@ -234,7 +207,7 @@ export default function App() {
       await analyzeAudio(
         activeFile,
         activeModel,
-        validJson,
+        null,
         (result, log) => {
           phase1CompletedRef.current = true;
           setPhase1Result(result);
@@ -296,7 +269,7 @@ export default function App() {
             {
               model: isPhase1Failure ? 'local-dsp-engine' : activeModel,
               phase: isPhase1Failure ? PHASE1_LABEL : PHASE2_LABEL,
-              promptLength: isPhase1Failure ? validJson?.length ?? 0 : 0,
+              promptLength: 0,
               responseLength: 0,
               durationMs: elapsedMs,
               audioMetadata,
@@ -465,25 +438,6 @@ export default function App() {
                           Initiate Analysis
                         </button>
                       </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex flex-col flex-grow">
-                  <div className="bg-[#222] border border-border border-b-0 rounded-t-sm px-3 py-1.5 flex items-center">
-                    <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
-                    <h3 className="text-[10px] font-mono text-text-secondary uppercase tracking-wider">DSP JSON (Optional)</h3>
-                  </div>
-                  <div className="flex-grow bg-bg-card border border-border rounded-b-sm p-4 flex flex-col min-h-[150px]">
-                    <textarea
-                      value={dspJsonInput}
-                      onChange={handleJsonChange}
-                      disabled={isAnalyzing}
-                      placeholder="Paste DSP analysis JSON here..."
-                      className="flex-grow w-full bg-bg-panel border border-border rounded-sm p-2 text-xs font-mono text-text-primary focus:border-accent focus:outline-none resize-none disabled:opacity-50 min-h-[100px]"
-                    />
-                    {dspJsonError && (
-                      <p className="text-[10px] text-red-400 font-mono mt-2">{dspJsonError}</p>
                     )}
                   </div>
                 </div>
