@@ -17,13 +17,27 @@ interface AnalyzePhase2Result {
   log: DiagnosticLogEntry;
 }
 
+interface RetryLoggingHooks {
+  onAttempt?: (attempt: number, maxRetries: number) => void;
+  onRetryableFailure?: (
+    attempt: number,
+    maxRetries: number,
+    errorMessage: string,
+    delayMs: number,
+  ) => void;
+  onExhausted?: (maxRetries: number, errorMessage: string) => void;
+}
+
 async function withRetry<T>(
   operation: () => Promise<T>,
   maxRetries = 3,
   baseDelayMs = 2_000,
+  loggingHooks?: RetryLoggingHooks,
 ): Promise<T> {
   let attempt = 0;
   while (attempt < maxRetries) {
+    const currentAttempt = attempt + 1;
+    loggingHooks?.onAttempt?.(currentAttempt, maxRetries);
     try {
       return await operation();
     } catch (error: unknown) {
@@ -37,10 +51,14 @@ async function withRetry<T>(
         errorMessage.includes("UNAVAILABLE");
 
       if (!isRetryable || attempt >= maxRetries) {
+        if (isRetryable && attempt >= maxRetries) {
+          loggingHooks?.onExhausted?.(maxRetries, errorMessage);
+        }
         throw error;
       }
 
       const delay = baseDelayMs * Math.pow(2, attempt - 1) + Math.random() * 1_000;
+      loggingHooks?.onRetryableFailure?.(attempt, maxRetries, errorMessage, Math.round(delay));
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
@@ -332,6 +350,21 @@ ${JSON.stringify(phase1Result, null, 2)}`;
       }),
     3,
     2_000,
+    {
+      onAttempt: (attempt, maxRetries) => {
+        console.warn(`[Phase2] Upload attempt ${attempt} of ${maxRetries}...`);
+      },
+      onRetryableFailure: (attempt, _maxRetries, errorMessage, delayMs) => {
+        console.warn(
+          `[Phase2] Upload attempt ${attempt} failed (${errorMessage}), retrying in ${delayMs}ms...`,
+        );
+      },
+      onExhausted: (maxRetries, errorMessage) => {
+        console.warn(
+          `[Phase2] Upload attempts exhausted after ${maxRetries} tries (${errorMessage}).`,
+        );
+      },
+    },
   );
 
   let phase2Response;

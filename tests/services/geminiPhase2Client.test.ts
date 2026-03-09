@@ -278,6 +278,8 @@ describe('analyzePhase2WithGemini', () => {
 
   it('retries retryable Gemini upload failures on the large-file path', async () => {
     vi.useFakeTimers();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(Math, 'random').mockReturnValue(0);
     filesUploadMock
       .mockRejectedValueOnce(new Error('503 temporary outage'))
       .mockResolvedValueOnce(uploadedFile);
@@ -293,15 +295,78 @@ describe('analyzePhase2WithGemini', () => {
     const response = await promise;
 
     expect(filesUploadMock).toHaveBeenCalledTimes(2);
+    expect(console.warn).toHaveBeenCalledWith('[Phase2] Upload attempt 1 of 3...');
+    expect(console.warn).toHaveBeenCalledWith(
+      '[Phase2] Upload attempt 1 failed (503 temporary outage), retrying in 2000ms...',
+    );
+    expect(console.warn).toHaveBeenCalledWith('[Phase2] Upload attempt 2 of 3...');
     expect(response.result.trackCharacter).toBe(phase2Result.trackCharacter);
   });
 
+  it('logs when all upload retry attempts are exhausted', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    filesUploadMock.mockRejectedValue(new Error('503 temporary outage'));
+
+    const promise = analyzePhase2WithGemini({
+      file: createLargeFile(),
+      modelName: 'gemini-2.5-pro',
+      phase1Result: basePhase1,
+      audioMetadata,
+    });
+    const rejection = expect(promise).rejects.toThrow('503 temporary outage');
+
+    await vi.runAllTimersAsync();
+
+    await rejection;
+    expect(filesUploadMock).toHaveBeenCalledTimes(3);
+    expect(console.warn).toHaveBeenCalledWith('[Phase2] Upload attempt 1 of 3...');
+    expect(console.warn).toHaveBeenCalledWith('[Phase2] Upload attempt 2 of 3...');
+    expect(console.warn).toHaveBeenCalledWith('[Phase2] Upload attempt 3 of 3...');
+    expect(console.warn).toHaveBeenCalledWith(
+      '[Phase2] Upload attempts exhausted after 3 tries (503 temporary outage).',
+    );
+  });
+
+  it('does not emit upload warnings when generateContent retries', async () => {
+    vi.useFakeTimers();
+    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    generateContentMock
+      .mockRejectedValueOnce(new Error('503 temporary outage'))
+      .mockResolvedValueOnce(phase2Response);
+
+    const promise = analyzePhase2WithGemini({
+      file: createLargeFile(),
+      modelName: 'gemini-2.5-pro',
+      phase1Result: basePhase1,
+      audioMetadata,
+    });
+
+    await vi.runAllTimersAsync();
+    const response = await promise;
+
+    expect(generateContentMock).toHaveBeenCalledTimes(2);
+    expect(response.result.trackCharacter).toBe(phase2Result.trackCharacter);
+    expect(consoleWarnSpy).toHaveBeenCalledTimes(1);
+    expect(consoleWarnSpy).toHaveBeenCalledWith('[Phase2] Upload attempt 1 of 3...');
+    expect(
+      consoleWarnSpy.mock.calls.some(([message]) =>
+        String(message).includes('retrying in'),
+      ),
+    ).toBe(false);
+    expect(
+      consoleWarnSpy.mock.calls.some(([message]) =>
+        String(message).includes('attempts exhausted'),
+      ),
+    ).toBe(false);
+  });
+
   it('excludes delete latency from upload and generation durations in the large-file success log', async () => {
-    vi.spyOn(Date, 'now')
-      .mockReturnValueOnce(1_000)
-      .mockReturnValueOnce(1_300)
-      .mockReturnValueOnce(1_900)
-      .mockReturnValueOnce(2_500);
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const timestamps = [1_000, 1_300, 1_900, 2_500];
+    vi.spyOn(Date, 'now').mockImplementation(() => timestamps.shift() ?? 2_500);
     filesDeleteMock.mockImplementationOnce(async () => {
       Date.now();
     });

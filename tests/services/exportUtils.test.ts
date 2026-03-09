@@ -105,4 +105,37 @@ describe('generateMarkdown', () => {
     expect(markdown).not.toContain('[object Object]');
     expect(markdown).not.toContain('[object Object],[object Object]');
   });
+
+  it('renders width and stereo and harmonic content when present', () => {
+    const markdown = generateMarkdown(basePhase1, {
+      ...basePhase2,
+      sonicElements: {
+        ...basePhase2.sonicElements,
+        widthAndStereo: 'Stereo image stays wide above the mids.',
+        harmonicContent: 'Harmony stays anchored to F minor with sparse motion.',
+      },
+    });
+
+    expect(markdown).toContain('- **Width and Stereo**: Stereo image stays wide above the mids.');
+    expect(markdown).toContain('- **Harmonic Content**: Harmony stays anchored to F minor with sparse motion.');
+  });
+
+  it('omits optional sonic element fields when absent or undefined', () => {
+    expect(() =>
+      generateMarkdown(basePhase1, {
+        ...basePhase2,
+        sonicElements: {
+          ...basePhase2.sonicElements,
+          widthAndStereo: undefined,
+          harmonicContent: undefined,
+        },
+      }),
+    ).not.toThrow();
+
+    const markdown = generateMarkdown(basePhase1, basePhase2);
+
+    expect(markdown).not.toContain('- **Width and Stereo**:');
+    expect(markdown).not.toContain('- **Harmonic Content**:');
+    expect(markdown).not.toContain('undefined');
+  });
 });

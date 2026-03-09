@@ -86,7 +86,14 @@ export function generateMarkdown(phase1: Phase1Result, phase2: Phase2Result | nu
   md += `- **Bass**: ${phase2.sonicElements.bass}\n`;
   md += `- **Melodic Arp**: ${phase2.sonicElements.melodicArp}\n`;
   md += `- **Groove and Timing**: ${phase2.sonicElements.grooveAndTiming}\n`;
-  md += `- **Effects and Texture**: ${phase2.sonicElements.effectsAndTexture}\n\n`;
+  md += `- **Effects and Texture**: ${phase2.sonicElements.effectsAndTexture}\n`;
+  if (phase2.sonicElements.widthAndStereo) {
+    md += `- **Width and Stereo**: ${phase2.sonicElements.widthAndStereo}\n`;
+  }
+  if (phase2.sonicElements.harmonicContent) {
+    md += `- **Harmonic Content**: ${phase2.sonicElements.harmonicContent}\n`;
+  }
+  md += '\n';
 
   md += `### Mix and Master Chain\n${formatMixAndMasterChainMarkdown(phase2.mixAndMasterChain)}\n\n`;
 
