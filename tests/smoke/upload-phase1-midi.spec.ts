@@ -74,6 +74,13 @@ async function stubGeminiPhase2(page: import('@playwright/test').Page) {
   });
 }
 
+async function pressSliderKey(locator: import('@playwright/test').Locator, key: string, times: number) {
+  await locator.focus();
+  for (let index = 0; index < times; index += 1) {
+    await locator.press(key);
+  }
+}
+
 test('phase1 dual-source session musician panel toggles between polyphonic and monophonic views', async ({ page }) => {
   await stubGeminiPhase2(page);
   await page.route('**/api/analyze/estimate', async (route) => {
@@ -229,28 +236,60 @@ test('phase1 dual-source session musician panel toggles between polyphonic and m
   await expect(panel.getByRole('button', { name: 'POLYPHONIC' })).toBeVisible();
   await expect(panel.getByRole('button', { name: 'MONOPHONIC' })).toBeVisible();
   await expect(panel.getByText('SOURCES: BASIC PITCH').first()).toBeVisible();
+  await expect(panel.getByText('Range: C3 - G4')).toHaveCount(1);
+  await expect(panel.getByText('Confidence: 83%')).toHaveCount(1);
+  await expect(panel.getByText('2 / 2 NOTES')).toBeVisible();
   await expect(panel.getByText('STEM-AWARE')).toBeVisible();
   await expect(panel.getByText('STEMS: bass, other')).toBeVisible();
   await expect(panel.getByText('Polyphonic transcription via Basic Pitch')).toBeVisible();
-  await expect(panel.getByRole('button', { name: /Download \.mid/i })).toBeVisible();
+  const previewButton = panel.getByRole('button', { name: /Preview/i });
+  const downloadButton = panel.getByRole('button', { name: /Download \.mid/i });
+  await expect(previewButton).toBeVisible();
+  await expect(previewButton).toBeEnabled();
+  await expect(downloadButton).toBeVisible();
+  await expect(downloadButton).toBeEnabled();
   const sliders = panel.locator('input[type="range"]');
   const confidenceSlider = sliders.nth(0);
   const swingSlider = sliders.nth(1);
   await expect(confidenceSlider).toBeEnabled();
   await expect(swingSlider).toBeDisabled();
 
+  await pressSliderKey(confidenceSlider, 'End', 1);
+  await pressSliderKey(confidenceSlider, 'ArrowLeft', 4);
+  await expect(confidenceSlider).toHaveValue('0.8');
+  await expect(panel.getByText('80%')).toBeVisible();
+  await expect(panel.getByText('1 / 2 NOTES')).toBeVisible();
+
   await panel.getByRole('button', { name: '1/16 note' }).click();
   await expect(swingSlider).toBeEnabled();
+  await pressSliderKey(swingSlider, 'ArrowRight', 30);
+  await expect(swingSlider).toHaveValue('30');
+
+  const downloadPromise = page.waitForEvent('download');
+  await downloadButton.click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe('track-analysis.mid');
 
   await panel.getByRole('button', { name: 'MONOPHONIC' }).click();
   await expect(panel.getByText('SOURCES: ESSENTIA').first()).toBeVisible();
   await expect(panel.getByText('Monophonic pitch detection via Essentia')).toBeVisible();
+  await expect(panel.getByText('STEM-AWARE')).toHaveCount(0);
+  await expect(panel.getByText('STEMS: bass, other')).toHaveCount(0);
+  await expect(panel.getByText('3 NOTES')).toBeVisible();
+  await expect(panel.getByText('3 / 3 NOTES')).toHaveCount(0);
+  await expect(panel.getByText('Per-note confidence not available in monophonic mode')).toBeVisible();
+  await expect(panel.getByText('Adjust confidence threshold to filter noise before export.')).toHaveCount(0);
   await expect(confidenceSlider).toBeDisabled();
+  await expect(confidenceSlider).toHaveValue('0.8');
 
   await panel.getByRole('button', { name: 'POLYPHONIC' }).click();
   await expect(panel.getByText('SOURCES: BASIC PITCH').first()).toBeVisible();
   await expect(panel.getByText('Polyphonic transcription via Basic Pitch')).toBeVisible();
+  await expect(panel.getByText('STEM-AWARE')).toBeVisible();
+  await expect(panel.getByText('STEMS: bass, other')).toBeVisible();
+  await expect(panel.getByText('1 / 2 NOTES')).toBeVisible();
   await expect(confidenceSlider).toBeEnabled();
+  await expect(confidenceSlider).toHaveValue('0.8');
 
   await panel.getByRole('button', { name: /Collapse session musician panel/i }).click();
   await expect(panel.getByRole('button', { name: '1/16 note' })).toHaveCount(0);

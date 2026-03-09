@@ -46,6 +46,26 @@ export function formatFilteredNoteCount(
   return `${filteredCount} / ${totalCount} NOTES`;
 }
 
+export function deriveTranscriptionProvenance(
+  activeSource: 'polyphonic' | 'monophonic' | 'none',
+  transcriptionDetail: Phase1Result['transcriptionDetail'] | null | undefined,
+): { transcriptionPathLabel: string | null; stemSourcesLabel: string | null } {
+  if (activeSource !== 'polyphonic' || !transcriptionDetail) {
+    return {
+      transcriptionPathLabel: null,
+      stemSourcesLabel: null,
+    };
+  }
+
+  return {
+    transcriptionPathLabel: transcriptionDetail.stemSeparationUsed ? 'STEM-AWARE' : 'FULL MIX',
+    stemSourcesLabel:
+      transcriptionDetail.stemSeparationUsed && transcriptionDetail.stemsTranscribed.length
+        ? transcriptionDetail.stemsTranscribed.join(', ')
+        : null,
+  };
+}
+
 function midiToNoteName(midi: number): string {
   const names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const;
   const clamped = Math.max(0, Math.min(127, Math.round(midi)));
@@ -297,15 +317,7 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
       : activeSource === 'monophonic'
         ? 'SOURCES: ESSENTIA'
         : null;
-  const transcriptionPathLabel = transcriptionDetail
-    ? transcriptionDetail.stemSeparationUsed
-      ? 'STEM-AWARE'
-      : 'FULL MIX'
-    : null;
-  const stemSourcesLabel =
-    transcriptionDetail?.stemSeparationUsed && transcriptionDetail.stemsTranscribed.length
-      ? transcriptionDetail.stemsTranscribed.join(', ')
-      : null;
+  const { transcriptionPathLabel, stemSourcesLabel } = deriveTranscriptionProvenance(activeSource, transcriptionDetail);
 
   return (
     <section className="space-y-4">
@@ -542,7 +554,7 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
                 {activeSource === 'polyphonic'
                   ? 'Polyphonic transcription via Basic Pitch. Adjust quantize before preview/export. Adjust confidence threshold to filter noise before export.'
                   : activeSource === 'monophonic'
-                    ? 'Monophonic pitch detection via Essentia. Adjust quantize before preview/export. Adjust confidence threshold to filter noise before export.'
+                    ? 'Monophonic pitch detection via Essentia. Adjust quantize before preview/export. Per-note confidence not available in monophonic mode.'
                     : 'MIDI transcription unavailable until transcriptionDetail or melodyDetail is present in the DSP payload.'}
                 {isDraft ? ' Confidence is low, so treat this clip as a draft scaffold.' : ''}
               </span>

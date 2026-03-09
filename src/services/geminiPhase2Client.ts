@@ -337,6 +337,7 @@ ${JSON.stringify(phase1Result, null, 2)}`;
 
   let phase2Response;
   const phase2StartTime = Date.now();
+  let phase2EndTime = phase2StartTime;
   try {
     phase2Response = await generatePhase2Response(ai, modelName, phase2Prompt, {
       fileData: {
@@ -344,6 +345,7 @@ ${JSON.stringify(phase1Result, null, 2)}`;
         mimeType: uploadedFile.mimeType,
       },
     });
+    phase2EndTime = Date.now();
   } finally {
     try {
       await ai.files.delete({ name: uploadedFile.name });
@@ -351,7 +353,6 @@ ${JSON.stringify(phase1Result, null, 2)}`;
       // Files auto-expire; cleanup failures should not fail the analysis.
     }
   }
-  const phase2EndTime = Date.now();
 
   const uploadMs = phase2StartTime - uploadStartTime;
   const generateMs = phase2EndTime - phase2StartTime;

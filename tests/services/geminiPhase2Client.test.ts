@@ -296,11 +296,15 @@ describe('analyzePhase2WithGemini', () => {
     expect(response.result.trackCharacter).toBe(phase2Result.trackCharacter);
   });
 
-  it('records upload and generation durations in the large-file success log', async () => {
+  it('excludes delete latency from upload and generation durations in the large-file success log', async () => {
     vi.spyOn(Date, 'now')
       .mockReturnValueOnce(1_000)
       .mockReturnValueOnce(1_300)
-      .mockReturnValueOnce(1_900);
+      .mockReturnValueOnce(1_900)
+      .mockReturnValueOnce(2_500);
+    filesDeleteMock.mockImplementationOnce(async () => {
+      Date.now();
+    });
 
     const response = await analyzePhase2WithGemini({
       file: createLargeFile(),
