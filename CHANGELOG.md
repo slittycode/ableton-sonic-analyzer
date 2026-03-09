@@ -4,6 +4,8 @@ All notable changes to `sonic-analyzer-UI` are documented here in reverse chrono
 
 ## Unreleased
 
+## v0.7.0
+
 - Made stem separation an independent App toggle so Demucs can be requested without enabling MIDI transcription.
 - Added optional `TEST_FLAC_PATH` support to the live backend smoke so it can exercise a real FLAC when one is available and otherwise fall back silently to the checked-in WAV fixture.
 - Corrected `.env.example` so `VITE_API_BASE_URL` points to `http://127.0.0.1:8000`, matching the current local backend server.
