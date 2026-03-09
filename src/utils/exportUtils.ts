@@ -9,6 +9,36 @@ export function downloadFile(content: string, fileName: string, contentType: str
   URL.revokeObjectURL(a.href);
 }
 
+function formatMarkdownNumber(value: number): string {
+  return value.toFixed(2).replace(/\.?0+$/, '');
+}
+
+function formatArrangementOverviewMarkdown(arrangementOverview: Phase2Result['arrangementOverview']): string {
+  let md = `${arrangementOverview.summary}\n`;
+
+  if (arrangementOverview.segments.length > 0) {
+    md += '\nSegments:\n';
+    arrangementOverview.segments.forEach((segment) => {
+      const timeRange = `${formatMarkdownNumber(segment.startTime)}s-${formatMarkdownNumber(segment.endTime)}s`;
+      const lufsLabel = typeof segment.lufs === 'number' ? `, ${formatMarkdownNumber(segment.lufs)} LUFS` : '';
+      const spectralNote = segment.spectralNote ? ` Spectral note: ${segment.spectralNote}` : '';
+      md += `- Segment ${segment.index} (${timeRange}${lufsLabel}): ${segment.description}${spectralNote}\n`;
+    });
+  }
+
+  if (arrangementOverview.noveltyNotes) {
+    md += `\nNovelty Notes: ${arrangementOverview.noveltyNotes}\n`;
+  }
+
+  return md;
+}
+
+function formatMixAndMasterChainMarkdown(mixAndMasterChain: Phase2Result['mixAndMasterChain']): string {
+  return mixAndMasterChain
+    .map((item) => `${item.order}. ${item.device} — ${item.parameter}: ${item.value}. ${item.reason}`)
+    .join('\n');
+}
+
 export function generateMarkdown(phase1: Phase1Result, phase2: Phase2Result | null): string {
   let md = '# Track Analysis Report\n\n';
 
@@ -49,7 +79,7 @@ export function generateMarkdown(phase1: Phase1Result, phase2: Phase2Result | nu
     md += '\n';
   }
 
-  md += `### Arrangement Overview\n${phase2.arrangementOverview}\n\n`;
+  md += `### Arrangement Overview\n${formatArrangementOverviewMarkdown(phase2.arrangementOverview)}\n`;
 
   md += '### Sonic Elements\n';
   md += `- **Kick**: ${phase2.sonicElements.kick}\n`;
@@ -58,7 +88,7 @@ export function generateMarkdown(phase1: Phase1Result, phase2: Phase2Result | nu
   md += `- **Groove and Timing**: ${phase2.sonicElements.grooveAndTiming}\n`;
   md += `- **Effects and Texture**: ${phase2.sonicElements.effectsAndTexture}\n\n`;
 
-  md += `### Mix and Master Chain\n${phase2.mixAndMasterChain}\n\n`;
+  md += `### Mix and Master Chain\n${formatMixAndMasterChainMarkdown(phase2.mixAndMasterChain)}\n\n`;
 
   md += `### Secret Sauce: ${phase2.secretSauce.title}\n`;
   md += `${phase2.secretSauce.explanation}\n\n`;

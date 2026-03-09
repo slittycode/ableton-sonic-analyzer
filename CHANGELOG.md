@@ -4,6 +4,8 @@ All notable changes to `sonic-analyzer-UI` are documented here in reverse chrono
 
 ## Unreleased
 
+- Fixed REPORT_MD export to serialize Arrangement Overview and Mix and Master Chain sections as human-readable markdown instead of object coercion output.
+
 ## v0.4.0
 
 - Phase 1 analyze requests now derive the UI timeout budget from the backend estimate instead of a fixed 120s cutoff, so long-running transcription and stem-separation runs do not abort prematurely in the browser.
