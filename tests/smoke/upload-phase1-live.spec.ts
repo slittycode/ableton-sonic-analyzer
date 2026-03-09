@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -23,6 +24,18 @@ async function backendSupportsPhase1Routes(baseUrl: string): Promise<boolean> {
   }
 }
 
+function resolveLiveFixturePath(): string {
+  const configuredFlacPath = process.env.TEST_FLAC_PATH;
+  if (configuredFlacPath) {
+    const resolvedFlacPath = path.resolve(configuredFlacPath);
+    if (fs.existsSync(resolvedFlacPath)) {
+      return resolvedFlacPath;
+    }
+  }
+
+  return path.resolve(testDir, "./fixtures/silence.wav");
+}
+
 test("live backend phase1 renders results without connectivity errors", async ({ page }) => {
   test.skip(
     !(await backendSupportsPhase1Routes(backendBaseUrl)),
@@ -31,7 +44,7 @@ test("live backend phase1 renders results without connectivity errors", async ({
 
   await page.goto("/", { waitUntil: "networkidle" });
 
-  const fixturePath = path.resolve(testDir, "./fixtures/silence.wav");
+  const fixturePath = resolveLiveFixturePath();
   await page.setInputFiles("#audio-upload", fixturePath);
 
   const analyzeButton = page.getByRole("button", { name: /Initiate Analysis/i });

@@ -243,7 +243,16 @@ Notes about tests:
 
 - most smoke tests stub the backend and Gemini calls
 - `tests/smoke/upload-phase1-live.spec.ts` checks a real backend if `VITE_API_BASE_URL` is reachable
+- `tests/smoke/upload-phase1-live.spec.ts` uses `TEST_FLAC_PATH` when it points to an existing file, otherwise it silently falls back to `tests/smoke/fixtures/silence.wav`
 - `tests/smoke/upload-phase2-live-gemini.spec.ts` is opt-in and checks the real Gemini Files API path against a generated `>20MB` WAV when `RUN_GEMINI_LIVE_SMOKE=true`, `VITE_ENABLE_PHASE2_GEMINI=true`, and `VITE_GEMINI_API_KEY` is set
+
+Run the live backend smoke against a real FLAC when one is available:
+
+```bash
+TEST_FLAC_PATH=/path/to/track.flac \
+VITE_API_BASE_URL=http://localhost:8000 \
+npm run test:smoke -- tests/smoke/upload-phase1-live.spec.ts
+```
 
 Run the live Gemini proof explicitly:
 
