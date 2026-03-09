@@ -4,6 +4,8 @@ All notable changes to `sonic-analyzer-UI` are documented here in reverse chrono
 
 ## Unreleased
 
+- Corrected `.env.example` so `VITE_API_BASE_URL` points to `http://127.0.0.1:8000`, matching the current local backend server.
+
 ## v0.6.0
 
 - Tightened the Phase 2 Gemini prompt with explicit genre detection, genre-adaptive reconstruction guidance, and genre-native secret-sauce framing.
