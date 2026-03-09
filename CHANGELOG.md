@@ -4,6 +4,10 @@ All notable changes to `sonic-analyzer` are documented here in reverse chronolog
 
 ## Unreleased
 
+## v0.9.0
+
+- Fixed `POST /api/analyze/estimate` to include Demucs separation time in the estimate when `separate=true` is requested, so the UI timeout budget and displayed estimate range correctly reflect stem separation runs.
+
 ## v0.8.0
 
 - `server.py` now respects the multipart `transcribe` form field on both `POST /api/analyze` and `POST /api/analyze/estimate`, so transcription runtime can be reflected in the estimate and timeout budget when requested.
