@@ -5,14 +5,17 @@ import { fileURLToPath } from "node:url";
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const backendBaseUrl = process.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
-async function backendIsReachable(baseUrl: string): Promise<boolean> {
+async function backendSupportsPhase1Routes(baseUrl: string): Promise<boolean> {
   const controller = new AbortController();
   const timeoutHandle = setTimeout(() => controller.abort(), 2_500);
   try {
     const response = await fetch(`${baseUrl.replace(/\/+$/, "")}/openapi.json`, {
       signal: controller.signal,
     });
-    return response.ok;
+    if (!response.ok) return false;
+
+    const spec = (await response.json()) as { paths?: Record<string, unknown> };
+    return Boolean(spec.paths?.["/api/analyze"] && spec.paths?.["/api/analyze/estimate"]);
   } catch {
     return false;
   } finally {
@@ -21,7 +24,10 @@ async function backendIsReachable(baseUrl: string): Promise<boolean> {
 }
 
 test("live backend phase1 renders results without connectivity errors", async ({ page }) => {
-  test.skip(!(await backendIsReachable(backendBaseUrl)), `Backend not reachable at ${backendBaseUrl}`);
+  test.skip(
+    !(await backendSupportsPhase1Routes(backendBaseUrl)),
+    `Backend at ${backendBaseUrl} does not expose /api/analyze and /api/analyze/estimate.`,
+  );
 
   await page.goto("/", { waitUntil: "networkidle" });
 

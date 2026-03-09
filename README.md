@@ -61,6 +61,7 @@ cp .env.example .env
 | `VITE_API_BASE_URL` | Base URL for the backend API. | `src/config.ts` falls back to `http://localhost:8000` when unset. The checked-in `.env.example` still uses `http://127.0.0.1:8787`, so set this explicitly to match the backend you are actually running. |
 | `VITE_ENABLE_PHASE2_GEMINI` | Enables the optional Gemini pass. | Must be `"true"` to allow Phase 2. |
 | `VITE_GEMINI_API_KEY` | Gemini API key. | Phase 2 only runs when this value is non-empty and `VITE_ENABLE_PHASE2_GEMINI=true`. |
+| `RUN_GEMINI_LIVE_SMOKE` | Enables the opt-in live Playwright proof for the Gemini Files API path. | Must be `"true"` to run `npm run test:smoke:live-gemini`; default smoke coverage keeps Gemini mocked. |
 | `DISABLE_HMR` | Vite dev-server knob. | `vite.config.ts` disables HMR only when this is `"true"`. |
 
 ## Running Locally
@@ -239,3 +240,14 @@ Notes about tests:
 
 - most smoke tests stub the backend and Gemini calls
 - `tests/smoke/upload-phase1-live.spec.ts` checks a real backend if `VITE_API_BASE_URL` is reachable
+- `tests/smoke/upload-phase2-live-gemini.spec.ts` is opt-in and checks the real Gemini Files API path against a generated `>20MB` WAV when `RUN_GEMINI_LIVE_SMOKE=true`, `VITE_ENABLE_PHASE2_GEMINI=true`, and `VITE_GEMINI_API_KEY` is set
+
+Run the live Gemini proof explicitly:
+
+```bash
+RUN_GEMINI_LIVE_SMOKE=true \
+VITE_ENABLE_PHASE2_GEMINI=true \
+VITE_GEMINI_API_KEY=your_key_here \
+VITE_API_BASE_URL=http://localhost:8000 \
+npm run test:smoke:live-gemini
+```
