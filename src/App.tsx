@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
-import { AudioWaveform, Sparkles, Activity } from 'lucide-react';
+import { AudioWaveform, Sparkles, Activity, X } from 'lucide-react';
 
 import { AnalysisStatusPanel } from './components/AnalysisStatusPanel';
 import { DiagnosticLog } from './components/DiagnosticLog';
@@ -60,6 +60,7 @@ export default function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [currentPhase, setCurrentPhase] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
+  const [errorRetryable, setErrorRetryable] = useState(false);
   const [selectedModel, setSelectedModel] = useState(MODELS[0].id);
   const phase2Enabled = isPhase2GeminiEnabled();
 
@@ -177,6 +178,7 @@ export default function App() {
     setIsAnalyzing(true);
     setCurrentPhase(1);
     setError(null);
+    setErrorRetryable(false);
     phase1CompletedRef.current = false;
     analysisStartedAtRef.current = Date.now();
 
@@ -280,6 +282,7 @@ export default function App() {
           ]);
 
           setError(err.message);
+          setErrorRetryable(backendError?.details?.retryable === true);
           setIsAnalyzing(false);
           setCurrentPhase(0);
           analysisStartedAtRef.current = null;
@@ -294,6 +297,7 @@ export default function App() {
     } catch (rawError) {
       const err = rawError instanceof Error ? rawError : new Error(String(rawError));
       setError(err.message);
+      setErrorRetryable(err instanceof BackendClientError && err.details?.retryable === true);
       setIsAnalyzing(false);
       setCurrentPhase(0);
       analysisStartedAtRef.current = null;
@@ -325,7 +329,7 @@ export default function App() {
             <span className="text-[10px] font-mono text-text-secondary uppercase">Local DSP Engine</span>
           </div>
 
-          <div className="flex items-center space-x-4">
+          <div className="hidden sm:flex items-center space-x-4">
             <div className="flex items-center space-x-2">
               <label className="text-[10px] font-mono text-text-secondary uppercase">Phase 2 Model</label>
               <select
@@ -493,9 +497,30 @@ export default function App() {
             </section>
 
             {error && (
-              <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-sm text-red-400 text-xs font-mono flex items-center">
-                <div className="w-2 h-2 bg-red-500 rounded-full mr-2"></div>
-                ERROR: {error}
+              <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-sm text-red-400 text-xs font-mono flex items-center justify-between gap-3">
+                <div className="flex items-center min-w-0">
+                  <div className="w-2 h-2 bg-red-500 rounded-full mr-2 shrink-0"></div>
+                  <span className="truncate">ERROR: {error}</span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {errorRetryable && audioFile && (
+                    <button
+                      onClick={handleStartAnalysis}
+                      disabled={isAnalyzing}
+                      className="px-2 py-1 bg-accent/20 text-accent border border-accent/30 rounded-sm hover:bg-accent/30 transition-colors uppercase tracking-wider text-[10px] disabled:opacity-50"
+                    >
+                      Retry
+                    </button>
+                  )}
+                  <button
+                    onClick={() => { setError(null); setErrorRetryable(false); }}
+                    className="p-1 hover:bg-red-500/20 rounded-sm transition-colors"
+                    title="Dismiss error"
+                    aria-label="Dismiss error"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             )}
 
@@ -504,7 +529,7 @@ export default function App() {
                 <AnalysisResults phase1={phase1Result} phase2={phase2Result} sourceFileName={audioFile?.name ?? null} />
               </Suspense>
             ) : null}
-            <DiagnosticLog logs={logs} />
+            <DiagnosticLog logs={logs} defaultExpanded={isAnalyzing} />
           </main>
         </div>
       </div>

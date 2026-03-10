@@ -1,5 +1,5 @@
-import React, { useCallback, useState } from 'react';
-import { UploadCloud, FileAudio, X } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { UploadCloud, FileAudio, X, AlertTriangle } from 'lucide-react';
 
 interface FileUploadProps {
   onFileSelect: (file: File) => void;
@@ -10,6 +10,20 @@ interface FileUploadProps {
 export function FileUpload({ onFileSelect, onFileClear, isLoading }: FileUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const dismissTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    return () => {
+      if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
+    };
+  }, []);
+
+  const showFileError = useCallback((msg: string) => {
+    setFileError(msg);
+    if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
+    dismissTimerRef.current = setTimeout(() => setFileError(null), 4000);
+  }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -31,14 +45,15 @@ export function FileUpload({ onFileSelect, onFileClear, isLoading }: FileUploadP
       if (files && files.length > 0) {
         const file = files[0];
         if (file.type.startsWith('audio/')) {
+          setFileError(null);
           setSelectedFile(file);
           onFileSelect(file);
         } else {
-          alert('Please upload an audio file.');
+          showFileError('File type not supported. Please upload MP3, WAV, FLAC, or AIFF.');
         }
       }
     },
-    [onFileSelect, isLoading]
+    [onFileSelect, isLoading, showFileError]
   );
 
   const handleFileInput = useCallback(
@@ -47,6 +62,7 @@ export function FileUpload({ onFileSelect, onFileClear, isLoading }: FileUploadP
       const files = e.target.files;
       if (files && files.length > 0) {
         const file = files[0];
+        setFileError(null);
         setSelectedFile(file);
         onFileSelect(file);
       }
@@ -68,9 +84,11 @@ export function FileUpload({ onFileSelect, onFileClear, isLoading }: FileUploadP
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           className={`h-full border border-dashed rounded-sm p-8 flex flex-col items-center justify-center transition-all cursor-pointer relative overflow-hidden group ${
-            isDragging
-              ? 'border-accent bg-accent/5'
-              : 'border-border bg-bg-card hover:border-text-secondary/50 hover:bg-bg-card-hover'
+            fileError
+              ? 'border-red-500/50 bg-red-500/5'
+              : isDragging
+                ? 'border-accent bg-accent/5'
+                : 'border-border bg-bg-card hover:border-text-secondary/50 hover:bg-bg-card-hover'
           } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
           onClick={() => !isLoading && document.getElementById('audio-upload')?.click()}
         >
@@ -94,6 +112,12 @@ export function FileUpload({ onFileSelect, onFileClear, isLoading }: FileUploadP
                </span>
              ))}
           </div>
+          {fileError && (
+            <div className="mt-3 flex items-center gap-2 text-red-400 text-[10px] font-mono uppercase tracking-wider" role="alert">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+              {fileError}
+            </div>
+          )}
         </div>
       ) : (
         <div className="bg-bg-card border border-border rounded-sm p-4 flex items-center justify-between relative overflow-hidden group">

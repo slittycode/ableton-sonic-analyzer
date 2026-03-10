@@ -35,13 +35,13 @@ async function loadFileAndClick(page: import('@playwright/test').Page) {
   await page.getByRole('button', { name: /Initiate Analysis/i }).click();
 }
 
-test('backend 500 shows error banner and ERROR status in diagnostic log', async ({ page }) => {
-  await page.route('**/api/analyze/estimate', async (route) => {
+function stubEstimateRoute(page: import('@playwright/test').Page) {
+  return page.route('**/api/analyze/estimate', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        requestId: 'req_est_err_500',
+        requestId: 'req_est_err',
         estimate: {
           durationSeconds: 10,
           totalLowMs: 22000,
@@ -51,6 +51,10 @@ test('backend 500 shows error banner and ERROR status in diagnostic log', async 
       }),
     });
   });
+}
+
+test('backend 500 shows error banner and ERROR status in diagnostic log', async ({ page }) => {
+  await stubEstimateRoute(page);
 
   await page.route('**/api/analyze', async (route) => {
     await route.fulfill({
@@ -81,21 +85,7 @@ test('backend 500 shows error banner and ERROR status in diagnostic log', async 
 });
 
 test('backend 502 (analyzer failed) shows error message in banner', async ({ page }) => {
-  await page.route('**/api/analyze/estimate', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        requestId: 'req_est_err_502',
-        estimate: {
-          durationSeconds: 10,
-          totalLowMs: 22000,
-          totalHighMs: 38000,
-          stages: [{ key: 'local_dsp', label: 'Local DSP analysis', lowMs: 22000, highMs: 38000 }],
-        },
-      }),
-    });
-  });
+  await stubEstimateRoute(page);
 
   await page.route('**/api/analyze', async (route) => {
     await route.fulfill({
@@ -124,21 +114,7 @@ test('backend 502 (analyzer failed) shows error message in banner', async ({ pag
 });
 
 test('network failure shows NETWORK_UNREACHABLE-style error', async ({ page }) => {
-  await page.route('**/api/analyze/estimate', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        requestId: 'req_est_err_net',
-        estimate: {
-          durationSeconds: 10,
-          totalLowMs: 22000,
-          totalHighMs: 38000,
-          stages: [{ key: 'local_dsp', label: 'Local DSP analysis', lowMs: 22000, highMs: 38000 }],
-        },
-      }),
-    });
-  });
+  await stubEstimateRoute(page);
 
   await page.route('**/api/analyze', async (route) => {
     await route.abort('connectionrefused');
@@ -183,4 +159,97 @@ test('estimate endpoint failure shows yellow warning but does not block analysis
 
   await analyzeButton.click();
   await expect(page.getByText('Analysis Results')).toBeVisible();
+});
+
+test('error banner dismiss button removes the error', async ({ page }) => {
+  await stubEstimateRoute(page);
+
+  await page.route('**/api/analyze', async (route) => {
+    await route.fulfill({
+      status: 500,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        requestId: 'req_err_dismiss',
+        error: {
+          code: 'BACKEND_INTERNAL_ERROR',
+          message: 'Server error for dismiss test.',
+          phase: 'analysis',
+          retryable: false,
+        },
+      }),
+    });
+  });
+
+  await loadFileAndClick(page);
+
+  const errorBanner = page.locator('div.p-3.text-red-400');
+  await expect(errorBanner).toBeVisible();
+  await expect(errorBanner).toContainText('Server error for dismiss test.');
+
+  // No Retry button for non-retryable errors
+  await expect(errorBanner.getByRole('button', { name: /Retry/i })).toHaveCount(0);
+
+  // Click the dismiss (X) button
+  const dismissBtn = errorBanner.getByLabel('Dismiss error');
+  await expect(dismissBtn).toBeVisible();
+  await dismissBtn.click();
+
+  await expect(errorBanner).toHaveCount(0);
+});
+
+test('error banner shows Retry button for retryable errors', async ({ page }) => {
+  await stubEstimateRoute(page);
+
+  let callCount = 0;
+  await page.route('**/api/analyze', async (route) => {
+    callCount++;
+    if (callCount === 1) {
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          requestId: 'req_err_retry',
+          error: {
+            code: 'SERVICE_UNAVAILABLE',
+            message: 'Backend temporarily unavailable.',
+            phase: 'analysis',
+            retryable: true,
+          },
+        }),
+      });
+    } else {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          requestId: 'req_retry_ok',
+          phase1: PHASE1_STUB,
+          diagnostics: { backendDurationMs: 200, engineVersion: 'smoke' },
+        }),
+      });
+    }
+  });
+
+  // Stub Gemini so Phase 2 completes quickly when enabled
+  await page.route('**://generativelanguage.googleapis.com/**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ candidates: [] }),
+    });
+  });
+
+  await loadFileAndClick(page);
+
+  const errorBanner = page.locator('div.p-3.text-red-400');
+  await expect(errorBanner).toBeVisible();
+  await expect(errorBanner).toContainText('Backend temporarily unavailable.');
+
+  // Retry button should be visible for retryable errors
+  const retryBtn = errorBanner.getByRole('button', { name: /Retry/i });
+  await expect(retryBtn).toBeVisible();
+
+  // Click retry — should trigger re-analysis and succeed this time
+  await retryBtn.click();
+  await expect(page.getByText('Analysis Results')).toBeVisible({ timeout: 30000 });
 });

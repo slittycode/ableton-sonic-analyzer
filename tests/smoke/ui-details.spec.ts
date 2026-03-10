@@ -173,3 +173,44 @@ test('JSON_DATA and REPORT_MD buttons are visible after analysis', async ({ page
   await expect(page.getByRole('button', { name: /JSON_DATA/i })).toBeVisible();
   await expect(page.getByRole('button', { name: /REPORT_MD/i })).toBeVisible();
 });
+
+test('diagnostic log can be collapsed and expanded via toggle button', async ({ page }) => {
+  await stubRoutes(page);
+  await page.goto('/', { waitUntil: 'networkidle' });
+  await page.setInputFiles('#audio-upload', fixturePath());
+  await page.getByRole('button', { name: /Initiate Analysis/i }).click();
+
+  await expect(page.getByText('Analysis Results')).toBeVisible();
+
+  // Toggle button should be visible with aria-expanded
+  const toggleBtn = page.getByLabel('Toggle diagnostic log');
+  await expect(toggleBtn).toBeVisible();
+  await expect(toggleBtn).toHaveAttribute('aria-expanded', 'true');
+
+  // Log content should be visible (expanded by default after analysis)
+  const logContent = page.locator('.mt-12.space-y-4 .bg-\\[\\#1a1a1a\\]');
+  await expect(logContent).toBeVisible();
+
+  // Click to collapse
+  await toggleBtn.click();
+  await expect(toggleBtn).toHaveAttribute('aria-expanded', 'false');
+  await expect(logContent).toHaveCount(0);
+
+  // Click to expand again
+  await toggleBtn.click();
+  await expect(toggleBtn).toHaveAttribute('aria-expanded', 'true');
+  await expect(logContent).toBeVisible();
+});
+
+test('diagnostic log entry count is shown in toggle header', async ({ page }) => {
+  await stubRoutes(page);
+  await page.goto('/', { waitUntil: 'networkidle' });
+  await page.setInputFiles('#audio-upload', fixturePath());
+  await page.getByRole('button', { name: /Initiate Analysis/i }).click();
+
+  await expect(page.getByText('Analysis Results')).toBeVisible();
+
+  // Should show entry count (at least "1 entry" or "2 entries" depending on Phase 2)
+  const toggleBtn = page.getByLabel('Toggle diagnostic log');
+  await expect(toggleBtn).toContainText(/\d+ entr/);
+});
