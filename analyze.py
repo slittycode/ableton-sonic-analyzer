@@ -270,8 +270,8 @@ def prompt_to_continue() -> bool:
 
 
 def midi_to_note_name(midi_num: int) -> str:
-    names = ['C', 'C#', 'D', 'D#', 'E', 'F',
-             'F#', 'G', 'G#', 'A', 'A#', 'B']
+    names = ["C", "C#", "D", "D#", "E", "F",
+             "F#", "G", "G#", "A", "A#", "B"]
     octave = (midi_num // 12) - 1
     name = names[midi_num % 12]
     return f"{name}{octave}"

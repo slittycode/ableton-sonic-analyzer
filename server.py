@@ -112,9 +112,9 @@ def _build_phase1(payload: dict[str, Any]) -> dict[str, Any]:
         "timeSignature": _coerce_string(payload.get("timeSignature"), "4/4"),
         "durationSeconds": _coerce_number(payload.get("durationSeconds")),
         "lufsIntegrated": _coerce_number(payload.get("lufsIntegrated")),
-        "lufsRange": payload.get("lufsRange"),
+        "lufsRange": _coerce_nullable_number(payload.get("lufsRange")),
         "truePeak": _coerce_number(payload.get("truePeak")),
-        "crestFactor": payload.get("crestFactor"),
+        "crestFactor": _coerce_nullable_number(payload.get("crestFactor")),
         "stereoWidth": _coerce_number(stereo_detail.get("stereoWidth")),
         "stereoCorrelation": _coerce_number(stereo_detail.get("stereoCorrelation")),
         "stereoDetail": payload.get("stereoDetail"),
@@ -217,10 +217,16 @@ def _build_backend_estimate(
         duration_seconds = None
 
     safe_duration = duration_seconds if duration_seconds is not None else 0.0
-    raw_estimate = build_analysis_estimate(safe_duration, run_separation, run_transcribe)
+    raw_estimate = build_analysis_estimate(
+        safe_duration, run_separation, run_transcribe
+    )
     raw_stages = raw_estimate.get("stages")
     stages = (
-        [_normalize_estimate_stage(stage) for stage in raw_stages if isinstance(stage, dict)]
+        [
+            _normalize_estimate_stage(stage)
+            for stage in raw_stages
+            if isinstance(stage, dict)
+        ]
         if isinstance(raw_stages, list)
         else []
     )
@@ -238,7 +244,8 @@ def _build_backend_estimate(
 
     normalized_duration = (
         round(float(duration_seconds), 1)
-        if isinstance(duration_seconds, (int, float)) and isfinite(float(duration_seconds))
+        if isinstance(duration_seconds, (int, float))
+        and isfinite(float(duration_seconds))
         else round(float(raw_estimate.get("durationSeconds", 0.0)), 1)
     )
 
@@ -252,7 +259,9 @@ def _build_backend_estimate(
 
 def _compute_timeout_seconds(estimate: dict[str, Any]) -> int:
     estimated_high_ms = _coerce_positive_int(estimate.get("totalHighMs"))
-    estimated_high_seconds = ceil(estimated_high_ms / 1000) if estimated_high_ms > 0 else 45
+    estimated_high_seconds = (
+        ceil(estimated_high_ms / 1000) if estimated_high_ms > 0 else 45
+    )
     return estimated_high_seconds + ANALYZE_TIMEOUT_BUFFER_SECONDS
 
 
@@ -266,7 +275,9 @@ def _round_timing_value(value: float | None) -> float | None:
     return round(float(value), 2)
 
 
-def _format_timing_summary_value(value: float | None, suffix: str = "", digits: int = 1) -> str:
+def _format_timing_summary_value(
+    value: float | None, suffix: str = "", digits: int = 1
+) -> str:
     if value is None:
         return "n/a"
     return f"{value:.{digits}f}{suffix}"
@@ -303,7 +314,11 @@ def _build_timings(
 
 def _log_timing_summary(timings: dict[str, Any]) -> None:
     flags_used = timings.get("flagsUsed")
-    flags_label = f"[{', '.join(flags_used)}]" if isinstance(flags_used, list) and flags_used else "[]"
+    flags_label = (
+        f"[{', '.join(flags_used)}]"
+        if isinstance(flags_used, list) and flags_used
+        else "[]"
+    )
     file_size_bytes = _coerce_positive_int(timings.get("fileSizeBytes"))
     file_size_mb = file_size_bytes / (1024 * 1024)
     print(
@@ -442,7 +457,9 @@ async def estimate_analysis(
     dsp_json_override: str | None = Form(None),
     transcribe: bool = Form(False),
     separate: bool = Form(False),
-    separate_query: bool = Query(False, alias="separate", description="Pass --separate to analyze.py when true"),
+    separate_query: bool = Query(
+        False, alias="separate", description="Pass --separate to analyze.py when true"
+    ),
     separate_flag: bool = Query(
         False,
         alias="--separate",
@@ -472,7 +489,9 @@ async def analyze_audio(
     dsp_json_override: str | None = Form(None),
     transcribe: bool = Form(False),
     separate: bool = Form(False),
-    separate_query: bool = Query(False, alias="separate", description="Pass --separate to analyze.py when true"),
+    separate_query: bool = Query(
+        False, alias="separate", description="Pass --separate to analyze.py when true"
+    ),
     separate_flag: bool = Query(
         False,
         alias="--separate",

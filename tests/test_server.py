@@ -46,18 +46,24 @@ class ServerContractTests(unittest.TestCase):
 
     def _request_body_properties(self, path: str) -> dict:
         openapi = server.app.openapi()
-        schema_ref = openapi["paths"][path]["post"]["requestBody"]["content"]["multipart/form-data"]["schema"]["$ref"]
+        schema_ref = openapi["paths"][path]["post"]["requestBody"]["content"][
+            "multipart/form-data"
+        ]["schema"]["$ref"]
         schema_name = schema_ref.split("/")[-1]
         return openapi["components"]["schemas"][schema_name]["properties"]
 
-    def test_analyze_endpoint_openapi_contract_exposes_separate_form_field(self) -> None:
+    def test_analyze_endpoint_openapi_contract_exposes_separate_form_field(
+        self,
+    ) -> None:
         properties = self._request_body_properties("/api/analyze")
 
         self.assertIn("track", properties)
         self.assertIn("transcribe", properties)
         self.assertIn("separate", properties)
 
-    def test_estimate_endpoint_openapi_contract_exposes_separate_form_field(self) -> None:
+    def test_estimate_endpoint_openapi_contract_exposes_separate_form_field(
+        self,
+    ) -> None:
         properties = self._request_body_properties("/api/analyze/estimate")
 
         self.assertIn("track", properties)
@@ -91,7 +97,9 @@ class ServerContractTests(unittest.TestCase):
         },
         create=True,
     )
-    def test_estimate_endpoint_combines_separate_and_transcribe_flags(self, build_estimate_mock, *_mocks) -> None:
+    def test_estimate_endpoint_combines_separate_and_transcribe_flags(
+        self, build_estimate_mock, *_mocks
+    ) -> None:
         response = asyncio.run(
             server.estimate_analysis(
                 track=self._upload_file(),
@@ -143,7 +151,14 @@ class ServerContractTests(unittest.TestCase):
         server.subprocess,
         "run",
         return_value=subprocess.CompletedProcess(
-            args=["./venv/bin/python", "analyze.py", "track.mp3", "--yes", "--separate", "--transcribe"],
+            args=[
+                "./venv/bin/python",
+                "analyze.py",
+                "track.mp3",
+                "--yes",
+                "--separate",
+                "--transcribe",
+            ],
             returncode=0,
             stdout=json.dumps(
                 {
@@ -174,13 +189,18 @@ class ServerContractTests(unittest.TestCase):
             stderr="",
         ),
     )
-    def test_analyze_endpoint_combines_separate_and_transcribe_in_subprocess(self, run_mock, build_estimate_mock, *_mocks) -> None:
-        with patch.object(
-            server,
-            "_current_time",
-            side_effect=_timing_points(response_ready_ms=245),
-            create=True,
-        ), patch("builtins.print") as print_mock:
+    def test_analyze_endpoint_combines_separate_and_transcribe_in_subprocess(
+        self, run_mock, build_estimate_mock, *_mocks
+    ) -> None:
+        with (
+            patch.object(
+                server,
+                "_current_time",
+                side_effect=_timing_points(response_ready_ms=245),
+                create=True,
+            ),
+            patch("builtins.print") as print_mock,
+        ):
             response = asyncio.run(
                 server.analyze_audio(
                     track=self._upload_file(),
@@ -196,7 +216,14 @@ class ServerContractTests(unittest.TestCase):
         command = run_mock.call_args.args[0]
         self.assertEqual(
             command,
-            ["./venv/bin/python", "analyze.py", unittest.mock.ANY, "--yes", "--separate", "--transcribe"],
+            [
+                "./venv/bin/python",
+                "analyze.py",
+                unittest.mock.ANY,
+                "--yes",
+                "--separate",
+                "--transcribe",
+            ],
         )
         self.assertEqual(run_mock.call_args.kwargs["timeout"], 218)
         build_estimate_mock.assert_called_once_with(214.6, True, True)
@@ -216,9 +243,14 @@ class ServerContractTests(unittest.TestCase):
         )
         print_mock.assert_called_once()
         self.assertIs(print_mock.call_args.kwargs["file"], server.sys.stderr)
-        self.assertIn("[TIMING] total=245.0ms analysis=200.0ms overhead=45.0ms", print_mock.call_args.args[0])
+        self.assertIn(
+            "[TIMING] total=245.0ms analysis=200.0ms overhead=45.0ms",
+            print_mock.call_args.args[0],
+        )
         self.assertIn("flags=[--separate, --transcribe]", print_mock.call_args.args[0])
-        self.assertIn("fileSize=0.0MB duration=214.6s ms/s=0.93", print_mock.call_args.args[0])
+        self.assertIn(
+            "fileSize=0.0MB duration=214.6s ms/s=0.93", print_mock.call_args.args[0]
+        )
 
     @patch.object(server, "get_audio_duration_seconds", return_value=214.6, create=True)
     @patch.object(
@@ -239,15 +271,15 @@ class ServerContractTests(unittest.TestCase):
     )
     def test_estimate_endpoint_returns_preflight_contract(self, *_mocks) -> None:
         response = asyncio.run(
-                server.estimate_analysis(
-                    track=self._upload_file(),
-                    dsp_json_override=None,
-                    transcribe=False,
-                    separate=False,
-                    separate_query=False,
-                    separate_flag=False,
-                )
+            server.estimate_analysis(
+                track=self._upload_file(),
+                dsp_json_override=None,
+                transcribe=False,
+                separate=False,
+                separate_query=False,
+                separate_flag=False,
             )
+        )
 
         self.assertEqual(response.status_code, 200)
         payload = self._decode_json_response(response)
@@ -280,12 +312,15 @@ class ServerContractTests(unittest.TestCase):
         side_effect=_make_timeout_expired(),
     )
     def test_timeout_response_uses_structured_json_contract(self, *_mocks) -> None:
-        with patch.object(
-            server,
-            "_current_time",
-            side_effect=_timing_points(response_ready_ms=255),
-            create=True,
-        ), patch("builtins.print") as print_mock:
+        with (
+            patch.object(
+                server,
+                "_current_time",
+                side_effect=_timing_points(response_ready_ms=255),
+                create=True,
+            ),
+            patch("builtins.print") as print_mock,
+        ):
             response = asyncio.run(
                 server.analyze_audio(
                     track=self._upload_file(),
@@ -350,12 +385,15 @@ class ServerContractTests(unittest.TestCase):
         ),
     )
     def test_invalid_json_response_includes_timing_breakdown(self, *_mocks) -> None:
-        with patch.object(
-            server,
-            "_current_time",
-            side_effect=_timing_points(response_ready_ms=235),
-            create=True,
-        ), patch("builtins.print") as print_mock:
+        with (
+            patch.object(
+                server,
+                "_current_time",
+                side_effect=_timing_points(response_ready_ms=235),
+                create=True,
+            ),
+            patch("builtins.print") as print_mock,
+        ):
             response = asyncio.run(
                 server.analyze_audio(
                     track=self._upload_file(),
@@ -458,6 +496,292 @@ class ServerContractTests(unittest.TestCase):
         self.assertEqual(payload["diagnostics"]["estimatedLowMs"], 22000)
         self.assertEqual(payload["diagnostics"]["estimatedHighMs"], 38000)
         self.assertGreaterEqual(payload["diagnostics"]["timeoutSeconds"], 38)
+
+    @patch.object(server, "get_audio_duration_seconds", return_value=214.6, create=True)
+    @patch.object(
+        server,
+        "build_analysis_estimate",
+        return_value={
+            "durationSeconds": 214.6,
+            "totalSeconds": {"min": 22, "max": 38},
+            "stages": [
+                {
+                    "key": "dsp",
+                    "label": "DSP analysis",
+                    "seconds": {"min": 22, "max": 38},
+                }
+            ],
+        },
+        create=True,
+    )
+    @patch.object(
+        server.subprocess,
+        "run",
+        side_effect=RuntimeError("disk full"),
+    )
+    def test_internal_error_returns_500_with_structured_envelope(self, *_mocks) -> None:
+        with (
+            patch.object(
+                server,
+                "_current_time",
+                side_effect=_timing_points(response_ready_ms=230),
+                create=True,
+            ),
+            patch("builtins.print"),
+        ):
+            response = asyncio.run(
+                server.analyze_audio(
+                    track=self._upload_file(),
+                    dsp_json_override=None,
+                    transcribe=False,
+                    separate=False,
+                    separate_query=False,
+                    separate_flag=False,
+                )
+            )
+
+        self.assertEqual(response.status_code, 500)
+        payload = self._decode_json_response(response)
+        self.assertIn("requestId", payload)
+        self.assertEqual(payload["error"]["code"], "BACKEND_INTERNAL_ERROR")
+        self.assertEqual(payload["error"]["phase"], "phase1_local_dsp")
+        self.assertFalse(payload["error"]["retryable"])
+        self.assertIn("stderrSnippet", payload["diagnostics"])
+        self.assertIn("timings", payload["diagnostics"])
+
+    @patch.object(server, "get_audio_duration_seconds", return_value=214.6, create=True)
+    @patch.object(
+        server,
+        "build_analysis_estimate",
+        return_value={
+            "durationSeconds": 214.6,
+            "totalSeconds": {"min": 22, "max": 38},
+            "stages": [
+                {
+                    "key": "dsp",
+                    "label": "DSP analysis",
+                    "seconds": {"min": 22, "max": 38},
+                }
+            ],
+        },
+        create=True,
+    )
+    @patch.object(
+        server.subprocess,
+        "run",
+        return_value=subprocess.CompletedProcess(
+            args=["./venv/bin/python", "analyze.py", "track.mp3", "--yes"],
+            returncode=1,
+            stdout="partial output",
+            stderr="segfault in essentia",
+        ),
+    )
+    def test_nonzero_exit_returns_502_analyzer_failed(self, *_mocks) -> None:
+        with (
+            patch.object(
+                server,
+                "_current_time",
+                side_effect=_timing_points(response_ready_ms=250),
+                create=True,
+            ),
+            patch("builtins.print"),
+        ):
+            response = asyncio.run(
+                server.analyze_audio(
+                    track=self._upload_file(),
+                    dsp_json_override=None,
+                    transcribe=False,
+                    separate=False,
+                    separate_query=False,
+                    separate_flag=False,
+                )
+            )
+
+        self.assertEqual(response.status_code, 502)
+        payload = self._decode_json_response(response)
+        self.assertIn("requestId", payload)
+        self.assertEqual(payload["error"]["code"], "ANALYZER_FAILED")
+        self.assertEqual(payload["error"]["phase"], "phase1_local_dsp")
+        self.assertTrue(payload["error"]["retryable"])
+        self.assertEqual(payload["diagnostics"]["stdoutSnippet"], "partial output")
+        self.assertEqual(
+            payload["diagnostics"]["stderrSnippet"], "segfault in essentia"
+        )
+
+    @patch.object(server, "get_audio_duration_seconds", return_value=214.6, create=True)
+    @patch.object(
+        server,
+        "build_analysis_estimate",
+        return_value={
+            "durationSeconds": 214.6,
+            "totalSeconds": {"min": 22, "max": 38},
+            "stages": [
+                {
+                    "key": "dsp",
+                    "label": "DSP analysis",
+                    "seconds": {"min": 22, "max": 38},
+                }
+            ],
+        },
+        create=True,
+    )
+    @patch.object(
+        server.subprocess,
+        "run",
+        return_value=subprocess.CompletedProcess(
+            args=["./venv/bin/python", "analyze.py", "track.mp3", "--yes"],
+            returncode=0,
+            stdout="",
+            stderr="analyze finished with no output",
+        ),
+    )
+    def test_empty_stdout_returns_502_analyzer_empty_output(self, *_mocks) -> None:
+        with (
+            patch.object(
+                server,
+                "_current_time",
+                side_effect=_timing_points(response_ready_ms=240),
+                create=True,
+            ),
+            patch("builtins.print"),
+        ):
+            response = asyncio.run(
+                server.analyze_audio(
+                    track=self._upload_file(),
+                    dsp_json_override=None,
+                    transcribe=False,
+                    separate=False,
+                    separate_query=False,
+                    separate_flag=False,
+                )
+            )
+
+        self.assertEqual(response.status_code, 502)
+        payload = self._decode_json_response(response)
+        self.assertIn("requestId", payload)
+        self.assertEqual(payload["error"]["code"], "ANALYZER_EMPTY_OUTPUT")
+        self.assertEqual(payload["error"]["phase"], "phase1_local_dsp")
+        self.assertFalse(payload["error"]["retryable"])
+        self.assertEqual(
+            payload["diagnostics"]["stderrSnippet"], "analyze finished with no output"
+        )
+
+    @patch.object(server, "get_audio_duration_seconds", return_value=214.6, create=True)
+    @patch.object(
+        server,
+        "build_analysis_estimate",
+        return_value={
+            "durationSeconds": 214.6,
+            "totalSeconds": {"min": 22, "max": 38},
+            "stages": [
+                {
+                    "key": "dsp",
+                    "label": "DSP analysis",
+                    "seconds": {"min": 22, "max": 38},
+                }
+            ],
+        },
+        create=True,
+    )
+    @patch.object(
+        server.subprocess,
+        "run",
+        return_value=subprocess.CompletedProcess(
+            args=["./venv/bin/python", "analyze.py", "track.mp3", "--yes"],
+            returncode=0,
+            stdout="[1, 2, 3]",
+            stderr="",
+        ),
+    )
+    def test_non_dict_json_returns_502_analyzer_bad_payload(self, *_mocks) -> None:
+        with (
+            patch.object(
+                server,
+                "_current_time",
+                side_effect=_timing_points(response_ready_ms=235),
+                create=True,
+            ),
+            patch("builtins.print"),
+        ):
+            response = asyncio.run(
+                server.analyze_audio(
+                    track=self._upload_file(),
+                    dsp_json_override=None,
+                    transcribe=False,
+                    separate=False,
+                    separate_query=False,
+                    separate_flag=False,
+                )
+            )
+
+        self.assertEqual(response.status_code, 502)
+        payload = self._decode_json_response(response)
+        self.assertIn("requestId", payload)
+        self.assertEqual(payload["error"]["code"], "ANALYZER_BAD_PAYLOAD")
+        self.assertEqual(payload["error"]["phase"], "phase1_local_dsp")
+        self.assertFalse(payload["error"]["retryable"])
+        self.assertEqual(payload["diagnostics"]["stdoutSnippet"], "[1, 2, 3]")
+
+
+class BuildPhase1CoercionTests(unittest.TestCase):
+    """Unit tests for _build_phase1 defensive coercion of scalar fields."""
+
+    def _minimal_payload(self, **overrides) -> dict:
+        base = {
+            "bpm": 128,
+            "bpmConfidence": 0.92,
+            "key": "A minor",
+            "keyConfidence": 0.88,
+            "timeSignature": "4/4",
+            "durationSeconds": 214.6,
+            "lufsIntegrated": -8.2,
+            "lufsRange": 6.3,
+            "truePeak": -0.1,
+            "crestFactor": 12.5,
+            "stereoDetail": {"stereoWidth": 0.74, "stereoCorrelation": 0.82},
+            "spectralBalance": {
+                "subBass": -0.6,
+                "lowBass": 1.0,
+                "mids": -0.2,
+                "upperMids": 0.3,
+                "highs": 0.9,
+                "brilliance": 0.7,
+            },
+        }
+        base.update(overrides)
+        return base
+
+    def test_lufs_range_nan_is_coerced_to_none(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(lufsRange=float("nan")))
+        self.assertIsNone(phase1["lufsRange"])
+
+    def test_crest_factor_nan_is_coerced_to_none(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(crestFactor=float("nan")))
+        self.assertIsNone(phase1["crestFactor"])
+
+    def test_lufs_range_none_stays_none(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(lufsRange=None))
+        self.assertIsNone(phase1["lufsRange"])
+
+    def test_crest_factor_none_stays_none(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(crestFactor=None))
+        self.assertIsNone(phase1["crestFactor"])
+
+    def test_lufs_range_valid_float_passes_through(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(lufsRange=6.3))
+        self.assertEqual(phase1["lufsRange"], 6.3)
+
+    def test_crest_factor_valid_float_passes_through(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(crestFactor=12.5))
+        self.assertEqual(phase1["crestFactor"], 12.5)
+
+    def test_lufs_range_boolean_is_coerced_to_none(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(lufsRange=True))
+        self.assertIsNone(phase1["lufsRange"])
+
+    def test_crest_factor_boolean_is_coerced_to_none(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(crestFactor=True))
+        self.assertIsNone(phase1["crestFactor"])
 
 
 if __name__ == "__main__":

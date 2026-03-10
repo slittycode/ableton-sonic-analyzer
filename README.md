@@ -95,6 +95,8 @@ Current CORS allow list:
 
 - `http://localhost:3000`
 - `http://127.0.0.1:3000`
+- `http://localhost:3100`
+- `http://127.0.0.1:3100`
 - `http://localhost:5173`
 - `http://127.0.0.1:5173`
 
@@ -297,5 +299,5 @@ When the analyzer does not produce a valid payload, `diagnostics.timings.fileDur
 
 ```bash
 ./venv/bin/python -m py_compile server.py
-./venv/bin/python -m unittest tests/test_server.py
+./venv/bin/python -m unittest discover -s tests
 ```
