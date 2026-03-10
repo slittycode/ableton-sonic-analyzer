@@ -3,6 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { parseBackendAnalyzeResponse } from "../../src/services/backendPhase1Client";
+
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const backendBaseUrl = process.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
@@ -50,7 +52,6 @@ test("live backend phase1 renders results without connectivity errors", async ({
   const analyzeButton = page.getByRole("button", { name: /Initiate Analysis/i });
   await expect(analyzeButton).toBeVisible();
 
-  const requestStartedAt = Date.now();
   const analyzeResponsePromise = page.waitForResponse(
     (response) => response.url().includes("/api/analyze") && response.request().method() === "POST",
     { timeout: 35_000 },
@@ -59,9 +60,25 @@ test("live backend phase1 renders results without connectivity errors", async ({
   await analyzeButton.click();
 
   const analyzeResponse = await analyzeResponsePromise;
-  const responseLatencyMs = Date.now() - requestStartedAt;
+  const payload = await analyzeResponse.json();
+  const parsedResponse = parseBackendAnalyzeResponse(payload);
+  const diagnostics = parsedResponse.diagnostics;
+
   expect(analyzeResponse.ok()).toBeTruthy();
-  expect(responseLatencyMs).toBeLessThan(30_000);
+  expect(parsedResponse.requestId).not.toBe("unknown");
+  expect(diagnostics).toBeTruthy();
+
+  if (diagnostics) {
+    expect(diagnostics.backendDurationMs).toBeGreaterThan(0);
+
+    if (typeof diagnostics.timeoutSeconds === "number") {
+      expect(diagnostics.backendDurationMs).toBeLessThan(diagnostics.timeoutSeconds * 1_000);
+    }
+
+    if (typeof diagnostics.estimatedHighMs === "number" && typeof diagnostics.timeoutSeconds === "number") {
+      expect(diagnostics.timeoutSeconds * 1_000).toBeGreaterThan(diagnostics.estimatedHighMs);
+    }
+  }
 
   await expect(page.getByText("Analysis Results")).toBeVisible({ timeout: 35_000 });
   await expect(page.getByText("System Diagnostics")).toBeVisible();

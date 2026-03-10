@@ -381,4 +381,42 @@ describe('analyzePhase2WithGemini', () => {
     expect(response.log.durationMs).toBe(900);
     expect(response.log.message).toBe('Phase 2 advisory complete. Upload: 300ms, Generate: 600ms');
   });
+
+  it('degrades malformed Gemini JSON into a skipped phase 2 result', async () => {
+    generateContentMock.mockResolvedValueOnce({
+      text: '{"trackCharacter":',
+    });
+
+    const response = await analyzePhase2WithGemini({
+      file: createSmallFile(),
+      modelName: 'gemini-2.5-pro',
+      phase1Result: basePhase1,
+      audioMetadata,
+    });
+
+    expect(response.result).toBeNull();
+    expect(response.log.phase).toBe('Phase 2: Advisory skipped');
+    expect(response.log.status).toBe('skipped');
+    expect(response.log.message).toBe('Phase 2 advisory skipped because Gemini returned invalid JSON.');
+  });
+
+  it('degrades structurally invalid Gemini JSON into a skipped phase 2 result', async () => {
+    generateContentMock.mockResolvedValueOnce({
+      text: JSON.stringify({
+        trackCharacter: 'Only a headline with the rest missing.',
+      }),
+    });
+
+    const response = await analyzePhase2WithGemini({
+      file: createSmallFile(),
+      modelName: 'gemini-2.5-pro',
+      phase1Result: basePhase1,
+      audioMetadata,
+    });
+
+    expect(response.result).toBeNull();
+    expect(response.log.phase).toBe('Phase 2: Advisory skipped');
+    expect(response.log.status).toBe('skipped');
+    expect(response.log.message).toBe('Phase 2 advisory skipped because Gemini returned an invalid response shape.');
+  });
 });

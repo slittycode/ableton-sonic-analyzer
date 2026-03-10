@@ -58,7 +58,7 @@ cp .env.example .env
 
 | Variable | Meaning | Current behavior |
 | --- | --- | --- |
-| `VITE_API_BASE_URL` | Base URL for the backend API. | `src/config.ts` falls back to `http://localhost:8000` when unset. The checked-in `.env.example` still uses `http://127.0.0.1:8787`, so set this explicitly to match the backend you are actually running. |
+| `VITE_API_BASE_URL` | Base URL for the backend API. | `src/config.ts` falls back to `http://localhost:8000` when unset. The checked-in `.env.example` uses `http://127.0.0.1:8000`, so set this explicitly to match the backend you are actually running. |
 | `VITE_ENABLE_PHASE2_GEMINI` | Enables the optional Gemini pass. | Must be `"true"` to allow Phase 2. |
 | `VITE_GEMINI_API_KEY` | Gemini API key. | Phase 2 only runs when this value is non-empty and `VITE_ENABLE_PHASE2_GEMINI=true`. |
 | `RUN_GEMINI_LIVE_SMOKE` | Enables the opt-in live Playwright proof for the Gemini Files API path. | Must be `"true"` to run `npm run test:smoke:live-gemini`; default smoke coverage keeps Gemini mocked. |

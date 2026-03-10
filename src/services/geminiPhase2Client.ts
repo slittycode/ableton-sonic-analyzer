@@ -1,7 +1,7 @@
 import { GoogleGenAI, Type, Type as SchemaType } from "@google/genai";
 import { appConfig, isGeminiPhase2Available } from "../config";
 import { DiagnosticLogEntry, Phase1Result, Phase2Result } from "../types";
-import { PHASE2_LABEL } from "./phaseLabels";
+import { PHASE2_LABEL, PHASE2_SKIPPED_LABEL } from "./phaseLabels";
 
 const INLINE_SIZE_LIMIT = 20_971_520;
 
@@ -13,7 +13,7 @@ interface AnalyzePhase2Args {
 }
 
 interface AnalyzePhase2Result {
-  result: Phase2Result;
+  result: Phase2Result | null;
   log: DiagnosticLogEntry;
 }
 
@@ -577,7 +577,26 @@ function buildPhase2Result({
   durationMs: number;
   message: string;
 }): AnalyzePhase2Result {
-  const result = JSON.parse(phase2Response.text || "{}") as Phase2Result;
+  const parsed = parsePhase2Result(phase2Response.text);
+
+  if (parsed.skipMessage) {
+    return {
+      result: null,
+      log: {
+        model: modelName,
+        phase: PHASE2_SKIPPED_LABEL,
+        promptLength: phase2Prompt.length,
+        responseLength: phase2Response.text?.length || 0,
+        durationMs,
+        audioMetadata,
+        timestamp: new Date().toISOString(),
+        source: "gemini",
+        status: "skipped",
+        message: parsed.skipMessage,
+      },
+    };
+  }
+
   const log: DiagnosticLogEntry = {
     model: modelName,
     phase: PHASE2_LABEL,
@@ -592,7 +611,186 @@ function buildPhase2Result({
   };
 
   return {
-    result,
+    result: parsed.result,
     log,
   };
+}
+
+function parsePhase2Result(responseText: string | undefined): {
+  result: Phase2Result | null;
+  skipMessage?: string;
+} {
+  const rawText = responseText?.trim();
+
+  if (!rawText) {
+    return {
+      result: null,
+      skipMessage: "Phase 2 advisory skipped because Gemini returned an empty response.",
+    };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawText);
+  } catch {
+    return {
+      result: null,
+      skipMessage: "Phase 2 advisory skipped because Gemini returned invalid JSON.",
+    };
+  }
+
+  if (!isPhase2Result(parsed)) {
+    return {
+      result: null,
+      skipMessage: "Phase 2 advisory skipped because Gemini returned an invalid response shape.",
+    };
+  }
+
+  return { result: parsed };
+}
+
+function isPhase2Result(value: unknown): value is Phase2Result {
+  const record = asRecord(value);
+  if (!record) return false;
+
+  return (
+    isString(record.trackCharacter) &&
+    isDetectedCharacteristics(record.detectedCharacteristics) &&
+    isArrangementOverview(record.arrangementOverview) &&
+    isSonicElements(record.sonicElements) &&
+    isMixAndMasterChain(record.mixAndMasterChain) &&
+    isSecretSauce(record.secretSauce) &&
+    isConfidenceNotes(record.confidenceNotes) &&
+    isAbletonRecommendations(record.abletonRecommendations)
+  );
+}
+
+function isDetectedCharacteristics(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.every((item) => {
+      const record = asRecord(item);
+      return (
+        !!record &&
+        isString(record.name) &&
+        isString(record.explanation) &&
+        (record.confidence === "HIGH" || record.confidence === "MED" || record.confidence === "LOW")
+      );
+    })
+  );
+}
+
+function isArrangementOverview(value: unknown): boolean {
+  const record = asRecord(value);
+  if (!record || !isString(record.summary) || !Array.isArray(record.segments)) return false;
+
+  const segmentsAreValid = record.segments.every((segment) => {
+    const entry = asRecord(segment);
+    return (
+      !!entry &&
+      isNumber(entry.index) &&
+      isNumber(entry.startTime) &&
+      isNumber(entry.endTime) &&
+      isString(entry.description) &&
+      isOptionalNumber(entry.lufs) &&
+      isOptionalString(entry.spectralNote)
+    );
+  });
+
+  return segmentsAreValid && isOptionalString(record.noveltyNotes);
+}
+
+function isSonicElements(value: unknown): boolean {
+  const record = asRecord(value);
+  return (
+    !!record &&
+    isString(record.kick) &&
+    isString(record.bass) &&
+    isString(record.melodicArp) &&
+    isString(record.grooveAndTiming) &&
+    isString(record.effectsAndTexture) &&
+    isOptionalString(record.widthAndStereo) &&
+    isOptionalString(record.harmonicContent)
+  );
+}
+
+function isMixAndMasterChain(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.every((item) => {
+      const record = asRecord(item);
+      return (
+        !!record &&
+        isNumber(record.order) &&
+        isString(record.device) &&
+        isString(record.parameter) &&
+        isString(record.value) &&
+        isString(record.reason)
+      );
+    })
+  );
+}
+
+function isSecretSauce(value: unknown): boolean {
+  const record = asRecord(value);
+  return (
+    !!record &&
+    isString(record.title) &&
+    isOptionalString(record.icon) &&
+    isString(record.explanation) &&
+    isStringArray(record.implementationSteps)
+  );
+}
+
+function isConfidenceNotes(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.every((item) => {
+      const record = asRecord(item);
+      return !!record && isString(record.field) && isString(record.value) && isString(record.reason);
+    })
+  );
+}
+
+function isAbletonRecommendations(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.every((item) => {
+      const record = asRecord(item);
+      return (
+        !!record &&
+        isString(record.device) &&
+        isString(record.category) &&
+        isString(record.parameter) &&
+        isString(record.value) &&
+        isString(record.reason) &&
+        isOptionalString(record.advancedTip)
+      );
+    })
+  );
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+function isNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isOptionalString(value: unknown): boolean {
+  return value === undefined || isString(value);
+}
+
+function isOptionalNumber(value: unknown): boolean {
+  return value === undefined || isNumber(value);
+}
+
+function isStringArray(value: unknown): boolean {
+  return Array.isArray(value) && value.every((item) => isString(item));
 }
