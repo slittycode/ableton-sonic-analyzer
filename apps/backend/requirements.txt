@@ -1,0 +1,8 @@
+essentia
+demucs
+mido
+numpy
+fastapi
+uvicorn
+python-multipart
+basic-pitch
