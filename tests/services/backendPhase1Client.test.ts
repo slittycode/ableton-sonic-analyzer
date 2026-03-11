@@ -5,6 +5,7 @@ import {
   BackendClientError,
   deriveAnalyzeTimeoutMs,
   mapBackendError,
+  resetBackendIdentityCacheForTests,
 } from '../../src/services/backendPhase1Client';
 import { afterEach, vi } from 'vitest';
 
@@ -161,6 +162,7 @@ const validEstimatePayload = {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  resetBackendIdentityCacheForTests();
 });
 
 describe('parseBackendAnalyzeResponse', () => {
@@ -349,7 +351,7 @@ describe('estimatePhase1WithBackend', () => {
 
     const result = await estimatePhase1WithBackend(
       new File(['wave'], 'track.mp3', { type: 'audio/mpeg' }),
-      { apiBaseUrl: 'http://localhost:8000' },
+      { apiBaseUrl: 'http://127.0.0.1:8100' },
     );
 
     expect(result.requestId).toBe('req_estimate_123');
@@ -375,10 +377,163 @@ describe('estimatePhase1WithBackend', () => {
 
     await estimatePhase1WithBackend(
       new File(['wave'], 'track.mp3', { type: 'audio/mpeg' }),
-      { apiBaseUrl: 'http://localhost:8000', transcribe: true, separate: true },
+      { apiBaseUrl: 'http://127.0.0.1:8100', transcribe: true, separate: true },
     );
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('classifies route-style estimate failures as wrong-service when openapi identifies another API', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+
+        if (url.endsWith('/api/analyze/estimate')) {
+          return new Response(JSON.stringify({ detail: 'Not Found' }), {
+            status: 404,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          });
+        }
+
+        if (url.endsWith('/openapi.json')) {
+          return new Response(
+            JSON.stringify({
+              info: { title: 'Multi-Agent Dashboard API' },
+              paths: {
+                '/api/state': {},
+              },
+            }),
+            {
+              status: 200,
+              headers: {
+                'Content-Type': 'application/json',
+              },
+            },
+          );
+        }
+
+        throw new Error(`Unexpected fetch URL: ${url}`);
+      }),
+    );
+
+    await expect(
+      estimatePhase1WithBackend(
+        new File(['wave'], 'track.mp3', { type: 'audio/mpeg' }),
+        { apiBaseUrl: 'http://localhost:8000' },
+      ),
+    ).rejects.toMatchObject({
+      code: 'BACKEND_WRONG_SERVICE',
+      message: expect.stringContaining('http://127.0.0.1:8100'),
+      details: {
+        status: 404,
+        configuredBaseUrl: 'http://localhost:8000',
+        detectedServiceTitle: 'Multi-Agent Dashboard API',
+      },
+    });
+  });
+
+  it('mentions stale local env overrides in the wrong-service guidance for legacy localhost:8000 configs', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+
+        if (url.endsWith('/api/analyze/estimate')) {
+          return new Response(JSON.stringify({ detail: 'Not Found' }), {
+            status: 404,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          });
+        }
+
+        if (url.endsWith('/openapi.json')) {
+          return new Response(
+            JSON.stringify({
+              info: { title: 'Multi-Agent Dashboard API' },
+              paths: {
+                '/api/state': {},
+              },
+            }),
+            {
+              status: 200,
+              headers: {
+                'Content-Type': 'application/json',
+              },
+            },
+          );
+        }
+
+        throw new Error(`Unexpected fetch URL: ${url}`);
+      }),
+    );
+
+    await expect(
+      estimatePhase1WithBackend(
+        new File(['wave'], 'track.mp3', { type: 'audio/mpeg' }),
+        { apiBaseUrl: 'http://localhost:8000' },
+      ),
+    ).rejects.toMatchObject({
+      code: 'BACKEND_WRONG_SERVICE',
+      message: expect.stringContaining('stale local'),
+    });
+  });
+
+  it('reuses cached backend identity results across estimate and analyze requests', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url.endsWith('/api/analyze/estimate') || url.endsWith('/api/analyze')) {
+        return new Response(JSON.stringify({ detail: 'Not Found' }), {
+          status: 404,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+      }
+
+      if (url.endsWith('/openapi.json')) {
+        return new Response(
+          JSON.stringify({
+            info: { title: 'Multi-Agent Dashboard API' },
+            paths: {
+              '/api/state': {},
+            },
+          }),
+          {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          },
+        );
+      }
+
+      throw new Error(`Unexpected fetch URL: ${url}`);
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      estimatePhase1WithBackend(
+        new File(['wave'], 'track.mp3', { type: 'audio/mpeg' }),
+        { apiBaseUrl: 'http://127.0.0.1:8100' },
+      ),
+    ).rejects.toMatchObject({ code: 'BACKEND_WRONG_SERVICE' });
+
+    await expect(
+      analyzePhase1WithBackend(
+        new File(['wave'], 'track.mp3', { type: 'audio/mpeg' }),
+        null,
+        { apiBaseUrl: 'http://127.0.0.1:8100' },
+      ),
+    ).rejects.toMatchObject({ code: 'BACKEND_WRONG_SERVICE' });
+
+    const openApiCalls = fetchMock.mock.calls.filter(([input]) => String(input).endsWith('/openapi.json'));
+    expect(openApiCalls).toHaveLength(1);
   });
 });
 
@@ -426,7 +581,7 @@ describe('analyzePhase1WithBackend structured errors', () => {
       analyzePhase1WithBackend(
         new File(['wave'], 'track.mp3', { type: 'audio/mpeg' }),
         null,
-        { apiBaseUrl: 'http://localhost:8000' },
+        { apiBaseUrl: 'http://127.0.0.1:8100' },
       ),
     ).rejects.toMatchObject({
       code: 'BACKEND_TIMEOUT',
@@ -469,7 +624,7 @@ describe('analyzePhase1WithBackend structured errors', () => {
     await analyzePhase1WithBackend(
       new File(['wave'], 'track.mp3', { type: 'audio/mpeg' }),
       null,
-      { apiBaseUrl: 'http://localhost:8000' },
+      { apiBaseUrl: 'http://127.0.0.1:8100' },
     );
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -494,7 +649,7 @@ describe('analyzePhase1WithBackend structured errors', () => {
     await analyzePhase1WithBackend(
       new File(['wave'], 'track.mp3', { type: 'audio/mpeg' }),
       null,
-      { apiBaseUrl: 'http://localhost:8000', transcribe: true, separate: true },
+      { apiBaseUrl: 'http://127.0.0.1:8100', transcribe: true, separate: true },
     );
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -518,7 +673,7 @@ describe('analyzePhase1WithBackend structured errors', () => {
     const request = analyzePhase1WithBackend(
       new File(['wave'], 'track.mp3', { type: 'audio/mpeg' }),
       null,
-      { apiBaseUrl: 'http://localhost:8000', timeoutMs: 456000 },
+      { apiBaseUrl: 'http://127.0.0.1:8100', timeoutMs: 456000 },
     );
 
     const expectation = expect(request).rejects.toMatchObject({

@@ -1,6 +1,8 @@
 import { GoogleGenAI, Type, Type as SchemaType } from "@google/genai";
 import { appConfig, isGeminiPhase2Available } from "../config";
 import { DiagnosticLogEntry, Phase1Result, Phase2Result } from "../types";
+import { getAudioMimeTypeOrDefault } from "./audioFile";
+import { createUserCancelledError } from "./backendPhase1Client";
 import { PHASE2_LABEL, PHASE2_SKIPPED_LABEL } from "./phaseLabels";
 
 const INLINE_SIZE_LIMIT = 20_971_520;
@@ -10,6 +12,7 @@ interface AnalyzePhase2Args {
   modelName: string;
   phase1Result: Phase1Result;
   audioMetadata: DiagnosticLogEntry["audioMetadata"];
+  signal?: AbortSignal;
 }
 
 interface AnalyzePhase2Result {
@@ -33,9 +36,11 @@ async function withRetry<T>(
   maxRetries = 3,
   baseDelayMs = 2_000,
   loggingHooks?: RetryLoggingHooks,
+  signal?: AbortSignal,
 ): Promise<T> {
   let attempt = 0;
   while (attempt < maxRetries) {
+    throwIfUserCancelled(signal);
     const currentAttempt = attempt + 1;
     loggingHooks?.onAttempt?.(currentAttempt, maxRetries);
     try {
@@ -59,7 +64,7 @@ async function withRetry<T>(
 
       const delay = baseDelayMs * Math.pow(2, attempt - 1) + Math.random() * 1_000;
       loggingHooks?.onRetryableFailure?.(attempt, maxRetries, errorMessage, Math.round(delay));
-      await new Promise((resolve) => setTimeout(resolve, delay));
+      await waitForRetryDelay(delay, signal);
     }
   }
   throw new Error("Max retries reached for Gemini phase-2 analysis.");
@@ -74,10 +79,13 @@ export async function analyzePhase2WithGemini({
   modelName,
   phase1Result,
   audioMetadata,
+  signal,
 }: AnalyzePhase2Args): Promise<AnalyzePhase2Result> {
   if (!canRunGeminiPhase2()) {
     throw new Error("Gemini phase-2 is disabled or missing VITE_GEMINI_API_KEY.");
   }
+
+  throwIfUserCancelled(signal);
 
   const ai = new GoogleGenAI({
     apiKey: appConfig.geminiApiKey,
@@ -315,17 +323,18 @@ justified by a specific measurement from the JSON.
 
 Phase 1 Measurements:
 ${JSON.stringify(phase1Result, null, 2)}`;
+  const resolvedMimeType = getAudioMimeTypeOrDefault(file);
 
   if (file.size <= INLINE_SIZE_LIMIT) {
     const base64Audio = await fileToBase64(file);
-    const mimeType = file.type || (file.name.toLowerCase().endsWith('.flac') ? 'audio/flac' : file.name.toLowerCase().endsWith('.wav') ? 'audio/wav' : 'audio/mpeg');
+    throwIfUserCancelled(signal);
     const phase2StartTime = Date.now();
     const phase2Response = await generatePhase2Response(ai, modelName, phase2Prompt, {
       inlineData: {
         data: base64Audio,
-        mimeType,
+        mimeType: resolvedMimeType,
       },
-    });
+    }, signal);
     const phase2EndTime = Date.now();
 
     return buildPhase2Result({
@@ -344,7 +353,7 @@ ${JSON.stringify(phase1Result, null, 2)}`;
       ai.files.upload({
         file,
         config: {
-          mimeType: file.type || (file.name.toLowerCase().endsWith('.flac') ? 'audio/flac' : file.name.toLowerCase().endsWith('.wav') ? 'audio/wav' : 'audio/mpeg'),
+          mimeType: resolvedMimeType,
           displayName: file.name,
         },
       }),
@@ -365,18 +374,20 @@ ${JSON.stringify(phase1Result, null, 2)}`;
         );
       },
     },
+    signal,
   );
 
   let phase2Response;
   const phase2StartTime = Date.now();
   let phase2EndTime = phase2StartTime;
   try {
+    throwIfUserCancelled(signal);
     phase2Response = await generatePhase2Response(ai, modelName, phase2Prompt, {
       fileData: {
         fileUri: uploadedFile.uri,
         mimeType: uploadedFile.mimeType,
       },
-    });
+    }, signal);
     phase2EndTime = Date.now();
   } finally {
     try {
@@ -415,6 +426,41 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
+function throwIfUserCancelled(signal?: AbortSignal) {
+  if (signal?.aborted) {
+    throw createUserCancelledError();
+  }
+}
+
+function waitForRetryDelay(delayMs: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(createUserCancelledError());
+      return;
+    }
+
+    let settled = false;
+    const timeoutId = setTimeout(() => {
+      settled = true;
+      if (signal && abortHandler) {
+        signal.removeEventListener("abort", abortHandler);
+      }
+      resolve();
+    }, delayMs);
+
+    const abortHandler = () => {
+      if (settled) return;
+      clearTimeout(timeoutId);
+      if (signal) {
+        signal.removeEventListener("abort", abortHandler);
+      }
+      reject(createUserCancelledError());
+    };
+
+    signal?.addEventListener("abort", abortHandler, { once: true });
+  });
+}
+
 function formatError(error: unknown): string {
   if (error instanceof Error) return error.message;
   return String(error);
@@ -425,6 +471,7 @@ function generatePhase2Response(
   modelName: string,
   phase2Prompt: string,
   mediaPart: Record<string, unknown>,
+  signal?: AbortSignal,
 ) {
   return withRetry(
     () =>
@@ -559,6 +606,8 @@ function generatePhase2Response(
       }),
     3,
     2_000,
+    undefined,
+    signal,
   );
 }
 

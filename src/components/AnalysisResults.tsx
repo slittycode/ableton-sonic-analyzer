@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Phase1Result, Phase2Result } from '../types';
 import {
   Activity,
@@ -15,7 +15,9 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { downloadFile, generateMarkdown } from '../utils/exportUtils';
+import { PHASE2_LABEL } from '../services/phaseLabels';
 import { SessionMusicianPanel } from './SessionMusicianPanel';
+import { PhaseSourceBadge } from './PhaseSourceBadge';
 import {
   buildArrangementViewModel,
   buildMixChainGroups,
@@ -56,9 +58,9 @@ function Collapsible({ isOpen, children }: { isOpen: boolean; children: React.Re
 }
 
 function confidenceClass(level: string): string {
-  if (level === 'High') return 'text-green-500 bg-green-500/10 border-green-500/20';
-  if (level === 'Moderate') return 'text-yellow-500 bg-yellow-500/10 border-yellow-500/20';
-  return 'text-red-500 bg-red-500/10 border-red-500/20';
+  if (level === 'High') return 'text-success bg-success/10 border-success/20';
+  if (level === 'Moderate') return 'text-warning bg-warning/10 border-warning/20';
+  return 'text-error bg-error/10 border-error/20';
 }
 
 function shortenCharacteristicName(name: string): string {
@@ -68,12 +70,12 @@ function shortenCharacteristicName(name: string): string {
 function characteristicPillClass(confidence: string): string {
   const normalized = String(confidence).trim().toUpperCase();
   if (normalized === 'HIGH') {
-    return 'bg-green-500/20 text-green-400 border-green-500/30';
+    return 'bg-success/20 text-success border-success/30';
   }
   if (normalized === 'MED' || normalized === 'MODERATE') {
-    return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+    return 'bg-warning/20 text-warning border-warning/30';
   }
-  return 'bg-red-500/20 text-red-400 border-red-500/30';
+  return 'bg-error/20 text-error border-error/30';
 }
 
 function groupIcon(groupName: string): string {
@@ -101,11 +103,46 @@ function formatMetricValue(value: number): string {
   return value.toFixed(2);
 }
 
+const LOW_CONFIDENCE_TITLE = "Low confidence — treat this as approximate.";
+
+function lowConfidenceIndicator(show: boolean) {
+  if (!show) return null;
+  return (
+    <span
+      className="text-[10px] font-mono text-warning"
+      title={LOW_CONFIDENCE_TITLE}
+      aria-label="Low confidence"
+    >
+      ⚠
+    </span>
+  );
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function getChordStrength(phase1: Phase1Result): number | null {
+  const chordDetail = phase1.chordDetail;
+  if (!chordDetail || typeof chordDetail !== 'object' || Array.isArray(chordDetail)) {
+    return null;
+  }
+
+  return toFiniteNumber((chordDetail as Record<string, unknown>).chordStrength);
+}
+
 export function AnalysisResults({ phase1, phase2, sourceFileName = null }: AnalysisResultsProps) {
   const [openArrangement, setOpenArrangement] = useState<Record<string, boolean>>({});
   const [openSonic, setOpenSonic] = useState<Set<string>>(new Set());
   const [openMix, setOpenMix] = useState<Record<string, boolean>>({});
   const [openPatch, setOpenPatch] = useState<Record<string, boolean>>({});
+
+  const sessionId = useMemo(() => new Date().getTime().toString(36).toUpperCase(), []);
 
   if (!phase1) return null;
 
@@ -151,6 +188,16 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
     ? phase2.detectedCharacteristics.slice(0, 4)
     : [];
   const danceability = phase1.danceability;
+  const keyIsApproximate = phase1.keyConfidence <= 0.6;
+  const chordStrength = getChordStrength(phase1);
+  const chordsAreApproximate = chordStrength !== null && chordStrength <= 0.7;
+  const hasRenderablePhase2Content =
+    confidenceBadges.length > 0 ||
+    characteristicPills.length > 0 ||
+    arrangement !== null ||
+    sonicCards.length > 0 ||
+    mixGroups.length > 0 ||
+    patchCards.length > 0;
 
   return (
     <motion.div
@@ -166,7 +213,7 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
             Analysis Results
           </h1>
           <p className="text-text-secondary font-mono text-xs mt-1 tracking-wider uppercase opacity-70">
-            SESSION ID: {new Date().getTime().toString(36).toUpperCase()} // PHASE COMPLETE
+            SESSION ID: {sessionId} // PHASE COMPLETE
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -193,7 +240,10 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
           <div className="bg-bg-card h-full min-h-[170px] p-4 rounded-sm flex flex-col items-center justify-center text-center border border-border/50 relative z-10 overflow-hidden">
             <div className="w-full flex justify-between items-start mb-2 opacity-50">
               <Activity className="w-4 h-4 text-accent" />
-              <span className="text-[10px] font-mono uppercase">TEMPO</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-mono uppercase">TEMPO</span>
+                <PhaseSourceBadge source="measured" />
+              </div>
             </div>
             <div className="w-full flex items-baseline justify-center space-x-1 overflow-hidden">
               <p className="text-3xl font-display font-bold text-text-primary truncate">{finalBpm}</p>
@@ -204,7 +254,7 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: `${phase1.bpmConfidence * 100}%` }}
-                className="h-full bg-accent shadow-[0_0_5px_#ff9500]"
+                className="h-full bg-accent shadow-[0_0_5px_var(--color-accent)]"
               />
             </div>
             <p className="text-[10px] font-mono text-text-secondary mt-1 opacity-70">
@@ -218,7 +268,11 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
           <div className="bg-bg-card h-full min-h-[170px] p-4 rounded flex flex-col items-center justify-center text-center border border-border/50 relative z-10 overflow-hidden">
             <div className="w-full flex justify-between items-start mb-2 opacity-50">
               <Music className="w-4 h-4 text-accent" />
-              <span className="text-[10px] font-mono uppercase">KEY SIG</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-mono uppercase">KEY SIG</span>
+                <PhaseSourceBadge source="measured" />
+                {lowConfidenceIndicator(keyIsApproximate)}
+              </div>
             </div>
             <div className="w-full overflow-hidden">
               <p className="text-3xl font-display font-bold text-text-primary truncate">{finalKey}</p>
@@ -228,7 +282,7 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: `${phase1.keyConfidence * 100}%` }}
-                className="h-full bg-accent shadow-[0_0_5px_#ff9500]"
+                className="h-full bg-accent shadow-[0_0_5px_var(--color-accent)]"
               />
             </div>
             <p className="text-[10px] font-mono text-text-secondary mt-1 opacity-70">
@@ -303,6 +357,24 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
         </div>
       )}
 
+      <div className="space-y-2">
+        <div className="flex items-center justify-between border-b border-border pb-2">
+          <h2 className="text-sm font-mono uppercase tracking-wider flex items-center gap-2 text-text-secondary">
+            <span className="w-2 h-2 bg-accent rounded-full"></span>
+            {PHASE2_LABEL}
+            <PhaseSourceBadge source="advisory" />
+          </h2>
+        </div>
+        <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+          Interpretive guidance generated from DSP measurements. Not a ground-truth measurement.
+        </p>
+        {!hasRenderablePhase2Content && (
+          <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+            Draft — Phase 2 output is incomplete or unavailable.
+          </p>
+        )}
+      </div>
+
       {confidenceBadges.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 px-1">
           {confidenceBadges.map((badge, idx) => (
@@ -337,10 +409,10 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
                   <span
                     className={`flex items-center text-[10px] font-mono font-bold px-2 py-1 rounded-sm border ${
                       item.confidence === 'HIGH'
-                        ? 'text-green-500 bg-green-500/10 border-green-500/20'
+                        ? 'text-success bg-success/10 border-success/20'
                         : item.confidence === 'MED'
-                          ? 'text-yellow-500 bg-yellow-500/10 border-yellow-500/20'
-                          : 'text-red-500 bg-red-500/10 border-red-500/20'
+                          ? 'text-warning bg-warning/10 border-warning/20'
+                          : 'text-error bg-error/10 border-error/20'
                     }`}
                   >
                     {item.confidence}
@@ -437,9 +509,9 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
                   lufsDelta === null
                     ? ''
                     : lufsDelta > 0
-                      ? 'text-green-400 border-green-500/30 bg-green-500/10'
+                      ? 'text-success border-success/30 bg-success/10'
                       : lufsDelta < 0
-                        ? 'text-red-400 border-red-500/30 bg-red-500/10'
+                        ? 'text-error border-error/30 bg-error/10'
                         : 'text-text-secondary border-border bg-bg-panel/40';
                 return (
                   <div
@@ -528,6 +600,7 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
                         <div className="flex items-center gap-2">
                           <span className="text-sm">{card.icon}</span>
                           <h3 className="text-sm font-bold uppercase tracking-wide truncate">{card.title}</h3>
+                          {card.id === 'harmonicContent' && lowConfidenceIndicator(chordsAreApproximate)}
                           {card.transcriptionDerived && (
                             <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-accent/40 text-accent whitespace-nowrap">
                               Transcription-derived
@@ -615,7 +688,7 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
                   </p>
                 )}
 
-                <div className="grid gap-4 grid-cols-2">
+                <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
                   {group.cards.map((card) => {
                     const isOpen = !!openMix[card.id];
                     return (
@@ -692,7 +765,7 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
             <Sliders className="w-4 h-4 text-accent opacity-70" />
           </div>
 
-          <div className="grid gap-4 grid-cols-2">
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
             {patchCards.map((patch) => {
               const isOpen = !!openPatch[patch.id];
               return (

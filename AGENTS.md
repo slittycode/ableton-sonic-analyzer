@@ -29,7 +29,9 @@
 
 ## Main Commands
 
+- Preferred synced local stack from the workspace root: `cd .. && ./scripts/dev.sh`
 - Dev server: `npm run dev`
+- Synced local UI only: `VITE_API_BASE_URL=http://127.0.0.1:8100 npm run dev:local`
 - Build: `npm run build`
 - Preview build: `npm run preview`
 - Clean build output: `npm run clean`
@@ -66,13 +68,13 @@ npm run test:smoke -- tests/smoke/upload-phase1.spec.ts
 - Live backend smoke:
 
 ```bash
-TEST_FLAC_PATH=/path/to/track.flac VITE_API_BASE_URL=http://localhost:8000 npm run test:smoke -- tests/smoke/upload-phase1-live.spec.ts
+TEST_FLAC_PATH=/path/to/track.flac VITE_API_BASE_URL=http://127.0.0.1:8100 npm run test:smoke -- tests/smoke/upload-phase1-live.spec.ts
 ```
 
 - Live Gemini smoke:
 
 ```bash
-RUN_GEMINI_LIVE_SMOKE=true VITE_ENABLE_PHASE2_GEMINI=true VITE_GEMINI_API_KEY=your_key_here VITE_API_BASE_URL=http://localhost:8000 npm run test:smoke:live-gemini
+RUN_GEMINI_LIVE_SMOKE=true VITE_ENABLE_PHASE2_GEMINI=true VITE_GEMINI_API_KEY=your_key_here VITE_API_BASE_URL=http://127.0.0.1:8100 npm run test:smoke:live-gemini
 ```
 
 ## Testing Expectations
@@ -145,8 +147,8 @@ RUN_GEMINI_LIVE_SMOKE=true VITE_ENABLE_PHASE2_GEMINI=true VITE_GEMINI_API_KEY=yo
 
 ## Known Gotchas
 
-- `src/config.ts` falls back to `http://localhost:8000` if `VITE_API_BASE_URL` is unset.
-- `.env.example` uses `http://127.0.0.1:8000`; docs and samples may drift slightly, so check current code.
+- `src/config.ts` falls back to `http://127.0.0.1:8100` if `VITE_API_BASE_URL` is unset.
+- `.env.example` uses `http://127.0.0.1:8100`; stale local `.env` files can still pin `localhost:8000` or `127.0.0.1:8010`, but `../scripts/dev.sh` overrides that for the spawned UI process.
 - Phase 2 Gemini is disabled unless both the feature flag and API key are present.
 - Audio files over 20MB take the Gemini Files API path; do not break that branch casually.
 - `npm run lint` does not cover tests because `tsconfig.json` excludes `tests`, `playwright.config.ts`, and `vitest.config.ts`.

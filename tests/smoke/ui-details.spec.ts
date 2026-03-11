@@ -128,7 +128,7 @@ test('diagnostic log shows SUCCESS badge and model info after analysis', async (
   await expect(page.getByText('Analysis Results')).toBeVisible();
   await expect(page.getByText('System Diagnostics')).toBeVisible();
 
-  const successBadge = page.locator('.bg-green-500\\/10').filter({ hasText: 'SUCCESS' });
+  const successBadge = page.locator('.bg-success\\/10').filter({ hasText: 'SUCCESS' });
   await expect(successBadge).toBeVisible();
 
   await expect(page.getByText('local-dsp-engine')).toBeVisible();
@@ -188,7 +188,7 @@ test('diagnostic log can be collapsed and expanded via toggle button', async ({ 
   await expect(toggleBtn).toHaveAttribute('aria-expanded', 'true');
 
   // Log content should be visible (expanded by default after analysis)
-  const logContent = page.locator('.mt-12.space-y-4 .bg-\\[\\#1a1a1a\\]');
+  const logContent = page.locator('.mt-12.space-y-4 .bg-bg-surface-darker');
   await expect(logContent).toBeVisible();
 
   // Click to collapse

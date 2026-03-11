@@ -16,11 +16,11 @@ function statusClass(status: DiagnosticLogStatus | undefined): string {
     case 'running':
       return 'text-accent border-accent/30 bg-accent/10';
     case 'error':
-      return 'text-red-400 border-red-500/30 bg-red-500/10';
+      return 'text-error border-error/30 bg-error/10';
     case 'skipped':
-      return 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10';
+      return 'text-warning border-warning/30 bg-warning/10';
     default:
-      return 'text-green-400 border-green-500/30 bg-green-500/10';
+      return 'text-success border-success/30 bg-success/10';
   }
 }
 
@@ -72,7 +72,7 @@ export function DiagnosticLog({ logs, defaultExpanded }: DiagnosticLogProps) {
         <span className="ml-auto text-[10px] text-text-secondary/50">{logs.length} {logs.length === 1 ? 'entry' : 'entries'}</span>
       </button>
       {isExpanded && (
-        <div className="bg-[#1a1a1a] border border-border rounded-sm p-4 font-mono text-xs overflow-x-auto relative shadow-inner">
+        <div className="bg-bg-surface-darker border border-border rounded-sm p-4 font-mono text-xs overflow-x-auto relative shadow-inner">
           <div className="space-y-4 relative z-10">
             {logs.map((log, idx) => {
               const estimateRange = formatEstimateRange(log.estimateLowMs, log.estimateHighMs);
@@ -100,7 +100,7 @@ export function DiagnosticLog({ logs, defaultExpanded }: DiagnosticLogProps) {
                     </div>
                     <div className="flex justify-between gap-4">
                       <span className="opacity-50">EXEC_TIME:</span>
-                      <span className="text-text-primary">{log.durationMs}ms</span>
+                      <span className="text-text-primary">{(log.status ?? 'success') === 'running' ? '--' : `${log.durationMs}ms`}</span>
                     </div>
                     <div className="flex justify-between gap-4">
                       <span className="opacity-50">TOKENS_IN:</span>

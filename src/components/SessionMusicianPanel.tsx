@@ -22,7 +22,7 @@ const KEY_WIDTH = 40;
 export const MIDI_DOWNLOAD_FILE_NAME = 'track-analysis.mid';
 
 const NOTE_COLORS = {
-  fill: '#ff9500',
+  fill: '#ff8800',
   fillHigh: '#ffb14d',
   fillLow: '#664526',
   stroke: '#e67e22',
@@ -30,6 +30,8 @@ const NOTE_COLORS = {
   text: '#9ca3af',
   bg: '#101010',
 };
+
+const LOW_CONFIDENCE_TITLE = "Low confidence — treat this as approximate.";
 
 export function filterNotesByConfidence(notes: MidiDisplayNote[], confidenceThreshold: number): MidiDisplayNote[] {
   return notes.filter((note) => note.confidence >= confidenceThreshold);
@@ -318,6 +320,7 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
         ? 'SOURCES: ESSENTIA'
         : null;
   const { transcriptionPathLabel, stemSourcesLabel } = deriveTranscriptionProvenance(activeSource, transcriptionDetail);
+  const melodyIsApproximate = !!melodyDetail && (melodyDetail.pitchConfidence ?? 1) <= 0.15;
 
   return (
     <section className="space-y-4">
@@ -325,6 +328,15 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
         <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
           <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
           SESSION MUSICIAN
+          {melodyIsApproximate && (
+            <span
+              className="ml-2 text-[10px] font-mono text-warning"
+              title={LOW_CONFIDENCE_TITLE}
+              aria-label="Low confidence"
+            >
+              ⚠
+            </span>
+          )}
         </h2>
         <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">MIDI TRANSCRIPTION</span>
       </div>
@@ -460,7 +472,7 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
                       <span className="px-2 py-1 rounded border border-border bg-bg-panel/40">{sourceBadgeLabel}</span>
                     )}
                     {isDraft && (
-                      <span className="px-2 py-1 rounded border border-yellow-500/30 text-yellow-400 bg-yellow-500/10">
+                      <span className="px-2 py-1 rounded border border-warning/30 text-warning bg-warning/10">
                         Draft transcription
                       </span>
                     )}

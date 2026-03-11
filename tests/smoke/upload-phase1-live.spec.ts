@@ -6,7 +6,8 @@ import { fileURLToPath } from "node:url";
 import { parseBackendAnalyzeResponse } from "../../src/services/backendPhase1Client";
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
-const backendBaseUrl = process.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+const backendBaseUrl = process.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8100";
+const analyzeEndpointUrl = `${backendBaseUrl.replace(/\/+$/, "")}/api/analyze`;
 
 async function backendSupportsPhase1Routes(baseUrl: string): Promise<boolean> {
   const controller = new AbortController();
@@ -53,18 +54,18 @@ test("live backend phase1 renders results without connectivity errors", async ({
   await expect(analyzeButton).toBeVisible();
 
   const analyzeResponsePromise = page.waitForResponse(
-    (response) => response.url().includes("/api/analyze") && response.request().method() === "POST",
+    (response) => response.url() === analyzeEndpointUrl && response.request().method() === "POST",
     { timeout: 35_000 },
   );
 
   await analyzeButton.click();
 
   const analyzeResponse = await analyzeResponsePromise;
+  expect(analyzeResponse.ok()).toBeTruthy();
   const payload = await analyzeResponse.json();
   const parsedResponse = parseBackendAnalyzeResponse(payload);
   const diagnostics = parsedResponse.diagnostics;
 
-  expect(analyzeResponse.ok()).toBeTruthy();
   expect(parsedResponse.requestId).not.toBe("unknown");
   expect(diagnostics).toBeTruthy();
 

@@ -6,9 +6,12 @@ The app uploads a track to the local DSP backend, shows the estimate and executi
 
 ## Current Features
 
-- file upload and local audio preview
+ - file upload with drag-and-drop and file picker, audio type validation with extension fallback when browser MIME is blank, and local audio preview
+- file size warning for uploads exceeding 100 MB (non-blocking)
+- inline error messages for invalid files with dismiss and retry controls
 - automatic Phase 1 estimate request on file selection
-- local DSP execution status with elapsed time and stage estimates
+- local DSP execution status with elapsed time, stage estimates, and progress bar
+ - cancel button during analysis with end-to-end abort handling across Phase 1 and Phase 2
 - optional Basic Pitch transcription toggle for the backend request
 - optional Demucs stem separation toggle for the backend request, independent of MIDI transcription
 - optional Gemini Phase 2 advisory pass with a selectable model
@@ -21,8 +24,10 @@ The app uploads a track to the local DSP backend, shows the estimate and executi
   - quantize grid and swing controls
   - browser preview and `.mid` download
 - JSON export and markdown report export
-- diagnostic log with request IDs, durations, estimate ranges, and backend or Gemini status
-- optimised initial bundle: 48kB entry chunk via Vite manual chunk splitting and lazy-loaded result components
+- collapsible diagnostic log with request IDs, durations, estimate ranges, and backend or Gemini status
+- semantic theme token system for status colors and surface backgrounds
+- mobile-responsive layouts across header, results grid, and upload flow
+- optimised initial bundle: 48kB entry chunk via Vite manual chunk splitting and lazy-loaded result components with skeleton fallback
 
 ## Tech Stack
 
@@ -44,7 +49,7 @@ The app uploads a track to the local DSP backend, shows the estimate and executi
 
 Recommended backend URL for the current Python server:
 
-- `http://localhost:8000`
+- `http://127.0.0.1:8100`
 
 ## Environment
 
@@ -58,7 +63,7 @@ cp .env.example .env
 
 | Variable | Meaning | Current behavior |
 | --- | --- | --- |
-| `VITE_API_BASE_URL` | Base URL for the backend API. | `src/config.ts` falls back to `http://localhost:8000` when unset. The checked-in `.env.example` uses `http://127.0.0.1:8000`, so set this explicitly to match the backend you are actually running. |
+| `VITE_API_BASE_URL` | Base URL for the backend API. | `src/config.ts` falls back to `http://127.0.0.1:8100` when unset. The checked-in `.env.example` uses `http://127.0.0.1:8100`. If another FastAPI app is answering on your configured URL, the UI now reports that it found the wrong service and disables `Initiate Analysis`. |
 | `VITE_ENABLE_PHASE2_GEMINI` | Enables the optional Gemini pass. | Must be `"true"` to allow Phase 2. |
 | `VITE_GEMINI_API_KEY` | Gemini API key. | Phase 2 only runs when this value is non-empty and `VITE_ENABLE_PHASE2_GEMINI=true`. |
 | `RUN_GEMINI_LIVE_SMOKE` | Enables the opt-in live Playwright proof for the Gemini Files API path. | Must be `"true"` to run `npm run test:smoke:live-gemini`; default smoke coverage keeps Gemini mocked. |
@@ -66,15 +71,35 @@ cp .env.example .env
 
 ## Running Locally
 
+Recommended synced launcher from the workspace root:
+
 ```bash
-npm install
-npm run dev
+cd /Users/christiansmith/code/projects/sonic-analyzer-workspace
+./scripts/dev.sh
 ```
 
-Current dev server:
+Manual equivalent:
 
-- URL: `http://localhost:3000`
-- Host binding: `0.0.0.0`
+```bash
+cd /Users/christiansmith/code/projects/sonic-analyzer-workspace/sonic-analyzer
+SONIC_ANALYZER_PORT=8100 ./venv/bin/python server.py
+```
+
+```bash
+cd /Users/christiansmith/code/projects/sonic-analyzer-workspace/sonic-analyzer-UI
+VITE_API_BASE_URL=http://127.0.0.1:8100 npm run dev:local
+```
+
+Canonical local URLs:
+
+- UI: `http://127.0.0.1:3100`
+- backend: `http://127.0.0.1:8100`
+
+Legacy note:
+
+- older local `.env` files may still pin `VITE_API_BASE_URL=http://localhost:8000` or `http://127.0.0.1:8010`
+- `./scripts/dev.sh` overrides those stale values for the spawned UI process
+- `npm run dev` remains available for custom local setups, but it is not the recommended synced-stack command
 
 ## Backend Contract Used by the UI
 
@@ -250,7 +275,7 @@ Run the live backend smoke against a real FLAC when one is available:
 
 ```bash
 TEST_FLAC_PATH=/path/to/track.flac \
-VITE_API_BASE_URL=http://localhost:8000 \
+VITE_API_BASE_URL=http://127.0.0.1:8100 \
 npm run test:smoke -- tests/smoke/upload-phase1-live.spec.ts
 ```
 
@@ -260,6 +285,6 @@ Run the live Gemini proof explicitly:
 RUN_GEMINI_LIVE_SMOKE=true \
 VITE_ENABLE_PHASE2_GEMINI=true \
 VITE_GEMINI_API_KEY=your_key_here \
-VITE_API_BASE_URL=http://localhost:8000 \
+VITE_API_BASE_URL=http://127.0.0.1:8100 \
 npm run test:smoke:live-gemini
 ```

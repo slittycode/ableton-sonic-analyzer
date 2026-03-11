@@ -3,7 +3,7 @@ import { promises as fs } from "node:fs";
 
 const INLINE_SIZE_LIMIT = 20_971_520;
 const LIVE_GEMINI_TARGET_BYTES = 25 * 1024 * 1024;
-const backendBaseUrl = process.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+const backendBaseUrl = process.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8100";
 const liveGeminiEnabled = process.env.RUN_GEMINI_LIVE_SMOKE === "true";
 const geminiPhase2Enabled = process.env.VITE_ENABLE_PHASE2_GEMINI === "true";
 const geminiApiKey = process.env.VITE_GEMINI_API_KEY?.trim() ?? "";

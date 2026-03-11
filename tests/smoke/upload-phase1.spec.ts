@@ -4,7 +4,27 @@ import { fileURLToPath } from 'node:url';
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 
+async function stubEstimateRoute(page: import('@playwright/test').Page) {
+  await page.route('**/api/analyze/estimate', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        requestId: 'req_estimate_smoke_001',
+        estimate: {
+          durationSeconds: 210.6,
+          totalLowMs: 22000,
+          totalHighMs: 38000,
+          stages: [{ key: 'local_dsp', label: 'Local DSP analysis', lowMs: 22000, highMs: 38000 }],
+        },
+      }),
+    });
+  });
+}
+
 test('upload + backend phase1 success renders analysis results', async ({ page }) => {
+  await stubEstimateRoute(page);
+
   await page.route('**/api/analyze', async (route) => {
     await route.fulfill({
       status: 200,

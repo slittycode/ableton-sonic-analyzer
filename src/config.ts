@@ -10,7 +10,7 @@ function parseBooleanFlag(value: string | undefined, defaultValue: boolean): boo
 }
 
 function normalizeBaseUrl(value: string | undefined): string {
-  const fallback = "http://localhost:8000";
+  const fallback = "http://127.0.0.1:8100";
   const raw = value?.trim();
   if (!raw) return fallback;
   return raw.replace(/\/+$/, "");

@@ -116,6 +116,43 @@ test('file size is displayed in MB after selecting a file', async ({ page }) => 
   await expect(page.getByText(/\d+\.\d+ MB/)).toBeVisible();
 });
 
+test('file picker accepts blank-mime WAV uploads via extension fallback', async ({ page }) => {
+  await stubBackendRoutes(page);
+  await page.goto('/', { waitUntil: 'networkidle' });
+
+  await page.setInputFiles('#audio-upload', {
+    name: 'mystery.wav',
+    mimeType: '',
+    buffer: Buffer.from('RIFF'),
+  });
+
+  await expect(page.getByText('mystery.wav')).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
+test('drag-and-drop accepts blank-mime FLAC uploads via extension fallback', async ({ page }) => {
+  await stubBackendRoutes(page);
+  await page.goto('/', { waitUntil: 'networkidle' });
+
+  await page.evaluate(() => {
+    const dropZone = document.getElementById('audio-upload')?.parentElement;
+    if (!dropZone) throw new Error('Upload drop zone not found.');
+
+    const dataTransfer = new DataTransfer();
+    dataTransfer.items.add(new File(['fLaC'], 'mystery.flac', { type: '' }));
+    const dropEvent = new DragEvent('drop', {
+      bubbles: true,
+      cancelable: true,
+      dataTransfer,
+    });
+
+    dropZone.dispatchEvent(dropEvent);
+  });
+
+  await expect(page.getByText('mystery.flac')).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
 test('format badges (MP3, WAV, FLAC, AIFF) are visible on the drop zone', async ({ page }) => {
   await page.goto('/', { waitUntil: 'networkidle' });
 

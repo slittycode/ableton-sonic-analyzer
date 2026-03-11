@@ -300,6 +300,22 @@ test('phase1 dual-source session musician panel toggles between polyphonic and m
 
 test('missing melodyDetail shows MIDI unavailable state', async ({ page }) => {
   await stubGeminiPhase2(page);
+  await page.route('**/api/analyze/estimate', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        requestId: 'req_estimate_smoke_midi_awaiting_001',
+        estimate: {
+          durationSeconds: 210.6,
+          totalLowMs: 22000,
+          totalHighMs: 38000,
+          stages: [{ key: 'local_dsp', label: 'Local DSP analysis', lowMs: 22000, highMs: 38000 }],
+        },
+      }),
+    });
+  });
+
   await page.route('**/api/analyze', async (route) => {
     await route.fulfill({
       status: 200,

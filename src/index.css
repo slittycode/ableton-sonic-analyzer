@@ -10,6 +10,8 @@
   --color-bg-panel: #3c3c3c;
   --color-bg-card: #444444;
   --color-bg-card-hover: #555555;
+  --color-bg-surface-dark: #222222;
+  --color-bg-surface-darker: #1a1a1a;
   
   --color-text-primary: #e6e6e6;
   --color-text-secondary: #aaaaaa;
@@ -26,12 +28,35 @@
   --color-error: #ff3333;
 }
 
+:root {
+  color-scheme: dark;
+  background-color: var(--color-bg-app);
+  color: var(--color-text-primary);
+}
+
+html {
+  min-height: 100%;
+  background-color: var(--color-bg-app);
+}
+
+body,
+#root {
+  min-height: 100vh;
+  background-color: var(--color-bg-app);
+  color: var(--color-text-primary);
+}
+
 body {
+  margin: 0;
   background-color: var(--color-bg-app);
   color: var(--color-text-primary);
   font-family: var(--font-sans);
-  min-height: 100vh;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+#root {
+  isolation: isolate;
 }
 
 /* Scrollbar */
@@ -72,8 +97,18 @@ body {
 }
 
 .ableton-header {
-  background-color: #222222;
+  background-color: var(--color-bg-surface-dark);
   border-bottom: 1px solid var(--color-border);
+}
+
+.ableton-shell {
+  background-color: var(--color-bg-panel);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.18);
+}
+
+.ableton-toolbar {
+  background-color: var(--color-bg-surface-dark);
 }
 
 @keyframes eq-bounce {

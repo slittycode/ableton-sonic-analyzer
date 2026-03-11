@@ -1,7 +1,7 @@
 # UI/UX Improvement Plan
 
 Prioritized backlog of UI/UX improvements for `sonic-analyzer-UI`.
-Tier 1 is implemented. Tiers 2 and 3 are documented for future implementation.
+All three tiers are implemented.
 
 ---
 
@@ -18,157 +18,79 @@ All four items are implemented and tested. See commit history for details.
 
 ---
 
-## Tier 2 — Noticeable polish
+## Tier 2 — Noticeable polish (DONE)
 
-### Item 5: Add cancel button during analysis
+All six items are implemented and tested. `npm run verify` passes (typecheck, 73 unit tests, build, 33 smoke tests).
 
-**Why:** Analysis can take 10+ minutes with no way to abort.
+| # | Change | Files |
+|---|--------|-------|
+| 5 | Cancel button during analysis | `src/services/backendPhase1Client.ts`, `src/services/analyzer.ts`, `src/components/AnalysisStatusPanel.tsx`, `src/App.tsx` |
+| 6 | Fix accent color inconsistency (`#ff9500` → `#ff8800`) | `src/App.tsx`, `src/components/AnalysisResults.tsx`, `src/components/SessionMusicianPanel.tsx`, `src/components/WaveformPlayer.tsx` |
+| 7 | Use semantic theme tokens for status colors | `src/components/AnalysisResults.tsx`, `src/components/DiagnosticLog.tsx`, `src/components/SessionMusicianPanel.tsx`, `src/App.tsx`, `src/components/WaveformPlayer.tsx`, `src/components/FileUpload.tsx` |
+| 8 | Fix `EXEC_TIME: 0ms` on running entries | `src/components/DiagnosticLog.tsx` |
+| 9 | Suspense skeleton for lazy-loaded results | `src/App.tsx` |
+| 10 | Fix mobile grid in Mix & Master / Patch sections | `src/components/AnalysisResults.tsx` |
 
-**Files:**
-- `src/App.tsx` — add Cancel button next to the status panel, wire an `AbortController` ref
-- `src/components/AnalysisStatusPanel.tsx` — optionally accept an `onCancel` prop
-- `src/services/analyzer.ts` — accept and forward `AbortSignal`
-- `src/services/backendPhase1Client.ts:192` — already creates an `AbortController` internally; refactor to accept an external signal or expose the controller
+### Implementation details
 
-**Implementation notes:**
-- Create an `AbortController` ref in `App.tsx` when analysis starts
-- Pass `signal` through `analyzer.ts` → `backendPhase1Client.ts`
-- The backend client already has `AbortController` at line 192; merge the external signal with the existing timeout controller
-- Show a "Cancel" button in the analysis status area; on click, call `controller.abort()`
-- Handle `AbortError` in the error callback — set a user-friendly "Analysis cancelled" message instead of a generic error
-- Clean up the controller ref on completion or unmount
+**Item 5 — Cancel button:** Added `USER_CANCELLED` error code. Threaded `AbortSignal` through `AnalyzePhase1Options` → `postBackendMultipart` and into the Phase 2 Gemini path. External signal abort is forwarded to the internal timeout controller for Phase 1, and advisory generation is guarded so cancellation suppresses late Phase 2 results. Cancel button appears in `AnalysisStatusPanel` during analysis. Cancellation logs as `skipped` (not `error`) and does not show the error banner.
 
----
+**Item 6 — Accent color:** Replaced 6 hardcoded `#ff9500`/`#ff9933` occurrences with `#ff8800` (JS contexts) or CSS var references like `hover:bg-accent/90` and `shadow-[0_0_5px_var(--color-accent)]` (Tailwind contexts).
 
-### Item 6: Fix accent color inconsistency (`#ff9500` vs `#ff8800`)
+**Item 7 — Semantic tokens:** Replaced 25+ hardcoded status color classes (e.g., `text-red-400`, `bg-green-500/10`, `text-yellow-500`) with semantic tokens (`text-error`, `bg-success/10`, `border-warning/30`) across 6 component files. Tailwind v4's `@theme` block already registered these tokens as first-class colors. Updated smoke tests to use new selectors.
 
-**Why:** The theme defines `--color-accent: #ff8800` in `src/index.css:18`, but 5 files hardcode `#ff9500` or `#ff9933`.
+**Item 8 — EXEC_TIME:** Shows `--` instead of `0ms` when `log.status === 'running'`.
 
-**Files and locations:**
-- `src/App.tsx:425` — `hover:bg-[#ff9933]` (button hover state)
-- `src/components/AnalysisResults.tsx:207` — `shadow-[0_0_5px_#ff9500]`
-- `src/components/AnalysisResults.tsx:231` — `shadow-[0_0_5px_#ff9500]`
-- `src/components/SessionMusicianPanel.tsx:25` — `fill: '#ff9500'` (inline style)
-- `src/components/WaveformPlayer.tsx:31` — `progressColor: '#ff9500'`
-- `src/components/WaveformPlayer.tsx:181` — `let fillStyle = '#ff9500'`
+**Item 9 — Suspense fallback:** Replaced `fallback={null}` with a skeleton loader (pulse-animated cards matching results panel layout).
 
-**Implementation notes:**
-- For Tailwind classes, replace with `shadow-accent` or `shadow-[0_0_5px_var(--color-accent)]`
-- For `App.tsx:425`, replace `hover:bg-[#ff9933]` with `hover:bg-accent/90` or a lighter variant
-- For inline JS styles (WaveformPlayer, SessionMusicianPanel), read the CSS variable at runtime: `getComputedStyle(document.documentElement).getPropertyValue('--color-accent')` or define a JS constant that matches the theme
-- Test: visual regression screenshots at `/tmp/sonic-screenshots/` to compare before/after
+**Item 10 — Mobile grid:** Changed `grid-cols-2` to `grid-cols-1 sm:grid-cols-2` at two grid locations. Updated unit test assertion to match.
 
 ---
 
-### Item 7: Use semantic theme tokens for status colors
+## Tier 3 — Nice-to-have (DONE)
 
-**Why:** `src/index.css` defines `--color-success` (line 24), `--color-warning` (line 25), `--color-error` (line 26) but they are unused. Components hardcode `text-red-400`, `bg-green-500/10`, etc.
+All five items are implemented and tested. `npm run verify` passes (typecheck, 73 unit tests, build, 33 smoke tests).
 
-**Files with hardcoded status colors (30+ occurrences):**
-- `src/components/AnalysisResults.tsx:59-76` — `getConfidenceStyles()` and `getRatingStyles()`
-- `src/components/AnalysisResults.tsx:340-343` — inline ternary status colors
-- `src/components/AnalysisResults.tsx:440-442` — pass/fail styling
-- `src/components/DiagnosticLog.tsx:19-23` — `getStatusColor()` returns hardcoded red/yellow/green
-- `src/components/SessionMusicianPanel.tsx:463` — yellow warning badge
-- `src/App.tsx:439,480,500,502,517` — status dots, warning text, error banner
-- `src/components/WaveformPlayer.tsx:217` — ready/not-ready dot
-- `src/components/FileUpload.tsx:88,116,132,143` — error styling and status dots
+| # | Change | Files |
+|---|--------|-------|
+| 11 | File size validation warning (>100MB) | `src/components/FileUpload.tsx` |
+| 12 | Progress bar in AnalysisStatusPanel | `src/components/AnalysisStatusPanel.tsx` |
+| 13 | File type check in `handleFileInput` | `src/components/FileUpload.tsx` |
+| 14 | Replace hardcoded `bg-[#222]` / `bg-[#1a1a1a]` with theme tokens | `src/index.css`, `src/App.tsx`, `src/components/WaveformPlayer.tsx`, `src/components/DiagnosticLog.tsx` |
+| 15 | Stabilize Session ID | `src/components/AnalysisResults.tsx` |
 
-**Implementation notes:**
-- Add Tailwind v4 utility classes in `src/index.css` that map to the semantic tokens, e.g.:
-  ```css
-  .text-success { color: var(--color-success); }
-  .bg-success-subtle { background: color-mix(in srgb, var(--color-success) 10%, transparent); }
-  ```
-- Or use Tailwind's `theme()` function / `@theme` block to register them as first-class colors
-- Replace incrementally, file by file, comparing screenshots
-- This is a large surface area change — consider doing it in a dedicated PR
+### Implementation details
 
----
+**Item 11 — File size warning:** Added `FILE_SIZE_WARNING_BYTES` constant (100 MB). Both `handleDrop` and `handleFileInput` now check file size and set a non-blocking yellow warning via `fileSizeWarning` state. Warning appears below the "Ready" status in the selected-file view with an `AlertTriangle` icon. Analysis still proceeds normally.
 
-### Item 8: Fix `EXEC_TIME: 0ms` on running entries
+**Item 12 — Progress bar:** Added `computeProgress` helper that calculates percentage from `elapsedMs` vs the midpoint of the estimate range. Shows an indeterminate pulsing bar when no estimate is available. Caps at 95% and pulses when the analysis exceeds the estimate. Bar is placed below the stats grid in `AnalysisStatusPanel`.
 
-**Why:** `DiagnosticLog.tsx:103` displays `{log.durationMs}ms` unconditionally. In-progress log entries have `durationMs: 0`, showing "EXEC_TIME: 0ms" which is misleading.
+**Item 13 — File type check:** Added a shared audio-file validation helper used by both `handleFileInput` and `handleDrop`. Valid `.mp3`, `.wav`, `.flac`, `.aiff`, and `.aif` uploads now succeed even when the browser reports a blank `File.type`, while non-audio files still trigger the same inline error message. Added `showFileError` to the dependency array.
 
-**File:** `src/components/DiagnosticLog.tsx:102-103`
+**Item 14 — Theme tokens:** Added `--color-bg-surface-dark: #222222` and `--color-bg-surface-darker: #1a1a1a` to the `@theme` block in `index.css`. Replaced 3 `bg-[#222]` occurrences in `App.tsx`, 1 `bg-[#1a1a1a]` in `WaveformPlayer.tsx`, and 1 `bg-[#1a1a1a]` in `DiagnosticLog.tsx` with semantic `bg-bg-surface-dark` / `bg-bg-surface-darker` utilities. Updated `.ableton-header` CSS class to use the new token. Updated smoke test selector in `ui-details.spec.ts`.
 
-**Implementation notes:**
-- Check if the log entry is still in-progress (e.g., `log.status === 'running'` or `log.durationMs === 0` combined with being the last entry)
-- Show `--` or a live elapsed timer instead of `0ms`
-- For a live timer: store `startTime` on the log entry, use `useEffect` with `setInterval` to update display
-- Simpler approach: just show `--` when `durationMs === 0`
+**Item 15 — Session ID:** Wrapped the inline `new Date().getTime().toString(36).toUpperCase()` in `useMemo` with an empty dependency array. The session ID is now generated once when `AnalysisResults` mounts, eliminating the flickering value on re-renders.
 
 ---
 
-### Item 9: Add Suspense fallback for lazy-loaded results
+## Test files updated
 
-**Why:** `App.tsx:528` has `<Suspense fallback={null}>` which causes a blank flash when the `AnalysisResults` component chunk loads on slow connections.
+Changes to source files required corresponding updates to test selectors and assertions:
 
-**File:** `src/App.tsx:528`
+| Test file | Reason |
+|-----------|--------|
+| `tests/services/analysisResultsUi.test.ts` | Grid class assertion (`grid-cols-2` → `grid-cols-1 sm:grid-cols-2`) and pill color class assertions (hardcoded → semantic tokens) — Items 7, 10 |
+| `tests/services/analyzer.test.ts` | New Phase 2 cancellation regression ensures advisory results are suppressed after user abort — Item 5 |
+| `tests/smoke/error-states.spec.ts` | Error banner selector updated from `text-red-400` to `text-error` (5 occurrences) and new Phase 2 cancel regression — Items 5, 7 |
+| `tests/smoke/file-validation.spec.ts` | New blank-MIME picker/drop regressions for `.wav` and `.flac` uploads — Item 13 |
+| `tests/smoke/ui-details.spec.ts` | SUCCESS badge selector (`bg-green-500\\/10` → `bg-success\\/10`) and diagnostic log content selector (`bg-\\[\\#1a1a1a\\]` → `bg-bg-surface-darker`) — Items 7, 14 |
 
-**Implementation notes:**
-- Replace `fallback={null}` with a skeleton or spinner that matches the results panel layout
-- A simple approach: a `div` with the same dimensions, a subtle pulse animation, and the panel's background color
-- Keep it lightweight — this is a one-time load per session
+## Summary
 
----
-
-### Item 10: Fix Mix & Master / Patch Framework mobile grid
-
-**Why:** Two grids in `AnalysisResults.tsx` use `grid-cols-2` with no responsive breakpoint, making them cramped on mobile.
-
-**Files and locations:**
-- `src/components/AnalysisResults.tsx:618` — `grid gap-4 grid-cols-2` (Mix & Master section)
-- `src/components/AnalysisResults.tsx:695` — `grid gap-4 grid-cols-2` (Patch Framework section)
-
-**Implementation notes:**
-- Change to `grid gap-4 grid-cols-1 sm:grid-cols-2` so items stack on mobile
-- Other grids in the file already use responsive breakpoints correctly (e.g., line 190: `grid-cols-2 md:grid-cols-4`)
-- Test with mobile viewport (375px width) via Playwright or browser devtools
-
----
-
-## Tier 3 — Nice-to-have
-
-### Item 11: Add file size validation warning (>100MB)
-
-**File:** `src/components/FileUpload.tsx`
-
-**Notes:** Show a non-blocking warning when the selected file exceeds 100MB. The analysis will still proceed, but the user should know it may take significantly longer. Add the check in both `handleDrop` (line 38) and `handleFileInput` (line 59). Use the existing inline error pattern from Item 1 but with a yellow/warning style instead of red.
-
----
-
-### Item 12: Progress bar in AnalysisStatusPanel
-
-**File:** `src/components/AnalysisStatusPanel.tsx`
-
-**Notes:** The estimate endpoint returns expected duration. Use elapsed time vs estimate to show a progress bar. Handle edge cases: estimate unavailable (show indeterminate), analysis exceeding estimate (bar stays at ~95% and pulses). Keep the existing status text; add the bar below it.
-
----
-
-### Item 13: File type check in `handleFileInput` (matches `handleDrop`)
-
-**File:** `src/components/FileUpload.tsx:59-71`
-
-**Notes:** `handleDrop` (line 47) checks `file.type.startsWith('audio/')` and shows an inline error for non-audio files. `handleFileInput` (line 59) does NOT check — it accepts any file. Add the same `audio/` type check to `handleFileInput`. Note: the `<input>` element likely has an `accept` attribute that filters at the OS level, but programmatic validation is still needed as `accept` is advisory, not enforced.
-
----
-
-### Item 14: Replace hardcoded `bg-[#222]` / `bg-[#1a1a1a]` with theme tokens
-
-**Files and locations:**
-- `src/App.tsx:322` — `bg-[#222]` (header bar)
-- `src/App.tsx:366` — `bg-[#222]` (tab)
-- `src/App.tsx:437` — `bg-[#222]` (tab)
-- `src/components/WaveformPlayer.tsx:247` — `bg-[#1a1a1a]` (waveform container)
-- `src/components/DiagnosticLog.tsx:75` — `bg-[#1a1a1a]` (log container)
-
-**Notes:** These should use existing theme tokens like `bg-bg-panel` or `bg-bg-card`. Check `src/index.css` for the closest semantic match. If no exact match exists, add new tokens (e.g., `--color-bg-surface`) rather than leaving raw hex values.
-
----
-
-### Item 15: Stabilize Session ID
-
-**File:** `src/components/AnalysisResults.tsx:169`
-
-**Notes:** The "SESSION ID" display uses `new Date().getTime().toString(36).toUpperCase()` inline in JSX, which regenerates on every render. Wrap in `useMemo` with an empty dependency array, or generate once when analysis results arrive and store in a `useRef`. The ID is cosmetic (not used for any logic), so stability is purely a UX concern — the flickering value looks broken.
+- **Source files changed:** 11 (`audioFile.ts`, `index.css`, `App.tsx`, `AnalysisResults.tsx`, `AnalysisStatusPanel.tsx`, `DiagnosticLog.tsx`, `FileUpload.tsx`, `SessionMusicianPanel.tsx`, `WaveformPlayer.tsx`, `backendPhase1Client.ts`, `analyzer.ts`)
+- **Test files changed:** 5 (`analyzer.test.ts`, `analysisResultsUi.test.ts`, `error-states.spec.ts`, `file-validation.spec.ts`, `ui-details.spec.ts`)
+- **New theme tokens added:** 4 (`--color-success`, `--color-warning`, `--color-error` already existed; `--color-bg-surface-dark` and `--color-bg-surface-darker` added in Tier 3)
+- **New error code:** `USER_CANCELLED`
+- **New constants:** `FILE_SIZE_WARNING_BYTES`
+- **New helpers:** `computeProgress`, `resolveAudioMimeType`, `isSupportedAudioFile`, `getAudioMimeTypeOrDefault`
+- **Verification:** `npm run verify` — typecheck clean, 73 unit tests passed, production build succeeded, 33/33 smoke tests passed (3 skipped are live-backend/live-Gemini tests requiring real services)

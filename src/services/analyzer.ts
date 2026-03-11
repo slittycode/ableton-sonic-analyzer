@@ -1,5 +1,6 @@
 import { appConfig, isGeminiPhase2Available } from "../config";
-import { analyzePhase1WithBackend, mapBackendError } from "./backendPhase1Client";
+import { getAudioMimeTypeOrDefault } from "./audioFile";
+import { analyzePhase1WithBackend, createUserCancelledError, mapBackendError } from "./backendPhase1Client";
 import { PHASE1_LABEL, PHASE2_SKIPPED_LABEL } from "./phaseLabels";
 import { DiagnosticLogEntry, Phase1Result, Phase2Result } from "../types";
 
@@ -7,10 +8,39 @@ interface AnalyzeAudioOptions {
   transcribe?: boolean;
   separate?: boolean;
   timeoutMs?: number;
+  signal?: AbortSignal;
 }
 
 export function isPhase2GeminiEnabled(): boolean {
   return isGeminiPhase2Available();
+}
+
+function throwIfUserCancelled(signal?: AbortSignal) {
+  if (signal?.aborted) {
+    throw createUserCancelledError();
+  }
+}
+
+async function raceWithCancellation<T>(operation: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) {
+    return operation;
+  }
+
+  throwIfUserCancelled(signal);
+
+  let abortHandler: (() => void) | null = null;
+  const cancellation = new Promise<never>((_, reject) => {
+    abortHandler = () => reject(createUserCancelledError());
+    signal.addEventListener("abort", abortHandler, { once: true });
+  });
+
+  try {
+    return await Promise.race([operation, cancellation]);
+  } finally {
+    if (abortHandler) {
+      signal.removeEventListener("abort", abortHandler);
+    }
+  }
 }
 
 export async function analyzeAudio(
@@ -26,7 +56,7 @@ export async function analyzeAudio(
   const audioMetadata: DiagnosticLogEntry["audioMetadata"] = {
     name: file.name,
     size: file.size,
-    type: file.type || "audio/mp3",
+    type: getAudioMimeTypeOrDefault(file),
   };
 
   try {
@@ -36,6 +66,7 @@ export async function analyzeAudio(
       timeoutMs: analysisOptions?.timeoutMs,
       transcribe: analysisOptions?.transcribe ?? false,
       separate: analysisOptions?.separate ?? false,
+      signal: analysisOptions?.signal,
     });
     const phase1End = Date.now();
 
@@ -58,6 +89,7 @@ export async function analyzeAudio(
 
     onPhase1Complete(backendResult.phase1, phase1Log);
     phase1Completed = true;
+    throwIfUserCancelled(analysisOptions?.signal);
 
     if (!isGeminiPhase2Available()) {
       const phase2SkippedLog: DiagnosticLogEntry = {
@@ -78,12 +110,17 @@ export async function analyzeAudio(
     }
 
     const { analyzePhase2WithGemini } = await import("./geminiPhase2Client");
-    const phase2 = await analyzePhase2WithGemini({
-      file,
-      modelName,
-      phase1Result: backendResult.phase1,
-      audioMetadata,
-    });
+    const phase2 = await raceWithCancellation(
+      analyzePhase2WithGemini({
+        file,
+        modelName,
+        phase1Result: backendResult.phase1,
+        audioMetadata,
+        signal: analysisOptions?.signal,
+      }),
+      analysisOptions?.signal,
+    );
+    throwIfUserCancelled(analysisOptions?.signal);
 
     onPhase2Complete(phase2.result, {
       ...phase2.log,

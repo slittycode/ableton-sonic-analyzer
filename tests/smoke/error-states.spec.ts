@@ -74,7 +74,7 @@ test('backend 500 shows error banner and ERROR status in diagnostic log', async 
 
   await loadFileAndClick(page);
 
-  const errorBanner = page.locator('div.p-3.text-red-400');
+  const errorBanner = page.locator('div.p-3.text-error');
   await expect(errorBanner).toBeVisible();
   await expect(errorBanner).toContainText('ERROR');
   await expect(errorBanner).toContainText('Internal server error during analysis.');
@@ -105,7 +105,7 @@ test('backend 502 (analyzer failed) shows error message in banner', async ({ pag
 
   await loadFileAndClick(page);
 
-  const errorBanner = page.locator('div.p-3.text-red-400');
+  const errorBanner = page.locator('div.p-3.text-error');
   await expect(errorBanner).toBeVisible();
   await expect(errorBanner).toContainText('Analyzer subprocess exited with non-zero status.');
 
@@ -122,7 +122,7 @@ test('network failure shows NETWORK_UNREACHABLE-style error', async ({ page }) =
 
   await loadFileAndClick(page);
 
-  const errorBanner = page.locator('div.p-3.text-red-400');
+  const errorBanner = page.locator('div.p-3.text-error');
   await expect(errorBanner).toBeVisible();
   await expect(errorBanner).toContainText('ERROR');
 });
@@ -161,6 +161,41 @@ test('estimate endpoint failure shows yellow warning but does not block analysis
   await expect(page.getByText('Analysis Results')).toBeVisible();
 });
 
+test('wrong backend service warning disables initiate analysis until the backend URL is fixed', async ({ page }) => {
+  await page.route('**/api/analyze/estimate', async (route) => {
+    await route.fulfill({
+      status: 404,
+      contentType: 'application/json',
+      body: JSON.stringify({ detail: 'Not Found' }),
+    });
+  });
+
+  await page.route('**/openapi.json', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        info: { title: 'Multi-Agent Dashboard API' },
+        paths: {
+          '/api/state': {},
+        },
+      }),
+    });
+  });
+
+  await page.goto('/', { waitUntil: 'networkidle' });
+  await page.setInputFiles('#audio-upload', fixturePath());
+
+  await expect(page.getByText(/Multi-Agent Dashboard API/)).toBeVisible();
+  await expect(page.getByText(/Sonic Analyzer Local API/)).toBeVisible();
+  await expect(page.getByText(/127\.0\.0\.1:8100/)).toBeVisible();
+  await expect(page.getByText(/VITE_API_BASE_URL=http:\/\/127\.0\.0\.1:8100/i)).toBeVisible();
+
+  const analyzeButton = page.getByRole('button', { name: /Initiate Analysis/i });
+  await expect(analyzeButton).toBeVisible();
+  await expect(analyzeButton).toBeDisabled();
+});
+
 test('error banner dismiss button removes the error', async ({ page }) => {
   await stubEstimateRoute(page);
 
@@ -182,7 +217,7 @@ test('error banner dismiss button removes the error', async ({ page }) => {
 
   await loadFileAndClick(page);
 
-  const errorBanner = page.locator('div.p-3.text-red-400');
+  const errorBanner = page.locator('div.p-3.text-error');
   await expect(errorBanner).toBeVisible();
   await expect(errorBanner).toContainText('Server error for dismiss test.');
 
@@ -241,7 +276,7 @@ test('error banner shows Retry button for retryable errors', async ({ page }) =>
 
   await loadFileAndClick(page);
 
-  const errorBanner = page.locator('div.p-3.text-red-400');
+  const errorBanner = page.locator('div.p-3.text-error');
   await expect(errorBanner).toBeVisible();
   await expect(errorBanner).toContainText('Backend temporarily unavailable.');
 
@@ -252,4 +287,48 @@ test('error banner shows Retry button for retryable errors', async ({ page }) =>
   // Click retry — should trigger re-analysis and succeed this time
   await retryBtn.click();
   await expect(page.getByText('Analysis Results')).toBeVisible({ timeout: 30000 });
+});
+
+test('cancel during phase 2 returns to idle without an error banner and logs skipped advisory', async ({ page }) => {
+  await stubEstimateRoute(page);
+
+  await page.route('**/api/analyze', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        requestId: 'req_phase2_cancel',
+        phase1: PHASE1_STUB,
+        diagnostics: { backendDurationMs: 250, engineVersion: 'smoke' },
+      }),
+    });
+  });
+
+  let releaseGeminiRoute: (() => void) | null = null;
+  await page.route('**://generativelanguage.googleapis.com/**', async (route) => {
+    await new Promise<void>((resolve) => {
+      releaseGeminiRoute = resolve;
+    });
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ candidates: [] }),
+    });
+  });
+
+  await loadFileAndClick(page);
+
+  await expect(page.getByText('Generating the advisory pass from completed local DSP measurements.')).toBeVisible();
+
+  const cancelButton = page.getByRole('button', { name: /Cancel analysis/i });
+  await expect(cancelButton).toBeVisible();
+  await cancelButton.click();
+
+  releaseGeminiRoute?.();
+
+  await expect(page.locator('div.p-3.text-error')).toHaveCount(0);
+  await expect(page.getByText('Analysis Results')).toBeVisible();
+  await expect(page.getByText('Analysis cancelled by user.')).toBeVisible();
+  await expect(page.getByText('SKIPPED')).toBeVisible();
 });

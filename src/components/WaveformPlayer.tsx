@@ -28,7 +28,7 @@ export function WaveformPlayer({ audioUrl, audioFile }: WaveformPlayerProps) {
     const ws = WaveSurfer.create({
       container: containerRef.current,
       waveColor: '#4a4b50', // Muted gray for unplayed
-      progressColor: '#ff9500', // Accent color for played
+      progressColor: '#ff8800', // Accent color for played
       cursorColor: '#ffffff',
       barWidth: 2,
       barGap: 2,
@@ -178,7 +178,7 @@ export function WaveformPlayer({ audioUrl, audioFile }: WaveformPlayerProps) {
             const segmentY = canvas.height - (j * (segmentHeight + segmentGap)) - segmentHeight;
             
             // Color gradient based on height
-            let fillStyle = '#ff9500'; // Default orange
+            let fillStyle = '#ff8800'; // Default orange
             if (j > 20) fillStyle = '#ff4444'; // Red at top
             else if (j > 15) fillStyle = '#ffcc00'; // Yellow
             
@@ -214,7 +214,7 @@ export function WaveformPlayer({ audioUrl, audioFile }: WaveformPlayerProps) {
           <span className="text-xs font-bold text-text-primary tracking-widest uppercase">Signal Monitor</span>
         </div>
         <div className="flex space-x-1">
-          <div className={`w-2 h-2 rounded-full ${isReady ? 'bg-green-500' : 'bg-red-500'}`}></div>
+          <div className={`w-2 h-2 rounded-full ${isReady ? 'bg-success' : 'bg-error'}`}></div>
           <span className="text-[9px] font-mono text-text-secondary uppercase">{isReady ? 'ONLINE' : 'SYNCING'}</span>
         </div>
       </div>
@@ -244,7 +244,7 @@ export function WaveformPlayer({ audioUrl, audioFile }: WaveformPlayerProps) {
         </div>
       </div>
 
-      <div className="w-full h-32 bg-[#1a1a1a] rounded-sm border border-border overflow-hidden relative">
+      <div className="w-full h-32 bg-bg-surface-darker rounded-sm border border-border overflow-hidden relative">
         <canvas 
           ref={canvasRef} 
           width={800} 

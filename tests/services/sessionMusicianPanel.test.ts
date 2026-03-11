@@ -38,6 +38,58 @@ afterEach(() => {
 });
 
 describe('SessionMusicianPanel confidence helpers', () => {
+  it('shows the melody low-confidence warning at the inclusive 0.15 threshold', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(SessionMusicianPanel, {
+        phase1: {
+          ...basePhase1,
+          melodyDetail: {
+            noteCount: 1,
+            notes: [{ midi: 60, onset: 0.2, duration: 0.3 }],
+            dominantNotes: [60],
+            pitchRange: { min: 60, max: 60 },
+            pitchConfidence: 0.15,
+            midiFile: null,
+            sourceSeparated: false,
+            vibratoPresent: false,
+            vibratoExtent: 0,
+            vibratoRate: 0,
+            vibratoConfidence: 0.1,
+          },
+        },
+      }),
+    );
+
+    expect(html).toContain('SESSION MUSICIAN');
+    expect(html).toContain('title="Low confidence — treat this as approximate."');
+    expect(html).toContain('⚠');
+  });
+
+  it('does not show the melody low-confidence warning above the threshold', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(SessionMusicianPanel, {
+        phase1: {
+          ...basePhase1,
+          melodyDetail: {
+            noteCount: 1,
+            notes: [{ midi: 60, onset: 0.2, duration: 0.3 }],
+            dominantNotes: [60],
+            pitchRange: { min: 60, max: 60 },
+            pitchConfidence: 0.16,
+            midiFile: null,
+            sourceSeparated: false,
+            vibratoPresent: false,
+            vibratoExtent: 0,
+            vibratoRate: 0,
+            vibratoConfidence: 0.1,
+          },
+        },
+      }),
+    );
+
+    expect(html).not.toContain('title="Low confidence — treat this as approximate."');
+  });
+
   it('renders monophonic stats without a filtered prefix and disables the confidence slider', () => {
     const html = renderToStaticMarkup(
       React.createElement(SessionMusicianPanel, {

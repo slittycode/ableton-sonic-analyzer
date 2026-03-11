@@ -12,13 +12,24 @@ const ANALYZE_TIMEOUT_FLOOR_MS = 180_000;
 const ANALYZE_TIMEOUT_PADDING_MS = 60_000;
 const DEFAULT_BACKEND_TIMEOUT_MS = 600_000;
 const DEFAULT_ESTIMATE_TIMEOUT_MS = 30_000;
+const BACKEND_IDENTITY_TIMEOUT_MS = 2_500;
+const DEFAULT_LOCAL_BACKEND_URL = "http://127.0.0.1:8100";
+const EXPECTED_BACKEND_API_TITLE = "Sonic Analyzer Local API";
+const LEGACY_LOCAL_BACKEND_URLS = new Set([
+  "http://localhost:8000",
+  "http://127.0.0.1:8000",
+  "http://localhost:8010",
+  "http://127.0.0.1:8010",
+]);
 
 export type BackendErrorCode =
   | "NETWORK_UNREACHABLE"
   | "BACKEND_HTTP_ERROR"
+  | "BACKEND_WRONG_SERVICE"
   | "BACKEND_BAD_RESPONSE"
   | "BACKEND_TIMEOUT"
   | "CLIENT_TIMEOUT"
+  | "USER_CANCELLED"
   | "BACKEND_UNKNOWN_ERROR";
 
 interface BackendClientErrorDetails {
@@ -32,6 +43,8 @@ interface BackendClientErrorDetails {
   retryable?: boolean;
   timeoutMs?: number;
   diagnostics?: BackendDiagnostics;
+  configuredBaseUrl?: string;
+  detectedServiceTitle?: string;
 }
 
 export class BackendClientError extends Error {
@@ -46,14 +59,31 @@ export class BackendClientError extends Error {
   }
 }
 
+export function createUserCancelledError(message = "Analysis was cancelled by the user."): BackendClientError {
+  return new BackendClientError("USER_CANCELLED", message);
+}
+
 export interface AnalyzePhase1Options {
   apiBaseUrl: string;
   timeoutMs?: number;
   transcribe?: boolean;
   separate?: boolean;
+  signal?: AbortSignal;
 }
 
 type UnknownRecord = Record<string, unknown>;
+type BackendIdentityProbe = {
+  title: string | null;
+  hasAnalyzeRoute: boolean;
+  hasEstimateRoute: boolean;
+  isExpectedBackend: boolean;
+};
+
+const backendIdentityCache = new Map<string, Promise<BackendIdentityProbe | null>>();
+
+export function resetBackendIdentityCacheForTests(): void {
+  backendIdentityCache.clear();
+}
 
 export function deriveAnalyzeTimeoutMs(estimatedHighMs?: number): number {
   if (typeof estimatedHighMs !== "number" || !Number.isFinite(estimatedHighMs) || estimatedHighMs <= 0) {
@@ -67,21 +97,25 @@ export async function estimatePhase1WithBackend(
   file: File,
   options: AnalyzePhase1Options,
 ): Promise<BackendEstimateResponse> {
-  const response = await postBackendMultipart(
-    `${options.apiBaseUrl}/api/analyze/estimate`,
-    buildTrackFormData(file, null, options.transcribe ?? false, options.separate ?? false),
-    options.timeoutMs ?? DEFAULT_ESTIMATE_TIMEOUT_MS,
-  );
-
-  const payload = await parseJsonPayload(response, "DSP estimate endpoint");
-
   try {
+    const response = await postBackendMultipart(
+      `${options.apiBaseUrl}/api/analyze/estimate`,
+      buildTrackFormData(file, null, options.transcribe ?? false, options.separate ?? false),
+      options.timeoutMs ?? DEFAULT_ESTIMATE_TIMEOUT_MS,
+    );
+
+    const payload = await parseJsonPayload(response, "DSP estimate endpoint");
+
     return parseBackendEstimateResponse(payload);
   } catch (error) {
+    const diagnosedError = await maybePromoteWrongServiceError(error, options.apiBaseUrl);
+    if (diagnosedError instanceof BackendClientError) {
+      throw diagnosedError;
+    }
     throw new BackendClientError(
       "BACKEND_BAD_RESPONSE",
-      `DSP estimate response did not match the expected contract: ${formatError(error)}`,
-      { cause: error },
+      `DSP estimate response did not match the expected contract: ${formatError(diagnosedError)}`,
+      { cause: diagnosedError },
     );
   }
 }
@@ -91,26 +125,31 @@ export async function analyzePhase1WithBackend(
   dspJsonOverride: string | null,
   options: AnalyzePhase1Options,
 ): Promise<BackendAnalyzeResponse> {
-  const response = await postBackendMultipart(
-    `${options.apiBaseUrl}/api/analyze`,
-    buildTrackFormData(
-      file,
-      dspJsonOverride,
-      options.transcribe ?? false,
-      options.separate ?? false,
-    ),
-    options.timeoutMs ?? DEFAULT_BACKEND_TIMEOUT_MS,
-  );
-
-  const payload = await parseJsonPayload(response, "DSP backend");
-
   try {
+    const response = await postBackendMultipart(
+      `${options.apiBaseUrl}/api/analyze`,
+      buildTrackFormData(
+        file,
+        dspJsonOverride,
+        options.transcribe ?? false,
+        options.separate ?? false,
+      ),
+      options.timeoutMs ?? DEFAULT_BACKEND_TIMEOUT_MS,
+      options.signal,
+    );
+
+    const payload = await parseJsonPayload(response, "DSP backend");
+
     return parseBackendAnalyzeResponse(payload);
   } catch (error) {
+    const diagnosedError = await maybePromoteWrongServiceError(error, options.apiBaseUrl);
+    if (diagnosedError instanceof BackendClientError) {
+      throw diagnosedError;
+    }
     throw new BackendClientError(
       "BACKEND_BAD_RESPONSE",
-      `DSP backend response did not match the expected contract: ${formatError(error)}`,
-      { cause: error },
+      `DSP backend response did not match the expected contract: ${formatError(diagnosedError)}`,
+      { cause: diagnosedError },
     );
   }
 }
@@ -184,13 +223,123 @@ export function mapBackendError(
   );
 }
 
+async function maybePromoteWrongServiceError(
+  error: unknown,
+  apiBaseUrl: string,
+): Promise<unknown> {
+  if (!(error instanceof BackendClientError)) {
+    return error;
+  }
+
+  const status = error.details?.status;
+  if (status !== 404 && status !== 405) {
+    return error;
+  }
+
+  const identity = await getBackendIdentity(apiBaseUrl);
+  if (!identity || identity.isExpectedBackend) {
+    return error;
+  }
+
+  return new BackendClientError(
+    "BACKEND_WRONG_SERVICE",
+    buildWrongServiceMessage(apiBaseUrl, identity),
+    {
+      ...error.details,
+      configuredBaseUrl: normalizeBaseUrl(apiBaseUrl),
+      detectedServiceTitle: identity.title ?? undefined,
+    },
+  );
+}
+
+async function getBackendIdentity(apiBaseUrl: string): Promise<BackendIdentityProbe | null> {
+  const normalizedBaseUrl = normalizeBaseUrl(apiBaseUrl);
+  const cachedProbe = backendIdentityCache.get(normalizedBaseUrl);
+  if (cachedProbe) {
+    return cachedProbe;
+  }
+
+  const probePromise = probeBackendIdentity(normalizedBaseUrl);
+  backendIdentityCache.set(normalizedBaseUrl, probePromise);
+  return probePromise;
+}
+
+async function probeBackendIdentity(apiBaseUrl: string): Promise<BackendIdentityProbe | null> {
+  const controller = new AbortController();
+  const timeoutHandle = setTimeout(() => controller.abort(), BACKEND_IDENTITY_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`${apiBaseUrl}/openapi.json`, {
+      method: "GET",
+      signal: controller.signal,
+    });
+
+    if (!response.ok) return null;
+
+    const payload = await response.json();
+    if (!isRecord(payload)) return null;
+
+    const info = isRecord(payload.info) ? payload.info : null;
+    const title = toOptionalStringOrNull(info?.title) ?? null;
+    const paths = isRecord(payload.paths) ? payload.paths : null;
+    const hasAnalyzeRoute = Boolean(paths?.["/api/analyze"]);
+    const hasEstimateRoute = Boolean(paths?.["/api/analyze/estimate"]);
+
+    return {
+      title,
+      hasAnalyzeRoute,
+      hasEstimateRoute,
+      isExpectedBackend:
+        title === EXPECTED_BACKEND_API_TITLE && hasAnalyzeRoute && hasEstimateRoute,
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeoutHandle);
+  }
+}
+
+function buildWrongServiceMessage(
+  apiBaseUrl: string,
+  identity: BackendIdentityProbe,
+): string {
+  const configuredBaseUrl = normalizeBaseUrl(apiBaseUrl);
+  const detectedTitle = identity.title ? `"${identity.title}"` : "a different API";
+  const missingRoutes = [
+    identity.hasAnalyzeRoute ? null : "/api/analyze",
+    identity.hasEstimateRoute ? null : "/api/analyze/estimate",
+  ].filter((route): route is string => route !== null);
+  const missingRouteMessage = missingRoutes.length
+    ? ` It does not expose ${missingRoutes.join(" and ")}.`
+    : "";
+  const staleOverrideMessage = LEGACY_LOCAL_BACKEND_URLS.has(configuredBaseUrl)
+    ? " A stale local .env or shell override may still be forcing the old backend URL."
+    : "";
+
+  return `Configured DSP backend URL ${configuredBaseUrl} is serving ${detectedTitle}, not ${EXPECTED_BACKEND_API_TITLE}.${missingRouteMessage}${staleOverrideMessage} Start Sonic Analyzer on ${DEFAULT_LOCAL_BACKEND_URL}. For the synced local stack, use ./scripts/dev.sh or run the UI with VITE_API_BASE_URL=${DEFAULT_LOCAL_BACKEND_URL} npm run dev:local.`;
+}
+
+function normalizeBaseUrl(value: string): string {
+  return value.replace(/\/+$/, "");
+}
+
 async function postBackendMultipart(
   endpoint: string,
   formData: FormData,
   timeoutMs: number,
+  externalSignal?: AbortSignal,
 ): Promise<Response> {
   const controller = new AbortController();
   const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
+
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      clearTimeout(timeoutHandle);
+      throw createUserCancelledError();
+    }
+    const onExternalAbort = () => controller.abort();
+    externalSignal.addEventListener("abort", onExternalAbort, { once: true });
+  }
 
   try {
     const response = await fetch(endpoint, {
@@ -205,6 +354,9 @@ async function postBackendMultipart(
 
     return response;
   } catch (error) {
+    if (externalSignal?.aborted) {
+      throw createUserCancelledError();
+    }
     throw mapBackendError(error, { timeoutMs });
   } finally {
     clearTimeout(timeoutHandle);

@@ -57,6 +57,7 @@ const basePhase2: Phase2Result = {
     melodicArp: 'Simple melodic motif.',
     grooveAndTiming: 'Quantized groove.',
     effectsAndTexture: 'Light atmospherics.',
+    harmonicContent: 'Approximate harmonic movement centred around the detected key.',
   },
   mixAndMasterChain: [
     {
@@ -125,7 +126,7 @@ describe('AnalysisResults UI wiring', () => {
       }),
     );
 
-    expect((html.match(/class=\"grid gap-4 grid-cols-2\"/g) ?? []).length).toBeGreaterThanOrEqual(2);
+    expect((html.match(/class=\"grid gap-4 grid-cols-1 sm:grid-cols-2\"/g) ?? []).length).toBeGreaterThanOrEqual(2);
     expect(html).toContain('🥁 DRUM PROCESSING');
     expect(html).toContain('🫧 BASS PROCESSING');
     expect(html).toContain('✨ HIGH-END DETAIL');
@@ -160,9 +161,9 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).toContain('>Bass Weight</span>');
     expect(html).toContain('>Top End</span>');
     expect(html).not.toContain('>Ignore This</span>');
-    expect(html).toContain('bg-green-500/20 text-green-400 border-green-500/30');
-    expect(html).toContain('bg-yellow-500/20 text-yellow-400 border-yellow-500/30');
-    expect(html).toContain('bg-red-500/20 text-red-400 border-red-500/30');
+    expect(html).toContain('bg-success/20 text-success border-success/30');
+    expect(html).toContain('bg-warning/20 text-warning border-warning/30');
+    expect(html).toContain('bg-error/20 text-error border-error/30');
   });
 
   it('renders character scanning fallback when phase2 is unavailable', () => {
@@ -175,6 +176,90 @@ describe('AnalysisResults UI wiring', () => {
     );
 
     expect(html).toContain('SCANNING...');
+    expect(html).toContain('Phase 2: Advisory reconstruction');
+    expect(html).toContain('Draft — Phase 2 output is incomplete or unavailable.');
+  });
+
+  it('renders exactly two DSP badges for the current Phase 1 headings and one AI advisory badge', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: basePhase1,
+        phase2: basePhase2,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect((html.match(/>DSP</g) ?? []).length).toBe(2);
+    expect((html.match(/>AI</g) ?? []).length).toBe(1);
+    expect(html).toContain('Interpretive guidance generated from DSP measurements. Not a ground-truth measurement.');
+  });
+
+  it('shows the key low-confidence warning at the inclusive 0.60 threshold', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: {
+          ...basePhase1,
+          keyConfidence: 0.6,
+        },
+        phase2: null,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).toContain('KEY SIG');
+    expect(html).toContain('title="Low confidence — treat this as approximate."');
+    expect(html).toContain('⚠');
+  });
+
+  it('does not show the key low-confidence warning above the threshold', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: {
+          ...basePhase1,
+          keyConfidence: 0.61,
+        },
+        phase2: null,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).not.toContain('title="Low confidence — treat this as approximate."');
+  });
+
+  it('shows the chord low-confidence warning at the inclusive 0.70 threshold', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: {
+          ...basePhase1,
+          chordDetail: {
+            chordStrength: 0.7,
+          },
+        },
+        phase2: basePhase2,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).toContain('Harmonic Content');
+    expect(html).toContain('title="Low confidence — treat this as approximate."');
+    expect(html).toContain('⚠');
+  });
+
+  it('does not show the chord low-confidence warning above the threshold', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: {
+          ...basePhase1,
+          chordDetail: {
+            chordStrength: 0.71,
+          },
+        },
+        phase2: basePhase2,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).not.toContain('title="Low confidence — treat this as approximate."');
   });
 
   it('renders a danceability section when backend danceability data is present', () => {

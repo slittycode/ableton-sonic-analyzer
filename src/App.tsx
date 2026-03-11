@@ -6,6 +6,7 @@ import { DiagnosticLog } from './components/DiagnosticLog';
 import { FileUpload } from './components/FileUpload';
 import { WaveformPlayer } from './components/WaveformPlayer';
 import { appConfig } from './config';
+import { getAudioMimeTypeOrDefault } from './services/audioFile';
 import { analyzeAudio, isPhase2GeminiEnabled } from './services/analyzer';
 import {
   BackendClientError,
@@ -40,7 +41,7 @@ function buildAudioMetadata(file: File): DiagnosticLogEntry["audioMetadata"] {
   return {
     name: file.name,
     size: file.size,
-    type: file.type || 'audio/mp3',
+    type: getAudioMimeTypeOrDefault(file),
   };
 }
 
@@ -74,24 +75,28 @@ export default function App() {
   const [analysisEstimate, setAnalysisEstimate] = useState<BackendAnalysisEstimate | null>(null);
   const [isEstimateLoading, setIsEstimateLoading] = useState(false);
   const [estimateError, setEstimateError] = useState<string | null>(null);
+  const [estimateWrongService, setEstimateWrongService] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [transcribeEnabled, setTranscribeEnabled] = useState(false);
   const [stemSeparationEnabled, setStemSeparationEnabled] = useState(false);
 
   const phase1CompletedRef = useRef(false);
   const analysisStartedAtRef = useRef<number | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (!audioFile) {
       setAnalysisEstimate(null);
       setIsEstimateLoading(false);
       setEstimateError(null);
+      setEstimateWrongService(false);
       return;
     }
 
     let isCancelled = false;
     setAnalysisEstimate(null);
     setEstimateError(null);
+    setEstimateWrongService(false);
     setIsEstimateLoading(true);
 
     estimatePhase1WithBackend(audioFile, {
@@ -107,6 +112,7 @@ export default function App() {
         if (isCancelled) return;
         const mapped = mapBackendError(rawError);
         setEstimateError(mapped.message);
+        setEstimateWrongService(mapped.code === 'BACKEND_WRONG_SERVICE');
       })
       .finally(() => {
         if (!isCancelled) {
@@ -147,6 +153,7 @@ export default function App() {
     phase1CompletedRef.current = false;
     analysisStartedAtRef.current = null;
     setElapsedMs(0);
+    setEstimateWrongService(false);
   };
 
   const handleFileClear = () => {
@@ -161,6 +168,7 @@ export default function App() {
     setAnalysisEstimate(null);
     setEstimateError(null);
     setIsEstimateLoading(false);
+    setEstimateWrongService(false);
     phase1CompletedRef.current = false;
     analysisStartedAtRef.current = null;
     setElapsedMs(0);
@@ -174,6 +182,9 @@ export default function App() {
     const activeEstimate = analysisEstimate;
     const activeTimeoutMs = deriveAnalyzeTimeoutMs(activeEstimate?.totalHighMs);
     const audioMetadata = buildAudioMetadata(activeFile);
+
+    const ac = new AbortController();
+    abortControllerRef.current = ac;
 
     setIsAnalyzing(true);
     setCurrentPhase(1);
@@ -252,6 +263,7 @@ export default function App() {
           });
           setCurrentPhase(0);
           setIsAnalyzing(false);
+          abortControllerRef.current = null;
           analysisStartedAtRef.current = null;
           setElapsedMs(0);
         },
@@ -259,6 +271,7 @@ export default function App() {
           const err = rawError instanceof Error ? rawError : new Error(String(rawError));
           const isPhase1Failure = !phase1CompletedRef.current;
           const backendError = err instanceof BackendClientError ? err : null;
+          const isCancelled = backendError?.code === 'USER_CANCELLED';
 
           setLogs((prev) => [
             ...prev.filter((entry) => !(entry.status === 'running' && entry.source === (isPhase1Failure ? 'backend' : 'gemini'))),
@@ -272,19 +285,22 @@ export default function App() {
               timestamp: new Date().toISOString(),
               requestId: backendError?.details?.requestId,
               source: isPhase1Failure ? 'backend' : 'gemini',
-              status: 'error',
-              message: err.message,
-              errorCode: backendError?.details?.serverCode ?? backendError?.code,
+              status: isCancelled ? 'skipped' : 'error',
+              message: isCancelled ? 'Analysis cancelled by user.' : err.message,
+              errorCode: isCancelled ? undefined : (backendError?.details?.serverCode ?? backendError?.code),
               estimateLowMs: isPhase1Failure ? activeEstimate?.totalLowMs : undefined,
               estimateHighMs: isPhase1Failure ? activeEstimate?.totalHighMs : undefined,
               timings: isPhase1Failure ? backendError?.details?.diagnostics?.timings : undefined,
             },
           ]);
 
-          setError(err.message);
-          setErrorRetryable(backendError?.details?.retryable === true);
+          if (!isCancelled) {
+            setError(err.message);
+            setErrorRetryable(backendError?.details?.retryable === true);
+          }
           setIsAnalyzing(false);
           setCurrentPhase(0);
+          abortControllerRef.current = null;
           analysisStartedAtRef.current = null;
           setElapsedMs(0);
         },
@@ -292,6 +308,7 @@ export default function App() {
           transcribe: transcribeEnabled,
           separate: stemSeparationEnabled,
           timeoutMs: activeTimeoutMs,
+          signal: ac.signal,
         },
       );
     } catch (rawError) {
@@ -300,10 +317,17 @@ export default function App() {
       setErrorRetryable(err instanceof BackendClientError && err.details?.retryable === true);
       setIsAnalyzing(false);
       setCurrentPhase(0);
+      abortControllerRef.current = null;
       analysisStartedAtRef.current = null;
       setElapsedMs(0);
     }
   };
+
+  const handleCancel = () => {
+    abortControllerRef.current?.abort();
+  };
+
+  const isAnalyzeDisabled = isAnalyzing || estimateWrongService;
 
   const statusTitle = currentPhase === 2 ? PHASE2_LABEL : PHASE1_LABEL;
   const statusSummary =
@@ -317,9 +341,15 @@ export default function App() {
   const statusRequestState = currentPhase === 2 ? 'Generating advisory output' : 'Request in flight';
 
   return (
-    <div className="min-h-screen p-4 md:p-8 font-sans flex items-center justify-center bg-bg-app">
-      <div className="w-full max-w-6xl bg-bg-panel border border-border rounded-sm shadow-md overflow-hidden flex flex-col">
-        <div className="h-10 bg-[#222] border-b border-border flex items-center justify-between px-4">
+    <div className="min-h-screen bg-bg-app px-3 py-3 md:px-6 md:py-5 font-sans flex items-center justify-center">
+      <div
+        data-testid="app-shell"
+        className="ableton-shell w-full max-w-6xl rounded-sm overflow-hidden flex flex-col"
+      >
+        <div
+          data-testid="app-toolbar"
+          className="ableton-toolbar h-10 border-b border-border flex items-center justify-between px-4"
+        >
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
               <AudioWaveform className="w-4 h-4 text-accent" />
@@ -358,16 +388,19 @@ export default function App() {
           </div>
         </div>
 
-        <div className="p-4 md:p-6 space-y-6 flex-grow">
-          <main className="space-y-6">
-            <section className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        <div className="bg-bg-panel p-3 md:p-5 space-y-5 flex-grow">
+          <main className="space-y-5">
+            <section className="grid grid-cols-1 lg:grid-cols-12 gap-3 md:gap-4">
               <div className="lg:col-span-4 flex flex-col gap-4">
                 <div className="flex flex-col">
-                  <div className="bg-[#222] border border-border border-b-0 rounded-t-sm px-3 py-1.5 flex items-center">
+                  <div className="bg-bg-surface-dark border border-border border-b-0 rounded-t-sm px-3 py-1.5 flex items-center">
                     <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
                     <h3 className="text-[10px] font-mono text-text-secondary uppercase tracking-wider">Input Source</h3>
                   </div>
-                  <div className="bg-bg-card border border-border rounded-b-sm p-4 flex flex-col min-h-[220px]">
+                  <div
+                    data-testid="input-panel"
+                    className="bg-bg-card border border-border rounded-b-sm p-4 flex flex-col min-h-[220px]"
+                  >
                     <FileUpload onFileSelect={handleFileSelect} onFileClear={handleFileClear} isLoading={isAnalyzing} />
                     <label
                       className={`mt-4 rounded-sm border px-3 py-3 transition-colors cursor-pointer ${
@@ -421,8 +454,9 @@ export default function App() {
                       <div className="mt-4 flex justify-end">
                         <button
                           onClick={handleStartAnalysis}
-                          disabled={isAnalyzing}
-                          className="bg-accent hover:bg-[#ff9933] disabled:opacity-50 disabled:cursor-not-allowed text-bg-app font-bold py-2 px-6 rounded-sm flex items-center transition-colors uppercase tracking-wider font-mono text-xs"
+                          disabled={isAnalyzeDisabled}
+                          className="bg-accent hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed text-bg-app font-bold py-2 px-6 rounded-sm flex items-center transition-colors uppercase tracking-wider font-mono text-xs"
+                          title={estimateWrongService ? 'Point the UI at the Sonic Analyzer backend to enable analysis.' : undefined}
                         >
                           <Sparkles className="w-3 h-3 mr-2" />
                           Initiate Analysis
@@ -434,16 +468,19 @@ export default function App() {
               </div>
 
               <div className="lg:col-span-8 flex flex-col h-full">
-                <div className="bg-[#222] border border-border border-b-0 rounded-t-sm px-3 py-1.5 flex items-center justify-between">
+                <div className="bg-bg-surface-dark border border-border border-b-0 rounded-t-sm px-3 py-1.5 flex items-center justify-between">
                   <div className="flex items-center">
-                    <span className={`w-2 h-2 rounded-full mr-2 ${audioUrl ? 'bg-green-500' : 'bg-border'}`}></span>
+                    <span className={`w-2 h-2 rounded-full mr-2 ${audioUrl ? 'bg-success' : 'bg-border'}`}></span>
                     <h3 className="text-[10px] font-mono text-text-secondary uppercase tracking-wider">
                       {isAnalyzing ? 'Local DSP Status' : 'Signal Monitor'}
                     </h3>
                   </div>
                 </div>
 
-                <div className="flex-grow bg-bg-card border border-border rounded-b-sm p-4 relative flex flex-col">
+                <div
+                  data-testid="signal-panel"
+                  className="flex-grow bg-bg-card border border-border rounded-b-sm p-4 relative flex flex-col"
+                >
                   {audioUrl && audioFile ? (
                     isAnalyzing ? (
                       <AnalysisStatusPanel
@@ -453,6 +490,7 @@ export default function App() {
                         requestState={statusRequestState}
                         elapsedMs={elapsedMs}
                         estimate={analysisEstimate}
+                        onCancel={handleCancel}
                       />
                     ) : (
                       <div className="h-full flex flex-col justify-between relative z-10 gap-4">
@@ -477,8 +515,12 @@ export default function App() {
                               </div>
                             </div>
                             {estimateError && (
-                              <p className="text-[10px] font-mono text-yellow-400 uppercase tracking-wider">
-                                Estimate unavailable: {estimateError}
+                              <p
+                                className={`text-[10px] font-mono text-warning ${
+                                  estimateWrongService ? 'leading-relaxed' : 'uppercase tracking-wider'
+                                }`}
+                              >
+                                {estimateWrongService ? estimateError : `Estimate unavailable: ${estimateError}`}
                               </p>
                             )}
                           </div>
@@ -497,9 +539,9 @@ export default function App() {
             </section>
 
             {error && (
-              <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-sm text-red-400 text-xs font-mono flex items-center justify-between gap-3">
+              <div className="p-3 bg-error/10 border border-error/30 rounded-sm text-error text-xs font-mono flex items-center justify-between gap-3">
                 <div className="flex items-center min-w-0">
-                  <div className="w-2 h-2 bg-red-500 rounded-full mr-2 shrink-0"></div>
+                  <div className="w-2 h-2 bg-error rounded-full mr-2 shrink-0"></div>
                   <span className="truncate">ERROR: {error}</span>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -514,7 +556,7 @@ export default function App() {
                   )}
                   <button
                     onClick={() => { setError(null); setErrorRetryable(false); }}
-                    className="p-1 hover:bg-red-500/20 rounded-sm transition-colors"
+                    className="p-1 hover:bg-error/20 rounded-sm transition-colors"
                     title="Dismiss error"
                     aria-label="Dismiss error"
                   >
@@ -525,7 +567,19 @@ export default function App() {
             )}
 
             {phase1Result ? (
-              <Suspense fallback={null}>
+              <Suspense
+                fallback={
+                  <div className="space-y-6">
+                    <div className="h-8 w-48 bg-bg-card rounded-sm animate-pulse" />
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {Array.from({ length: 4 }).map((_, i) => (
+                        <div key={i} className="bg-bg-panel border border-border rounded-sm p-4 min-h-[170px] animate-pulse" />
+                      ))}
+                    </div>
+                    <div className="h-40 bg-bg-panel border border-border rounded-sm animate-pulse" />
+                  </div>
+                }
+              >
                 <AnalysisResults phase1={phase1Result} phase2={phase2Result} sourceFileName={audioFile?.name ?? null} />
               </Suspense>
             ) : null}

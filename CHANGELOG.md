@@ -4,11 +4,47 @@ All notable changes to `sonic-analyzer-UI` are documented here in reverse chrono
 
 ## Unreleased
 
+- Standardized the canonical local stack on UI `127.0.0.1:3100` and backend `127.0.0.1:8100`, added `npm run dev:local`, and documented the new workspace launcher flow.
+- Wrong-backend diagnostics now mention stale local env overrides and point users to `./scripts/dev.sh` or `npm run dev:local`.
+
+### UI/UX Improvements (Tiers 1–3)
+
+Implemented all 15 items from the UI/UX improvement plan (`UI_UX_IMPROVEMENTS.md`). `npm run verify` passes: typecheck clean, 73 unit tests, production build, 33 smoke tests.
+
+#### Tier 1 — High-impact, low-risk
+
+- Replaced browser `alert()` calls with inline drop-zone error messages in the file upload component.
+- Added dismiss (X) and Retry buttons to the error banner in the main app view.
+- Made the diagnostic log collapsible with a chevron toggle, defaulting to collapsed.
+- Fixed mobile header overflow so the title and controls no longer break out of the viewport.
+
+#### Tier 2 — Noticeable polish
+
+- Added a Cancel button during analysis. Threaded `AbortSignal` through both the backend client and the Phase 2 Gemini path; cancellation logs as `skipped`, suppresses late advisory results, and does not trigger the error banner. New `USER_CANCELLED` error code.
+- Fixed accent color inconsistency: replaced 6 hardcoded `#ff9500`/`#ff9933` values with the theme token `#ff8800` (or CSS var references in Tailwind contexts).
+- Adopted semantic theme tokens for status colors (`text-error`, `bg-success/10`, `border-warning/30`, etc.) across 6 component files, replacing 25+ hardcoded color classes.
+- Fixed `EXEC_TIME: 0ms` on running diagnostic log entries; now shows `--` while a stage is still running.
+- Added a Suspense skeleton fallback for lazy-loaded analysis results, replacing the blank `fallback={null}`.
+- Fixed mobile grid layout in Mix & Master / Patch sections: `grid-cols-2` → `grid-cols-1 sm:grid-cols-2`.
+
+#### Tier 3 — Nice-to-have
+
+- Added file size validation warning for files exceeding 100 MB. Non-blocking yellow warning with `AlertTriangle` icon; analysis still proceeds.
+- Added a progress bar to the analysis status panel. Uses elapsed time vs estimate midpoint, caps at 95%, pulses when exceeding the estimate, and shows an indeterminate bar when no estimate is available.
+- Added shared audio-file validation across both the file input handler and drag-and-drop path. Valid `.mp3`, `.wav`, `.flac`, `.aiff`, and `.aif` uploads now succeed even when the browser leaves `File.type` blank; non-audio files still trigger an inline error.
+- Replaced hardcoded `bg-[#222]` and `bg-[#1a1a1a]` values with new theme tokens (`--color-bg-surface-dark`, `--color-bg-surface-darker`) across 3 source files and the `.ableton-header` CSS class.
+- Stabilized Session ID with `useMemo` so it no longer regenerates on every re-render.
+
+#### Test updates
+
+- Updated smoke test selectors in `error-states.spec.ts` (5 existing selector changes plus a new Phase 2 cancel regression), `ui-details.spec.ts` (2 selector changes), and `file-validation.spec.ts` (blank-MIME picker/drop regressions) to match the shipped behavior.
+- Updated unit test assertions in `analysisResultsUi.test.ts` for responsive grid classes and semantic color classes, and added a Phase 2 cancellation regression in `analyzer.test.ts`.
+
 ## v0.7.0
 
 - Made stem separation an independent App toggle so Demucs can be requested without enabling MIDI transcription.
 - Added optional `TEST_FLAC_PATH` support to the live backend smoke so it can exercise a real FLAC when one is available and otherwise fall back silently to the checked-in WAV fixture.
-- Corrected `.env.example` so `VITE_API_BASE_URL` points to `http://127.0.0.1:8000`, matching the current local backend server.
+- Corrected `.env.example` so `VITE_API_BASE_URL` points to `http://127.0.0.1:8100`, matching the current local backend server.
 - Removed the stale `bpmAgreement` reference from the Phase 2 Gemini prompt because the frontend Phase 1 payload never includes that field.
 - Removed the no-op DSP JSON override UI control from the App and documented the behavior as reserved transport support only.
 - Completed markdown export so `widthAndStereo` and `harmonicContent` are included in the Sonic Elements section when present.

@@ -1,16 +1,21 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { UploadCloud, FileAudio, X, AlertTriangle } from 'lucide-react';
 
+import { isSupportedAudioFile } from '../services/audioFile';
+
 interface FileUploadProps {
   onFileSelect: (file: File) => void;
   onFileClear: () => void;
   isLoading: boolean;
 }
 
+const FILE_SIZE_WARNING_BYTES = 100 * 1024 * 1024; // 100 MB
+
 export function FileUpload({ onFileSelect, onFileClear, isLoading }: FileUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [fileSizeWarning, setFileSizeWarning] = useState<string | null>(null);
   const dismissTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
@@ -44,8 +49,13 @@ export function FileUpload({ onFileSelect, onFileClear, isLoading }: FileUploadP
       const files = e.dataTransfer.files;
       if (files && files.length > 0) {
         const file = files[0];
-        if (file.type.startsWith('audio/')) {
+        if (isSupportedAudioFile(file)) {
           setFileError(null);
+          setFileSizeWarning(
+            file.size > FILE_SIZE_WARNING_BYTES
+              ? `Large file (${(file.size / (1024 * 1024)).toFixed(0)} MB). Analysis may take significantly longer.`
+              : null,
+          );
           setSelectedFile(file);
           onFileSelect(file);
         } else {
@@ -62,17 +72,27 @@ export function FileUpload({ onFileSelect, onFileClear, isLoading }: FileUploadP
       const files = e.target.files;
       if (files && files.length > 0) {
         const file = files[0];
+        if (!isSupportedAudioFile(file)) {
+          showFileError('File type not supported. Please upload MP3, WAV, FLAC, or AIFF.');
+          return;
+        }
         setFileError(null);
+        setFileSizeWarning(
+          file.size > FILE_SIZE_WARNING_BYTES
+            ? `Large file (${(file.size / (1024 * 1024)).toFixed(0)} MB). Analysis may take significantly longer.`
+            : null,
+        );
         setSelectedFile(file);
         onFileSelect(file);
       }
     },
-    [onFileSelect, isLoading]
+    [onFileSelect, isLoading, showFileError]
   );
 
   const clearFile = () => {
     if (isLoading) return;
     setSelectedFile(null);
+    setFileSizeWarning(null);
     onFileClear();
   };
 
@@ -85,7 +105,7 @@ export function FileUpload({ onFileSelect, onFileClear, isLoading }: FileUploadP
           onDrop={handleDrop}
           className={`h-full border border-dashed rounded-sm p-8 flex flex-col items-center justify-center transition-all cursor-pointer relative overflow-hidden group ${
             fileError
-              ? 'border-red-500/50 bg-red-500/5'
+              ? 'border-error/50 bg-error/5'
               : isDragging
                 ? 'border-accent bg-accent/5'
                 : 'border-border bg-bg-card hover:border-text-secondary/50 hover:bg-bg-card-hover'
@@ -113,7 +133,7 @@ export function FileUpload({ onFileSelect, onFileClear, isLoading }: FileUploadP
              ))}
           </div>
           {fileError && (
-            <div className="mt-3 flex items-center gap-2 text-red-400 text-[10px] font-mono uppercase tracking-wider" role="alert">
+            <div className="mt-3 flex items-center gap-2 text-error text-[10px] font-mono uppercase tracking-wider" role="alert">
               <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
               {fileError}
             </div>
@@ -129,9 +149,15 @@ export function FileUpload({ onFileSelect, onFileClear, isLoading }: FileUploadP
             <div>
               <p className="font-bold text-sm tracking-tight truncate max-w-[200px] md:max-w-xs">{selectedFile.name}</p>
               <p className="text-[10px] text-text-secondary font-mono uppercase tracking-wider flex items-center mt-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500 mr-2"></span>
+                <span className="w-1.5 h-1.5 rounded-full bg-success mr-2"></span>
                 Ready • {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
               </p>
+              {fileSizeWarning && (
+                <p className="text-[10px] text-warning font-mono uppercase tracking-wider flex items-center mt-1">
+                  <AlertTriangle className="w-3 h-3 shrink-0 mr-1.5" />
+                  {fileSizeWarning}
+                </p>
+              )}
             </div>
           </div>
           {!isLoading && (
@@ -140,7 +166,7 @@ export function FileUpload({ onFileSelect, onFileClear, isLoading }: FileUploadP
               className="p-1.5 hover:bg-bg-panel rounded-sm border border-transparent hover:border-border transition-all group/btn"
               title="Remove File"
             >
-              <X className="w-4 h-4 text-text-secondary group-hover/btn:text-red-400" />
+              <X className="w-4 h-4 text-text-secondary group-hover/btn:text-error" />
             </button>
           )}
         </div>
