@@ -18,15 +18,23 @@
 
 ## Environment And Setup
 
-- Python: use Python `3.13.x` for the current known-good local setup.
-- Create the local environment with:
+- Python: use Python `3.11.x` for the supported full-feature local setup on macOS arm64.
+- Preferred bootstrap from `apps/backend`:
 
 ```bash
-python3.13 -m venv venv
-./venv/bin/pip install -r requirements.txt
+./scripts/bootstrap.sh
 ```
 
-- Main runtime dependencies are declared in `requirements.txt`.
+- Manual equivalent:
+
+```bash
+python3.11 -m venv venv
+./venv/bin/python -m pip install --upgrade pip
+./venv/bin/python -m pip install -r requirements.txt
+```
+
+- Main runtime dependencies are pinned in `requirements.txt`.
+- Python `3.12+` is not a supported full-feature local bootstrap target on macOS arm64 because `basic-pitch` on Darwin pulls a `tensorflow-macos` / NumPy combination that does not resolve cleanly.
 - If audio/DSP imports fail, check local native dependencies before editing code.
 
 ## Main Commands
@@ -47,7 +55,7 @@ python3.13 -m venv venv
 - The server currently binds to `0.0.0.0:8100` by default and honors `SONIC_ANALYZER_PORT`.
 - The UI expects the backend at `http://127.0.0.1:8100` unless overridden.
 - The monorepo root `./scripts/dev.sh` starts `apps/ui` on `http://127.0.0.1:3100` and overrides stale UI `.env` backend URLs for that session.
-- The backend dependency set is still under-constrained for some fresh installs; prefer the established Python `3.13.x` local environment until follow-up pinning work lands.
+- If `./scripts/dev.sh` reports a missing backend virtualenv, run `./scripts/bootstrap.sh` in `apps/backend` or `./apps/backend/scripts/bootstrap.sh` from the repo root.
 
 ## Validation Commands
 

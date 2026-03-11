@@ -31,6 +31,18 @@ ensure_exists() {
   fi
 }
 
+print_missing_backend_env() {
+  echo "Missing backend virtualenv python: ${BACKEND_DIR}/venv/bin/python" >&2
+  echo "Run ./apps/backend/scripts/bootstrap.sh to create the Python 3.11 backend environment." >&2
+}
+
+ensure_backend_env() {
+  if [[ ! -e "$BACKEND_DIR/venv/bin/python" ]]; then
+    print_missing_backend_env
+    exit 1
+  fi
+}
+
 print_port_conflict() {
   local port="$1"
   local service_name="$2"
@@ -110,7 +122,7 @@ require_command python3
 
 ensure_exists "$UI_DIR/package.json" "frontend package.json"
 ensure_exists "$BACKEND_DIR/server.py" "backend server entrypoint"
-ensure_exists "$BACKEND_DIR/venv/bin/python" "backend virtualenv python"
+ensure_backend_env
 
 warn_if_stale_ui_env
 

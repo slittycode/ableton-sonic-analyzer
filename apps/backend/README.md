@@ -32,14 +32,21 @@ FastAPI also serves the usual generated endpoints at `/openapi.json`, `/docs`, a
 ## Installation
 
 ```bash
-python3.13 -m venv venv
-./venv/bin/pip install -r requirements.txt
+./scripts/bootstrap.sh
 ```
 
-Known limitation for this monorepo `v1.0.0` cut:
+Manual equivalent:
 
-- fresh installs from `requirements.txt` are still under-constrained enough to backtrack into older dependency paths in some environments
-- the known-good local baseline remains Python `3.13.x`
+```bash
+python3.11 -m venv venv
+./venv/bin/python -m pip install --upgrade pip
+./venv/bin/python -m pip install -r requirements.txt
+```
+
+Bootstrap contract for this monorepo `v1.0.0` cut:
+
+- the pinned full-feature local baseline is Python `3.11.x` on macOS arm64
+- Python `3.12+` is not a supported full-feature bootstrap target on macOS arm64 because `basic-pitch` on Darwin pulls a `tensorflow-macos` / NumPy combination that does not resolve cleanly
 
 ## CLI Usage
 
@@ -91,6 +98,12 @@ Recommended full-stack launcher from the monorepo root:
 
 ```bash
 ./scripts/dev.sh
+```
+
+If the root launcher reports a missing backend virtualenv, create it first with:
+
+```bash
+./apps/backend/scripts/bootstrap.sh
 ```
 
 The root launcher starts the backend on `http://127.0.0.1:8100`, waits for the FastAPI contract to come up, then starts the monorepo UI on `http://127.0.0.1:3100` with `VITE_API_BASE_URL=http://127.0.0.1:8100`.
