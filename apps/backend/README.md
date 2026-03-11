@@ -32,9 +32,14 @@ FastAPI also serves the usual generated endpoints at `/openapi.json`, `/docs`, a
 ## Installation
 
 ```bash
-python3 -m venv venv
+python3.13 -m venv venv
 ./venv/bin/pip install -r requirements.txt
 ```
+
+Known limitation for this monorepo `v1.0.0` cut:
+
+- fresh installs from `requirements.txt` are still under-constrained enough to backtrack into older dependency paths in some environments
+- the known-good local baseline remains Python `3.13.x`
 
 ## CLI Usage
 
@@ -82,18 +87,15 @@ Notable top-level sections include:
 
 ## Running the HTTP Server
 
-Recommended synced launcher from this backend repo:
+Recommended full-stack launcher from the monorepo root:
 
 ```bash
-cd /Users/christiansmith/code/projects/sonic-analyzer-workspace/sonic-analyzer
 ./scripts/dev.sh
 ```
 
-This tracked launcher starts the backend on `http://127.0.0.1:8100`, waits for the FastAPI contract to come up, then starts the sibling UI on `http://127.0.0.1:3100` with `VITE_API_BASE_URL=http://127.0.0.1:8100`.
+The root launcher starts the backend on `http://127.0.0.1:8100`, waits for the FastAPI contract to come up, then starts the monorepo UI on `http://127.0.0.1:3100` with `VITE_API_BASE_URL=http://127.0.0.1:8100`.
 
-If `../sonic-analyzer-UI/.env` still contains `http://localhost:8000`, the launcher prints a warning and overrides it for that session so the UI does not hit the dashboard service by mistake.
-
-The older workspace-root `./scripts/dev.sh` flow is deprecated because it is not version-controlled in either repo.
+If `apps/ui/.env` still contains `http://localhost:8000`, the root launcher prints a warning and overrides it for that session so the UI does not hit the wrong local service by mistake.
 
 Manual backend command:
 
@@ -101,11 +103,16 @@ Manual backend command:
 SONIC_ANALYZER_PORT=8100 ./venv/bin/python server.py
 ```
 
-Manual full-stack pair:
+Manual full-stack pair from the monorepo root:
 
 ```bash
+cd apps/backend
 SONIC_ANALYZER_PORT=8100 ./venv/bin/python server.py
-cd ../sonic-analyzer-UI && VITE_API_BASE_URL=http://127.0.0.1:8100 npm run dev:local
+```
+
+```bash
+cd apps/ui
+VITE_API_BASE_URL=http://127.0.0.1:8100 npm run dev:local
 ```
 
 Override the port when needed:

@@ -2,7 +2,7 @@
 
 ## Scope
 
-- This file applies to the `sonic-analyzer` backend repo.
+- This file applies to `apps/backend` inside the `ableton-sonic-analyzer` monorepo.
 - The repo is a local Python audio-analysis service with two entry points:
   - `analyze.py`: raw CLI analyzer
   - `server.py`: FastAPI wrapper around the CLI
@@ -18,11 +18,11 @@
 
 ## Environment And Setup
 
-- Python: use Python 3.10+.
+- Python: use Python `3.13.x` for the current known-good local setup.
 - Create the local environment with:
 
 ```bash
-python3 -m venv venv
+python3.13 -m venv venv
 ./venv/bin/pip install -r requirements.txt
 ```
 
@@ -31,7 +31,7 @@ python3 -m venv venv
 
 ## Main Commands
 
-- Preferred synced local stack from this repo: `./scripts/dev.sh`
+- Preferred synced local stack from the monorepo root: `./scripts/dev.sh`
 - Run the CLI analyzer:
 
 ```bash
@@ -46,8 +46,8 @@ python3 -m venv venv
 
 - The server currently binds to `0.0.0.0:8100` by default and honors `SONIC_ANALYZER_PORT`.
 - The UI expects the backend at `http://127.0.0.1:8100` unless overridden.
-- `./scripts/dev.sh` starts the sibling `../sonic-analyzer-UI` checkout on `http://127.0.0.1:3100` and overrides stale UI `.env` backend URLs for that session.
-- The workspace-root `../scripts/dev.sh` flow is deprecated because it is not version-controlled in either repo.
+- The monorepo root `./scripts/dev.sh` starts `apps/ui` on `http://127.0.0.1:3100` and overrides stale UI `.env` backend URLs for that session.
+- The backend dependency set is still under-constrained for some fresh installs; prefer the established Python `3.13.x` local environment until follow-up pinning work lands.
 
 ## Validation Commands
 

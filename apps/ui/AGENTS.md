@@ -2,7 +2,7 @@
 
 ## Scope
 
-- This file applies to the `sonic-analyzer-UI` frontend repo.
+- This file applies to `apps/ui` inside the `ableton-sonic-analyzer` monorepo.
 - Stack: React 19, TypeScript, Vite 6, Tailwind CSS v4, Vitest, Playwright.
 - The app talks to the local `sonic-analyzer` backend.
 - No repo-local `.cursorrules`, `.cursor/rules/`, or `.github/copilot-instructions.md` exist here as of 2026-03-10.
@@ -29,7 +29,7 @@
 
 ## Main Commands
 
-- Preferred synced local stack from the workspace root: `cd .. && ./scripts/dev.sh`
+- Preferred synced local stack from the monorepo root: `./scripts/dev.sh`
 - Dev server: `npm run dev`
 - Synced local UI only: `VITE_API_BASE_URL=http://127.0.0.1:8100 npm run dev:local`
 - Build: `npm run build`
@@ -148,7 +148,7 @@ RUN_GEMINI_LIVE_SMOKE=true VITE_ENABLE_PHASE2_GEMINI=true VITE_GEMINI_API_KEY=yo
 ## Known Gotchas
 
 - `src/config.ts` falls back to `http://127.0.0.1:8100` if `VITE_API_BASE_URL` is unset.
-- `.env.example` uses `http://127.0.0.1:8100`; stale local `.env` files can still pin `localhost:8000` or `127.0.0.1:8010`, but `../scripts/dev.sh` overrides that for the spawned UI process.
+- `.env.example` uses `http://127.0.0.1:8100`; stale local `.env` files can still pin `localhost:8000` or `127.0.0.1:8010`, but the monorepo root `./scripts/dev.sh` overrides that for the spawned UI process.
 - Phase 2 Gemini is disabled unless both the feature flag and API key are present.
 - Audio files over 20MB take the Gemini Files API path; do not break that branch casually.
 - `npm run lint` does not cover tests because `tsconfig.json` excludes `tests`, `playwright.config.ts`, and `vitest.config.ts`.

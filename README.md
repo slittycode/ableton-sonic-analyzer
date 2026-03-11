@@ -9,6 +9,12 @@ them together under one roof:
 - `apps/backend` contains the Python/FastAPI local DSP backend
 - `scripts/dev.sh` starts the full local stack on the canonical ports
 
+Migration note:
+
+- `apps/ui` and `apps/backend` were imported with history from the former standalone repos.
+- The monorepo root is now the source of truth for release notes, local-stack commands, and push workflow.
+- App-level changelogs remain imported app history rather than monorepo release history.
+
 ## Canonical Local Stack
 
 - UI: `http://127.0.0.1:3100`
@@ -82,3 +88,16 @@ This monorepo is being cut as a **local/dev `v1.0.0`** baseline.
 The current quality bar is met for local development and iterative product work.
 It should not be presented as a stronger production/security milestone until
 Gemini access is moved out of the browser bundle.
+
+## Push Checklist
+
+```bash
+git remote add origin <new-repo-url>
+git push -u origin main
+git push origin v1.0.0
+```
+
+Keep the backend bootstrap limitation in mind when handing the repo to another machine:
+
+- prefer Python `3.13.x`
+- expect follow-up dependency pinning work in `apps/backend/requirements.txt`

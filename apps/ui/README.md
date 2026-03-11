@@ -71,22 +71,21 @@ cp .env.example .env
 
 ## Running Locally
 
-Recommended synced launcher from the workspace root:
+Recommended full-stack launcher from the monorepo root:
 
 ```bash
-cd /Users/christiansmith/code/projects/sonic-analyzer-workspace
 ./scripts/dev.sh
 ```
 
-Manual equivalent:
+Manual equivalent from the monorepo root:
 
 ```bash
-cd /Users/christiansmith/code/projects/sonic-analyzer-workspace/sonic-analyzer
+cd apps/backend
 SONIC_ANALYZER_PORT=8100 ./venv/bin/python server.py
 ```
 
 ```bash
-cd /Users/christiansmith/code/projects/sonic-analyzer-workspace/sonic-analyzer-UI
+cd apps/ui
 VITE_API_BASE_URL=http://127.0.0.1:8100 npm run dev:local
 ```
 
@@ -98,7 +97,7 @@ Canonical local URLs:
 Legacy note:
 
 - older local `.env` files may still pin `VITE_API_BASE_URL=http://localhost:8000` or `http://127.0.0.1:8010`
-- `./scripts/dev.sh` overrides those stale values for the spawned UI process
+- the monorepo root `./scripts/dev.sh` overrides those stale values for the spawned UI process
 - `npm run dev` remains available for custom local setups, but it is not the recommended synced-stack command
 
 ## Backend Contract Used by the UI
