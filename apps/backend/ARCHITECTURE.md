@@ -1,0 +1,260 @@
+# Architecture
+
+## Components
+
+| Component | Role |
+| --- | --- |
+| `analyze.py` | Raw CLI analyzer. Loads audio, runs DSP, optionally separates stems and transcribes notes, then prints JSON to `stdout`. |
+| `server.py` | FastAPI wrapper. Accepts uploads, computes an estimate, shells out to `analyze.py`, normalizes the result into the HTTP `phase1` contract, and returns diagnostics or structured errors. |
+| `tests/test_server.py` | Contract tests for estimate, timeout, and success envelopes. |
+| `tests/test_analyze.py` | Structural snapshot tests for the raw analyzer JSON output. |
+
+## Separation of Responsibilities
+
+### `analyze.py`
+
+Responsibilities:
+
+- read the input file
+- optionally run Demucs separation
+- run the Phase 1 DSP analysis functions
+- optionally run Basic Pitch transcription
+- emit the raw analyzer JSON
+
+Interface:
+
+```bash
+./venv/bin/python analyze.py <audio_file> [--separate] [--transcribe] [--fast] [--yes]
+```
+
+### `server.py`
+
+Responsibilities:
+
+- receive multipart uploads
+- write the upload to a temporary file
+- compute a backend estimate and timeout
+- invoke `analyze.py` with `--yes`
+- translate raw analyzer output into the HTTP `phase1` envelope
+- return structured error diagnostics when the subprocess fails
+- clean up temporary files
+
+Custom routes:
+
+- `POST /api/analyze/estimate`
+- `POST /api/analyze`
+
+FastAPI-generated routes remain available at `/openapi.json`, `/docs`, and `/redoc`.
+
+## CLI Flow
+
+1. Parse the positional audio path and the optional flags `--separate`, `--transcribe`, `--fast`, and `--yes`.
+2. Read duration metadata with `get_audio_duration_seconds()`.
+3. If running in a TTY and `--yes` is not set, print a stage-by-stage estimate and prompt the user to continue.
+4. Load mono audio for most DSP features.
+5. Load stereo audio for loudness, true peak, stereo, and segment-loudness measurements.
+6. If `--separate` is enabled, run Demucs and keep the temporary stem paths.
+7. Run shared rhythm extraction once and reuse it across BPM, rhythm, groove, and sidechain analyses.
+8. Run the individual feature analyzers and merge their return dictionaries into a single result object.
+9. If `--transcribe` is enabled, run Basic Pitch:
+   - on `bass` and `other` stems when Demucs output is available
+   - otherwise on the full mix
+10. Print the final JSON to `stdout` and logs to `stderr`.
+11. Remove temporary stems after a separated run.
+
+## Raw Analyzer Output
+
+`analyze.py` emits the full schema documented in [JSON_SCHEMA.md](JSON_SCHEMA.md).
+
+Important sections:
+
+- core metrics: tempo, key, duration, loudness, true peak
+- detail objects: `dynamicCharacter`, `stereoDetail`, `spectralDetail`, `rhythmDetail`, `melodyDetail`, `transcriptionDetail`, `effectsDetail`, `synthesisCharacter`, `danceability`, `perceptual`, `essentiaFeatures`
+- arrangement and segment data: `structure`, `arrangementDetail`, `segmentLoudness`, `segmentStereo`, `segmentSpectral`, `segmentKey`
+
+## HTTP Flow
+
+### `POST /api/analyze/estimate`
+
+1. Persist the uploaded file to a temporary path.
+2. Read duration metadata with `get_audio_duration_seconds()`.
+3. Call `build_analysis_estimate(duration, run_separation, run_transcribe)`.
+4. Normalize stage keys into the server contract:
+   - `dsp` -> `local_dsp`
+   - `separation` -> `demucs_separation`
+5. Return:
+   - `requestId`
+   - `estimate.durationSeconds`
+   - `estimate.totalLowMs`
+   - `estimate.totalHighMs`
+   - `estimate.stages[]`
+6. Close the upload and delete the temporary file.
+
+### `POST /api/analyze`
+
+1. Persist the uploaded file to a temporary path.
+2. Build the same estimate object used by the estimate route.
+3. Convert the estimated upper bound into a timeout with a 15-second buffer.
+4. Build the subprocess command:
+   - base command: `./venv/bin/python analyze.py <temp_path> --yes`
+   - add `--separate` when the query parameter is present
+   - add `--transcribe` when the multipart form field is truthy
+5. Run the subprocess with `capture_output=True`.
+6. Handle failures with structured JSON error envelopes:
+   - timeout
+   - internal subprocess launch failure
+   - non-zero exit
+   - empty stdout
+   - malformed JSON
+   - non-object JSON
+7. Build `diagnostics.timings` from request wall time, subprocess wall time, flag usage, upload size, and analyzer-reported duration.
+8. Emit a `[TIMING]` summary line to `stderr` for every completed request, including structured errors.
+9. On success, normalize the raw payload into `phase1` and attach diagnostics.
+10. Close the upload and delete the temporary file.
+
+## HTTP Contract
+
+### Shared Request Inputs
+
+Multipart form fields accepted by both routes:
+
+- `track` required
+- `dsp_json_override` optional and currently ignored
+- `transcribe` optional; `POST /api/analyze` forwards it to `analyze.py`, and `POST /api/analyze/estimate` uses it for runtime estimation
+
+Query parameters accepted by both routes:
+
+- `separate`
+- `--separate`
+
+### Success Envelope
+
+`POST /api/analyze` returns:
+
+- `requestId`
+- `phase1`
+- `diagnostics`
+
+`phase1` contains normalized scalars:
+
+- `bpm`
+- `bpmConfidence`
+- `key`
+- `keyConfidence`
+- `timeSignature`
+- `durationSeconds`
+- `lufsIntegrated`
+- `lufsRange`
+- `truePeak`
+- `crestFactor`
+- `stereoWidth`
+- `stereoCorrelation`
+- `spectralBalance`
+
+`phase1` forwards these raw analyzer sections unchanged:
+
+- `stereoDetail`
+- `spectralDetail`
+- `rhythmDetail`
+- `melodyDetail`
+- `transcriptionDetail`
+- `grooveDetail`
+- `sidechainDetail`
+- `effectsDetail`
+- `synthesisCharacter`
+- `danceability`
+- `structure`
+- `arrangementDetail`
+- `segmentLoudness`
+- `segmentSpectral`
+- `segmentKey`
+- `chordDetail`
+- `perceptual`
+
+The server does not currently expose these raw analyzer fields over HTTP:
+
+- `bpmPercival`
+- `bpmAgreement`
+- `sampleRate`
+- `dynamicSpread`
+- `dynamicCharacter`
+- `segmentStereo`
+- `essentiaFeatures`
+
+`diagnostics` currently contains:
+
+- `requestId`
+- `backendDurationMs`
+- `engineVersion`
+- `estimatedLowMs`
+- `estimatedHighMs`
+- `timeoutSeconds`
+- `timings.totalMs`
+- `timings.analysisMs`
+- `timings.serverOverheadMs`
+- `timings.flagsUsed`
+- `timings.fileSizeBytes`
+- `timings.fileDurationSeconds`
+- `timings.msPerSecondOfAudio`
+
+Compatibility note:
+
+- `backendDurationMs` remains the subprocess wall time for backward compatibility and mirrors `timings.analysisMs`.
+
+### Error Envelope
+
+`server.py` returns a consistent error envelope with:
+
+- `requestId`
+- `error.code`
+- `error.message`
+- `error.phase`
+- `error.retryable`
+- `diagnostics`
+
+Error diagnostics can include:
+
+- `requestId`
+- `backendDurationMs`
+- `timeoutSeconds`
+- `estimatedLowMs`
+- `estimatedHighMs`
+- `timings`
+- `stdoutSnippet`
+- `stderrSnippet`
+
+When the analyzer never produces a valid JSON object, `timings.fileDurationSeconds` and `timings.msPerSecondOfAudio` are `null`.
+
+## Transcription Pipeline
+
+`transcriptionDetail` is produced only when `--transcribe` is active.
+
+Flow:
+
+1. Try to import Basic Pitch.
+2. Choose transcription sources:
+   - `bass` and `other` stems when Demucs succeeded
+   - otherwise `full_mix`
+3. Run `predict()` once per source.
+4. Normalize each note into:
+   - `pitchMidi`
+   - `pitchName`
+   - `onsetSeconds`
+   - `durationSeconds`
+   - `confidence`
+   - `stemSource`
+5. Merge notes, compute dominant pitches and pitch range, and return `transcriptionDetail`.
+
+## Current Caveats
+
+- `dsp_json_override` is a reserved field only. The backend accepts it but does not use it.
+- `--fast` is parsed by `analyze.py` but still does nothing.
+- The HTTP API is intentionally narrower than the raw CLI schema.
+
+## Verification Surface
+
+`tests/test_server.py` currently verifies:
+
+- estimate contract normalization
+- timeout error envelopes
+- success responses with diagnostics

@@ -1,0 +1,5 @@
+{
+  "name": "Ableton Live 12 Sonic Analyzer",
+  "description": "A two-phase sonic analysis UI for Ableton Live 12 producers, powered by a local DSP backend with optional Gemini phase-2 advice.",
+  "requestFramePermissions": []
+}
