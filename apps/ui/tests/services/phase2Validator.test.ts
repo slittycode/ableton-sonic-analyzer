@@ -195,7 +195,7 @@ describe('validatePhase2Consistency', () => {
       const phase2 = createBasePhase2({
         arrangementOverview: {
           ...createBasePhase2().arrangementOverview,
-          segments: [{ index: 1, startTime: 0, endTime: 30, lufs: -3.0, description: 'Very loud section' }],
+          segments: [{ index: 1, startTime: 0, endTime: 30, lufs: -1.0, description: 'Very loud section' }],
         },
       });
 
