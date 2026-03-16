@@ -1,18 +1,16 @@
-import { appConfig, isGeminiPhase2Available } from "../config";
-import { getAudioMimeTypeOrDefault } from "./audioFile";
-import { analyzePhase1WithBackend, createUserCancelledError, mapBackendError } from "./backendPhase1Client";
-import { PHASE1_LABEL, PHASE2_SKIPPED_LABEL } from "./phaseLabels";
-import { DiagnosticLogEntry, Phase1Result, Phase2Result } from "../types";
+import { appConfig, canRunGeminiPhase2, isGeminiPhase2ConfigEnabled } from '../config';
+import { getAudioMimeTypeOrDefault } from './audioFile';
+import { analyzePhase1WithBackend, createUserCancelledError, mapBackendError } from './backendPhase1Client';
+import { PHASE1_LABEL, PHASE2_SKIPPED_LABEL } from './phaseLabels';
+import { DiagnosticLogEntry, Phase1Result, Phase2Result } from '../types';
 
 interface AnalyzeAudioOptions {
   transcribe?: boolean;
   separate?: boolean;
   timeoutMs?: number;
   signal?: AbortSignal;
-}
-
-export function isPhase2GeminiEnabled(): boolean {
-  return isGeminiPhase2Available();
+  phase2Requested?: boolean;
+  phase2ConfigEnabled?: boolean;
 }
 
 function throwIfUserCancelled(signal?: AbortSignal) {
@@ -31,16 +29,36 @@ async function raceWithCancellation<T>(operation: Promise<T>, signal?: AbortSign
   let abortHandler: (() => void) | null = null;
   const cancellation = new Promise<never>((_, reject) => {
     abortHandler = () => reject(createUserCancelledError());
-    signal.addEventListener("abort", abortHandler, { once: true });
+    signal.addEventListener('abort', abortHandler, { once: true });
   });
 
   try {
     return await Promise.race([operation, cancellation]);
   } finally {
     if (abortHandler) {
-      signal.removeEventListener("abort", abortHandler);
+      signal.removeEventListener('abort', abortHandler);
     }
   }
+}
+
+function buildPhase2SkippedLog(
+  audioMetadata: DiagnosticLogEntry['audioMetadata'],
+  requestId: string | undefined,
+  message: string,
+): DiagnosticLogEntry {
+  return {
+    model: 'disabled',
+    phase: PHASE2_SKIPPED_LABEL,
+    promptLength: 0,
+    responseLength: 0,
+    durationMs: 0,
+    audioMetadata,
+    timestamp: new Date().toISOString(),
+    requestId,
+    source: 'system',
+    status: 'skipped',
+    message,
+  };
 }
 
 export async function analyzeAudio(
@@ -53,7 +71,9 @@ export async function analyzeAudio(
   analysisOptions?: AnalyzeAudioOptions,
 ) {
   let phase1Completed = false;
-  const audioMetadata: DiagnosticLogEntry["audioMetadata"] = {
+  const phase2Requested = analysisOptions?.phase2Requested ?? true;
+  const phase2ConfigEnabled = analysisOptions?.phase2ConfigEnabled ?? isGeminiPhase2ConfigEnabled(appConfig);
+  const audioMetadata: DiagnosticLogEntry['audioMetadata'] = {
     name: file.name,
     size: file.size,
     type: getAudioMimeTypeOrDefault(file),
@@ -71,7 +91,7 @@ export async function analyzeAudio(
     const phase1End = Date.now();
 
     const phase1Log: DiagnosticLogEntry = {
-      model: "local-dsp-engine",
+      model: 'local-dsp-engine',
       phase: PHASE1_LABEL,
       promptLength: dspJson?.length ?? 0,
       responseLength: JSON.stringify(backendResult.phase1).length,
@@ -79,9 +99,9 @@ export async function analyzeAudio(
       audioMetadata,
       timestamp: new Date().toISOString(),
       requestId: backendResult.requestId,
-      source: "backend",
-      status: "success",
-      message: "Local DSP analysis complete.",
+      source: 'backend',
+      status: 'success',
+      message: 'Local DSP analysis complete.',
       estimateLowMs: backendResult.diagnostics?.estimatedLowMs,
       estimateHighMs: backendResult.diagnostics?.estimatedHighMs,
       timings: backendResult.diagnostics?.timings,
@@ -91,25 +111,43 @@ export async function analyzeAudio(
     phase1Completed = true;
     throwIfUserCancelled(analysisOptions?.signal);
 
-    if (!isGeminiPhase2Available()) {
-      const phase2SkippedLog: DiagnosticLogEntry = {
-        model: "disabled",
-        phase: PHASE2_SKIPPED_LABEL,
-        promptLength: 0,
-        responseLength: 0,
-        durationMs: 0,
-        audioMetadata,
-        timestamp: new Date().toISOString(),
-        requestId: backendResult.requestId,
-        source: "system",
-        status: "skipped",
-        message: "Phase 2 advisory is disabled or missing an API key.",
-      };
-      onPhase2Complete(null, phase2SkippedLog);
+    if (!phase2Requested) {
+      onPhase2Complete(
+        null,
+        buildPhase2SkippedLog(
+          audioMetadata,
+          backendResult.requestId,
+          'Phase 2 advisory skipped because it was disabled in the UI.',
+        ),
+      );
       return;
     }
 
-    const { analyzePhase2WithGemini } = await import("./geminiPhase2Client");
+    if (!phase2ConfigEnabled) {
+      onPhase2Complete(
+        null,
+        buildPhase2SkippedLog(
+          audioMetadata,
+          backendResult.requestId,
+          'Phase 2 advisory skipped because it was disabled by configuration.',
+        ),
+      );
+      return;
+    }
+
+    if (!canRunGeminiPhase2()) {
+      onPhase2Complete(
+        null,
+        buildPhase2SkippedLog(
+          audioMetadata,
+          backendResult.requestId,
+          'Phase 2 advisory skipped because Gemini is enabled but no API key is configured.',
+        ),
+      );
+      return;
+    }
+
+    const { analyzePhase2WithGemini } = await import('./geminiPhase2Client');
     const phase2 = await raceWithCancellation(
       analyzePhase2WithGemini({
         file,

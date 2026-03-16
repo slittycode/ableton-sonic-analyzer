@@ -1,0 +1,82 @@
+{
+  "track_01_techno": {
+    "genre": "Acid Techno",
+    "bpm": 135,
+    "key": "Am",
+    "has_sidechain": true,
+    "melody_accuracy": "high",
+    "chord_accuracy": "low"
+  },
+  "track_02_house": {
+    "genre": "Deep House",
+    "bpm": 124,
+    "key": "Fm",
+    "has_sidechain": true,
+    "melody_accuracy": "high",
+    "chord_accuracy": "high"
+  },
+  "track_03_dnb": {
+    "genre": "Drum & Bass",
+    "bpm": 172,
+    "key": "Gm",
+    "has_sidechain": false,
+    "melody_accuracy": "low",
+    "chord_accuracy": "low"
+  },
+  "track_04_ambient": {
+    "genre": "Ambient",
+    "bpm": 90,
+    "key": "Dm",
+    "has_sidechain": false,
+    "melody_accuracy": "high",
+    "chord_accuracy": "high"
+  },
+  "track_05_electro": {
+    "genre": "Electro",
+    "bpm": 128,
+    "key": "Em",
+    "has_sidechain": true,
+    "melody_accuracy": "high",
+    "chord_accuracy": "high"
+  },
+  "track_06_breaks": {
+    "genre": "Breakbeat",
+    "bpm": 130,
+    "key": "Cm",
+    "has_sidechain": false,
+    "melody_accuracy": "low",
+    "chord_accuracy": "high"
+  },
+  "track_07_psy": {
+    "genre": "Psytrance",
+    "bpm": 145,
+    "key": "Fm",
+    "has_sidechain": true,
+    "melody_accuracy": "high",
+    "chord_accuracy": "low"
+  },
+  "track_08_dub": {
+    "genre": "Dub Techno",
+    "bpm": 120,
+    "key": "Gm",
+    "has_sidechain": true,
+    "melody_accuracy": "high",
+    "chord_accuracy": "high"
+  },
+  "track_09_idm": {
+    "genre": "IDM",
+    "bpm": 110,
+    "key": "Am",
+    "has_sidechain": false,
+    "melody_accuracy": "low",
+    "chord_accuracy": "low"
+  },
+  "track_10_industrial": {
+    "genre": "Industrial",
+    "bpm": 140,
+    "key": "Dm",
+    "has_sidechain": true,
+    "melody_accuracy": "low",
+    "chord_accuracy": "high"
+  }
+}

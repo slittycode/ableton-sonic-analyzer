@@ -113,7 +113,9 @@ test('CPU indicator animates during analysis', async ({ page }) => {
   await page.setInputFiles('#audio-upload', fixturePath());
   await page.getByRole('button', { name: /Initiate Analysis/i }).click();
 
-  const cpuBar = page.locator('.animate-pulse').first();
+  await expect(page.getByText('CPU')).toBeVisible();
+
+  const cpuBar = page.getByTestId('cpu-meter-fill');
   await expect(cpuBar).toBeVisible();
 
   await expect(page.getByText('Analysis Results')).toBeVisible();

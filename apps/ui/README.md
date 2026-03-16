@@ -64,8 +64,8 @@ cp .env.example .env
 | Variable | Meaning | Current behavior |
 | --- | --- | --- |
 | `VITE_API_BASE_URL` | Base URL for the backend API. | `src/config.ts` falls back to `http://127.0.0.1:8100` when unset. The checked-in `.env.example` uses `http://127.0.0.1:8100`. If another FastAPI app is answering on your configured URL, the UI now reports that it found the wrong service and disables `Initiate Analysis`. |
-| `VITE_ENABLE_PHASE2_GEMINI` | Enables the optional Gemini pass. | Must be `"true"` to allow Phase 2. |
-| `VITE_GEMINI_API_KEY` | Gemini API key. | Phase 2 only runs when this value is non-empty and `VITE_ENABLE_PHASE2_GEMINI=true`. |
+| `VITE_ENABLE_PHASE2_GEMINI` | Hard kill-switch for the optional Gemini pass. | Defaults to `"true"` when unset. Set it to `"false"` only when you want to disable Phase 2 for the whole build. |
+| `VITE_GEMINI_API_KEY` | Gemini API key. | Phase 2 is on by default in the UI, but the advisory run is blocked until this value is non-empty. |
 | `RUN_GEMINI_LIVE_SMOKE` | Enables the opt-in live Playwright proof for the Gemini Files API path. | Must be `"true"` to run `npm run test:smoke:live-gemini`; default smoke coverage keeps Gemini mocked. |
 | `DISABLE_HMR` | Vite dev-server knob. | `vite.config.ts` disables HMR only when this is `"true"`. |
 
@@ -74,6 +74,43 @@ cp .env.example .env
 Recommended full-stack launcher from the monorepo root:
 
 ```bash
+./scripts/dev.sh
+```
+
+`./scripts/dev.sh` now reads `apps/ui/.env` before starting Vite. The simplest
+persistent local setup is:
+
+```bash
+cd apps/ui
+cp .env.example .env
+```
+
+Then set:
+
+```bash
+VITE_API_BASE_URL="http://127.0.0.1:8100"
+VITE_ENABLE_PHASE2_GEMINI="true"
+VITE_GEMINI_API_KEY="your_real_key_here"
+```
+
+Supported shell-based overrides:
+
+```bash
+export VITE_GEMINI_API_KEY="your_real_key_here"
+cd /Users/christiansmith/code/projects/ableton-sonic-analyzer
+./scripts/dev.sh
+```
+
+```bash
+cd /Users/christiansmith/code/projects/ableton-sonic-analyzer
+VITE_GEMINI_API_KEY="your_real_key_here" ./scripts/dev.sh
+```
+
+This does **not** work because the variable is only local to the shell line and
+is not exported to the next command:
+
+```bash
+VITE_GEMINI_API_KEY="your_real_key_here"
 ./scripts/dev.sh
 ```
 
@@ -234,7 +271,9 @@ Phase 2 is optional and entirely frontend-owned.
 
 Current behavior:
 
-- Phase 2 is skipped when Gemini is disabled or `VITE_GEMINI_API_KEY` is missing.
+- Phase 2 is on by default unless `VITE_ENABLE_PHASE2_GEMINI="false"` is used as a hard kill-switch.
+- The app remembers the user's `PHASE 2 ADVISORY` toggle in browser storage.
+- If the UI toggle is on but `VITE_GEMINI_API_KEY` is missing, analysis start is blocked and the app tells you to either update `apps/ui/.env`, `export VITE_GEMINI_API_KEY=...`, or run `VITE_GEMINI_API_KEY=... ./scripts/dev.sh`.
 - The user can choose from the baked-in Gemini model list in `src/App.tsx`.
 - The prompt uses the uploaded audio file plus the completed `phase1` payload.
 - Phase 2 results drive the arrangement narrative, sonic element cards, mix chain, patch framework, secret sauce, and recommendation sections.

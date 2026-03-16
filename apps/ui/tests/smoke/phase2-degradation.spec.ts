@@ -1,6 +1,8 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { disablePhase2ForTest, enablePhase2ForTest } from './runtimeEnv';
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -29,13 +31,31 @@ function fixturePath(): string {
   return path.resolve(testDir, './fixtures/silence.wav');
 }
 
-function stubAnalyzeRoute(page: import('@playwright/test').Page) {
+function stubEstimateRoute(page: import('@playwright/test').Page, requestId: string) {
+  return page.route('**/api/analyze/estimate', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        requestId,
+        estimate: {
+          durationSeconds: 10,
+          totalLowMs: 22000,
+          totalHighMs: 38000,
+          stages: [{ key: 'local_dsp', label: 'Local DSP analysis', lowMs: 22000, highMs: 38000 }],
+        },
+      }),
+    });
+  });
+}
+
+function stubAnalyzeRoute(page: import('@playwright/test').Page, requestId = 'req_phase2_degrade') {
   return page.route('**/api/analyze', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        requestId: 'req_phase2_degrade',
+        requestId,
         phase1: PHASE1_STUB,
         diagnostics: { backendDurationMs: 400, engineVersion: 'smoke' },
       }),
@@ -43,66 +63,84 @@ function stubAnalyzeRoute(page: import('@playwright/test').Page) {
   });
 }
 
-test('Phase 2 OFF indicator shown when Gemini feature flag is disabled', async ({ page }) => {
-  await page.route('**/api/analyze/estimate', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        requestId: 'req_est_p2off',
-        estimate: {
-          durationSeconds: 10,
-          totalLowMs: 22000,
-          totalHighMs: 38000,
-          stages: [{ key: 'local_dsp', label: 'Local DSP analysis', lowMs: 22000, highMs: 38000 }],
-        },
-      }),
-    });
-  });
+async function expectAnalysisResultsVisible(page: import('@playwright/test').Page) {
+  await expect(page.getByText('Analysis Results')).toBeVisible({ timeout: 15_000 });
+}
+
+test('Phase 2 controls show config-disabled state when the env kill-switch is off', async ({ page }) => {
+  await disablePhase2ForTest(page);
+  await stubEstimateRoute(page, 'req_est_p2off');
   await stubAnalyzeRoute(page);
 
   await page.goto('/', { waitUntil: 'networkidle' });
 
-  // Phase 2 is controlled by Vite env vars baked at build time.
-  // If Phase 2 is enabled in this environment, skip the test.
-  const phase2OffVisible = await page.getByText('PHASE 2 OFF').count();
-  if (phase2OffVisible === 0) {
-    test.skip(true, 'Phase 2 Gemini is enabled in this test environment — PHASE 2 OFF label is not rendered.');
-    return;
-  }
-
-  await expect(page.getByText('PHASE 2 OFF')).toBeVisible();
-  await expect(page.getByText('Phase 2 Model')).toBeVisible();
+  await expect(page.getByLabel('PHASE 2 ADVISORY')).toBeDisabled();
+  await expect(page.getByTestId('phase2-status-inline')).toHaveText('PHASE 2 CONFIG OFF');
+  await expect(page.getByTestId('phase2-model-desktop')).toBeDisabled();
 
   await page.setInputFiles('#audio-upload', fixturePath());
   await page.getByRole('button', { name: /Initiate Analysis/i }).click();
 
-  await expect(page.getByText('Analysis Results')).toBeVisible();
+  await expectAnalysisResultsVisible(page);
   await expect(page.getByText('126')).toBeVisible();
+  await expect(
+    page.getByText('Phase 2 advisory skipped because it was disabled by configuration.', { exact: true }).first(),
+  ).toBeVisible();
+});
+
+test('turning Phase 2 off in the UI runs Phase 1 only and records the user-disabled reason', async ({ page }) => {
+  await enablePhase2ForTest(page);
+  await stubEstimateRoute(page, 'req_est_user_off');
+  await stubAnalyzeRoute(page, 'req_user_off');
+
+  await page.goto('/', { waitUntil: 'networkidle' });
+  await page.setInputFiles('#audio-upload', fixturePath());
+  await page.getByLabel('PHASE 2 ADVISORY').uncheck();
+
+  await expect(page.getByTestId('phase2-status-inline')).toHaveText('PHASE 2 USER OFF');
+
+  await page.getByRole('button', { name: /Initiate Analysis/i }).click();
+
+  await expectAnalysisResultsVisible(page);
+  await expect(
+    page.getByText('Phase 2 advisory skipped because it was disabled in the UI.', { exact: true }).first(),
+  ).toBeVisible();
+});
+
+test('Phase 2 start is blocked when the UI requests Gemini but no API key is configured', async ({ page }) => {
+  let analyzeCalled = false;
+
+  await page.addInitScript(() => {
+    window.__VITE_ENABLE_PHASE2_GEMINI_OVERRIDE__ = 'true';
+    window.__VITE_GEMINI_API_KEY_OVERRIDE__ = '';
+  });
+  await stubEstimateRoute(page, 'req_est_no_key');
+  await page.route('**/api/analyze', async (route) => {
+    analyzeCalled = true;
+    await route.abort();
+  });
+
+  await page.goto('/', { waitUntil: 'networkidle' });
+  await page.setInputFiles('#audio-upload', fixturePath());
+
+  await expect(page.getByTestId('phase2-status-inline')).toHaveText('PHASE 2 KEY MISSING');
+  await expect(page.getByText(/apps\/ui\/\.env/i)).toBeVisible();
+
+  await page.getByRole('button', { name: /Initiate Analysis/i }).click();
+
+  await expect(
+    page.getByText(/ERROR: Phase 2 Advisory is enabled, but VITE_GEMINI_API_KEY is missing\./i),
+  ).toBeVisible();
+  await expect(page.getByText(/export VITE_GEMINI_API_KEY=/i).first()).toBeVisible();
+  await expect(page.getByText(/VITE_GEMINI_API_KEY=\.\.\. \.\/scripts\/dev\.sh/i).first()).toBeVisible();
+  expect(analyzeCalled).toBe(false);
+  await expect(page.getByText('Analysis Results')).toHaveCount(0);
 });
 
 test('malformed Gemini Phase 2 response degrades gracefully to skipped', async ({ page }) => {
-  await page.addInitScript(() => {
-    (window as unknown as Record<string, string>).__VITE_ENABLE_PHASE2_GEMINI_OVERRIDE__ = 'true';
-  });
-
-  await page.route('**/api/analyze/estimate', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        requestId: 'req_est_p2_malformed',
-        estimate: {
-          durationSeconds: 10,
-          totalLowMs: 22000,
-          totalHighMs: 38000,
-          stages: [{ key: 'local_dsp', label: 'Local DSP analysis', lowMs: 22000, highMs: 38000 }],
-        },
-      }),
-    });
-  });
-  await stubAnalyzeRoute(page);
-
+  await enablePhase2ForTest(page);
+  await stubEstimateRoute(page, 'req_est_p2_malformed');
+  await stubAnalyzeRoute(page, 'req_p2_malformed');
   await page.route('**://generativelanguage.googleapis.com/**', async (route) => {
     await route.fulfill({
       status: 200,
@@ -122,16 +160,14 @@ test('malformed Gemini Phase 2 response degrades gracefully to skipped', async (
 
   await page.goto('/', { waitUntil: 'networkidle' });
   await page.setInputFiles('#audio-upload', fixturePath());
-
-  const phase2Enabled = await page.getByText('PHASE 2 OFF').count();
-
-  if (phase2Enabled > 0) {
-    test.skip(true, 'Phase 2 Gemini is not enabled in this test environment — cannot test degradation path.');
-    return;
-  }
+  await expect(page.getByLabel('PHASE 2 ADVISORY')).toBeChecked();
 
   await page.getByRole('button', { name: /Initiate Analysis/i }).click();
-  await expect(page.getByText('Analysis Results')).toBeVisible();
+
+  await expectAnalysisResultsVisible(page);
   await expect(page.getByText('126')).toBeVisible();
   await expect(page.getByText('System Diagnostics')).toBeVisible();
+  await expect(
+    page.getByText('Phase 2 advisory skipped because Gemini returned invalid JSON.', { exact: true }).first(),
+  ).toBeVisible();
 });

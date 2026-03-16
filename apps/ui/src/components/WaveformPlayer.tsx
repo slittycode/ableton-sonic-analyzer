@@ -1,11 +1,18 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import WaveSurfer from 'wavesurfer.js';
 import { Play, Pause, Loader2, Activity } from 'lucide-react';
+
+import { isSpectrumActive, nextPeakValue } from './waveformPlayerUtils';
 
 interface WaveformPlayerProps {
   audioUrl: string;
   audioFile?: File;
 }
+
+const BAR_COUNT = 64;
+const PEAK_DROP_RATE = 2;
+const SEGMENT_HEIGHT = 4;
+const SEGMENT_GAP = 1;
 
 export function WaveformPlayer({ audioUrl, audioFile }: WaveformPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -13,17 +20,141 @@ export function WaveformPlayer({ audioUrl, audioFile }: WaveformPlayerProps) {
   const wavesurferRef = useRef<WaveSurfer | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isReady, setIsReady] = useState(false);
-  
+  const [isSeekPreviewActive, setIsSeekPreviewActive] = useState(false);
+
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
   const animationRef = useRef<number | null>(null);
+  const frequencyDataRef = useRef<Uint8Array | null>(null);
+  const peakDataRef = useRef<Uint8Array | null>(null);
+  const seekingRef = useRef(false);
+  const seekPreviewTimeoutRef = useRef<number | null>(null);
+
+  const stopSpectrumLoop = useCallback(() => {
+    if (animationRef.current !== null) {
+      cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
+    }
+  }, []);
+
+  const clearSeekPreview = useCallback(() => {
+    if (seekPreviewTimeoutRef.current !== null) {
+      window.clearTimeout(seekPreviewTimeoutRef.current);
+      seekPreviewTimeoutRef.current = null;
+    }
+    setIsSeekPreviewActive(false);
+  }, []);
+
+  const ensureSpectrumBuffers = useCallback((bufferLength: number) => {
+    if (!frequencyDataRef.current || frequencyDataRef.current.length !== bufferLength) {
+      frequencyDataRef.current = new Uint8Array(bufferLength);
+    }
+
+    if (!peakDataRef.current || peakDataRef.current.length !== BAR_COUNT) {
+      peakDataRef.current = new Uint8Array(BAR_COUNT);
+    }
+
+    return {
+      frequencyData: frequencyDataRef.current,
+      peakData: peakDataRef.current,
+    };
+  }, []);
+
+  const drawSpectrumFrame = useCallback(() => {
+    const canvas = canvasRef.current;
+    const analyser = analyserRef.current;
+    if (!canvas || !analyser) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const bufferLength = analyser.frequencyBinCount;
+    const { frequencyData, peakData } = ensureSpectrumBuffers(bufferLength);
+
+    analyser.getByteFrequencyData(frequencyData);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const barWidth = canvas.width / BAR_COUNT;
+    const effectiveBarWidth = Math.max(1, barWidth - 2);
+    const step = Math.max(1, Math.floor(bufferLength / BAR_COUNT / 1.5));
+
+    for (let i = 0; i < BAR_COUNT; i++) {
+      const dataIndex = Math.min(bufferLength - 1, i * step);
+      const value = frequencyData[dataIndex];
+      peakData[i] = nextPeakValue(peakData[i], value, PEAK_DROP_RATE);
+
+      const height = (value / 255) * canvas.height;
+      const x = i * barWidth;
+      const segmentCount = Math.floor(height / (SEGMENT_HEIGHT + SEGMENT_GAP));
+
+      for (let j = 0; j < segmentCount; j++) {
+        const segmentY = canvas.height - (j * (SEGMENT_HEIGHT + SEGMENT_GAP)) - SEGMENT_HEIGHT;
+
+        let fillStyle = '#ff8800';
+        if (j > 20) fillStyle = '#ff4444';
+        else if (j > 15) fillStyle = '#ffcc00';
+
+        ctx.fillStyle = fillStyle;
+        ctx.globalAlpha = 0.8;
+        ctx.fillRect(x, segmentY, effectiveBarWidth, SEGMENT_HEIGHT);
+      }
+
+      const peakY = canvas.height - (peakData[i] / 255) * canvas.height;
+      ctx.fillStyle = '#ffffff';
+      ctx.globalAlpha = 0.5;
+      ctx.fillRect(x, peakY, effectiveBarWidth, 2);
+    }
+
+    ctx.globalAlpha = 1;
+
+    if (isSpectrumActive(wavesurferRef.current?.isPlaying() ?? false, seekingRef.current)) {
+      animationRef.current = requestAnimationFrame(drawSpectrumFrame);
+      return;
+    }
+
+    animationRef.current = null;
+  }, [ensureSpectrumBuffers]);
+
+  const startSpectrumLoop = useCallback(() => {
+    if (animationRef.current !== null) return;
+    drawSpectrumFrame();
+  }, [drawSpectrumFrame]);
+
+  const redrawSpectrum = useCallback(() => {
+    stopSpectrumLoop();
+    drawSpectrumFrame();
+  }, [drawSpectrumFrame, stopSpectrumLoop]);
+
+  const setupAnalyzer = useCallback((mediaElement: HTMLMediaElement) => {
+    try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      if (!analyserRef.current) {
+        analyserRef.current = audioContextRef.current.createAnalyser();
+        analyserRef.current.fftSize = 256;
+      }
+      if (!sourceRef.current) {
+        sourceRef.current = audioContextRef.current.createMediaElementSource(mediaElement);
+        sourceRef.current.connect(analyserRef.current);
+        analyserRef.current.connect(audioContextRef.current.destination);
+      }
+    } catch (e) {
+      console.error('Error setting up audio analyzer:', e);
+    }
+  }, []);
 
   useEffect(() => {
     if (!containerRef.current) return;
-    
+
     setIsReady(false);
     setIsPlaying(false);
+    clearSeekPreview();
+    stopSpectrumLoop();
+    seekingRef.current = false;
+    frequencyDataRef.current = null;
+    peakDataRef.current = null;
 
     const ws = WaveSurfer.create({
       container: containerRef.current,
@@ -39,10 +170,12 @@ export function WaveformPlayer({ audioUrl, audioFile }: WaveformPlayerProps) {
     });
 
     wavesurferRef.current = ws;
+    const mediaElement = ws.getMediaElement();
 
     const handleReady = () => {
       setIsReady(true);
-      setupAnalyzer(ws.getMediaElement());
+      setupAnalyzer(mediaElement);
+      redrawSpectrum();
     };
 
     ws.on('ready', handleReady);
@@ -55,150 +188,86 @@ export function WaveformPlayer({ audioUrl, audioFile }: WaveformPlayerProps) {
 
     ws.on('play', () => {
       setIsPlaying(true);
+      clearSeekPreview();
       if (audioContextRef.current?.state === 'suspended') {
-        audioContextRef.current.resume();
+        void audioContextRef.current.resume();
       }
-      drawSpectrum();
+      startSpectrumLoop();
     });
-    
+
     ws.on('pause', () => {
       setIsPlaying(false);
-      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      if (!seekingRef.current) {
+        stopSpectrumLoop();
+      }
     });
-    
+
     ws.on('finish', () => {
       setIsPlaying(false);
-      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      seekingRef.current = false;
+      clearSeekPreview();
+      stopSpectrumLoop();
     });
+
+    const handleSeeking = () => {
+      seekingRef.current = true;
+      clearSeekPreview();
+      setIsSeekPreviewActive(true);
+      startSpectrumLoop();
+    };
+
+    const handleSeeked = () => {
+      seekingRef.current = false;
+      redrawSpectrum();
+      clearSeekPreview();
+      seekPreviewTimeoutRef.current = window.setTimeout(() => {
+        setIsSeekPreviewActive(false);
+        seekPreviewTimeoutRef.current = null;
+      }, 180);
+    };
+
+    mediaElement.addEventListener('seeking', handleSeeking);
+    mediaElement.addEventListener('seeked', handleSeeked);
 
     // Load the audio explicitly
     if (audioFile) {
-      ws.loadBlob(audioFile).catch(err => {
-        console.error("WaveSurfer loadBlob error:", err);
+      ws.loadBlob(audioFile).catch((err) => {
+        console.error('WaveSurfer loadBlob error:', err);
       });
     } else {
-      ws.load(audioUrl).catch(err => {
-        console.error("WaveSurfer load error:", err);
+      ws.load(audioUrl).catch((err) => {
+        console.error('WaveSurfer load error:', err);
       });
     }
 
     return () => {
-      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      mediaElement.removeEventListener('seeking', handleSeeking);
+      mediaElement.removeEventListener('seeked', handleSeeked);
+      clearSeekPreview();
+      stopSpectrumLoop();
       if (sourceRef.current) {
-        try { sourceRef.current.disconnect(); } catch (e) {}
+        try {
+          sourceRef.current.disconnect();
+        } catch (e) {}
         sourceRef.current = null;
       }
       if (analyserRef.current) {
-        try { analyserRef.current.disconnect(); } catch (e) {}
+        try {
+          analyserRef.current.disconnect();
+        } catch (e) {}
         analyserRef.current = null;
       }
       if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-        try { audioContextRef.current.close(); } catch (e) {}
+        try {
+          void audioContextRef.current.close();
+        } catch (e) {}
         audioContextRef.current = null;
       }
+      frequencyDataRef.current = null;
+      peakDataRef.current = null;
       ws.destroy();
     };
-  }, [audioUrl, audioFile]);
-
-  const setupAnalyzer = (mediaElement: HTMLMediaElement) => {
-    try {
-      if (!audioContextRef.current) {
-        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-      }
-      if (!analyserRef.current) {
-        analyserRef.current = audioContextRef.current.createAnalyser();
-        analyserRef.current.fftSize = 256;
-      }
-      if (!sourceRef.current) {
-        sourceRef.current = audioContextRef.current.createMediaElementSource(mediaElement);
-        sourceRef.current.connect(analyserRef.current);
-        analyserRef.current.connect(audioContextRef.current.destination);
-      }
-    } catch (e) {
-      console.error("Error setting up audio analyzer:", e);
-    }
-  };
-
-  const drawSpectrum = () => {
-    if (!canvasRef.current || !analyserRef.current) return;
-    
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-      const bufferLength = analyserRef.current.frequencyBinCount;
-      const dataArray = new Uint8Array(bufferLength);
-      
-      // Peak hold functionality
-      const peakData = new Uint8Array(bufferLength).fill(0);
-      const peakDropRate = 2;
-
-      const draw = () => {
-        if (!wavesurferRef.current?.isPlaying()) {
-          setIsPlaying(false);
-          return;
-        }
-        animationRef.current = requestAnimationFrame(draw);
-
-        analyserRef.current!.getByteFrequencyData(dataArray);
-
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        // Visualizer settings
-        const barCount = 64; // Number of bars to draw
-        const barWidth = canvas.width / barCount;
-        const gap = 2;
-        const effectiveBarWidth = barWidth - gap;
-        
-        // We only use the lower half of the frequency data for better visuals (most music energy is there)
-        const step = Math.floor(bufferLength / barCount / 1.5); 
-
-        for (let i = 0; i < barCount; i++) {
-          const dataIndex = i * step;
-          let value = dataArray[dataIndex];
-          
-          // Peak hold logic
-          if (value > peakData[i]) {
-            peakData[i] = value;
-          } else {
-            peakData[i] = Math.max(0, peakData[i] - peakDropRate);
-          }
-
-          const percent = value / 255;
-          const height = percent * canvas.height;
-          const x = i * barWidth;
-          const y = canvas.height - height;
-
-          // Draw LED bars (segmented)
-          const segmentHeight = 4;
-          const segmentGap = 1;
-          const segmentCount = Math.floor(height / (segmentHeight + segmentGap));
-
-          for (let j = 0; j < segmentCount; j++) {
-            const segmentY = canvas.height - (j * (segmentHeight + segmentGap)) - segmentHeight;
-            
-            // Color gradient based on height
-            let fillStyle = '#ff8800'; // Default orange
-            if (j > 20) fillStyle = '#ff4444'; // Red at top
-            else if (j > 15) fillStyle = '#ffcc00'; // Yellow
-            
-            ctx.fillStyle = fillStyle;
-            ctx.globalAlpha = 0.8;
-            ctx.fillRect(x, segmentY, effectiveBarWidth, segmentHeight);
-          }
-          
-          // Draw Peak
-          const peakY = canvas.height - (peakData[i] / 255) * canvas.height;
-          ctx.fillStyle = '#ffffff';
-          ctx.globalAlpha = 0.5;
-          ctx.fillRect(x, peakY, effectiveBarWidth, 2);
-          
-          ctx.globalAlpha = 1.0;
-        }
-      };
-
-      draw();
-    };
+  }, [audioFile, audioUrl, clearSeekPreview, redrawSpectrum, setupAnalyzer, startSpectrumLoop, stopSpectrumLoop]);
 
   const togglePlay = () => {
     if (wavesurferRef.current && isReady) {
@@ -252,7 +321,7 @@ export function WaveformPlayer({ audioUrl, audioFile }: WaveformPlayerProps) {
           className="w-full h-full object-fill opacity-90 relative z-10"
         />
         
-        {!isPlaying && isReady && (
+        {!isPlaying && isReady && !isSeekPreviewActive && (
           <div className="absolute inset-0 flex flex-col items-center justify-center z-30">
             <p className="text-xs text-accent font-mono uppercase tracking-widest">Awaiting Signal</p>
             <p className="text-[10px] text-text-secondary font-mono mt-1">PRESS PLAY TO INITIALIZE SPECTRAL ANALYSIS</p>

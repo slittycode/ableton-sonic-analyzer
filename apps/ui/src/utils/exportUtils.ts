@@ -39,7 +39,11 @@ function formatMixAndMasterChainMarkdown(mixAndMasterChain: Phase2Result['mixAnd
     .join('\n');
 }
 
-export function generateMarkdown(phase1: Phase1Result, phase2: Phase2Result | null): string {
+export function generateMarkdown(
+  phase1: Phase1Result,
+  phase2: Phase2Result | null,
+  phase2StatusMessage: string | null = null,
+): string {
   let md = '# Track Analysis Report\n\n';
 
   md += '## Phase 1 Metadata\n';
@@ -64,7 +68,7 @@ export function generateMarkdown(phase1: Phase1Result, phase2: Phase2Result | nu
 
   if (!phase2) {
     md += '## Phase 2\n';
-    md += 'Phase 2 (Gemini reconstruction advice) was skipped or unavailable.\n';
+    md += `${phase2StatusMessage ?? 'Phase 2 (Gemini reconstruction advice) was skipped or unavailable.'}\n`;
     return md;
   }
 

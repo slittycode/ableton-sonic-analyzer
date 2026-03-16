@@ -18,6 +18,7 @@ import { downloadFile, generateMarkdown } from '../utils/exportUtils';
 import { PHASE2_LABEL } from '../services/phaseLabels';
 import { SessionMusicianPanel } from './SessionMusicianPanel';
 import { PhaseSourceBadge } from './PhaseSourceBadge';
+import { StickyNav, type StickyNavSection } from './StickyNav';
 import {
   buildArrangementViewModel,
   buildMixChainGroups,
@@ -32,6 +33,7 @@ import {
 interface AnalysisResultsProps {
   phase1: Phase1Result | null;
   phase2: Phase2Result | null;
+  phase2StatusMessage?: string | null;
   sourceFileName?: string | null;
 }
 
@@ -136,7 +138,12 @@ function getChordStrength(phase1: Phase1Result): number | null {
   return toFiniteNumber((chordDetail as Record<string, unknown>).chordStrength);
 }
 
-export function AnalysisResults({ phase1, phase2, sourceFileName = null }: AnalysisResultsProps) {
+export function AnalysisResults({
+  phase1,
+  phase2,
+  phase2StatusMessage = null,
+  sourceFileName = null,
+}: AnalysisResultsProps) {
   const [openArrangement, setOpenArrangement] = useState<Record<string, boolean>>({});
   const [openSonic, setOpenSonic] = useState<Set<string>>(new Set());
   const [openMix, setOpenMix] = useState<Record<string, boolean>>({});
@@ -156,7 +163,7 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
   };
 
   const handleExportMD = () => {
-    const markdown = generateMarkdown(phase1, phase2);
+    const markdown = generateMarkdown(phase1, phase2, phase2StatusMessage);
     downloadFile(markdown, 'track-analysis.md', 'text/markdown');
   };
 
@@ -198,6 +205,13 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
     sonicCards.length > 0 ||
     mixGroups.length > 0 ||
     patchCards.length > 0;
+  const navSections: StickyNavSection[] = [
+    arrangement ? { id: 'section-arrangement', label: 'Arrangement' } : null,
+    { id: 'section-session', label: 'Session' },
+    sonicCards.length > 0 ? { id: 'section-sonic-elements', label: 'Sonic' } : null,
+    mixGroups.length > 0 ? { id: 'section-mix-chain', label: 'Mix Chain' } : null,
+    patchCards.length > 0 ? { id: 'section-patches', label: 'Patches' } : null,
+  ].filter((section): section is StickyNavSection => section !== null);
 
   return (
     <motion.div
@@ -233,6 +247,8 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
           </button>
         </div>
       </div>
+
+      <StickyNav sections={navSections} />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 auto-rows-fr">
         <div className="bg-bg-panel border border-border rounded-sm p-1 relative group overflow-hidden">
@@ -368,7 +384,12 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
         <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">
           Interpretive guidance generated from DSP measurements. Not a ground-truth measurement.
         </p>
-        {!hasRenderablePhase2Content && (
+        {phase2StatusMessage && !phase2 && (
+          <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+            {phase2StatusMessage}
+          </p>
+        )}
+        {!hasRenderablePhase2Content && !phase2StatusMessage && (
           <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">
             Draft — Phase 2 output is incomplete or unavailable.
           </p>
@@ -428,7 +449,7 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
       )}
 
       {arrangement && (
-        <div className="space-y-6">
+        <section id="section-arrangement" className="space-y-6 scroll-mt-24">
           <div className="flex items-center justify-between border-b border-border pb-2">
             <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
               <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
@@ -571,13 +592,15 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
               })}
             </div>
           </div>
-        </div>
+        </section>
       )}
 
-      <SessionMusicianPanel phase1={phase1} sourceFileName={sourceFileName} />
+      <div id="section-session" className="scroll-mt-24">
+        <SessionMusicianPanel phase1={phase1} sourceFileName={sourceFileName} />
+      </div>
 
       {sonicCards.length > 0 && (
-        <div className="space-y-6">
+        <section id="section-sonic-elements" className="space-y-6 scroll-mt-24">
           <div className="flex items-center justify-between border-b border-border pb-2">
             <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
               <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
@@ -590,7 +613,10 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
             {sonicCards.map((card) => {
               const isOpen = openSonic.has(card.id);
               return (
-                <div key={card.id} className="bg-bg-card border border-border rounded-sm overflow-hidden self-start flex flex-col">
+                <div
+                  key={card.id}
+                  className="bg-bg-card border border-border rounded-sm overflow-hidden self-start flex flex-col transition-colors hover:border-accent/40 hover:bg-bg-card-hover/70"
+                >
                   <button
                     onClick={() => toggleSonic(card.id)}
                     className="w-full px-4 py-3 border-b border-border bg-bg-panel/60 text-left hover:bg-bg-panel transition-colors"
@@ -661,11 +687,11 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
               );
             })}
           </div>
-        </div>
+        </section>
       )}
 
       {mixGroups.length > 0 && (
-        <div className="space-y-6">
+        <section id="section-mix-chain" className="space-y-6 scroll-mt-24">
           <div className="flex items-center justify-between border-b border-border pb-2">
             <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
               <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
@@ -694,7 +720,7 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
                     return (
                       <div
                         key={card.id}
-                        className="bg-bg-card border border-border rounded-sm overflow-hidden self-start"
+                        className="bg-bg-card border border-border rounded-sm overflow-hidden self-start transition-colors hover:border-accent/40 hover:bg-bg-card-hover/70"
                       >
                         <button
                           onClick={() => toggleMix(card.id)}
@@ -752,11 +778,11 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
               </section>
             ))}
           </div>
-        </div>
+        </section>
       )}
 
       {patchCards.length > 0 && (
-        <div className="space-y-6">
+        <section id="section-patches" className="space-y-6 scroll-mt-24">
           <div className="flex items-center justify-between border-b border-border pb-2">
             <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
               <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
@@ -771,7 +797,7 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
               return (
                 <div
                   key={patch.id}
-                  className="bg-bg-card border border-border rounded-sm overflow-hidden self-start"
+                  className="bg-bg-card border border-border rounded-sm overflow-hidden self-start transition-colors hover:border-accent/40 hover:bg-bg-card-hover/70"
                 >
                   <button
                     onClick={() => togglePatch(patch.id)}
@@ -829,7 +855,7 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
               );
             })}
           </div>
-        </div>
+        </section>
       )}
 
       {phase2?.secretSauce && (

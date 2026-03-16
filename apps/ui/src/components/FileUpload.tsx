@@ -6,14 +6,23 @@ import { isSupportedAudioFile } from '../services/audioFile';
 interface FileUploadProps {
   onFileSelect: (file: File) => void;
   onFileClear: () => void;
+  onLoadDemoTrack: () => Promise<void> | void;
   isLoading: boolean;
+  isDemoLoading?: boolean;
+  selectedFile: File | null;
 }
 
 const FILE_SIZE_WARNING_BYTES = 100 * 1024 * 1024; // 100 MB
 
-export function FileUpload({ onFileSelect, onFileClear, isLoading }: FileUploadProps) {
+export function FileUpload({
+  onFileSelect,
+  onFileClear,
+  onLoadDemoTrack,
+  isLoading,
+  isDemoLoading = false,
+  selectedFile,
+}: FileUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [fileSizeWarning, setFileSizeWarning] = useState<string | null>(null);
   const dismissTimerRef = useRef<ReturnType<typeof setTimeout>>();
@@ -24,11 +33,32 @@ export function FileUpload({ onFileSelect, onFileClear, isLoading }: FileUploadP
     };
   }, []);
 
+  useEffect(() => {
+    if (!selectedFile) {
+      setFileSizeWarning(null);
+      return;
+    }
+
+    setFileSizeWarning(
+      selectedFile.size > FILE_SIZE_WARNING_BYTES
+        ? `Large file (${(selectedFile.size / (1024 * 1024)).toFixed(0)} MB). Analysis may take significantly longer.`
+        : null,
+    );
+  }, [selectedFile]);
+
   const showFileError = useCallback((msg: string) => {
     setFileError(msg);
     if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
     dismissTimerRef.current = setTimeout(() => setFileError(null), 4000);
   }, []);
+
+  const handleAcceptedFile = useCallback(
+    (file: File) => {
+      setFileError(null);
+      onFileSelect(file);
+    },
+    [onFileSelect],
+  );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -44,31 +74,24 @@ export function FileUpload({ onFileSelect, onFileClear, isLoading }: FileUploadP
     (e: React.DragEvent) => {
       e.preventDefault();
       setIsDragging(false);
-      if (isLoading) return;
+      if (isLoading || isDemoLoading) return;
 
       const files = e.dataTransfer.files;
       if (files && files.length > 0) {
         const file = files[0];
         if (isSupportedAudioFile(file)) {
-          setFileError(null);
-          setFileSizeWarning(
-            file.size > FILE_SIZE_WARNING_BYTES
-              ? `Large file (${(file.size / (1024 * 1024)).toFixed(0)} MB). Analysis may take significantly longer.`
-              : null,
-          );
-          setSelectedFile(file);
-          onFileSelect(file);
+          handleAcceptedFile(file);
         } else {
           showFileError('File type not supported. Please upload MP3, WAV, FLAC, or AIFF.');
         }
       }
     },
-    [onFileSelect, isLoading, showFileError]
+    [handleAcceptedFile, isDemoLoading, isLoading, showFileError],
   );
 
   const handleFileInput = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (isLoading) return;
+      if (isLoading || isDemoLoading) return;
       const files = e.target.files;
       if (files && files.length > 0) {
         const file = files[0];
@@ -76,23 +99,14 @@ export function FileUpload({ onFileSelect, onFileClear, isLoading }: FileUploadP
           showFileError('File type not supported. Please upload MP3, WAV, FLAC, or AIFF.');
           return;
         }
-        setFileError(null);
-        setFileSizeWarning(
-          file.size > FILE_SIZE_WARNING_BYTES
-            ? `Large file (${(file.size / (1024 * 1024)).toFixed(0)} MB). Analysis may take significantly longer.`
-            : null,
-        );
-        setSelectedFile(file);
-        onFileSelect(file);
+        handleAcceptedFile(file);
       }
     },
-    [onFileSelect, isLoading, showFileError]
+    [handleAcceptedFile, isDemoLoading, isLoading, showFileError],
   );
 
   const clearFile = () => {
     if (isLoading) return;
-    setSelectedFile(null);
-    setFileSizeWarning(null);
     onFileClear();
   };
 
@@ -109,8 +123,8 @@ export function FileUpload({ onFileSelect, onFileClear, isLoading }: FileUploadP
               : isDragging
                 ? 'border-accent bg-accent/5'
                 : 'border-border bg-bg-card hover:border-text-secondary/50 hover:bg-bg-card-hover'
-          } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-          onClick={() => !isLoading && document.getElementById('audio-upload')?.click()}
+          } ${isLoading || isDemoLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+          onClick={() => !isLoading && !isDemoLoading && document.getElementById('audio-upload')?.click()}
         >
           <input
             type="file"
@@ -118,7 +132,7 @@ export function FileUpload({ onFileSelect, onFileClear, isLoading }: FileUploadP
             accept="audio/*"
             className="hidden"
             onChange={handleFileInput}
-            disabled={isLoading}
+            disabled={isLoading || isDemoLoading}
           />
           <div className="w-12 h-12 rounded-sm bg-bg-panel border border-border flex items-center justify-center mb-4 group-hover:border-accent/50 transition-colors">
             <UploadCloud className="w-6 h-6 text-text-secondary group-hover:text-accent transition-colors" />
@@ -132,6 +146,17 @@ export function FileUpload({ onFileSelect, onFileClear, isLoading }: FileUploadP
                </span>
              ))}
           </div>
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              void onLoadDemoTrack();
+            }}
+            disabled={isLoading || isDemoLoading}
+            className="mt-4 rounded-sm border border-border bg-bg-panel px-3 py-1.5 text-[10px] font-mono uppercase tracking-wider text-text-secondary transition-colors hover:border-accent/40 hover:text-accent disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isDemoLoading ? 'Loading Demo...' : 'Load Demo Track'}
+          </button>
           {fileError && (
             <div className="mt-3 flex items-center gap-2 text-error text-[10px] font-mono uppercase tracking-wider" role="alert">
               <AlertTriangle className="w-3.5 h-3.5 shrink-0" />

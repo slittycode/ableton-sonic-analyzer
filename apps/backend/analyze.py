@@ -10,6 +10,7 @@ Usage:
 """
 
 import json
+import math
 import os
 import shutil
 import sys
@@ -180,7 +181,11 @@ def get_audio_duration_seconds(audio_path: str) -> float | None:
         if duration_seconds is None:
             return None
         duration_value = float(duration_seconds)
-        return duration_value if np.isfinite(duration_value) and duration_value > 0 else None
+        return (
+            duration_value
+            if np.isfinite(duration_value) and duration_value > 0
+            else None
+        )
     except Exception:
         return None
 
@@ -202,7 +207,9 @@ def build_analysis_estimate(
     )
 
     if run_separation:
-        separation_seconds = _estimate_stage_seconds(duration_seconds, 0.16, 0.32, 45.0, 90.0)
+        separation_seconds = _estimate_stage_seconds(
+            duration_seconds, 0.16, 0.32, 45.0, 90.0
+        )
         stages.append(
             {
                 "key": "separation",
@@ -212,8 +219,14 @@ def build_analysis_estimate(
         )
 
     if run_transcribe:
-        transcription_key = "transcription_stems" if run_separation else "transcription_full_mix"
-        transcription_label = "Basic Pitch on bass + other stems" if run_separation else "Basic Pitch on full mix"
+        transcription_key = (
+            "transcription_stems" if run_separation else "transcription_full_mix"
+        )
+        transcription_label = (
+            "Basic Pitch on bass + other stems"
+            if run_separation
+            else "Basic Pitch on full mix"
+        )
         transcription_seconds = (
             _estimate_stage_seconds(duration_seconds, 0.22, 0.42, 60.0, 150.0)
             if run_separation
@@ -270,8 +283,7 @@ def prompt_to_continue() -> bool:
 
 
 def midi_to_note_name(midi_num: int) -> str:
-    names = ["C", "C#", "D", "D#", "E", "F",
-             "F#", "G", "G#", "A", "A#", "B"]
+    names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
     octave = (midi_num // 12) - 1
     name = names[midi_num % 12]
     return f"{name}{octave}"
@@ -336,8 +348,8 @@ def _compute_stereo_metrics(left: np.ndarray, right: np.ndarray) -> dict:
 
         mid = (left_arr + right_arr) / 2.0
         side = (left_arr - right_arr) / 2.0
-        mid_energy = float(np.mean(mid ** 2))
-        side_energy = float(np.mean(side ** 2))
+        mid_energy = float(np.mean(mid**2))
+        side_energy = float(np.mean(side**2))
         width = side_energy / mid_energy if mid_energy > 0 else 0.0
 
         return {
@@ -348,7 +360,9 @@ def _compute_stereo_metrics(left: np.ndarray, right: np.ndarray) -> dict:
         return {"stereoWidth": None, "stereoCorrelation": None}
 
 
-def _slice_segments(structure_data: dict | None, total_samples: int, sample_rate: int) -> list[dict] | None:
+def _slice_segments(
+    structure_data: dict | None, total_samples: int, sample_rate: int
+) -> list[dict] | None:
     """Create canonical sample-index segment slices from structure output."""
     try:
         if (
@@ -372,7 +386,9 @@ def _slice_segments(structure_data: dict | None, total_samples: int, sample_rate
                 continue
 
             start_idx = max(0, min(int(total_samples), int(round(start * sample_rate))))
-            end_idx = max(start_idx, min(int(total_samples), int(round(end * sample_rate))))
+            end_idx = max(
+                start_idx, min(int(total_samples), int(round(end * sample_rate)))
+            )
 
             sliced.append(
                 {
@@ -389,7 +405,9 @@ def _slice_segments(structure_data: dict | None, total_samples: int, sample_rate
         return None
 
 
-def _downsample_evenly(values: np.ndarray, max_points: int, decimals: int = 4) -> list[float]:
+def _downsample_evenly(
+    values: np.ndarray, max_points: int, decimals: int = 4
+) -> list[float]:
     """Evenly subsample an array to max_points and round values."""
     arr = np.asarray(values, dtype=np.float64)
     if arr.size == 0 or max_points <= 0:
@@ -424,7 +442,9 @@ def _pick_novelty_peaks(
     if len(local_maxima) == 0:
         return []
 
-    min_spacing_frames = max(1, int(round((min_spacing_sec * sample_rate) / float(hop_size))))
+    min_spacing_frames = max(
+        1, int(round((min_spacing_sec * sample_rate) / float(hop_size)))
+    )
     ranked = sorted(local_maxima, key=lambda idx: arr[idx], reverse=True)
 
     selected = []
@@ -537,7 +557,9 @@ def extract_rhythm(mono: np.ndarray) -> dict | None:
 # ── Individual analysis functions ──────────────────────────────────────────
 
 
-def analyze_bpm(rhythm_data: dict | None, mono: np.ndarray, sample_rate: int = 44100) -> dict:
+def analyze_bpm(
+    rhythm_data: dict | None, mono: np.ndarray, sample_rate: int = 44100
+) -> dict:
     """Extract BPM/confidence from RhythmExtractor2013 and compare with Percival BPM."""
     try:
         bpm = None
@@ -570,7 +592,12 @@ def analyze_bpm(rhythm_data: dict | None, mono: np.ndarray, sample_rate: int = 4
         }
     except Exception as e:
         print(f"[warn] BPM extraction failed: {e}", file=sys.stderr)
-        return {"bpm": None, "bpmConfidence": None, "bpmPercival": None, "bpmAgreement": None}
+        return {
+            "bpm": None,
+            "bpmConfidence": None,
+            "bpmPercival": None,
+            "bpmAgreement": None,
+        }
 
 
 def analyze_key(mono: np.ndarray) -> dict:
@@ -636,7 +663,9 @@ def analyze_dynamics(mono: np.ndarray, sample_rate: int = 44100) -> dict:
         spectrum = es.Spectrum(size=frame_size)
 
         energy_band_algos = {
-            name: es.EnergyBand(startCutoffFrequency=lo, stopCutoffFrequency=hi, sampleRate=sample_rate)
+            name: es.EnergyBand(
+                startCutoffFrequency=lo, stopCutoffFrequency=hi, sampleRate=sample_rate
+            )
             for name, (lo, hi) in bands.items()
         }
         band_energies = {name: [] for name in bands}
@@ -688,7 +717,9 @@ def analyze_dynamic_character(mono: np.ndarray, sample_rate: int = 44100) -> dic
             spectrum = es.Spectrum(size=frame_size)
             flatness_algo = es.Flatness()
             flatness_vals = []
-            for frame in es.FrameGenerator(mono, frameSize=frame_size, hopSize=hop_size):
+            for frame in es.FrameGenerator(
+                mono, frameSize=frame_size, hopSize=hop_size
+            ):
                 spec = spectrum(window(frame))
                 flatness_vals.append(float(flatness_algo(spec)))
             if len(flatness_vals) > 0:
@@ -726,17 +757,25 @@ def analyze_dynamic_character(mono: np.ndarray, sample_rate: int = 44100) -> dic
                 onset_hop_size = 512
                 onset_window = es.Windowing(type="hann", size=onset_frame_size)
                 onset_spectrum = es.Spectrum(size=onset_frame_size)
-                onset_detection = es.OnsetDetection(method="hfc", sampleRate=sample_rate)
+                onset_detection = es.OnsetDetection(
+                    method="hfc", sampleRate=sample_rate
+                )
                 onset_values = []
 
-                for frame in es.FrameGenerator(mono, frameSize=onset_frame_size, hopSize=onset_hop_size):
+                for frame in es.FrameGenerator(
+                    mono, frameSize=onset_frame_size, hopSize=onset_hop_size
+                ):
                     spec = onset_spectrum(onset_window(frame))
                     onset_val = None
                     try:
                         onset_val = float(onset_detection(spec))
                     except Exception:
                         try:
-                            onset_val = float(onset_detection(spec, np.zeros_like(spec, dtype=np.float32)))
+                            onset_val = float(
+                                onset_detection(
+                                    spec, np.zeros_like(spec, dtype=np.float32)
+                                )
+                            )
                         except Exception:
                             onset_val = None
 
@@ -744,7 +783,9 @@ def analyze_dynamic_character(mono: np.ndarray, sample_rate: int = 44100) -> dic
                         onset_values.append(onset_val)
 
                 if len(onset_values) > 0:
-                    onsets_algo = es.Onsets(frameRate=float(sample_rate) / float(onset_hop_size))
+                    onsets_algo = es.Onsets(
+                        frameRate=float(sample_rate) / float(onset_hop_size)
+                    )
                     onset_times = onsets_algo(
                         np.asarray([onset_values], dtype=np.float32),
                         np.asarray([1.0], dtype=np.float32),
@@ -754,13 +795,19 @@ def analyze_dynamic_character(mono: np.ndarray, sample_rate: int = 44100) -> dic
 
                     for idx, onset in enumerate(onset_times):
                         start_t = max(0.0, float(onset))
-                        next_onset = float(onset_times[idx + 1]) if idx + 1 < len(onset_times) else duration_seconds
+                        next_onset = (
+                            float(onset_times[idx + 1])
+                            if idx + 1 < len(onset_times)
+                            else duration_seconds
+                        )
                         end_t = min(next_onset, start_t + 0.5, duration_seconds)
                         start_sample = int(start_t * sample_rate)
                         end_sample = int(end_t * sample_rate)
                         if end_sample - start_sample < 8:
                             continue
-                        seg_env = np.asarray(envelope[start_sample:end_sample], dtype=np.float32)
+                        seg_env = np.asarray(
+                            envelope[start_sample:end_sample], dtype=np.float32
+                        )
                         try:
                             lat, _start, _stop = log_attack_algo(seg_env)
                             if np.isfinite(lat):
@@ -778,7 +825,7 @@ def analyze_dynamic_character(mono: np.ndarray, sample_rate: int = 44100) -> dic
 
         if len(attack_log_values) > 0:
             log_attack_time = float(np.mean(attack_log_values))
-            linear_attack_times = [10.0 ** v for v in attack_log_values if np.isfinite(v)]
+            linear_attack_times = [10.0**v for v in attack_log_values if np.isfinite(v)]
             if len(linear_attack_times) > 1:
                 attack_time_stddev = float(np.std(linear_attack_times))
             else:
@@ -820,7 +867,11 @@ def analyze_spectral_balance(mono: np.ndarray, sample_rate: int = 44100) -> dict
         for frame in es.FrameGenerator(mono, frameSize=frame_size, hopSize=hop_size):
             spec = spectrum(window(frame))
             for name, (lo, hi) in bands.items():
-                energy_band = es.EnergyBand(startCutoffFrequency=lo, stopCutoffFrequency=hi, sampleRate=sample_rate)
+                energy_band = es.EnergyBand(
+                    startCutoffFrequency=lo,
+                    stopCutoffFrequency=hi,
+                    sampleRate=sample_rate,
+                )
                 energy = energy_band(spec)
                 band_energies[name].append(float(energy))
 
@@ -846,8 +897,15 @@ def analyze_spectral_detail(mono: np.ndarray, sample_rate: int = 44100) -> dict:
 
         centroid_algo = es.SpectralCentroidTime(sampleRate=sample_rate)
         rolloff_algo = es.RollOff(sampleRate=sample_rate)
-        mfcc_algo = es.MFCC(inputSize=frame_size // 2 + 1, sampleRate=sample_rate, numberCoefficients=13)
-        spectral_peaks = es.SpectralPeaks(orderBy="magnitude", magnitudeThreshold=0.00001, maxPeaks=60, sampleRate=sample_rate)
+        mfcc_algo = es.MFCC(
+            inputSize=frame_size // 2 + 1, sampleRate=sample_rate, numberCoefficients=13
+        )
+        spectral_peaks = es.SpectralPeaks(
+            orderBy="magnitude",
+            magnitudeThreshold=0.00001,
+            maxPeaks=60,
+            sampleRate=sample_rate,
+        )
         hpcp_algo = es.HPCP(sampleRate=sample_rate)
         bark_algo = es.BarkBands(numberBands=24, sampleRate=sample_rate)
 
@@ -861,7 +919,9 @@ def analyze_spectral_detail(mono: np.ndarray, sample_rate: int = 44100) -> dict:
             )
         except Exception:
             try:
-                erb_algo = es.ERBBands(sampleRate=sample_rate, numberBands=40, type="power")
+                erb_algo = es.ERBBands(
+                    sampleRate=sample_rate, numberBands=40, type="power"
+                )
             except Exception:
                 try:
                     erb_algo = es.ERBBands(sampleRate=sample_rate, numberBands=40)
@@ -877,7 +937,9 @@ def analyze_spectral_detail(mono: np.ndarray, sample_rate: int = 44100) -> dict:
             )
         except Exception:
             try:
-                spectral_contrast_algo = es.SpectralContrast(frameSize=frame_size, sampleRate=sample_rate)
+                spectral_contrast_algo = es.SpectralContrast(
+                    frameSize=frame_size, sampleRate=sample_rate
+                )
             except Exception:
                 spectral_contrast_algo = None
 
@@ -935,21 +997,64 @@ def analyze_spectral_detail(mono: np.ndarray, sample_rate: int = 44100) -> dict:
                     contrast_vals, valley_vals = spectral_contrast_algo(spec)
                     contrast_vals = np.asarray(contrast_vals, dtype=np.float64)
                     valley_vals = np.asarray(valley_vals, dtype=np.float64)
-                    if contrast_vals.ndim == 1 and valley_vals.ndim == 1 and contrast_vals.size > 0 and valley_vals.size > 0:
+                    if (
+                        contrast_vals.ndim == 1
+                        and valley_vals.ndim == 1
+                        and contrast_vals.size > 0
+                        and valley_vals.size > 0
+                    ):
                         contrast_matrix.append(contrast_vals)
                         valley_matrix.append(valley_vals)
                 except Exception:
                     pass
 
         # Compute means
-        mean_centroid = round(float(np.mean(centroid_vals)), 1) if centroid_vals else 0.0
+        mean_centroid = (
+            round(float(np.mean(centroid_vals)), 1) if centroid_vals else 0.0
+        )
         mean_rolloff = round(float(np.mean(rolloff_vals)), 1) if rolloff_vals else 0.0
-        mean_mfcc = [round(float(v), 4) for v in np.mean(mfcc_matrix, axis=0)] if mfcc_matrix else [0.0] * 13
-        mean_chroma = [round(float(v), 4) for v in np.mean(hpcp_matrix, axis=0)] if hpcp_matrix else [0.0] * 12
-        mean_bark = [_safe_db(float(v)) for v in np.mean(np.asarray(bark_matrix, dtype=np.float64), axis=0)] if bark_matrix else [-100.0] * 24
-        mean_erb = [_safe_db(float(v)) for v in np.mean(np.asarray(erb_matrix, dtype=np.float64), axis=0)] if erb_matrix else [-100.0] * 40
-        mean_contrast = [round(float(v), 4) for v in np.mean(np.asarray(contrast_matrix, dtype=np.float64), axis=0)] if contrast_matrix else []
-        mean_valley = [round(float(v), 4) for v in np.mean(np.asarray(valley_matrix, dtype=np.float64), axis=0)] if valley_matrix else []
+        mean_mfcc = (
+            [round(float(v), 4) for v in np.mean(mfcc_matrix, axis=0)]
+            if mfcc_matrix
+            else [0.0] * 13
+        )
+        mean_chroma = (
+            [round(float(v), 4) for v in np.mean(hpcp_matrix, axis=0)]
+            if hpcp_matrix
+            else [0.0] * 12
+        )
+        mean_bark = (
+            [
+                _safe_db(float(v))
+                for v in np.mean(np.asarray(bark_matrix, dtype=np.float64), axis=0)
+            ]
+            if bark_matrix
+            else [-100.0] * 24
+        )
+        mean_erb = (
+            [
+                _safe_db(float(v))
+                for v in np.mean(np.asarray(erb_matrix, dtype=np.float64), axis=0)
+            ]
+            if erb_matrix
+            else [-100.0] * 40
+        )
+        mean_contrast = (
+            [
+                round(float(v), 4)
+                for v in np.mean(np.asarray(contrast_matrix, dtype=np.float64), axis=0)
+            ]
+            if contrast_matrix
+            else []
+        )
+        mean_valley = (
+            [
+                round(float(v), 4)
+                for v in np.mean(np.asarray(valley_matrix, dtype=np.float64), axis=0)
+            ]
+            if valley_matrix
+            else []
+        )
 
         return {
             "spectralDetail": {
@@ -1148,8 +1253,12 @@ def analyze_perceptual(mono: np.ndarray, sample_rate: int = 44100) -> dict:
 
         return {
             "perceptual": {
-                "sharpness": round(float(np.mean(sharpness_vals)), 4) if sharpness_vals else 0.0,
-                "roughness": round(float(np.mean(roughness_vals)), 4) if roughness_vals else 0.0,
+                "sharpness": round(float(np.mean(sharpness_vals)), 4)
+                if sharpness_vals
+                else 0.0,
+                "roughness": round(float(np.mean(roughness_vals)), 4)
+                if roughness_vals
+                else 0.0,
             }
         }
     except Exception as e:
@@ -1198,9 +1307,13 @@ def analyze_essentia_features(mono: np.ndarray) -> dict:
 
         return {
             "essentiaFeatures": {
-                "zeroCrossingRate": round(float(np.mean(zcr_vals)), 4) if zcr_vals else 0.0,
+                "zeroCrossingRate": round(float(np.mean(zcr_vals)), 4)
+                if zcr_vals
+                else 0.0,
                 "hfc": round(float(np.mean(hfc_vals)), 4) if hfc_vals else 0.0,
-                "spectralComplexity": round(float(np.mean(sc_vals)), 4) if sc_vals else 0.0,
+                "spectralComplexity": round(float(np.mean(sc_vals)), 4)
+                if sc_vals
+                else 0.0,
                 "dissonance": round(float(np.mean(diss_vals)), 4) if diss_vals else 0.0,
             }
         }
@@ -1255,7 +1368,9 @@ def analyze_melody(
         pitch_values, pitch_confidence = pitch_extractor(audio_eq)
         pitch_values = np.asarray(pitch_values, dtype=np.float64)
         pitch_confidence = np.asarray(pitch_confidence, dtype=np.float64)
-        mean_conf = float(np.mean(pitch_confidence)) if pitch_confidence.size > 0 else 0.0
+        mean_conf = (
+            float(np.mean(pitch_confidence)) if pitch_confidence.size > 0 else 0.0
+        )
         vibrato_metrics = {
             "vibratoPresent": False,
             "vibratoExtent": 0.0,
@@ -1266,8 +1381,14 @@ def analyze_melody(
         # Reuse existing pitch contour (do not re-run Melodia) for vibrato extraction.
         try:
             pitch_frame_rate = float(sample_rate) / 128.0 if sample_rate > 0 else 0.0
-            min_pitch_frames = int(np.ceil((2.0 * pitch_frame_rate) / 4.0)) if pitch_frame_rate > 0 else 0
-            voiced_pitch = pitch_values[np.isfinite(pitch_values) & (pitch_values > 0.0)]
+            min_pitch_frames = (
+                int(np.ceil((2.0 * pitch_frame_rate) / 4.0))
+                if pitch_frame_rate > 0
+                else 0
+            )
+            voiced_pitch = pitch_values[
+                np.isfinite(pitch_values) & (pitch_values > 0.0)
+            ]
 
             if min_pitch_frames > 0 and voiced_pitch.size >= min_pitch_frames:
                 vibrato_algo = es.Vibrato(
@@ -1277,7 +1398,9 @@ def analyze_melody(
                     minExtend=50.0,
                     maxExtend=250.0,
                 )
-                vibrato_frequency, vibrato_extend = vibrato_algo(np.asarray(voiced_pitch, dtype=np.float32))
+                vibrato_frequency, vibrato_extend = vibrato_algo(
+                    np.asarray(voiced_pitch, dtype=np.float32)
+                )
                 vibrato_frequency = np.asarray(vibrato_frequency, dtype=np.float64)
                 vibrato_extend = np.asarray(vibrato_extend, dtype=np.float64)
 
@@ -1293,7 +1416,9 @@ def analyze_melody(
                     confidence = 0.0
 
                 extent = float(np.mean(vibrato_extend[valid])) if np.any(valid) else 0.0
-                rate = float(np.mean(vibrato_frequency[valid])) if np.any(valid) else 0.0
+                rate = (
+                    float(np.mean(vibrato_frequency[valid])) if np.any(valid) else 0.0
+                )
                 vibrato_metrics = {
                     "vibratoPresent": bool(extent > 50.0),
                     "vibratoExtent": round(extent, 4),
@@ -1308,7 +1433,9 @@ def analyze_melody(
                 "vibratoConfidence": 0.0,
             }
 
-        contour_segmenter = es.PitchContourSegmentation(hopSize=128, sampleRate=sample_rate)
+        contour_segmenter = es.PitchContourSegmentation(
+            hopSize=128, sampleRate=sample_rate
+        )
         onsets, durations, notes = contour_segmenter(pitch_values, audio_eq)
 
         onsets = np.asarray(onsets, dtype=np.float64)
@@ -1363,7 +1490,11 @@ def analyze_melody(
             }
 
         note_objects = [
-            {"midi": int(m), "onset": round(float(o), 3), "duration": round(float(d), 3)}
+            {
+                "midi": int(m),
+                "onset": round(float(o), 3),
+                "duration": round(float(d), 3),
+            }
             for (o, d, m) in note_events
         ]
         if len(note_objects) > 64:
@@ -1372,7 +1503,9 @@ def analyze_melody(
         else:
             sampled_notes = note_objects
 
-        dominant_notes = [label for label, _count in Counter(midi_values).most_common(5)]
+        dominant_notes = [
+            label for label, _count in Counter(midi_values).most_common(5)
+        ]
         pitch_range = {"min": int(min(midi_values)), "max": int(max(midi_values))}
 
         midi_file_path = None
@@ -1390,12 +1523,16 @@ def analyze_melody(
             midi_out = mido.MidiFile(ticks_per_beat=ppq)
             track = mido.MidiTrack()
             midi_out.tracks.append(track)
-            track.append(mido.MetaMessage("set_tempo", tempo=int(mido.bpm2tempo(bpm)), time=0))
+            track.append(
+                mido.MetaMessage("set_tempo", tempo=int(mido.bpm2tempo(bpm)), time=0)
+            )
 
             events = []
             for onset, duration, midi_note in note_events:
                 start_tick = max(0, int(round(onset * ticks_per_second)))
-                end_tick = max(start_tick + 1, int(round((onset + duration) * ticks_per_second)))
+                end_tick = max(
+                    start_tick + 1, int(round((onset + duration) * ticks_per_second))
+                )
                 events.append((start_tick, 1, midi_note))
                 events.append((end_tick, 0, midi_note))
             events.sort(key=lambda e: (e[0], e[1]))
@@ -1404,9 +1541,13 @@ def analyze_melody(
             for tick, is_note_on, midi_note in events:
                 delta = max(0, tick - prev_tick)
                 if is_note_on == 1:
-                    track.append(mido.Message("note_on", note=midi_note, velocity=90, time=delta))
+                    track.append(
+                        mido.Message("note_on", note=midi_note, velocity=90, time=delta)
+                    )
                 else:
-                    track.append(mido.Message("note_off", note=midi_note, velocity=0, time=delta))
+                    track.append(
+                        mido.Message("note_off", note=midi_note, velocity=0, time=delta)
+                    )
                 prev_tick = tick
 
             output_dir = os.path.dirname(audio_path)
@@ -1480,8 +1621,11 @@ def analyze_groove(
                 values = values[indices]
             return [round(float(v), 4) for v in values]
 
-        kick_swing = round(calc_swing(low_band, beats), 4)
-        hihat_swing = round(calc_swing(high_band, beats), 4)
+        raw_kick_swing = calc_swing(low_band, beats)
+        raw_hihat_swing = calc_swing(high_band, beats)
+        # Normalize to 0-1 scale using tanh compression
+        kick_swing = round(math.tanh(raw_kick_swing * 0.5), 4)
+        hihat_swing = round(math.tanh(raw_hihat_swing * 0.5), 4)
         kick_accent = sample_accents(low_band, 16)
         hihat_accent = sample_accents(high_band, 16)
 
@@ -1553,7 +1697,9 @@ def analyze_sidechain_detail(
             if end_t <= start_t:
                 continue
             start_idx = max(0, min(total_samples, int(round(start_t * sample_rate))))
-            end_idx = max(start_idx, min(total_samples, int(round(end_t * sample_rate))))
+            end_idx = max(
+                start_idx, min(total_samples, int(round(end_t * sample_rate)))
+            )
             if end_idx - start_idx < 2:
                 continue
             segment = mono_arr[start_idx:end_idx]
@@ -1578,7 +1724,9 @@ def analyze_sidechain_detail(
                 }
             }
 
-        kick_series = np.interp(centers, beats, low_band, left=low_band[0], right=low_band[-1])
+        kick_series = np.interp(
+            centers, beats, low_band, left=low_band[0], right=low_band[-1]
+        )
 
         def zscore(values: np.ndarray) -> np.ndarray:
             arr = np.asarray(values, dtype=np.float64)
@@ -1600,12 +1748,16 @@ def analyze_sidechain_detail(
         rms_q10 = float(np.percentile(rms_values, 10))
         dip_depth = (rms_q90 - rms_q10) / (rms_q90 + 1e-9) if rms_q90 > 0 else 0.0
         dip_depth = float(np.clip(dip_depth, 0.0, 1.0))
-        pumping_strength = float(np.clip(0.6 * max(0.0, dip_corr) + 0.4 * dip_depth, 0.0, 1.0))
+        pumping_strength = float(
+            np.clip(0.6 * max(0.0, dip_corr) + 0.4 * dip_depth, 0.0, 1.0)
+        )
 
         rms_mean = float(np.mean(rms_values))
         rms_std = float(np.std(rms_values))
         kick_mean = float(np.mean(kick_series))
-        dip_mask = (rms_values <= (rms_mean - 0.35 * rms_std)) & (kick_series >= kick_mean)
+        dip_mask = (rms_values <= (rms_mean - 0.35 * rms_std)) & (
+            kick_series >= kick_mean
+        )
         dip_indices = np.where(dip_mask)[0]
 
         pumping_regularity = 0.0
@@ -1613,40 +1765,62 @@ def analyze_sidechain_detail(
         interval_steps = np.array([], dtype=np.float64)
         if dip_indices.size >= 3:
             interval_steps = np.diff(dip_indices.astype(np.float64))
-            mean_step = float(np.mean(interval_steps)) if interval_steps.size > 0 else 0.0
+            mean_step = (
+                float(np.mean(interval_steps)) if interval_steps.size > 0 else 0.0
+            )
             if mean_step > 0:
-                pumping_regularity = float(np.clip(1.0 - (np.std(interval_steps) / mean_step), 0.0, 1.0))
+                pumping_regularity = float(
+                    np.clip(1.0 - (np.std(interval_steps) / mean_step), 0.0, 1.0)
+                )
 
             rate_scores = {}
-            for label, target in (("quarter", 4.0), ("eighth", 2.0), ("sixteenth", 1.0)):
+            for label, target in (
+                ("quarter", 4.0),
+                ("eighth", 2.0),
+                ("sixteenth", 1.0),
+            ):
                 if interval_steps.size == 0:
                     rate_scores[label] = 0.0
                     continue
-                error = float(np.mean(np.abs(interval_steps - target) / (target + 1e-9)))
+                error = float(
+                    np.mean(np.abs(interval_steps - target) / (target + 1e-9))
+                )
                 rate_scores[label] = float(np.clip(1.0 - error, 0.0, 1.0))
 
             best_rate = max(rate_scores, key=rate_scores.get)
             pumping_rate = best_rate if rate_scores[best_rate] >= 0.45 else None
 
         beat_intervals = np.diff(beats.astype(np.float64))
-        mean_interval = float(np.mean(beat_intervals)) if beat_intervals.size > 0 else 0.0
+        mean_interval = (
+            float(np.mean(beat_intervals)) if beat_intervals.size > 0 else 0.0
+        )
         if mean_interval > 0:
-            timing_stability = float(np.clip(1.0 - (np.std(beat_intervals) / mean_interval), 0.0, 1.0))
+            timing_stability = float(
+                np.clip(1.0 - (np.std(beat_intervals) / mean_interval), 0.0, 1.0)
+            )
         else:
             timing_stability = 0.0
 
         mean_total_beat_loudness = float(np.mean(beat_loudness))
         mean_kick = float(np.mean(low_band))
-        kick_presence = mean_kick / (mean_total_beat_loudness + 1e-9) if mean_total_beat_loudness > 0 else 0.0
+        kick_presence = (
+            mean_kick / (mean_total_beat_loudness + 1e-9)
+            if mean_total_beat_loudness > 0
+            else 0.0
+        )
 
         kick_p90 = float(np.percentile(low_band, 90))
         kick_p50 = float(np.percentile(low_band, 50))
-        kick_contrast = (kick_p90 - kick_p50) / (kick_p90 + 1e-9) if kick_p90 > 0 else 0.0
+        kick_contrast = (
+            (kick_p90 - kick_p50) / (kick_p90 + 1e-9) if kick_p90 > 0 else 0.0
+        )
         kick_contrast = float(np.clip(kick_contrast, 0.0, 1.0))
 
         confidence = float(
             np.clip(
-                0.45 * max(0.0, dip_corr) + 0.35 * kick_contrast + 0.20 * timing_stability,
+                0.45 * max(0.0, dip_corr)
+                + 0.35 * kick_contrast
+                + 0.20 * timing_stability,
                 0.0,
                 1.0,
             )
@@ -1662,7 +1836,9 @@ def analyze_sidechain_detail(
         return {
             "sidechainDetail": {
                 "pumpingStrength": round(pumping_strength, 4),
-                "pumpingRegularity": round(float(np.clip(pumping_regularity, 0.0, 1.0)), 4),
+                "pumpingRegularity": round(
+                    float(np.clip(pumping_regularity, 0.0, 1.0)), 4
+                ),
                 "pumpingRate": pumping_rate,
                 "pumpingConfidence": round(pumping_confidence, 4),
             }
@@ -1685,7 +1861,9 @@ def analyze_effects_detail(
             return {"effectsDetail": None}
 
         if lufs_integrated is not None and np.isfinite(float(lufs_integrated)):
-            gating_threshold = float(np.clip(float(lufs_integrated) - 15.0, -55.0, -20.0))
+            gating_threshold = float(
+                np.clip(float(lufs_integrated) - 15.0, -55.0, -20.0)
+            )
         else:
             gating_threshold = -40.0
 
@@ -1694,11 +1872,15 @@ def analyze_effects_detail(
         try:
             silence_detector = es.StartStopSilence(threshold=float(gating_threshold))
         except Exception:
-            silence_detector = es.StartStopSilence(threshold=int(round(gating_threshold)))
+            silence_detector = es.StartStopSilence(
+                threshold=int(round(gating_threshold))
+            )
 
         active_flags = []
         prev_stop = None
-        for frame in es.FrameGenerator(mono_arr, frameSize=frame_size, hopSize=hop_size):
+        for frame in es.FrameGenerator(
+            mono_arr, frameSize=frame_size, hopSize=hop_size
+        ):
             _start_frame, stop_frame = silence_detector(frame)
             try:
                 stop_val = float(stop_frame)
@@ -1723,11 +1905,18 @@ def analyze_effects_detail(
         active_arr = np.asarray(active_flags, dtype=np.int32)
         # Remove one-frame state flicker to reduce transient-induced false positives.
         for i in range(1, active_arr.size - 1):
-            if active_arr[i - 1] == active_arr[i + 1] and active_arr[i] != active_arr[i - 1]:
+            if (
+                active_arr[i - 1] == active_arr[i + 1]
+                and active_arr[i] != active_arr[i - 1]
+            ):
                 active_arr[i] = active_arr[i - 1]
 
-        transition_indices = np.where((active_arr[1:] == 1) & (active_arr[:-1] == 0))[0] + 1
-        event_times = (transition_indices.astype(np.float64) * float(hop_size)) / float(sample_rate)
+        transition_indices = (
+            np.where((active_arr[1:] == 1) & (active_arr[:-1] == 0))[0] + 1
+        )
+        event_times = (transition_indices.astype(np.float64) * float(hop_size)) / float(
+            sample_rate
+        )
         event_count = int(event_times.size)
 
         gating_regularity = 0.0
@@ -1739,7 +1928,9 @@ def analyze_effects_detail(
             if ioi.size > 0:
                 mean_ioi = float(np.mean(ioi))
                 if mean_ioi > 0:
-                    gating_regularity = float(np.clip(1.0 - (np.std(ioi) / mean_ioi), 0.0, 1.0))
+                    gating_regularity = float(
+                        np.clip(1.0 - (np.std(ioi) / mean_ioi), 0.0, 1.0)
+                    )
 
                     bpm = None
                     if rhythm_data is not None and rhythm_data.get("bpm") is not None:
@@ -1758,15 +1949,23 @@ def analyze_effects_detail(
                             if best_error is None or rel_error < best_error:
                                 best_error = rel_error
                                 best_label = label
-                        if best_label is not None and best_error is not None and best_error <= 0.20:
+                        if (
+                            best_label is not None
+                            and best_error is not None
+                            and best_error <= 0.20
+                        ):
                             gating_rate = best_label
 
-        gating_detected = bool(event_count >= 6 and gating_regularity >= 0.45 and gating_rate is not None)
+        gating_detected = bool(
+            event_count >= 6 and gating_regularity >= 0.45 and gating_rate is not None
+        )
         return {
             "effectsDetail": {
                 "gatingDetected": gating_detected,
                 "gatingRate": gating_rate,
-                "gatingRegularity": round(float(np.clip(gating_regularity, 0.0, 1.0)), 4),
+                "gatingRegularity": round(
+                    float(np.clip(gating_regularity, 0.0, 1.0)), 4
+                ),
                 "gatingEventCount": event_count,
             }
         }
@@ -1792,7 +1991,9 @@ def analyze_arrangement_detail(mono: np.ndarray, sample_rate: int = 44100) -> di
         bark_bands = es.BarkBands(numberBands=24, sampleRate=sample_rate)
 
         bark_matrix = []
-        for frame in es.FrameGenerator(mono_arr, frameSize=frame_size, hopSize=hop_size):
+        for frame in es.FrameGenerator(
+            mono_arr, frameSize=frame_size, hopSize=hop_size
+        ):
             spec = spectrum(window(frame))
             bands = np.asarray(bark_bands(spec), dtype=np.float32)
             if bands.size == 24 and np.all(np.isfinite(bands)):
@@ -1808,7 +2009,9 @@ def analyze_arrangement_detail(mono: np.ndarray, sample_rate: int = 44100) -> di
                 }
             }
 
-        novelty_algo = es.NoveltyCurve(frameRate=float(sample_rate) / float(hop_size), normalize=True)
+        novelty_algo = es.NoveltyCurve(
+            frameRate=float(sample_rate) / float(hop_size), normalize=True
+        )
         novelty = novelty_algo(np.asarray(bark_matrix, dtype=np.float32))
         novelty = np.asarray(novelty, dtype=np.float64)
         novelty = novelty[np.isfinite(novelty)]
@@ -1903,8 +2106,12 @@ def analyze_synthesis_character(mono: np.ndarray, sample_rate: int = 44100) -> d
 
         return {
             "synthesisCharacter": {
-                "inharmonicity": round(float(np.mean(inharmonicity_vals)), 4) if inharmonicity_vals else 0.0,
-                "oddToEvenRatio": round(float(np.mean(odd_even_vals)), 4) if odd_even_vals else 0.0,
+                "inharmonicity": round(float(np.mean(inharmonicity_vals)), 4)
+                if inharmonicity_vals
+                else 0.0,
+                "oddToEvenRatio": round(float(np.mean(odd_even_vals)), 4)
+                if odd_even_vals
+                else 0.0,
             }
         }
     except Exception as e:
@@ -1954,10 +2161,16 @@ def analyze_structure(mono: np.ndarray, sample_rate: int = 44100) -> dict:
             hop_size = 1024
             window = es.Windowing(type="hann", size=frame_size)
             spectrum = es.Spectrum(size=frame_size)
-            mfcc = es.MFCC(inputSize=frame_size // 2 + 1, sampleRate=sample_rate, numberCoefficients=13)
+            mfcc = es.MFCC(
+                inputSize=frame_size // 2 + 1,
+                sampleRate=sample_rate,
+                numberCoefficients=13,
+            )
 
             feature_rows = []
-            for frame in es.FrameGenerator(mono, frameSize=frame_size, hopSize=hop_size):
+            for frame in es.FrameGenerator(
+                mono, frameSize=frame_size, hopSize=hop_size
+            ):
                 spec = spectrum(window(frame))
                 _bands, coeffs = mfcc(spec)
                 feature_rows.append(np.asarray(coeffs, dtype=np.float64))
@@ -1967,7 +2180,9 @@ def analyze_structure(mono: np.ndarray, sample_rate: int = 44100) -> dict:
 
             feature_matrix = np.asarray(feature_rows, dtype=np.float32).T
             boundary_frames = np.asarray(es.SBic()(feature_matrix), dtype=np.float64)
-            boundaries_seconds = boundary_frames * (float(hop_size) / float(sample_rate))
+            boundaries_seconds = boundary_frames * (
+                float(hop_size) / float(sample_rate)
+            )
 
         boundaries_seconds = np.asarray(boundaries_seconds, dtype=np.float64)
         if boundaries_seconds.size == 0:
@@ -2036,7 +2251,9 @@ def analyze_segment_loudness(
         if stereo_arr.ndim != 2 or stereo_arr.shape[0] == 0:
             return {"segmentLoudness": None}
 
-        segment_slices = _slice_segments(structure_data, int(stereo_arr.shape[0]), sample_rate)
+        segment_slices = _slice_segments(
+            structure_data, int(stereo_arr.shape[0]), sample_rate
+        )
         if segment_slices is None:
             return {"segmentLoudness": None}
 
@@ -2053,7 +2270,9 @@ def analyze_segment_loudness(
             if end_idx > start_idx:
                 try:
                     segment_audio = stereo_arr[start_idx:end_idx]
-                    _m, _s, integrated, loudness_range = es.LoudnessEBUR128(sampleRate=sample_rate)(segment_audio)
+                    _m, _s, integrated, loudness_range = es.LoudnessEBUR128(
+                        sampleRate=sample_rate
+                    )(segment_audio)
                     if np.isfinite(integrated):
                         lufs = round(float(integrated), 1)
                     if np.isfinite(loudness_range):
@@ -2092,7 +2311,9 @@ def analyze_segment_stereo(
         if stereo_arr.ndim != 2 or stereo_arr.shape[0] == 0:
             return {"segmentStereo": None}
 
-        segment_slices = _slice_segments(structure_data, int(stereo_arr.shape[0]), sample_rate)
+        segment_slices = _slice_segments(
+            structure_data, int(stereo_arr.shape[0]), sample_rate
+        )
         if segment_slices is None:
             return {"segmentStereo": None}
 
@@ -2112,7 +2333,9 @@ def analyze_segment_stereo(
             if end_idx - start_idx < 2:
                 metrics = {"stereoWidth": None, "stereoCorrelation": None}
             else:
-                metrics = _compute_stereo_metrics(left_all[start_idx:end_idx], right_all[start_idx:end_idx])
+                metrics = _compute_stereo_metrics(
+                    left_all[start_idx:end_idx], right_all[start_idx:end_idx]
+                )
 
             out.append(
                 {
@@ -2143,7 +2366,9 @@ def analyze_segment_spectral(
         if mono_arr.ndim != 1 or mono_arr.size == 0:
             return {"segmentSpectral": None}
 
-        segment_slices = _slice_segments(structure_data, int(mono_arr.shape[0]), sample_rate)
+        segment_slices = _slice_segments(
+            structure_data, int(mono_arr.shape[0]), sample_rate
+        )
         if segment_slices is None:
             return {"segmentSpectral": None}
 
@@ -2192,7 +2417,9 @@ def analyze_segment_spectral(
                     seg_audio = np.pad(seg_audio, (0, frame_size - seg_audio.size))
                 centroid_vals = []
                 rolloff_vals = []
-                for frame in es.FrameGenerator(seg_audio, frameSize=frame_size, hopSize=hop_size):
+                for frame in es.FrameGenerator(
+                    seg_audio, frameSize=frame_size, hopSize=hop_size
+                ):
                     try:
                         spec = spectrum(window(frame))
                         centroid_vals.append(float(centroid_algo(frame)))
@@ -2236,7 +2463,9 @@ def analyze_segment_key(
         if mono_arr.ndim != 1 or mono_arr.size == 0:
             return {"segmentKey": None}
 
-        segment_slices = _slice_segments(structure_data, int(mono_arr.shape[0]), sample_rate)
+        segment_slices = _slice_segments(
+            structure_data, int(mono_arr.shape[0]), sample_rate
+        )
         if segment_slices is None:
             return {"segmentKey": None}
 
@@ -2294,7 +2523,9 @@ def analyze_chords(mono: np.ndarray, sample_rate: int = 44100) -> dict:
         chords_algo = es.ChordsDetection(sampleRate=sample_rate, hopSize=hop_size)
 
         hpcp_sequence = []
-        for frame in es.FrameGenerator(mono_filtered, frameSize=frame_size, hopSize=hop_size):
+        for frame in es.FrameGenerator(
+            mono_filtered, frameSize=frame_size, hopSize=hop_size
+        ):
             spec = spectrum(window(frame))
             try:
                 freqs, mags = spectral_peaks(spec)
@@ -2335,7 +2566,9 @@ def analyze_chords(mono: np.ndarray, sample_rate: int = 44100) -> dict:
         else:
             chord_sequence = chords
 
-        chord_strength = round(float(np.mean(strength)), 4) if strength.size > 0 else 0.0
+        chord_strength = (
+            round(float(np.mean(strength)), 4) if strength.size > 0 else 0.0
+        )
 
         progression = []
         for chord in chords:
@@ -2374,7 +2607,9 @@ def _normalize_confidence(value) -> float:
     return round(float(np.clip(numeric, 0.0, 1.0)), 4)
 
 
-def _transcription_source_paths(audio_path: str, stem_paths: dict | None = None) -> list[tuple[str, str]]:
+def _transcription_source_paths(
+    audio_path: str, stem_paths: dict | None = None
+) -> list[tuple[str, str]]:
     sources = []
     if isinstance(stem_paths, dict):
         for stem_name in ("bass", "other"):
@@ -2409,13 +2644,24 @@ def _extract_basic_pitch_notes(
         if isinstance(raw_event, dict):
             pitch_raw = raw_event.get(
                 "pitchMidi",
-                raw_event.get("pitch_midi", raw_event.get("pitch", raw_event.get("midi", raw_event.get("note")))),
+                raw_event.get(
+                    "pitch_midi",
+                    raw_event.get(
+                        "pitch", raw_event.get("midi", raw_event.get("note"))
+                    ),
+                ),
             )
             onset_raw = raw_event.get(
                 "onsetSeconds",
                 raw_event.get(
                     "onset_seconds",
-                    raw_event.get("onset", raw_event.get("startSeconds", raw_event.get("start_seconds", raw_event.get("start")))),
+                    raw_event.get(
+                        "onset",
+                        raw_event.get(
+                            "startSeconds",
+                            raw_event.get("start_seconds", raw_event.get("start")),
+                        ),
+                    ),
                 ),
             )
             duration_raw = raw_event.get(
@@ -2426,12 +2672,20 @@ def _extract_basic_pitch_notes(
                 "offsetSeconds",
                 raw_event.get(
                     "offset_seconds",
-                    raw_event.get("offset", raw_event.get("endSeconds", raw_event.get("end_seconds", raw_event.get("end")))),
+                    raw_event.get(
+                        "offset",
+                        raw_event.get(
+                            "endSeconds",
+                            raw_event.get("end_seconds", raw_event.get("end")),
+                        ),
+                    ),
                 ),
             )
             confidence_raw = raw_event.get(
                 "confidence",
-                raw_event.get("amplitude", raw_event.get("velocity", raw_event.get("probability"))),
+                raw_event.get(
+                    "amplitude", raw_event.get("velocity", raw_event.get("probability"))
+                ),
             )
         elif isinstance(raw_event, (tuple, list)):
             if len(raw_event) >= 3:
@@ -2473,8 +2727,16 @@ def _extract_basic_pitch_notes(
         second_value = _to_finite_float(duration_raw, None)
         duration_seconds = None
         if onset_seconds is not None and second_value is not None:
-            duration_seconds = second_value - onset_seconds if second_value >= onset_seconds else second_value
-        if (duration_seconds is None or duration_seconds <= 0) and onset_seconds is not None and end_raw is not None:
+            duration_seconds = (
+                second_value - onset_seconds
+                if second_value >= onset_seconds
+                else second_value
+            )
+        if (
+            (duration_seconds is None or duration_seconds <= 0)
+            and onset_seconds is not None
+            and end_raw is not None
+        ):
             end_seconds = _to_finite_float(end_raw, None)
             if end_seconds is not None:
                 duration_seconds = end_seconds - onset_seconds
@@ -2503,7 +2765,9 @@ def _extract_basic_pitch_notes(
     return notes, midi_values, confidence_values
 
 
-def analyze_transcription_basic_pitch(audio_path: str, stem_paths: dict | None = None) -> dict:
+def analyze_transcription_basic_pitch(
+    audio_path: str, stem_paths: dict | None = None
+) -> dict:
     try:
         from basic_pitch.inference import predict
         from basic_pitch import ICASSP_2022_MODEL_PATH
@@ -2516,21 +2780,27 @@ def analyze_transcription_basic_pitch(audio_path: str, stem_paths: dict | None =
         notes = []
         midi_values = []
         confidence_values = []
-        stems_transcribed = [stem_source for stem_source, _source_path in transcription_sources]
+        stems_transcribed = [
+            stem_source for stem_source, _source_path in transcription_sources
+        ]
 
         for stem_source, source_path in transcription_sources:
-            source_notes, source_midi_values, source_confidence_values = _extract_basic_pitch_notes(
-                source_path,
-                stem_source,
-                predict,
-                ICASSP_2022_MODEL_PATH,
+            source_notes, source_midi_values, source_confidence_values = (
+                _extract_basic_pitch_notes(
+                    source_path,
+                    stem_source,
+                    predict,
+                    ICASSP_2022_MODEL_PATH,
+                )
             )
             notes.extend(source_notes)
             midi_values.extend(source_midi_values)
             confidence_values.extend(source_confidence_values)
 
         notes.sort(key=lambda note: note["onsetSeconds"])
-        stem_separation_used = any(stem_source in ("bass", "other") for stem_source in stems_transcribed)
+        stem_separation_used = any(
+            stem_source in ("bass", "other") for stem_source in stems_transcribed
+        )
 
         if len(notes) == 0:
             return {
@@ -2562,7 +2832,9 @@ def analyze_transcription_basic_pitch(audio_path: str, stem_paths: dict | None =
 
         min_midi = int(min(midi_values))
         max_midi = int(max(midi_values))
-        average_confidence = round(float(np.mean(np.asarray(confidence_values, dtype=np.float64))), 4)
+        average_confidence = round(
+            float(np.mean(np.asarray(confidence_values, dtype=np.float64))), 4
+        )
 
         return {
             "transcriptionDetail": {
@@ -2591,7 +2863,10 @@ def analyze_transcription_basic_pitch(audio_path: str, stem_paths: dict | None =
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: ./venv/bin/python analyze.py <audio_file> [--separate] [--fast] [--transcribe] [--yes]", file=sys.stderr)
+        print(
+            "Usage: ./venv/bin/python analyze.py <audio_file> [--separate] [--fast] [--transcribe] [--yes]",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     audio_path = sys.argv[1]
@@ -2607,7 +2882,9 @@ def main():
 
     analysis_estimate = get_audio_duration_seconds(audio_path)
     if analysis_estimate is not None:
-        estimate = build_analysis_estimate(analysis_estimate, run_separation, run_transcribe)
+        estimate = build_analysis_estimate(
+            analysis_estimate, run_separation, run_transcribe
+        )
         if sys.stdin.isatty():
             print_analysis_estimate(audio_path, estimate)
         if should_prompt_for_confirmation(sys.stdin.isatty(), auto_yes):
@@ -2627,11 +2904,17 @@ def main():
     try:
         stereo, sr, num_channels = load_stereo(audio_path)
     except Exception as e:
-        print(f"[warn] Stereo loading failed, stereo features will be null: {e}", file=sys.stderr)
+        print(
+            f"[warn] Stereo loading failed, stereo features will be null: {e}",
+            file=sys.stderr,
+        )
         stereo = None
 
     if run_separation:
-        print("Running source separation (this may take 30-60 seconds)...", file=sys.stderr)
+        print(
+            "Running source separation (this may take 30-60 seconds)...",
+            file=sys.stderr,
+        )
         stems = separate_stems(audio_path)
 
     print("Analyzing...", file=sys.stderr)
@@ -2712,7 +2995,9 @@ def main():
     result.update(analyze_structure(mono, sample_rate))
     result.update(analyze_arrangement_detail(mono, sample_rate))
     result.update(analyze_segment_stereo(result.get("structure"), stereo, sample_rate))
-    result.update(analyze_segment_loudness(result.get("structure"), stereo, sample_rate))
+    result.update(
+        analyze_segment_loudness(result.get("structure"), stereo, sample_rate)
+    )
     result.update(
         analyze_segment_spectral(
             result.get("structure"),
@@ -2743,7 +3028,11 @@ def main():
                     transcription_stem_paths[stem_name] = source_path
             if len(transcription_stem_paths) == 0:
                 transcription_stem_paths = None
-        result.update(analyze_transcription_basic_pitch(audio_path, stem_paths=transcription_stem_paths))
+        result.update(
+            analyze_transcription_basic_pitch(
+                audio_path, stem_paths=transcription_stem_paths
+            )
+        )
     else:
         result["transcriptionDetail"] = None
 

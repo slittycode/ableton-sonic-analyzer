@@ -5,18 +5,21 @@ import type { BackendAnalyzeResponse, DiagnosticLogEntry, Phase1Result } from '.
 const {
   analyzePhase1WithBackendMock,
   analyzePhase2WithGeminiMock,
-  isGeminiPhase2AvailableMock,
+  canRunGeminiPhase2Mock,
+  isGeminiPhase2ConfigEnabledMock,
 } = vi.hoisted(() => ({
   analyzePhase1WithBackendMock: vi.fn(),
   analyzePhase2WithGeminiMock: vi.fn(),
-  isGeminiPhase2AvailableMock: vi.fn(() => false),
+  canRunGeminiPhase2Mock: vi.fn(() => false),
+  isGeminiPhase2ConfigEnabledMock: vi.fn(() => true),
 }));
 
 vi.mock('../../src/config', () => ({
   appConfig: {
     apiBaseUrl: 'http://127.0.0.1:8100',
   },
-  isGeminiPhase2Available: isGeminiPhase2AvailableMock,
+  canRunGeminiPhase2: canRunGeminiPhase2Mock,
+  isGeminiPhase2ConfigEnabled: isGeminiPhase2ConfigEnabledMock,
 }));
 
 vi.mock('../../src/services/backendPhase1Client', async () => {
@@ -27,8 +30,7 @@ vi.mock('../../src/services/backendPhase1Client', async () => {
   return {
     ...actual,
     analyzePhase1WithBackend: analyzePhase1WithBackendMock,
-    mapBackendError: (error: unknown) =>
-      error instanceof Error ? error : new Error(String(error)),
+    mapBackendError: (error: unknown) => (error instanceof Error ? error : new Error(String(error))),
   };
 });
 
@@ -63,8 +65,10 @@ const phase1Result: Phase1Result = {
 afterEach(() => {
   analyzePhase1WithBackendMock.mockReset();
   analyzePhase2WithGeminiMock.mockReset();
-  isGeminiPhase2AvailableMock.mockReset();
-  isGeminiPhase2AvailableMock.mockReturnValue(false);
+  canRunGeminiPhase2Mock.mockReset();
+  isGeminiPhase2ConfigEnabledMock.mockReset();
+  canRunGeminiPhase2Mock.mockReturnValue(false);
+  isGeminiPhase2ConfigEnabledMock.mockReturnValue(true);
 });
 
 describe('analyzeAudio', () => {
@@ -141,8 +145,82 @@ describe('analyzeAudio', () => {
     );
   });
 
+  it('skips phase 2 with a user-disabled reason when the UI toggle is off', async () => {
+    const backendResult: BackendAnalyzeResponse = {
+      requestId: 'req_user_off',
+      phase1: phase1Result,
+    };
+    analyzePhase1WithBackendMock.mockResolvedValue(backendResult);
+
+    const file = new File(['audio-data'], 'track.mp3', { type: 'audio/mpeg' });
+    const onPhase2Complete = vi.fn();
+
+    await analyzeAudio(
+      file,
+      'gemini-2.5-pro',
+      null,
+      () => {},
+      onPhase2Complete,
+      (error) => {
+        throw error;
+      },
+      {
+        phase2Requested: false,
+        phase2ConfigEnabled: true,
+      },
+    );
+
+    expect(analyzePhase2WithGeminiMock).not.toHaveBeenCalled();
+    expect(onPhase2Complete).toHaveBeenCalledWith(
+      null,
+      expect.objectContaining({
+        phase: 'Phase 2: Advisory skipped',
+        status: 'skipped',
+        message: 'Phase 2 advisory skipped because it was disabled in the UI.',
+      }),
+    );
+  });
+
+  it('keeps missing API key distinct from configuration kill-switches', async () => {
+    const backendResult: BackendAnalyzeResponse = {
+      requestId: 'req_missing_key',
+      phase1: phase1Result,
+    };
+    analyzePhase1WithBackendMock.mockResolvedValue(backendResult);
+    canRunGeminiPhase2Mock.mockReturnValue(false);
+    isGeminiPhase2ConfigEnabledMock.mockReturnValue(true);
+
+    const file = new File(['audio-data'], 'track.mp3', { type: 'audio/mpeg' });
+    const onPhase2Complete = vi.fn();
+
+    await analyzeAudio(
+      file,
+      'gemini-2.5-pro',
+      null,
+      () => {},
+      onPhase2Complete,
+      (error) => {
+        throw error;
+      },
+      {
+        phase2Requested: true,
+        phase2ConfigEnabled: true,
+      },
+    );
+
+    expect(analyzePhase2WithGeminiMock).not.toHaveBeenCalled();
+    expect(onPhase2Complete).toHaveBeenCalledWith(
+      null,
+      expect.objectContaining({
+        phase: 'Phase 2: Advisory skipped',
+        status: 'skipped',
+        message: 'Phase 2 advisory skipped because Gemini is enabled but no API key is configured.',
+      }),
+    );
+  });
+
   it('treats a phase 2 abort as user-cancelled and suppresses the late advisory result', async () => {
-    isGeminiPhase2AvailableMock.mockReturnValue(true);
+    canRunGeminiPhase2Mock.mockReturnValue(true);
 
     const backendResult: BackendAnalyzeResponse = {
       requestId: 'req_phase2_cancel',
@@ -150,10 +228,9 @@ describe('analyzeAudio', () => {
     };
     analyzePhase1WithBackendMock.mockResolvedValue(backendResult);
 
-    let resolvePhase2: ((value: {
-      result: { trackCharacter: string };
-      log: DiagnosticLogEntry;
-    }) => void) | null = null;
+    let resolvePhase2:
+      | ((value: { result: { trackCharacter: string }; log: DiagnosticLogEntry }) => void)
+      | null = null;
     analyzePhase2WithGeminiMock.mockImplementation(
       () =>
         new Promise((resolve) => {

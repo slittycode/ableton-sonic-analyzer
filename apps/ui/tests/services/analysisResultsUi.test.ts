@@ -465,4 +465,26 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).toContain('▲ +0.5 dB');
     expect(html).toContain('▼ -0.9 dB');
   });
+
+  it('renders a sticky device navigator with section anchors', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: basePhase1,
+        phase2: basePhase2,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).toContain('Device Chain');
+    expect(html).toContain('href="#section-arrangement"');
+    expect(html).toContain('href="#section-session"');
+    expect(html).toContain('href="#section-sonic-elements"');
+    expect(html).toContain('href="#section-mix-chain"');
+    expect(html).toContain('href="#section-patches"');
+    expect(html).toContain('id="section-arrangement"');
+    expect(html).toContain('id="section-session"');
+    expect(html).toContain('id="section-sonic-elements"');
+    expect(html).toContain('id="section-mix-chain"');
+    expect(html).toContain('id="section-patches"');
+  });
 });

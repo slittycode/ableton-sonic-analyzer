@@ -114,15 +114,14 @@ test('desktop viewport (1280px) renders two-column grid layout', async ({ page }
   }
 });
 
-test('mobile viewport hides model selector and CPU meter', async ({ page }) => {
+test('mobile viewport moves the model selector into the input panel and hides the toolbar CPU meter', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto('/', { waitUntil: 'networkidle' });
 
-  // Brand should always be visible
   await expect(page.getByText('SonicAnalyzer')).toBeVisible();
-
-  // Model selector label and CPU meter should be hidden on mobile
-  await expect(page.getByText('Phase 2 Model')).not.toBeVisible();
+  await expect(page.getByLabel('PHASE 2 ADVISORY')).toBeVisible();
+  await expect(page.getByTestId('phase2-model-mobile')).toBeVisible();
+  await expect(page.getByTestId('phase2-model-desktop')).not.toBeVisible();
   await expect(page.getByText('CPU')).not.toBeVisible();
 });
 
@@ -131,6 +130,7 @@ test('desktop viewport shows model selector and CPU meter', async ({ page }) => 
   await page.goto('/', { waitUntil: 'networkidle' });
 
   await expect(page.getByText('SonicAnalyzer')).toBeVisible();
-  await expect(page.getByText('Phase 2 Model')).toBeVisible();
+  await expect(page.getByTestId('phase2-model-desktop')).toBeVisible();
+  await expect(page.getByTestId('phase2-model-mobile')).not.toBeVisible();
   await expect(page.getByText('CPU')).toBeVisible();
 });

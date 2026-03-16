@@ -106,7 +106,7 @@ ABSOLUTE RULES:
    lufsRange, truePeak, stereoDetail values, durationSeconds.
 3. Use the exact key string provided. Do not reinterpret as 
    relative major/minor. Do not override from audio perception.
-4. If audio perception contradicts JSON, JSON is correct.
+4. If audio perception contradicts a measured JSON field, keep the JSON measurement and describe the contradiction rather than rewriting the number.
 5. Low confidence handling:
    - pitchConfidence below 0.15 = melody is draft only
    - chordStrength below 0.70 = chords approximate
@@ -114,15 +114,14 @@ ABSOLUTE RULES:
    - segmentKey from segments shorter than 10s = low confidence
 6. When transcriptionDetail is present, use dominantPitches for note name recommendations, not melodyDetail.dominantNotes.
 7. stemSeparationUsed: true means bass and melodic content have been transcribed independently - treat bass stem notes and other stem notes as separate layers.
-8. You are a producer reading a spec sheet, not an audio analyser.
+8. For measured values, the JSON is authoritative. For genre identification only, audio perception is authoritative.
 9. mixAndMasterChain must contain a minimum of 8 device objects. If fewer than 8 real devices can be inferred from the audio, supplement with contextually appropriate Ableton Live devices that would suit the detected characteristics. Never return fewer than 8.
 
 FIELD GLOSSARY:
 - bpm: use exactly as Ableton project tempo
-- grooveAmount near 0.0 = fully quantised, straight grid
-- kickSwing > hihatSwing = kick has more timing push than hats
-- kickAccent[16] = kick energy per 16th position, high variance = 
-  dynamic pattern, low variance = four-on-the-floor
+- grooveDetail.kickSwing: timing variance in kick band — higher = more swing
+- grooveDetail.hihatSwing: timing variance in high band — higher = more loose feel
+- grooveDetail.kickAccent: 16-value array of kick energy per 16th note position
 - lufsIntegrated: club electronic target is -6 to -9 LUFS
 - truePeak above 0.0 dBTP = intersample clipping present
 - crestFactor: higher = more transient punch, lower = more limited
@@ -165,20 +164,27 @@ IMPORTANT SPECTRAL NOTE:
   recommendations, not character descriptions
 
 GENRE INFERENCE AND ADAPTATION:
-- Infer the most likely genre from the combined evidence of 
-  bpm, synthesisCharacter (especially inharmonicity and 
-  oddToEvenRatio), crestFactor, spectral profile, grooveDetail, 
-  and any available melodic or harmonic data.
-- State the inferred genre explicitly at the very start of 
-  trackCharacter, including a confidence indicator in plain 
-  language and the specific measurements that support the inference.
-- Use the inferred genre to choose device types, production 
-  techniques, terminology, and secretSauce framing. Derive 
-  those conventions from the inferred genre, not from a fixed 
-  list of hard-coded genre assumptions.
-- If the DSP signature is ambiguous across genres, say so 
-  explicitly in trackCharacter and explain which measured 
-  characteristics point in different directions rather than guessing.
+Compute kickAccentVariance as the variance of grooveDetail.kickAccent (the 16-value array) and use the DSP values below as context rather than as the genre label itself.
+
+RHYTHM CLUSTER (from DSP measurements — use as context, not as genre):
+  - kickSwing < 0.15 AND kickAccentVariance < 0.15 → tight mechanical pulse
+  - kickSwing > 0.50 AND kickAccentVariance < 0.10 → loose psychedelic pulse
+  - kickSwing < 0.12 AND kickAccentVariance < 0.05 → minimal/no pulse
+  - kickAccentVariance > 0.28 → complex broken pattern
+  - otherwise → ambiguous rhythm profile
+
+SYNTHESIS TIER (from synthesisCharacter — use to confirm genre, not define it):
+  - inharmonicity 0.10-0.25 → FM/acid character
+  - inharmonicity < 0.10 → subtractive/clean character
+  - inharmonicity > 0.25 → wavetable/noise/complex character
+  - oddToEvenRatio > 1.5 → saw/square dominant
+  - oddToEvenRatio < 0.8 → sine/triangle dominant
+
+GENRE INFERENCE PROCESS:
+  1. State the rhythm cluster and synthesis tier from the JSON above.
+  2. Listen to the audio and identify the genre from audio perception.
+  3. Cross-check: does the audio genre match the rhythm cluster and synthesis tier? If yes, HIGH confidence. If partially, MED confidence with explanation. If the audio clearly contradicts the DSP, state the contradiction explicitly — the DSP measurement may be capturing something the audio does not, or vice versa.
+  4. Never override the measured DSP values with audio perception. Only use audio perception for the genre label itself.
 
 OUTPUT REQUIREMENTS — QUANTITY AND DEPTH ARE MANDATORY:
 
@@ -218,24 +224,28 @@ Return a structured object with three keys:
 sonicElements:
 Return ALL of the following keys with substantive content.
 Each must be at minimum 4 sentences with specific values referenced:
-- kick: reference crestFactor, kickAccent pattern, spectralBalance 
-  subBass and lowBass, logAttackTime. Name specific Ableton devices 
-  with parameter values.
+- kick: Derive the kick recommendation directly from kickAccentVariance and kickSwing:
+  - kickAccentVariance < 0.15 AND kickSwing < 0.06 → four-on-the-floor → Kick 2, short decay, 909/808
+  - kickAccentVariance > 0.25 → complex pattern → Sampler, layered kicks
+  - kickAccentVariance 0.15–0.25 → moderate variation → Drum Rack, mixed approach
+  Also reference crestFactor, logAttackTime, and spectralBalance subBass with specific values.
 - bass: reference synthesisCharacter oddToEvenRatio and 
   inharmonicity, subBassMono, spectralBalance subBass/lowBass. 
   Select synth architecture from inharmonicity:
   - 0.1-0.25 = FM / Operator
   - below 0.1 = subtractive / Analog
   - above 0.25 = wavetable or noise / Wavetable plus noise oscillator
-  Explain why that instrument choice fits the measured synthesis 
-  character of THIS track using inharmonicity and oddToEvenRatio. 
+  Apply this rule regardless of the genre label inferred in trackCharacter.
+  The measured inharmonicity is ground truth.
+  Explain why that instrument choice fits the measured synthesis
+  character of THIS track using inharmonicity and oddToEvenRatio.
   Suggest oscillator type, filter settings, and mono routing.
 - melodicArp: convert dominantNotes MIDI to note names. Reference 
   pitchConfidence explicitly — if below 0.15 say so. Reference 
   chordDetail.dominantChords. Suggest synth approach and MIDI pattern.
-- grooveAndTiming: reference grooveAmount, kickSwing, hihatSwing 
-  with specific ms offset calculations at the track BPM. Suggest 
-  Ableton groove pool settings.
+- grooveAndTiming: reference grooveDetail.kickSwing, grooveDetail.hihatSwing,
+  and grooveDetail.kickAccent with specific ms offset calculations at the track BPM.
+  Suggest Ableton groove pool settings.
 - effectsAndTexture: reference effectsDetail, vibratoPresent, 
   arrangementDetail noveltyPeaks. Use audio perception here for 
   qualitative texture. Reference spectralContrast values.
@@ -261,9 +271,10 @@ Where applicable to the track, the chain must explicitly cover:
 - high-frequency air or presence
 - bus compression or glue
 - limiting/mastering
-At least one device entry must embody a technique native to the 
-inferred genre and must justify that technique using both the 
-genre inference and the measured DSP values for this track.
+At least one device entry must embody a technique justified by measured
+synthesisCharacter, grooveDetail, or sidechainDetail values — not by genre
+label alone. If genre confidence is LOW or MED, provide a measurement-based
+justification regardless of genre name.
 Each object must include:
 - order: position in chain starting at 1
 - device: exact Ableton Live 12 device name
@@ -275,32 +286,38 @@ Each object must include:
 Never return fewer than 8 devices.
 
 secretSauce:
-Title: a specific named technique that is native to the inferred 
-genre and the measured characteristics of this track. Generic 
-production-technique titles are not acceptable.
-icon: one word describing the core technique type. 
-Must be exactly one of: DISTORTION, FILTER, COMPRESSION, 
+Title: a specific named technique derived from the dominant measured characteristic
+of this track — the single most distinctive DSP feature. State which genre(s)
+commonly apply this technique, but derive the technique from the measurement,
+not from the genre label. Generic production-technique titles are not acceptable.
+icon: one word describing the core technique type.
+Must be exactly one of: DISTORTION, FILTER, COMPRESSION,
 MODULATION, ROUTING, SATURATION, STEREO, SYNTHESIS
-Explanation: 4-5 sentences explaining what makes this technique 
-specific to THIS track based on its measurements. It must also 
-state why this technique is native to the inferred genre. Reference 
-at least 3 specific JSON values.
+Explanation: 4-5 sentences explaining what makes this technique
+specific to THIS track based on its measurements. Cite at least 3 specific JSON
+values that make this technique appropriate for this track. Then name the genre(s)
+where this technique is common. If genre confidence is LOW or MED, acknowledge
+that the technique is measurement-driven, not genre-confirmed.
 implementationSteps: return exactly 6 steps. Each step must be 
 a complete sentence with specific Ableton device names, parameter 
 names, and numeric values. Steps must build on each other 
 sequentially.
 
 confidenceNotes:
-Return at least 5 items. 
-For the field name, use a human-readable label, NOT the JSON 
+Return at least 5 items.
+For the field name, use a human-readable label, NOT the JSON
 field name. For example:
 - use "Key Signature" not "key"
-- use "True Peak" not "truePeak"  
+- use "True Peak" not "truePeak"
 - use "Chord Progression" not "chordDetail.chordStrength"
 - use "Melody Transcription" not "melodyDetail.pitchConfidence"
 - use "Sidechain Detection" not "sidechainDetail.pumpingConfidence"
 - use "Segment Key (short segment)" not "segmentKey[1]"
 Every field that has a known accuracy limitation must appear here.
+Always include:
+- Rhythm cluster: which bucket and why
+- Synthesis tier: which tier and the specific inharmonicity + oddToEvenRatio values
+- Genre confidence: HIGH/MED/LOW with specific reason for any degradation
 
 abletonRecommendations:
 Return at least 10 device recommendation cards.

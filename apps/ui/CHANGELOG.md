@@ -4,6 +4,22 @@ All notable changes to `sonic-analyzer-UI` are documented here in reverse chrono
 
 ## Unreleased
 
+## v1.3.0 — Downstream Section Hardening
+
+- sonicElements kick: now derives device recommendations directly from kickAccentVariance and kickSwing thresholds rather than from the genre label inferred in trackCharacter.
+- sonicElements bass: added explicit rule that inharmonicity-based synth selection applies regardless of genre label — the measured value is ground truth.
+- mixAndMasterChain: replaced the genre-native technique requirement with a measurement-based justification rule; LOW/MED genre confidence now requires explicit DSP-grounded reasoning.
+- secretSauce: title and explanation now derive from the dominant measured DSP characteristic, not the genre label. Genre is named as context, not as the primary driver.
+- confidenceNotes: now always includes a genre inference result entry reporting label, confidence level, and which Step 1/Step 2 indicators matched or conflicted.
+
+## v1.2.0 — Genre Inference Hardening (Prompt Pass)
+
+- Replaced the descriptive `GENRE INFERENCE AND ADAPTATION` block with a three-step classification process: Step 1 rhythm profile (kickAccentVariance + kickSwing + danceability), Step 2 synthesis profile (inharmonicity + oddToEvenRatio + pumpingStrength), Step 3 BPM as tiebreaker only when Step 2 leaves ambiguity within a cluster.
+- Added explicit genre buckets covering Acid Techno, Techno, House/Electro, EDM, Acid/Psychedelic Electronica, Hip-Hop, Trap, D&B/Breakbeat, Dark Electronica, and Pure Ambient — each tied to measured DSP thresholds, not audio perception.
+- Added confidence reporting rules: 3+ indicators = HIGH, 2 = MED with conflict noted, 1 or 0 = LOW with both candidate genres named.
+- Removed stale `grooveAmount` references from the FIELD GLOSSARY and `sonicElements.grooveAndTiming` (this field does not exist in the DSP payload). Replaced with correct `grooveDetail.kickSwing`, `grooveDetail.hihatSwing`, and `grooveDetail.kickAccent` descriptions.
+- BPM is now explicitly prohibited from being the primary genre classifier — it is Step 3 only.
+
 - Standardized the canonical local stack on UI `127.0.0.1:3100` and backend `127.0.0.1:8100`, added `npm run dev:local`, and documented the new workspace launcher flow.
 - Wrong-backend diagnostics now mention stale local env overrides and point users to `./scripts/dev.sh` or `npm run dev:local`.
 

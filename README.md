@@ -32,24 +32,55 @@ npm install
 Backend environment:
 
 ```bash
-cd apps/backend
-python3.13 -m venv venv
-./venv/bin/pip install -r requirements.txt
+./apps/backend/scripts/bootstrap.sh
 ```
 
-The backend dependency stack is currently verified on Python `3.13.x` for local
-development. A fresh `3.14.x` environment is not a supported bootstrap target
-for this `v1.0.0` cut.
-
-Current limitation: the backend dependency set is still under-constrained enough
-that some clean `pip install -r requirements.txt` runs can backtrack into an
-older NumPy/basic-pitch build path and fail. The existing backend repo's
-pre-provisioned Python `3.13.x` environment remains the known-good local setup
-until those pins are tightened in a follow-up pass.
+The backend bootstrap path is verified on Python `3.11.x`. The bootstrap
+script recreates `apps/backend/venv` from scratch and is the supported recovery
+path if the local backend environment becomes stale or broken.
 
 Run the full stack from the repo root:
 
 ```bash
+./scripts/dev.sh
+```
+
+### Phase 2 Local Setup
+
+`./scripts/dev.sh` now reads `apps/ui/.env` before starting Vite. This is the
+recommended persistent way to enable Gemini Phase 2 locally.
+
+Persistent `.env` setup:
+
+```bash
+cd apps/ui
+cp .env.example .env
+```
+
+Then set:
+
+```bash
+VITE_API_BASE_URL="http://127.0.0.1:8100"
+VITE_ENABLE_PHASE2_GEMINI="true"
+VITE_GEMINI_API_KEY="your_real_key_here"
+```
+
+Supported shell-based overrides:
+
+```bash
+export VITE_GEMINI_API_KEY="your_real_key_here"
+./scripts/dev.sh
+```
+
+```bash
+VITE_GEMINI_API_KEY="your_real_key_here" ./scripts/dev.sh
+```
+
+This does **not** work because the variable is not exported to the next
+command:
+
+```bash
+VITE_GEMINI_API_KEY="your_real_key_here"
 ./scripts/dev.sh
 ```
 
@@ -99,5 +130,5 @@ git push origin v1.0.0
 
 Keep the backend bootstrap limitation in mind when handing the repo to another machine:
 
-- prefer Python `3.13.x`
-- expect follow-up dependency pinning work in `apps/backend/requirements.txt`
+- prefer Python `3.11.x`
+- use `./apps/backend/scripts/bootstrap.sh` as the supported environment recovery path

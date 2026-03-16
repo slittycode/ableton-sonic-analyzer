@@ -158,6 +158,16 @@ function getRequestParts(): Array<Record<string, unknown>> {
   return generateContentMock.mock.calls[0][0].contents[0].parts as Array<Record<string, unknown>>;
 }
 
+function getPromptText(): string {
+  const promptPart = getRequestParts()[1];
+
+  if (!promptPart || typeof promptPart.text !== 'string') {
+    throw new Error('Gemini prompt text part missing.');
+  }
+
+  return promptPart.text;
+}
+
 beforeEach(() => {
   filesUploadMock.mockReset();
   filesDeleteMock.mockReset();
@@ -215,6 +225,39 @@ describe('analyzePhase2WithGemini', () => {
     expect(parts.some((part) => 'fileData' in part)).toBe(false);
     expect(response.result.trackCharacter).toBe(phase2Result.trackCharacter);
     expect(response.log.message).toBe('Phase 2 advisory complete.');
+  });
+
+  it('uses DSP context for anchoring and audio perception for genre naming in the prompt', async () => {
+    await analyzePhase2WithGemini({
+      file: createSmallFile(),
+      modelName: 'gemini-2.5-pro',
+      phase1Result: basePhase1,
+      audioMetadata,
+    });
+
+    const prompt = getPromptText();
+
+    expect(prompt).toContain(
+      'For measured values, the JSON is authoritative. For genre identification only, audio perception is authoritative.',
+    );
+    expect(prompt).toContain('RHYTHM CLUSTER (from DSP measurements — use as context, not as genre):');
+    expect(prompt).toContain('SYNTHESIS TIER (from synthesisCharacter — use to confirm genre, not define it):');
+    expect(prompt).toContain('GENRE INFERENCE PROCESS:');
+    expect(prompt).toContain('1. State the rhythm cluster and synthesis tier from the JSON above.');
+    expect(prompt).toContain(
+      "4. Never override the measured DSP values with audio perception. Only use audio perception for the genre label itself.",
+    );
+    expect(prompt).toContain('Rhythm cluster: which bucket and why');
+    expect(prompt).toContain(
+      'Synthesis tier: which tier and the specific inharmonicity + oddToEvenRatio values',
+    );
+    expect(prompt).toContain(
+      'Genre confidence: HIGH/MED/LOW with specific reason for any degradation',
+    );
+    expect(prompt).not.toContain('You are a producer reading a spec sheet, not an audio analyser.');
+    expect(prompt).not.toContain('STEP 2 — SYNTHESIS PROFILE (within the cluster from Step 1):');
+    expect(prompt).not.toContain('STEP 3 — BPM AS TIEBREAKER');
+    expect(prompt).not.toContain('3+ indicators match → HIGH confidence');
   });
 
   it('uses the Files API for files larger than the inline size limit', async () => {

@@ -150,7 +150,7 @@ test('upload shows estimate and local DSP processing copy before phase1 complete
   const fixturePath = path.resolve(testDir, './fixtures/silence.wav');
   await page.setInputFiles('#audio-upload', fixturePath);
 
-  await expect(page.getByText('Phase 2 Model')).toBeVisible();
+  await expect(page.getByTestId('phase2-model-desktop')).toBeVisible();
   await expect(page.getByText(/Estimated local analysis/i)).toBeVisible();
   await expect(page.getByText('22s-38s')).toBeVisible();
 

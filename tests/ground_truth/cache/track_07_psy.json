@@ -1,0 +1,5 @@
+{
+  "melodyDetail": {"pitchConfidence": 0.91},
+  "chordDetail": {"chordStrength": 0.48},
+  "sidechainDetail": {"pumpingConfidence": 0.55}
+}

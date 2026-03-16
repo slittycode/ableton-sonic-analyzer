@@ -153,6 +153,63 @@ test('drag-and-drop accepts blank-mime FLAC uploads via extension fallback', asy
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
 
+test('global drag overlay appears for valid audio files and global drop replaces the current file', async ({ page }) => {
+  await stubBackendRoutes(page);
+  await page.goto('/', { waitUntil: 'networkidle' });
+
+  await page.setInputFiles('#audio-upload', fixturePath());
+  await expect(page.getByText('silence.wav')).toBeVisible();
+
+  await page.evaluate(() => {
+    const dataTransfer = new DataTransfer();
+    dataTransfer.items.add(new File(['RIFF'], 'replacement.wav', { type: 'audio/wav' }));
+
+    document.dispatchEvent(
+      new DragEvent('dragenter', {
+        bubbles: true,
+        cancelable: true,
+        dataTransfer,
+      }),
+    );
+  });
+
+  await expect(page.getByText('Drop Audio Here')).toBeVisible();
+
+  await page.evaluate(() => {
+    const dataTransfer = new DataTransfer();
+    dataTransfer.items.add(new File(['RIFF'], 'replacement.wav', { type: 'audio/wav' }));
+
+    document.dispatchEvent(
+      new DragEvent('drop', {
+        bubbles: true,
+        cancelable: true,
+        dataTransfer,
+      }),
+    );
+  });
+
+  await expect(page.getByText('replacement.wav')).toBeVisible();
+  await expect(page.getByText('silence.wav')).toHaveCount(0);
+});
+
+test('load demo track fetches demo.mp3 into the upload flow', async ({ page }) => {
+  await stubBackendRoutes(page);
+  await page.route('**/demo.mp3', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'audio/mpeg',
+      body: Buffer.from('ID3'),
+    });
+  });
+
+  await page.goto('/', { waitUntil: 'networkidle' });
+
+  await page.getByRole('button', { name: /Load Demo Track/i }).click();
+
+  await expect(page.getByText('demo.mp3')).toBeVisible();
+  await expect(page.getByText(/Ready/)).toBeVisible();
+});
+
 test('format badges (MP3, WAV, FLAC, AIFF) are visible on the drop zone', async ({ page }) => {
   await page.goto('/', { waitUntil: 'networkidle' });
 
