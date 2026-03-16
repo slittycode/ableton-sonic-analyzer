@@ -59,6 +59,33 @@ function Collapsible({ isOpen, children }: { isOpen: boolean; children: React.Re
   );
 }
 
+function SourcesToggle({ sources, showSources, onToggle }: { sources?: string[]; showSources: boolean; onToggle: () => void }) {
+  if (!sources || sources.length === 0) return null;
+  return (
+    <div className="mt-3">
+      <button
+        onClick={onToggle}
+        className="text-[10px] font-mono uppercase tracking-wide text-accent hover:text-accent/80 transition-colors flex items-center gap-1"
+      >
+        {showSources ? '▼' : '▶'} Sources
+      </button>
+      <Collapsible isOpen={showSources}>
+        <div className="mt-2 text-xs text-text-secondary/70 font-mono">
+          <span className="text-[10px] uppercase tracking-wide text-text-secondary/50">Based on:</span>
+          <ul className="mt-1 space-y-0.5">
+            {sources.map((source, idx) => (
+              <li key={idx} className="flex items-start gap-2">
+                <span className="text-accent/60">•</span>
+                <span>{source}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </Collapsible>
+    </div>
+  );
+}
+
 function confidenceClass(level: string): string {
   if (level === 'High') return 'text-success bg-success/10 border-success/20';
   if (level === 'Moderate') return 'text-warning bg-warning/10 border-warning/20';
@@ -148,6 +175,7 @@ export function AnalysisResults({
   const [openSonic, setOpenSonic] = useState<Set<string>>(new Set());
   const [openMix, setOpenMix] = useState<Record<string, boolean>>({});
   const [openPatch, setOpenPatch] = useState<Record<string, boolean>>({});
+  const [showSources, setShowSources] = useState<Record<string, boolean>>({});
 
   const sessionId = useMemo(() => new Date().getTime().toString(36).toUpperCase(), []);
 
@@ -181,6 +209,10 @@ export function AnalysisResults({
 
   const togglePatch = (id: string) => {
     setOpenPatch((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const toggleSources = (id: string) => {
+    setShowSources((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
   const finalBpm = Math.round(phase1.bpm);

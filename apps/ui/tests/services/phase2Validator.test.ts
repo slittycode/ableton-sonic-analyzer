@@ -56,11 +56,11 @@ const createBasePhase2 = (overrides: Partial<Phase2Result> = {}): Phase2Result =
     ],
   },
   sonicElements: {
-    kick: { description: 'Four-on-the-floor kick at 126 BPM.' },
-    bass: { description: 'FM bass character.' },
-    melodicArp: { description: 'Simple melodic motif.' },
-    grooveAndTiming: { description: 'Tight quantized groove with minimal swing.' },
-    effectsAndTexture: { description: 'Light atmospherics.' },
+    kick: 'Four-on-the-floor kick at 126 BPM.',
+    bass: 'FM bass character.',
+    melodicArp: 'Simple melodic motif.',
+    grooveAndTiming: 'Tight quantized groove with minimal swing.',
+    effectsAndTexture: 'Light atmospherics.',
   },
   mixAndMasterChain: [
     { order: 1, device: 'EQ Eight', parameter: 'Low Cut', value: '30 Hz', reason: 'Removes rumble' },
@@ -69,14 +69,7 @@ const createBasePhase2 = (overrides: Partial<Phase2Result> = {}): Phase2Result =
   secretSauce: {
     title: 'Punch Layering',
     explanation: 'Layered transient enhancement.',
-    implementationSteps: [
-      { step: 'Step 1' },
-      { step: 'Step 2' },
-      { step: 'Step 3' },
-      { step: 'Step 4' },
-      { step: 'Step 5' },
-      { step: 'Step 6' },
-    ],
+    implementationSteps: ['Step 1', 'Step 2', 'Step 3', 'Step 4', 'Step 5', 'Step 6'],
   },
   confidenceNotes: [
     { field: 'Key Signature', value: 'HIGH', reason: 'Stable detection.' },
@@ -97,7 +90,7 @@ describe('validatePhase2Consistency', () => {
         trackCharacter: 'Track at 127.5 BPM',
         sonicElements: {
           ...createBasePhase2().sonicElements,
-          kick: { description: 'Kick at 127.5 BPM' },
+          kick: 'Kick at 127.5 BPM',
         },
       });
 
@@ -113,7 +106,7 @@ describe('validatePhase2Consistency', () => {
         trackCharacter: 'Track at 130 BPM',
         sonicElements: {
           ...createBasePhase2().sonicElements,
-          kick: { description: 'Kick at 130 BPM' },
+          kick: 'Kick at 130 BPM',
         },
       });
 
@@ -143,7 +136,7 @@ describe('validatePhase2Consistency', () => {
       const phase2 = createBasePhase2({
         sonicElements: {
           ...createBasePhase2().sonicElements,
-          kick: { description: 'Kick pattern at 130 BPM' },
+          kick: 'Kick pattern at 130 BPM',
         },
       });
 

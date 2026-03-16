@@ -109,16 +109,16 @@ function extractBPMFromPhase2(phase2: Phase2Result): Array<{ value: number; loca
     }
   }
 
-  // Check sonicElements - they are now objects with description property
+  // Check sonicElements - they are strings
   if (phase2.sonicElements) {
-    const kickDesc = phase2.sonicElements.kick?.description;
+    const kickDesc = phase2.sonicElements.kick;
     if (kickDesc) {
       const bpm = extractBPMFromText(kickDesc);
       if (bpm !== null) {
         mentions.push({ value: bpm, location: 'sonicElements.kick' });
       }
     }
-    const grooveDesc = phase2.sonicElements.grooveAndTiming?.description;
+    const grooveDesc = phase2.sonicElements.grooveAndTiming;
     if (grooveDesc) {
       const bpm = extractBPMFromText(grooveDesc);
       if (bpm !== null) {
@@ -201,8 +201,8 @@ function extractKeyFromPhase2(phase2: Phase2Result): Array<{ value: string; loca
     }
   }
 
-  // Check sonicElements.harmonicContent (now an object)
-  const harmonicDesc = phase2.sonicElements?.harmonicContent?.description;
+  // Check sonicElements.harmonicContent (string)
+  const harmonicDesc = phase2.sonicElements?.harmonicContent;
   if (harmonicDesc) {
     const matches = [...harmonicDesc.matchAll(keyPattern)];
     for (const match of matches) {

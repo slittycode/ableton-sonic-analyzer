@@ -2,6 +2,25 @@
 
 All notable changes to `ableton-sonic-analyzer` are documented here.
 
+## v1.2.0
+
+- Added `apps/backend/scripts/genre_check.py`: DSP preflight reporter emitting rhythm cluster, synthesis tier, sidechain status, BPM, kickSwing, kickAccentVariance, and inharmonicity — no genre labels.
+- Added `apps/backend/scripts/genre_corpus.md`: 10-track ground truth validation corpus.
+- Added `apps/backend/analyze_fast.py`: fast analysis path for core fields only (BPM, key, loudness, dynamics).
+- Added `scripts/calibrate_confidence.py`: F1-based threshold calibration for pitchConfidence, chordStrength, and pumpingConfidence against a ground truth dataset.
+- Added `tests/ground_truth/labels.json`: ground truth label schema (placeholder tracks — replace with real library entries from genre_corpus.md before running calibration).
+- Applied `math.tanh(raw * 0.5)` normalization to `grooveDetail.kickSwing` and `grooveDetail.hihatSwing` in `analyze.py`, compressing the unbounded std/mean ratio to a consistent 0–1 scale.
+- Added `apps/ui/src/services/phase2Validator.ts` and `apps/ui/src/services/fieldAnalytics.ts`.
+- Backend tests: 29. UI tests: 128 across 16 files.
+
+## v1.1.0
+
+- Standardized full-feature backend bootstrap on Python `3.11.x` for macOS arm64 and documented the `3.12+` Darwin limitation across all root and backend docs.
+- Added `apps/backend/scripts/bootstrap.sh`.
+- Replaced loose backend dependency list with the validated Python 3.11 frozen lock set.
+- Updated `scripts/dev.sh` missing-venv error to point to bootstrap helper.
+- Added `apps/backend/tests/test_bootstrap_scripts.py`.
+
 ## v1.0.0
 
 - Cut the first monorepo release and preserved the imported history of the former UI and backend repos under:

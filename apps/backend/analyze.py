@@ -35,6 +35,12 @@ except ImportError:
     print("Error: essentia is not installed.", file=sys.stderr)
     sys.exit(1)
 
+# Import fast analysis mode
+try:
+    from analyze_fast import analyze_fast
+except ImportError:
+    analyze_fast = None
+
 
 def load_mono(path: str, sample_rate: int = 44100) -> np.ndarray:
     """Load audio as mono via MonoLoader."""
@@ -194,6 +200,7 @@ def build_analysis_estimate(
     duration_seconds: float,
     run_separation: bool,
     run_transcribe: bool,
+    run_fast: bool = False,
 ) -> dict:
     stages = []
 

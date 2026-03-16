@@ -81,6 +81,7 @@ export interface SonicElementCardViewModel {
   measurements: SonicMeasurementViewModel[];
   isWidthAndStereo: boolean;
   transcriptionDerived?: boolean;
+  sources?: string[];
 }
 
 export interface ChainParameterViewModel {
@@ -502,7 +503,14 @@ export function buildSonicElementCards(
   const melodyInsights = buildMelodyInsights(phase1);
 
   return Object.entries(sonicElements)
-    .filter(([, value]) => typeof value === "string" && value.trim().length > 0)
+    .filter(([, value]) => {
+      if (typeof value === "string") return value.trim().length > 0;
+      if (typeof value === "object" && value !== null) {
+        return typeof (value as { description?: string }).description === "string" &&
+          (value as { description?: string }).description!.trim().length > 0;
+      }
+      return false;
+    })
     .map(([key, rawValue]) => {
       const def = SONIC_ELEMENT_DEFINITIONS[key] ?? {
         title: key.replace(/([A-Z])/g, " $1").trim(),
@@ -510,9 +518,22 @@ export function buildSonicElementCards(
       };
 
       const isWidthAndStereo = key === "widthAndStereo";
-      const sanitized = sanitizeText(rawValue as string, 600);
-      const sentenceCap = isWidthAndStereo ? 6 : 4;
       const transcriptionDerived = key === "melodicArp" && !!melodyInsights;
+
+      // Handle both string and object formats
+      let descriptionText: string;
+      let sources: string[] | undefined;
+      if (typeof rawValue === "string") {
+        descriptionText = rawValue;
+      } else if (typeof rawValue === "object" && rawValue !== null) {
+        descriptionText = (rawValue as { description?: string }).description || "";
+        sources = (rawValue as { sources?: string[] }).sources;
+      } else {
+        descriptionText = String(rawValue);
+      }
+
+      const sanitized = sanitizeText(descriptionText, 600);
+      const sentenceCap = isWidthAndStereo ? 6 : 4;
 
       return {
         id: key,
@@ -523,6 +544,7 @@ export function buildSonicElementCards(
         measurements: getSonicMeasurements(key, phase1, melodyInsights),
         isWidthAndStereo,
         transcriptionDerived,
+        sources,
       } satisfies SonicElementCardViewModel;
     });
 }

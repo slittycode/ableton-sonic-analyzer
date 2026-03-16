@@ -48,11 +48,11 @@ const basePhase2: Phase2Result = {
     noveltyNotes: 'Novel shifts at 14.0s and 63.5s align with transitions.',
   },
   sonicElements: {
-    kick: { description: 'Punchy kick body.' },
-    bass: { description: 'Focused bass lane.' },
-    melodicArp: { description: 'Simple melodic motif.' },
-    grooveAndTiming: { description: 'Quantized groove.' },
-    effectsAndTexture: { description: 'Light atmospherics.' },
+    kick: 'Punchy kick body.',
+    bass: 'Focused bass lane.',
+    melodicArp: 'Simple melodic motif.',
+    grooveAndTiming: 'Quantized groove.',
+    effectsAndTexture: 'Light atmospherics.',
   },
   mixAndMasterChain: [
     {
@@ -73,7 +73,7 @@ const basePhase2: Phase2Result = {
   secretSauce: {
     title: 'Punch Layering',
     explanation: 'Layered transient enhancement.',
-    implementationSteps: [{ step: 'Step 1' }, { step: 'Step 2' }],
+    implementationSteps: ['Step 1', 'Step 2'],
   },
   confidenceNotes: [{ field: 'Key Signature', value: 'HIGH', reason: 'Stable detection.' }],
   abletonRecommendations: [

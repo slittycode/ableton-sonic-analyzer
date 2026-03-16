@@ -114,7 +114,6 @@ export interface AbletonRecommendation {
   value: string;
   reason: string;
   advancedTip?: string;
-  sources?: string[];
 }
 
 export interface Phase2Result {
@@ -137,13 +136,13 @@ export interface Phase2Result {
     noveltyNotes?: string;
   };
   sonicElements: {
-    kick: { description: string; sources?: string[] };
-    bass: { description: string; sources?: string[] };
-    melodicArp: { description: string; sources?: string[] };
-    grooveAndTiming: { description: string; sources?: string[] };
-    effectsAndTexture: { description: string; sources?: string[] };
-    widthAndStereo?: { description: string; sources?: string[] };
-    harmonicContent?: { description: string; sources?: string[] };
+    kick: string;
+    bass: string;
+    melodicArp: string;
+    grooveAndTiming: string;
+    effectsAndTexture: string;
+    widthAndStereo?: string;
+    harmonicContent?: string;
   };
   mixAndMasterChain: Array<{
     order: number;
@@ -151,16 +150,12 @@ export interface Phase2Result {
     parameter: string;
     value: string;
     reason: string;
-    sources?: string[];
   }>;
   secretSauce: {
     title: string;
     icon?: string;
     explanation: string;
-    implementationSteps: Array<{
-      step: string;
-      sources?: string[];
-    }>;
+    implementationSteps: string[];
   };
   confidenceNotes: {
     field: string;

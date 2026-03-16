@@ -4,6 +4,16 @@ All notable changes to `sonic-analyzer-UI` are documented here in reverse chrono
 
 ## Unreleased
 
+## v1.4.0 — DSP Preflight, Phase 2 Validation, Confidence Calibration Infrastructure
+
+- Rewrote genre inference block: DSP now provides rhythm cluster and synthesis tier as anchoring context only; Gemini uses audio perception for genre naming with explicit cross-check against DSP signals.
+- Replaced "producer reading a spec sheet" rule with explicit split: JSON authoritative for measured values, audio authoritative for genre identification only.
+- Added CITATION REQUIREMENT to prompt: Gemini must include a sources array per recommendation field (prompt-only, not schema-enforced yet).
+- Added `apps/ui/src/services/phase2Validator.ts`: validates Phase 2 output against Phase 1 measurements — checks BPM consistency, key consistency, LUFS bounds, genre/DSP context references, and spectral bounds.
+- Added `apps/ui/src/services/fieldAnalytics.ts`: tracks which Phase 1 fields drive Phase 2 recommendations per analysis run.
+- Reverted schema type changes introduced during Hermes pass: sonicElements fields remain plain strings, secretSauce.implementationSteps remains string[]. Sources deferred to a future schema pass.
+- Unit test count: 96 → 128 across 16 files.
+
 ## v1.3.0 — Downstream Section Hardening
 
 - sonicElements kick: now derives device recommendations directly from kickAccentVariance and kickSwing thresholds rather than from the genre label inferred in trackCharacter.
