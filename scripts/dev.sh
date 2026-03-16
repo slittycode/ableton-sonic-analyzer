@@ -38,7 +38,6 @@ ensure_exists() {
   fi
 }
 
-<<<<<<< HEAD
 read_env_file_value() {
   local env_file="$1"
   local key="$2"
@@ -90,7 +89,8 @@ load_ui_env_file() {
       export "$key=$value"
     fi
   done
-=======
+}
+
 print_missing_backend_env() {
   echo "Missing backend virtualenv python: ${BACKEND_DIR}/venv/bin/python" >&2
   echo "Run ./apps/backend/scripts/bootstrap.sh to create the Python 3.11 backend environment." >&2
@@ -101,7 +101,6 @@ ensure_backend_env() {
     print_missing_backend_env
     exit 1
   fi
->>>>>>> 1ba0f11df99a88eefd669d3db69fae16257dc529
 }
 
 print_port_conflict() {
@@ -182,15 +181,9 @@ main() {
   require_command npm
   require_command python3
 
-<<<<<<< HEAD
   ensure_exists "$UI_DIR/package.json" "frontend package.json"
   ensure_exists "$BACKEND_DIR/server.py" "backend server entrypoint"
-  ensure_exists "$BACKEND_DIR/venv/bin/python" "backend virtualenv python"
-=======
-ensure_exists "$UI_DIR/package.json" "frontend package.json"
-ensure_exists "$BACKEND_DIR/server.py" "backend server entrypoint"
-ensure_backend_env
->>>>>>> 1ba0f11df99a88eefd669d3db69fae16257dc529
+  ensure_backend_env
 
   warn_if_stale_ui_env
   load_ui_env_file
