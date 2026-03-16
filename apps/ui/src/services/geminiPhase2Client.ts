@@ -338,6 +338,28 @@ For each card:
 Do not pad with generic advice. Every recommendation must be 
 justified by a specific measurement from the JSON.
 
+CITATION REQUIREMENT:
+For every field in your output, include a "sources" array listing the specific 
+Phase 1 JSON fields that justify this recommendation.
+
+Example:
+"sonicElements": {
+  "kick": {
+    "description": "Four-on-the-floor pattern with moderate swing...",
+    "sources": ["grooveDetail.kickAccent", "grooveDetail.kickSwing", "bpm"]
+  }
+}
+
+Fields that MUST have sources:
+- All sonicElements (kick, bass, melodicArp, grooveAndTiming, etc.)
+- Every device in mixAndMasterChain
+- secretSauce.implementationSteps
+- All abletonRecommendations
+
+Fields where sources are OPTIONAL:
+- trackCharacter (narrative summary)
+- confidenceNotes (self-referential)
+
 Phase 1 Measurements:
 ${JSON.stringify(phase1Result, null, 2)}`;
   const resolvedMimeType = getAudioMimeTypeOrDefault(file);
