@@ -4,6 +4,15 @@ All notable changes to `sonic-analyzer-UI` are documented here in reverse chrono
 
 ## Unreleased
 
+## v1.5.0 — Phase 2 Validation Wiring
+
+- Wired `validatePhase2Consistency` into the analysis flow in `analyzer.ts` — runs after Phase 2 completes when result is non-null, wrapped in try/catch so validator errors cannot break analysis.
+- `DiagnosticLogEntry` now carries an optional `validationReport` field populated by the validator.
+- `App.tsx` appends `Validation: X error(s), Y warning(s)` to the Phase 2 diagnostic log message when violations are present.
+- `DiagnosticLog.tsx` renders log messages with `whitespace-pre-line` so the validation summary appears on its own line.
+- Added two targeted tests in `analyzer.test.ts`: successful report attachment and silent validator failure resilience.
+- Unit test count: 128 → 130.
+
 ## v1.4.0 — DSP Preflight, Phase 2 Validation, Confidence Calibration Infrastructure
 
 - Rewrote genre inference block: DSP now provides rhythm cluster and synthesis tier as anchoring context only; Gemini uses audio perception for genre naming with explicit cross-check against DSP signals.

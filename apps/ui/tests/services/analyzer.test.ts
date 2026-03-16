@@ -1,17 +1,24 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { BackendAnalyzeResponse, DiagnosticLogEntry, Phase1Result } from '../../src/types';
+import type {
+  BackendAnalyzeResponse,
+  DiagnosticLogEntry,
+  Phase1Result,
+  Phase2Result,
+} from '../../src/types';
 
 const {
   analyzePhase1WithBackendMock,
   analyzePhase2WithGeminiMock,
   canRunGeminiPhase2Mock,
   isGeminiPhase2ConfigEnabledMock,
+  validatePhase2ConsistencyMock,
 } = vi.hoisted(() => ({
   analyzePhase1WithBackendMock: vi.fn(),
   analyzePhase2WithGeminiMock: vi.fn(),
   canRunGeminiPhase2Mock: vi.fn(() => false),
   isGeminiPhase2ConfigEnabledMock: vi.fn(() => true),
+  validatePhase2ConsistencyMock: vi.fn(),
 }));
 
 vi.mock('../../src/config', () => ({
@@ -38,6 +45,10 @@ vi.mock('../../src/services/geminiPhase2Client', () => ({
   analyzePhase2WithGemini: analyzePhase2WithGeminiMock,
 }));
 
+vi.mock('../../src/services/phase2Validator', () => ({
+  validatePhase2Consistency: validatePhase2ConsistencyMock,
+}));
+
 import { BackendClientError } from '../../src/services/backendPhase1Client';
 import { analyzeAudio } from '../../src/services/analyzer';
 
@@ -62,11 +73,62 @@ const phase1Result: Phase1Result = {
   },
 };
 
+const phase2Result: Phase2Result = {
+  trackCharacter: 'Tight modern electronic mix.',
+  detectedCharacteristics: [
+    { name: 'Stereo Discipline', confidence: 'HIGH', explanation: 'Controlled width and correlation.' },
+  ],
+  arrangementOverview: {
+    summary: 'Arrangement transitions and energy shifts.',
+    segments: [
+      {
+        index: 1,
+        startTime: 0,
+        endTime: 30,
+        lufs: -8.4,
+        description: 'Intro: sparse opening.',
+      },
+    ],
+  },
+  sonicElements: {
+    kick: 'Punchy kick body.',
+    bass: 'Focused bass lane.',
+    melodicArp: 'Simple melodic motif.',
+    grooveAndTiming: 'Quantized groove.',
+    effectsAndTexture: 'Light atmospherics.',
+  },
+  mixAndMasterChain: [
+    {
+      order: 1,
+      device: 'Drum Buss',
+      parameter: 'Drive',
+      value: '5 dB',
+      reason: 'Adds punch to drums.',
+    },
+  ],
+  secretSauce: {
+    title: 'Punch Layering',
+    explanation: 'Layered transient enhancement.',
+    implementationSteps: ['Step 1', 'Step 2'],
+  },
+  confidenceNotes: [{ field: 'Key Signature', value: 'HIGH', reason: 'Stable detection.' }],
+  abletonRecommendations: [
+    {
+      device: 'Operator',
+      category: 'SYNTHESIS',
+      parameter: 'Coarse',
+      value: '1.00',
+      reason: 'Matches tonal center.',
+    },
+  ],
+};
+
 afterEach(() => {
   analyzePhase1WithBackendMock.mockReset();
   analyzePhase2WithGeminiMock.mockReset();
   canRunGeminiPhase2Mock.mockReset();
   isGeminiPhase2ConfigEnabledMock.mockReset();
+  validatePhase2ConsistencyMock.mockReset();
   canRunGeminiPhase2Mock.mockReturnValue(false);
   isGeminiPhase2ConfigEnabledMock.mockReturnValue(true);
 });
@@ -284,5 +346,129 @@ describe('analyzeAudio', () => {
     expect(onError).toHaveBeenCalledTimes(1);
     expect(onError.mock.calls[0]?.[0]).toBeInstanceOf(BackendClientError);
     expect((onError.mock.calls[0]?.[0] as BackendClientError).code).toBe('USER_CANCELLED');
+  });
+
+  it('attaches a validation report to the phase 2 log when advisory output is available', async () => {
+    canRunGeminiPhase2Mock.mockReturnValue(true);
+
+    const backendResult: BackendAnalyzeResponse = {
+      requestId: 'req_phase2_validation',
+      phase1: phase1Result,
+    };
+    analyzePhase1WithBackendMock.mockResolvedValue(backendResult);
+
+    const validationReport = {
+      violations: [
+        {
+          type: 'GENRE_IGNORES_DSP',
+          field: 'confidenceNotes',
+          severity: 'WARNING',
+          message: 'Missing rhythm cluster reference.',
+        },
+      ],
+      passed: true,
+      summary: {
+        errorCount: 0,
+        warningCount: 1,
+        checkedFields: 5,
+      },
+    };
+    validatePhase2ConsistencyMock.mockReturnValue(validationReport);
+    analyzePhase2WithGeminiMock.mockResolvedValue({
+      result: phase2Result,
+      log: {
+        model: 'gemini-2.5-pro',
+        phase: 'Phase 2: Advisory reconstruction',
+        promptLength: 10,
+        responseLength: 20,
+        durationMs: 100,
+        audioMetadata: {
+          name: 'track.mp3',
+          size: 10,
+          type: 'audio/mpeg',
+        },
+        timestamp: new Date().toISOString(),
+        source: 'gemini',
+        status: 'success',
+        message: 'Phase 2 advisory complete.',
+      },
+    });
+
+    const file = new File(['audio-data'], 'track.mp3', { type: 'audio/mpeg' });
+    const onPhase2Complete = vi.fn();
+
+    await analyzeAudio(
+      file,
+      'gemini-2.5-pro',
+      null,
+      () => {},
+      onPhase2Complete,
+      (error) => {
+        throw error;
+      },
+      { phase2Requested: true, phase2ConfigEnabled: true },
+    );
+
+    expect(validatePhase2ConsistencyMock).toHaveBeenCalledWith(backendResult.phase1, phase2Result);
+    expect(onPhase2Complete).toHaveBeenCalledWith(
+      phase2Result,
+      expect.objectContaining({
+        requestId: 'req_phase2_validation',
+        validationReport,
+      }),
+    );
+  });
+
+  it('silently skips validation when the validator throws', async () => {
+    canRunGeminiPhase2Mock.mockReturnValue(true);
+
+    const backendResult: BackendAnalyzeResponse = {
+      requestId: 'req_phase2_validation_throw',
+      phase1: phase1Result,
+    };
+    analyzePhase1WithBackendMock.mockResolvedValue(backendResult);
+    validatePhase2ConsistencyMock.mockImplementation(() => {
+      throw new Error('validator blew up');
+    });
+    analyzePhase2WithGeminiMock.mockResolvedValue({
+      result: phase2Result,
+      log: {
+        model: 'gemini-2.5-pro',
+        phase: 'Phase 2: Advisory reconstruction',
+        promptLength: 10,
+        responseLength: 20,
+        durationMs: 100,
+        audioMetadata: {
+          name: 'track.mp3',
+          size: 10,
+          type: 'audio/mpeg',
+        },
+        timestamp: new Date().toISOString(),
+        source: 'gemini',
+        status: 'success',
+        message: 'Phase 2 advisory complete.',
+      },
+    });
+
+    const file = new File(['audio-data'], 'track.mp3', { type: 'audio/mpeg' });
+    const onPhase2Complete = vi.fn();
+    const onError = vi.fn();
+
+    await analyzeAudio(
+      file,
+      'gemini-2.5-pro',
+      null,
+      () => {},
+      onPhase2Complete,
+      onError,
+      { phase2Requested: true, phase2ConfigEnabled: true },
+    );
+
+    expect(validatePhase2ConsistencyMock).toHaveBeenCalledWith(backendResult.phase1, phase2Result);
+    expect(onError).not.toHaveBeenCalled();
+    expect(onPhase2Complete).toHaveBeenCalledTimes(1);
+    expect(onPhase2Complete.mock.calls[0]?.[0]).toBe(phase2Result);
+    expect(onPhase2Complete.mock.calls[0]?.[1]?.validationReport).toBeUndefined();
+    expect(onPhase2Complete.mock.calls[0]?.[1]?.requestId).toBe('req_phase2_validation_throw');
   });
 });

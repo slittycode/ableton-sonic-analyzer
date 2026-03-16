@@ -112,6 +112,16 @@ function getPhase2HelperCopy(
   return 'Runs after Phase 1 succeeds and uses the selected Gemini model for advisory reconstruction output.';
 }
 
+function getValidationSummaryLine(
+  validationReport: DiagnosticLogEntry['validationReport'],
+): string | null {
+  if (!validationReport || validationReport.violations.length === 0) {
+    return null;
+  }
+
+  return `Validation: ${validationReport.summary.errorCount} error(s), ${validationReport.summary.warningCount} warning(s)`;
+}
+
 export default function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [currentPhase, setCurrentPhase] = useState<number>(0);
@@ -401,14 +411,27 @@ export default function App() {
           setPhase2Result(result);
           setPhase2StatusMessage(log.message ?? null);
           setLogs((prev) => {
+            const baseMessage =
+              log.message ?? (result ? 'Phase 2 advisory complete.' : 'Phase 2 advisory skipped.');
+            const validationSummaryLine = getValidationSummaryLine(log.validationReport);
+            const logMessage = validationSummaryLine
+              ? `${baseMessage}\n${validationSummaryLine}`
+              : baseMessage;
+
             if (phase2WillRun) {
               return replaceRunningLog(prev, 'gemini', {
                 ...log,
                 status: log.status ?? (result ? 'success' : 'skipped'),
-                message: log.message ?? (result ? 'Phase 2 advisory complete.' : 'Phase 2 advisory skipped.'),
+                message: logMessage,
               });
             }
-            return [...prev, log];
+            return [
+              ...prev,
+              {
+                ...log,
+                message: logMessage,
+              },
+            ];
           });
           setCurrentPhase(0);
           setIsAnalyzing(false);

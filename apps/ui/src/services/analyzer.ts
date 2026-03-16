@@ -2,6 +2,7 @@ import { appConfig, canRunGeminiPhase2, isGeminiPhase2ConfigEnabled } from '../c
 import { getAudioMimeTypeOrDefault } from './audioFile';
 import { analyzePhase1WithBackend, createUserCancelledError, mapBackendError } from './backendPhase1Client';
 import { PHASE1_LABEL, PHASE2_SKIPPED_LABEL } from './phaseLabels';
+import { validatePhase2Consistency } from './phase2Validator';
 import { DiagnosticLogEntry, Phase1Result, Phase2Result } from '../types';
 
 interface AnalyzeAudioOptions {
@@ -160,9 +161,19 @@ export async function analyzeAudio(
     );
     throwIfUserCancelled(analysisOptions?.signal);
 
+    let validationReport: DiagnosticLogEntry['validationReport'];
+    if (phase2.result) {
+      try {
+        validationReport = validatePhase2Consistency(backendResult.phase1, phase2.result);
+      } catch {
+        validationReport = undefined;
+      }
+    }
+
     onPhase2Complete(phase2.result, {
       ...phase2.log,
       requestId: backendResult.requestId,
+      validationReport,
     });
   } catch (error) {
     if (!phase1Completed) {

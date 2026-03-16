@@ -89,7 +89,7 @@ export function DiagnosticLog({ logs, defaultExpanded }: DiagnosticLogProps) {
                     </span>
                   </div>
                   {log.message && (
-                    <p className="pl-2 text-text-primary/90 leading-relaxed">
+                    <p className="pl-2 text-text-primary/90 leading-relaxed whitespace-pre-line">
                       {log.message}
                     </p>
                   )}
