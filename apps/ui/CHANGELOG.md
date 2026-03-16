@@ -4,6 +4,15 @@ All notable changes to `sonic-analyzer-UI` are documented here in reverse chrono
 
 ## Unreleased
 
+## v1.6.0 — Full Live E2E Suite
+
+- Added a full live browser-level E2E suite under `tests/e2e` covering real local-backend and live Gemini flows.
+- Added `playwright.full.config.ts` plus `test:e2e` and `test:e2e:headed` commands for the dedicated live suite.
+- Added root runner `scripts/test-e2e.sh` with fail-fast checks for backend bootstrap, Gemini enablement, and a non-placeholder API key.
+- Added four live specs: `phase1-exports`, `session-musician`, `phase2-inline`, and `phase2-files-api`.
+- Added `audioFixtures.ts` and `liveHarness.ts` support infrastructure for deterministic audio generation, live preflight, downloads, and Gemini request observation.
+- Unit test count: 130 → 137.
+
 ## v1.5.0 — Phase 2 Validation Wiring
 
 - Wired `validatePhase2Consistency` into the analysis flow in `analyzer.ts` — runs after Phase 2 completes when result is non-null, wrapped in try/catch so validator errors cannot break analysis.

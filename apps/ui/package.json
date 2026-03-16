@@ -13,6 +13,8 @@
     "lint": "tsc --noEmit",
     "test": "vitest run",
     "test:unit": "vitest run tests/services",
+    "test:e2e": "playwright test --config=playwright.full.config.ts --reporter=list",
+    "test:e2e:headed": "playwright test --config=playwright.full.config.ts --headed --reporter=list",
     "test:smoke": "playwright test --reporter=list",
     "test:smoke:live-gemini": "playwright test tests/smoke/upload-phase2-live-gemini.spec.ts --reporter=list",
     "verify": "npm run lint && npm run test:unit && npm run build && npm run test:smoke"
