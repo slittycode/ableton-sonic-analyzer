@@ -458,6 +458,11 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
                         STEMS: {stemSourcesLabel}
                       </span>
                     )}
+                    {transcriptionDetail?.fullMixFallback && (
+                      <span className="px-2 py-1 rounded border border-warning/30 text-warning bg-warning/10">
+                        FULL MIX — quality limited
+                      </span>
+                    )}
                   </div>
                 )}
 

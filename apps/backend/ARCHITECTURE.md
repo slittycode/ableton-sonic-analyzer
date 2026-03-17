@@ -43,6 +43,7 @@ Custom routes:
 
 - `POST /api/analyze/estimate`
 - `POST /api/analyze`
+- `POST /api/phase2`
 
 FastAPI-generated routes remain available at `/openapi.json`, `/docs`, and `/redoc`.
 
@@ -225,6 +226,17 @@ Error diagnostics can include:
 
 When the analyzer never produces a valid JSON object, `timings.fileDurationSeconds` and `timings.msPerSecondOfAudio` are `null`.
 
+### `POST /api/phase2`
+
+1. Optionally use a cached temp file from a prior Phase 1 request (keyed by `phase1_request_id` form field); fall back to persisting the uploaded file if no cache hit.
+2. Parse `phase1_json` form field — used as-is (already normalized by the frontend).
+3. Build the Gemini prompt: system prompt from `prompts/phase2_system.txt` + Phase 1 JSON appended.
+4. Upload the audio inline (≤20 MiB) or via the Gemini Files API (>20 MiB).
+5. Call `generateContent` with structured output schema; retry on transient errors.
+6. Parse and validate the response against the Phase 2 schema.
+7. Return `{ requestId, phase2: Phase2Result | null, message, diagnostics }`.
+8. Clean up the temporary file in the `finally` block.
+
 ## Transcription Pipeline
 
 `transcriptionDetail` is produced only when `--transcribe` is active.
@@ -235,20 +247,30 @@ Flow:
 2. Choose transcription sources:
    - `bass` and `other` stems when Demucs succeeded
    - otherwise `full_mix`
-3. Run `predict()` once per source.
-4. Normalize each note into:
+3. If the pipeline falls back to `full_mix`, emit a warning to `stderr` because dense material is lower quality without stem separation.
+4. Run `predict()` once per source.
+5. Normalize each note into:
    - `pitchMidi`
    - `pitchName`
    - `onsetSeconds`
    - `durationSeconds`
    - `confidence`
    - `stemSource`
-5. Merge notes, compute dominant pitches and pitch range, and return `transcriptionDetail`.
+6. Drop notes below the backend noise floor (`0.05`) before merge. This is not the user-facing quality dial; the UI confidence slider remains the primary filter.
+7. Merge all sources, then deduplicate overlapping stem collisions with an active-window sweep:
+   - active window: `onsetSeconds` through `onsetSeconds + max(durationSeconds, 0.1)`
+   - overlap tolerance: `±1` semitone across different stems
+   - exact-pitch near-duplicates: onsets within `30ms`
+   - stem priority: `bass` wins below MIDI 48, `other` wins at or above MIDI 48, `full_mix` loses to both
+8. Apply the post-dedup cap:
+   - `500` notes for stem-aware transcription
+   - `200` notes for `full_mix` fallback
+9. Recompute `noteCount`, `averageConfidence`, `dominantPitches`, and `pitchRange` from the retained notes and return `transcriptionDetail`, including `fullMixFallback`.
 
 ## Current Caveats
 
 - `dsp_json_override` is a reserved field only. The backend accepts it but does not use it.
-- `--fast` is parsed by `analyze.py` but still does nothing.
+- `--fast` is forwarded via form field `fast` or query param `fast` on `POST /api/analyze`. The estimate endpoint does not account for fast mode.
 - The HTTP API is intentionally narrower than the raw CLI schema.
 
 ## Verification Surface

@@ -52,6 +52,10 @@ class ServerContractTests(unittest.TestCase):
         schema_name = schema_ref.split("/")[-1]
         return openapi["components"]["schemas"][schema_name]["properties"]
 
+    def test_phase2_prompt_template_loaded(self) -> None:
+        self.assertIsInstance(server.PHASE2_PROMPT_TEMPLATE, str)
+        self.assertGreater(len(server.PHASE2_PROMPT_TEMPLATE), 100)
+
     def test_resolve_server_port_defaults_to_8100(self) -> None:
         with patch.dict(server.os.environ, {}, clear=True):
             self.assertEqual(server.resolve_server_port(), 8100)
@@ -217,6 +221,8 @@ class ServerContractTests(unittest.TestCase):
                     separate=True,
                     separate_query=False,
                     separate_flag=False,
+                    fast=False,
+                    fast_query=False,
                 )
             )
 
@@ -259,6 +265,118 @@ class ServerContractTests(unittest.TestCase):
         self.assertIn(
             "fileSize=0.0MB duration=214.6s ms/s=0.93", print_mock.call_args.args[0]
         )
+
+    def test_analyze_endpoint_openapi_exposes_fast_form_field(self) -> None:
+        properties = self._request_body_properties("/api/analyze")
+        self.assertIn("fast", properties)
+
+    @patch.object(server, "get_audio_duration_seconds", return_value=60.0, create=True)
+    @patch.object(
+        server,
+        "build_analysis_estimate",
+        return_value={
+            "durationSeconds": 60.0,
+            "totalSeconds": {"min": 10, "max": 20},
+            "stages": [{"key": "dsp", "label": "DSP analysis", "seconds": {"min": 10, "max": 20}}],
+        },
+        create=True,
+    )
+    @patch.object(
+        server.subprocess,
+        "run",
+        return_value=subprocess.CompletedProcess(
+            args=["./venv/bin/python", "analyze.py", "track.mp3", "--yes", "--fast"],
+            returncode=0,
+            stdout=json.dumps({
+                "bpm": 128, "bpmConfidence": 0.9, "key": "C major", "keyConfidence": 0.8,
+                "timeSignature": "4/4", "durationSeconds": 60.0,
+                "lufsIntegrated": -8.0, "truePeak": -0.5,
+                "stereoDetail": {"stereoWidth": 0.5, "stereoCorrelation": 0.9},
+                "spectralBalance": {"subBass": 0.0, "lowBass": 0.0, "mids": 0.0, "upperMids": 0.0, "highs": 0.0, "brilliance": 0.0},
+                "melodyDetail": None, "transcriptionDetail": None,
+            }),
+            stderr="",
+        ),
+    )
+    def test_analyze_endpoint_passes_fast_flag_to_subprocess(
+        self, run_mock, *_mocks
+    ) -> None:
+        with (
+            patch.object(server, "_current_time", side_effect=_timing_points(), create=True),
+            patch("builtins.print"),
+        ):
+            response = asyncio.run(
+                server.analyze_audio(
+                    track=self._upload_file(),
+                    dsp_json_override=None,
+                    transcribe=False,
+                    separate=False,
+                    separate_query=False,
+                    separate_flag=False,
+                    fast=True,
+                    fast_query=False,
+                )
+            )
+
+        self.assertEqual(response.status_code, 200)
+        command = run_mock.call_args.args[0]
+        self.assertIn("--fast", command)
+        payload = self._decode_json_response(response)
+        self.assertIn("--fast", payload["diagnostics"]["timings"]["flagsUsed"])
+
+    @patch.object(server, "get_audio_duration_seconds", return_value=60.0, create=True)
+    @patch.object(
+        server,
+        "build_analysis_estimate",
+        return_value={
+            "durationSeconds": 60.0,
+            "totalSeconds": {"min": 10, "max": 20},
+            "stages": [{"key": "dsp", "label": "DSP analysis", "seconds": {"min": 10, "max": 20}}],
+        },
+        create=True,
+    )
+    @patch.object(
+        server.subprocess,
+        "run",
+        return_value=subprocess.CompletedProcess(
+            args=["./venv/bin/python", "analyze.py", "track.mp3", "--yes"],
+            returncode=0,
+            stdout=json.dumps({
+                "bpm": 128, "bpmConfidence": 0.9, "key": "C major", "keyConfidence": 0.8,
+                "timeSignature": "4/4", "durationSeconds": 60.0,
+                "lufsIntegrated": -8.0, "truePeak": -0.5,
+                "stereoDetail": {"stereoWidth": 0.5, "stereoCorrelation": 0.9},
+                "spectralBalance": {"subBass": 0.0, "lowBass": 0.0, "mids": 0.0, "upperMids": 0.0, "highs": 0.0, "brilliance": 0.0},
+                "melodyDetail": None, "transcriptionDetail": None,
+            }),
+            stderr="",
+        ),
+    )
+    def test_analyze_endpoint_does_not_pass_fast_when_false(
+        self, run_mock, *_mocks
+    ) -> None:
+        with (
+            patch.object(server, "_current_time", side_effect=_timing_points(), create=True),
+            patch("builtins.print"),
+        ):
+            response = asyncio.run(
+                server.analyze_audio(
+                    track=self._upload_file(),
+                    dsp_json_override=None,
+                    transcribe=False,
+                    separate=False,
+                    separate_query=False,
+                    separate_flag=False,
+                    fast=False,
+                    fast_query=False,
+                )
+            )
+
+        self.assertEqual(response.status_code, 200)
+        command = run_mock.call_args.args[0]
+        self.assertNotIn("--fast", command)
+        payload = self._decode_json_response(response)
+        self.assertNotIn("--fast", payload["diagnostics"]["timings"]["flagsUsed"])
 
     @patch.object(server, "get_audio_duration_seconds", return_value=214.6, create=True)
     @patch.object(
@@ -337,6 +455,8 @@ class ServerContractTests(unittest.TestCase):
                     separate=True,
                     separate_query=False,
                     separate_flag=False,
+                    fast=False,
+                    fast_query=False,
                 )
             )
 
@@ -410,6 +530,8 @@ class ServerContractTests(unittest.TestCase):
                     separate=False,
                     separate_query=False,
                     separate_flag=False,
+                    fast=False,
+                    fast_query=False,
                 )
             )
 
@@ -495,6 +617,8 @@ class ServerContractTests(unittest.TestCase):
                     separate=False,
                     separate_query=False,
                     separate_flag=False,
+                    fast=False,
+                    fast_query=False,
                 )
             )
 
@@ -545,6 +669,8 @@ class ServerContractTests(unittest.TestCase):
                     separate=False,
                     separate_query=False,
                     separate_flag=False,
+                    fast=False,
+                    fast_query=False,
                 )
             )
 
@@ -602,6 +728,8 @@ class ServerContractTests(unittest.TestCase):
                     separate=False,
                     separate_query=False,
                     separate_flag=False,
+                    fast=False,
+                    fast_query=False,
                 )
             )
 
@@ -661,6 +789,8 @@ class ServerContractTests(unittest.TestCase):
                     separate=False,
                     separate_query=False,
                     separate_flag=False,
+                    fast=False,
+                    fast_query=False,
                 )
             )
 
@@ -719,6 +849,8 @@ class ServerContractTests(unittest.TestCase):
                     separate=False,
                     separate_query=False,
                     separate_flag=False,
+                    fast=False,
+                    fast_query=False,
                 )
             )
 
@@ -804,7 +936,8 @@ class Phase2EndpointTests(unittest.TestCase):
     def _run(self, coro):
         return asyncio.run(coro)
 
-    def _call(self, phase1_json=None, model_name="gemini-2.5-flash", content=b"fake"):
+    def _call(self, phase1_json=None, model_name="gemini-2.5-flash", content=b"fake",
+              phase1_request_id=None):
         if phase1_json is None:
             phase1_json = json.dumps({"bpm": 128})
         return self._run(
@@ -812,6 +945,7 @@ class Phase2EndpointTests(unittest.TestCase):
                 track=self._upload_file(content=content),
                 phase1_json=phase1_json,
                 model_name=model_name,
+                phase1_request_id=phase1_request_id,
             )
         )
 
@@ -994,6 +1128,170 @@ class Phase2EndpointTests(unittest.TestCase):
         self.assertIn("requestId", body)
         self.assertIsInstance(body["requestId"], str)
         self.assertGreater(len(body["requestId"]), 0)
+
+
+class FileCacheTests(unittest.TestCase):
+    """Tests for the Phase 1 → Phase 2 temp-file cache."""
+
+    _MINIMAL_ANALYZE_PAYLOAD = json.dumps({
+        "bpm": 128, "bpmConfidence": 0.9, "key": "C major", "keyConfidence": 0.8,
+        "timeSignature": "4/4", "durationSeconds": 60.0,
+        "lufsIntegrated": -8.0, "truePeak": -0.5,
+        "stereoDetail": {"stereoWidth": 0.5, "stereoCorrelation": 0.9},
+        "spectralBalance": {"subBass": 0.0, "lowBass": 0.0, "mids": 0.0,
+                            "upperMids": 0.0, "highs": 0.0, "brilliance": 0.0},
+        "melodyDetail": None, "transcriptionDetail": None,
+    })
+
+    def setUp(self) -> None:
+        # Clear the cache before each test
+        with server._FILE_CACHE_LOCK:
+            server._FILE_CACHE.clear()
+
+    def _upload_file(self) -> UploadFile:
+        return UploadFile(filename="track.mp3", file=io.BytesIO(b"fake-audio"))
+
+    def _decode(self, response) -> dict:
+        return json.loads(response.body.decode("utf-8"))
+
+    @patch.object(server, "get_audio_duration_seconds", return_value=60.0, create=True)
+    @patch.object(
+        server,
+        "build_analysis_estimate",
+        return_value={
+            "durationSeconds": 60.0,
+            "totalSeconds": {"min": 10, "max": 20},
+            "stages": [{"key": "dsp", "label": "DSP analysis", "seconds": {"min": 10, "max": 20}}],
+        },
+        create=True,
+    )
+    @patch.object(
+        server.subprocess,
+        "run",
+        return_value=subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout=_MINIMAL_ANALYZE_PAYLOAD,
+            stderr="",
+        ),
+    )
+    def test_phase1_caches_temp_file_on_success(self, *_mocks) -> None:
+        with (
+            patch.object(server, "_current_time", side_effect=_timing_points(), create=True),
+            patch("builtins.print"),
+        ):
+            response = asyncio.run(
+                server.analyze_audio(
+                    track=self._upload_file(),
+                    dsp_json_override=None,
+                    transcribe=False,
+                    separate=False,
+                    separate_query=False,
+                    separate_flag=False,
+                    fast=False,
+                    fast_query=False,
+                )
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = self._decode(response)
+        request_id = payload["requestId"]
+        with server._FILE_CACHE_LOCK:
+            self.assertIn(request_id, server._FILE_CACHE)
+
+    @patch.object(server, "get_audio_duration_seconds", return_value=60.0, create=True)
+    @patch.object(
+        server,
+        "build_analysis_estimate",
+        return_value={
+            "durationSeconds": 60.0,
+            "totalSeconds": {"min": 10, "max": 20},
+            "stages": [{"key": "dsp", "label": "DSP analysis", "seconds": {"min": 10, "max": 20}}],
+        },
+        create=True,
+    )
+    @patch.object(
+        server.subprocess,
+        "run",
+        return_value=subprocess.CompletedProcess(
+            args=[],
+            returncode=1,
+            stdout="",
+            stderr="error",
+        ),
+    )
+    def test_phase1_does_not_cache_on_analyzer_error(self, *_mocks) -> None:
+        with (
+            patch.object(server, "_current_time", side_effect=_timing_points(), create=True),
+            patch("builtins.print"),
+        ):
+            response = asyncio.run(
+                server.analyze_audio(
+                    track=self._upload_file(),
+                    dsp_json_override=None,
+                    transcribe=False,
+                    separate=False,
+                    separate_query=False,
+                    separate_flag=False,
+                    fast=False,
+                    fast_query=False,
+                )
+            )
+
+        self.assertEqual(response.status_code, 502)
+        with server._FILE_CACHE_LOCK:
+            self.assertEqual(len(server._FILE_CACHE), 0)
+
+    def test_phase2_uses_cached_file_when_request_id_provided(self) -> None:
+        with (
+            patch.object(server, "_GENAI_AVAILABLE", True),
+            patch.dict(server.os.environ, {"GEMINI_API_KEY": "fake-key"}),
+            patch.object(server, "_pop_cached_temp_file", return_value="/tmp/cached.mp3") as pop_mock,
+            patch.object(server, "_persist_upload") as persist_mock,
+            patch.object(server, "_cleanup_temp_path"),
+            patch.object(server, "os") as mock_os,
+        ):
+            mock_os.path.getsize.return_value = 1024
+            mock_os.getenv.return_value = "fake-key"
+            mock_os.path.exists.return_value = True
+            # Will fail at Gemini call — that's fine, we only check _persist_upload
+            try:
+                asyncio.run(
+                    server.analyze_phase2(
+                        track=self._upload_file(),
+                        phase1_json=json.dumps({"bpm": 128}),
+                        model_name="gemini-2.5-flash",
+                        phase1_request_id="req_cached",
+                    )
+                )
+            except Exception:
+                pass
+
+            pop_mock.assert_called_once_with("req_cached")
+            persist_mock.assert_not_called()
+
+    def test_phase2_falls_back_to_upload_when_no_cache_hit(self) -> None:
+        with (
+            patch.object(server, "_GENAI_AVAILABLE", True),
+            patch.dict(server.os.environ, {"GEMINI_API_KEY": "fake-key"}),
+            patch.object(server, "_pop_cached_temp_file", return_value=None),
+            patch.object(server, "_persist_upload", return_value=("/tmp/fresh.mp3", 512)) as persist_mock,
+            patch.object(server, "_cleanup_temp_path"),
+        ):
+            # Will fail at Gemini call — that's fine, we only check _persist_upload
+            try:
+                asyncio.run(
+                    server.analyze_phase2(
+                        track=self._upload_file(),
+                        phase1_json=json.dumps({"bpm": 128}),
+                        model_name="gemini-2.5-flash",
+                        phase1_request_id="nonexistent",
+                    )
+                )
+            except Exception:
+                pass
+
+            persist_mock.assert_called_once()
 
 
 if __name__ == "__main__":

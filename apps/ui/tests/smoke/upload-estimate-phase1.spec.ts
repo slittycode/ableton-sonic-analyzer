@@ -152,20 +152,16 @@ test('upload shows estimate and local DSP processing copy before phase1 complete
 
   await expect(page.getByTestId('phase2-model-desktop')).toBeVisible();
   await expect(page.getByText(/Estimated local analysis/i)).toBeVisible();
-  await expect(page.getByText('22s-38s')).toBeVisible();
+  await expect(page.getByText('47s-113s')).toBeVisible();
 
   const transcribeToggle = page.getByLabel('MIDI TRANSCRIPTION');
   const stemToggle = page.getByLabel('STEM SEPARATION');
 
-  await expect(transcribeToggle).not.toBeChecked();
+  await expect(transcribeToggle).toBeChecked();
   await expect(stemToggle).not.toBeChecked();
   await expect(stemToggle).toBeEnabled();
 
   await stemToggle.check();
-  await expect(page.getByText('67s-128s')).toBeVisible();
-
-  await transcribeToggle.check();
-  await expect(stemToggle).toBeChecked();
   await expect(page.getByText('107s-203s')).toBeVisible();
 
   await stemToggle.uncheck();

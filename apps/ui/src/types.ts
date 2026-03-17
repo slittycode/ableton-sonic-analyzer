@@ -37,6 +37,7 @@ export interface TranscriptionDetail {
   noteCount: number;
   averageConfidence: number;
   stemSeparationUsed: boolean;
+  fullMixFallback: boolean;
   stemsTranscribed: string[];
   dominantPitches: Array<{
     pitchMidi: number;

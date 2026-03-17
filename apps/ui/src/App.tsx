@@ -123,7 +123,7 @@ export default function App() {
   const [estimateError, setEstimateError] = useState<string | null>(null);
   const [estimateWrongService, setEstimateWrongService] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
-  const [transcribeEnabled, setTranscribeEnabled] = useState(false);
+  const [transcribeEnabled, setTranscribeEnabled] = useState(true);
   const [stemSeparationEnabled, setStemSeparationEnabled] = useState(false);
 
   const phase1CompletedRef = useRef(false);

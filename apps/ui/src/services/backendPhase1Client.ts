@@ -610,6 +610,10 @@ function parseOptionalTranscriptionDetail(
     noteCount,
     averageConfidence: clamp01(toNumberOrFallback(raw.averageConfidence, 0)),
     stemSeparationUsed: toBooleanOrFallback(raw.stemSeparationUsed, false),
+    fullMixFallback: toBooleanOrFallback(
+      raw.fullMixFallback,
+      raw.stemSeparationUsed === false,
+    ),
     stemsTranscribed: parseTranscribedStems(raw.stemsTranscribed),
     dominantPitches,
     pitchRange,

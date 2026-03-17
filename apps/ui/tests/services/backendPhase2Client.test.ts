@@ -188,4 +188,22 @@ describe('analyzePhase2WithBackend', () => {
 
     expect(log.responseLength).toBe(0);
   });
+
+  it('includes phase1_request_id in form body when provided', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: () => Promise.resolve({ requestId: 'req_1', phase2: minimalPhase2Result, message: '' }),
+    } as Response);
+    vi.stubGlobal('fetch', fetchSpy);
+
+    await analyzePhase2WithBackend(mockFile(), mockPhase1Result, 'gemini-2.5-flash', {
+      ...baseOptions,
+      phase1RequestId: 'req_abc',
+    });
+
+    const body = fetchSpy.mock.calls[0][1].body as FormData;
+    expect(body.get('phase1_request_id')).toBe('req_abc');
+  });
 });

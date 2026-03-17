@@ -10,6 +10,7 @@ Usage:
 """
 
 import json
+import heapq
 import math
 import os
 import shutil
@@ -1172,7 +1173,7 @@ def analyze_rhythm_detail(rhythm_data: dict | None) -> dict:
         if rhythm_data is None:
             return {"rhythmDetail": None}
 
-        ticks = rhythm_data["ticks"]
+        ticks = np.asarray(rhythm_data["ticks"], dtype=np.float64)
 
         # OnsetRate
         try:
@@ -1187,8 +1188,9 @@ def analyze_rhythm_detail(rhythm_data: dict | None) -> dict:
         except Exception:
             onset_rate = 0.0
 
-        # Beat positions (first 16)
-        beat_positions = [round(float(t), 3) for t in ticks[:16]]
+        beat_grid = [round(float(t), 3) for t in ticks]
+        beat_positions = [((index % 4) + 1) for index in range(len(beat_grid))]
+        downbeats = beat_grid[::4]
 
         # Groove amount: stdev of beat interval diffs, normalized by mean interval
         if len(ticks) >= 3:
@@ -1204,6 +1206,8 @@ def analyze_rhythm_detail(rhythm_data: dict | None) -> dict:
         return {
             "rhythmDetail": {
                 "onsetRate": round(onset_rate, 2),
+                "beatGrid": beat_grid,
+                "downbeats": downbeats,
                 "beatPositions": beat_positions,
                 "grooveAmount": round(groove, 4),
             }
@@ -2614,6 +2618,13 @@ def _normalize_confidence(value) -> float:
     return round(float(np.clip(numeric, 0.0, 1.0)), 4)
 
 
+TRANSCRIPTION_CONFIDENCE_FLOOR = 0.05
+TRANSCRIPTION_NOTE_CAP = 500
+FULL_MIX_TRANSCRIPTION_NOTE_CAP = 200
+TRANSCRIPTION_MIN_ACTIVE_WINDOW_SECONDS = 0.1
+TRANSCRIPTION_NEAR_DUPLICATE_SECONDS = 0.03
+
+
 def _transcription_source_paths(
     audio_path: str, stem_paths: dict | None = None
 ) -> list[tuple[str, str]]:
@@ -2756,6 +2767,10 @@ def _extract_basic_pitch_notes(
 
         pitch_midi_int = int(np.clip(int(round(pitch_midi)), 0, 127))
         confidence = _normalize_confidence(confidence_raw)
+        # Backend floor only removes obvious garbage. The UI slider remains the
+        # primary quality filter for transcriptionDetail notes.
+        if confidence < TRANSCRIPTION_CONFIDENCE_FLOOR:
+            continue
 
         note_obj = {
             "pitchMidi": pitch_midi_int,
@@ -2772,6 +2787,193 @@ def _extract_basic_pitch_notes(
     return notes, midi_values, confidence_values
 
 
+def _transcription_active_end(note: dict) -> float:
+    onset = float(note.get("onsetSeconds", 0.0))
+    duration = float(note.get("durationSeconds", 0.0))
+    return onset + max(duration, TRANSCRIPTION_MIN_ACTIVE_WINDOW_SECONDS)
+
+
+def _transcription_stem_priority(note: dict) -> int:
+    pitch_midi = int(note.get("pitchMidi", 0))
+    return _transcription_stem_priority_for_pitch(note.get("stemSource"), pitch_midi)
+
+
+def _transcription_stem_priority_for_pitch(stem_source: str | None, pitch_midi: int) -> int:
+    if pitch_midi < 48:
+        order = {"bass": 3, "other": 2, "full_mix": 1}
+    else:
+        order = {"other": 3, "bass": 2, "full_mix": 1}
+    return order.get(stem_source, 0)
+
+
+def _merge_transcription_notes(preferred: dict, other: dict) -> dict:
+    merged = dict(preferred)
+    merged["durationSeconds"] = round(
+        max(
+            float(preferred.get("durationSeconds", 0.0)),
+            float(other.get("durationSeconds", 0.0)),
+        ),
+        4,
+    )
+    return merged
+
+
+def _is_near_duplicate_pitch(note: dict, candidate: dict) -> bool:
+    return (
+        int(note.get("pitchMidi", 0)) == int(candidate.get("pitchMidi", 0))
+        and abs(float(note.get("onsetSeconds", 0.0)) - float(candidate.get("onsetSeconds", 0.0)))
+        <= TRANSCRIPTION_NEAR_DUPLICATE_SECONDS
+    )
+
+
+def _notes_overlap_for_dedup(note: dict, candidate: dict) -> bool:
+    if abs(int(note.get("pitchMidi", 0)) - int(candidate.get("pitchMidi", 0))) > 1:
+        return False
+    note_start = float(note.get("onsetSeconds", 0.0))
+    note_end = _transcription_active_end(note)
+    candidate_start = float(candidate.get("onsetSeconds", 0.0))
+    candidate_end = _transcription_active_end(candidate)
+    return min(note_end, candidate_end) >= max(note_start, candidate_start)
+
+
+def _select_transcription_winner(note: dict, candidate: dict, prefer_confidence_first: bool) -> dict:
+    note_conf = float(note.get("confidence", 0.0))
+    candidate_conf = float(candidate.get("confidence", 0.0))
+    priority_pitch = min(int(note.get("pitchMidi", 0)), int(candidate.get("pitchMidi", 0)))
+    note_priority = _transcription_stem_priority_for_pitch(note.get("stemSource"), priority_pitch)
+    candidate_priority = _transcription_stem_priority_for_pitch(candidate.get("stemSource"), priority_pitch)
+
+    if prefer_confidence_first:
+        if note_conf != candidate_conf:
+            return note if note_conf > candidate_conf else candidate
+        if note_priority != candidate_priority:
+            return note if note_priority > candidate_priority else candidate
+    else:
+        if note_priority != candidate_priority:
+            return note if note_priority > candidate_priority else candidate
+        if note_conf != candidate_conf:
+            return note if note_conf > candidate_conf else candidate
+
+    note_duration = float(note.get("durationSeconds", 0.0))
+    candidate_duration = float(candidate.get("durationSeconds", 0.0))
+    if note_duration != candidate_duration:
+        return note if note_duration > candidate_duration else candidate
+    return note if float(note.get("onsetSeconds", 0.0)) <= float(candidate.get("onsetSeconds", 0.0)) else candidate
+
+
+def _deduplicate_transcription_notes(notes: list[dict]) -> list[dict]:
+    if len(notes) <= 1:
+        return [dict(note) for note in notes]
+
+    sorted_notes = sorted(
+        (dict(note) for note in notes),
+        key=lambda note: (
+            float(note.get("onsetSeconds", 0.0)),
+            int(note.get("pitchMidi", 0)),
+            -float(note.get("confidence", 0.0)),
+        ),
+    )
+    active_heap: list[tuple[float, int, int]] = []
+    active_by_pitch: dict[int, dict[int, dict]] = {}
+    deduplicated: list[dict] = []
+    next_active_id = 0
+
+    def register_active(note: dict) -> None:
+        nonlocal next_active_id
+        note["_activeId"] = next_active_id
+        note["_heapVersion"] = 1
+        active_by_pitch.setdefault(int(note["pitchMidi"]), {})[next_active_id] = note
+        heapq.heappush(
+            active_heap,
+            (_transcription_active_end(note), next_active_id, int(note["_heapVersion"])),
+        )
+        deduplicated.append(note)
+        next_active_id += 1
+
+    def refresh_active(note: dict) -> None:
+        note["_heapVersion"] = int(note.get("_heapVersion", 0)) + 1
+        heapq.heappush(
+            active_heap,
+            (_transcription_active_end(note), int(note["_activeId"]), int(note["_heapVersion"])),
+        )
+
+    for note in sorted_notes:
+        onset = float(note.get("onsetSeconds", 0.0))
+        while active_heap and active_heap[0][0] < onset:
+            _end_time, active_id, heap_version = heapq.heappop(active_heap)
+            active_note = None
+            for bucket in active_by_pitch.values():
+                active_note = bucket.get(active_id)
+                if active_note is not None:
+                    break
+            if active_note is None or int(active_note.get("_heapVersion", 0)) != heap_version:
+                continue
+            pitch_bucket = active_by_pitch.get(int(active_note["pitchMidi"]))
+            if pitch_bucket is not None:
+                pitch_bucket.pop(active_id, None)
+                if len(pitch_bucket) == 0:
+                    active_by_pitch.pop(int(active_note["pitchMidi"]), None)
+
+        matching_candidates: list[tuple[bool, float, int, dict]] = []
+        for pitch_midi in range(max(0, int(note["pitchMidi"]) - 1), min(127, int(note["pitchMidi"]) + 1) + 1):
+            for candidate in active_by_pitch.get(pitch_midi, {}).values():
+                if candidate.get("stemSource") == note.get("stemSource"):
+                    continue
+                is_near_duplicate = _is_near_duplicate_pitch(note, candidate)
+                if not is_near_duplicate and not _notes_overlap_for_dedup(note, candidate):
+                    continue
+                matching_candidates.append(
+                    (
+                        is_near_duplicate,
+                        abs(float(candidate.get("onsetSeconds", 0.0)) - onset),
+                        abs(int(candidate.get("pitchMidi", 0)) - int(note.get("pitchMidi", 0))),
+                        candidate,
+                    )
+                )
+
+        if len(matching_candidates) == 0:
+            register_active(note)
+            continue
+
+        matching_candidates.sort(key=lambda item: (not item[0], item[1], item[2]))
+        candidate = matching_candidates[0][3]
+        is_near_duplicate = matching_candidates[0][0]
+        winner = _select_transcription_winner(note, candidate, prefer_confidence_first=is_near_duplicate)
+        loser = candidate if winner is note else note
+        merged = _merge_transcription_notes(winner, loser)
+
+        if winner is note:
+            active_id = int(candidate["_activeId"])
+            pitch_bucket = active_by_pitch.get(int(candidate["pitchMidi"]))
+            if pitch_bucket is not None:
+                pitch_bucket.pop(active_id, None)
+                if len(pitch_bucket) == 0:
+                    active_by_pitch.pop(int(candidate["pitchMidi"]), None)
+            deduplicated = [
+                merged if int(existing.get("_activeId", -1)) == active_id else existing
+                for existing in deduplicated
+            ]
+            merged["_activeId"] = active_id
+            merged["_heapVersion"] = int(candidate.get("_heapVersion", 0)) + 1
+            active_by_pitch.setdefault(int(merged["pitchMidi"]), {})[active_id] = merged
+            heapq.heappush(
+                active_heap,
+                (_transcription_active_end(merged), active_id, int(merged["_heapVersion"])),
+            )
+        else:
+            candidate.update(merged)
+            refresh_active(candidate)
+
+    cleaned_notes = []
+    for note in deduplicated:
+        cleaned_note = dict(note)
+        cleaned_note.pop("_activeId", None)
+        cleaned_note.pop("_heapVersion", None)
+        cleaned_notes.append(cleaned_note)
+
+    return sorted(cleaned_notes, key=lambda note: note["onsetSeconds"])
+
+
 def analyze_transcription_basic_pitch(
     audio_path: str, stem_paths: dict | None = None
 ) -> dict:
@@ -2784,9 +2986,16 @@ def analyze_transcription_basic_pitch(
 
     try:
         transcription_sources = _transcription_source_paths(audio_path, stem_paths)
+        full_mix_fallback = (
+            len(transcription_sources) == 1
+            and transcription_sources[0][0] == "full_mix"
+        )
+        if full_mix_fallback:
+            print(
+                "[warn] transcriptionDetail: running on full mix — quality may be low for dense material",
+                file=sys.stderr,
+            )
         notes = []
-        midi_values = []
-        confidence_values = []
         stems_transcribed = [
             stem_source for stem_source, _source_path in transcription_sources
         ]
@@ -2801,13 +3010,35 @@ def analyze_transcription_basic_pitch(
                 )
             )
             notes.extend(source_notes)
-            midi_values.extend(source_midi_values)
-            confidence_values.extend(source_confidence_values)
 
         notes.sort(key=lambda note: note["onsetSeconds"])
+        notes = _deduplicate_transcription_notes(notes)
         stem_separation_used = any(
             stem_source in ("bass", "other") for stem_source in stems_transcribed
         )
+        note_cap = (
+            FULL_MIX_TRANSCRIPTION_NOTE_CAP
+            if full_mix_fallback
+            else TRANSCRIPTION_NOTE_CAP
+        )
+        if len(notes) > note_cap:
+            original_count = len(notes)
+            ranked_notes = sorted(
+                notes,
+                key=lambda note: (
+                    -float(note.get("confidence", 0.0)),
+                    -float(note.get("durationSeconds", 0.0)),
+                    float(note.get("onsetSeconds", 0.0)),
+                ),
+            )
+            notes = sorted(
+                ranked_notes[:note_cap],
+                key=lambda note: note["onsetSeconds"],
+            )
+            print(
+                f"[warn] transcriptionDetail: truncated to {note_cap} notes (was {original_count})",
+                file=sys.stderr,
+            )
 
         if len(notes) == 0:
             return {
@@ -2823,11 +3054,14 @@ def analyze_transcription_basic_pitch(
                         "maxName": None,
                     },
                     "stemSeparationUsed": stem_separation_used,
+                    "fullMixFallback": full_mix_fallback,
                     "stemsTranscribed": stems_transcribed,
                     "notes": [],
                 }
             }
 
+        midi_values = [int(note["pitchMidi"]) for note in notes]
+        confidence_values = [float(note["confidence"]) for note in notes]
         dominant_pitches = [
             {
                 "pitchMidi": int(pitch_midi),
@@ -2856,6 +3090,7 @@ def analyze_transcription_basic_pitch(
                     "maxName": midi_to_note_name(max_midi),
                 },
                 "stemSeparationUsed": stem_separation_used,
+                "fullMixFallback": full_mix_fallback,
                 "stemsTranscribed": stems_transcribed,
                 "notes": notes,
             }

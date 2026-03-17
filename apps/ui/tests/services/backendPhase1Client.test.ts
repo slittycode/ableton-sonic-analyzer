@@ -65,6 +65,7 @@ const validPayload = {
       noteCount: 2,
       averageConfidence: 0.83,
       stemSeparationUsed: true,
+      fullMixFallback: false,
       stemsTranscribed: ['bass', 'other'],
       dominantPitches: [
         { pitchMidi: 48, pitchName: 'C3', count: 5 },
@@ -176,6 +177,7 @@ describe('parseBackendAnalyzeResponse', () => {
     expect(parsed.phase1.melodyDetail?.noteCount).toBe(3);
     expect(parsed.phase1.melodyDetail?.notes[0].midi).toBe(60);
     expect(parsed.phase1.transcriptionDetail?.noteCount).toBe(2);
+    expect(parsed.phase1.transcriptionDetail?.fullMixFallback).toBe(false);
     expect(parsed.phase1.transcriptionDetail?.notes[0].stemSource).toBe('bass');
     expect(parsed.phase1.lufsRange).toBe(3.1);
     expect(parsed.phase1.crestFactor).toBe(8.6);
@@ -270,6 +272,48 @@ describe('parseBackendAnalyzeResponse', () => {
     expect(parsed.phase1.melodyDetail?.vibratoConfidence).toBe(0);
     expect(parsed.phase1.melodyDetail?.midiFile).toBeNull();
     expect(parsed.phase1.melodyDetail?.sourceSeparated).toBe(false);
+  });
+
+  it('parses explicit fullMixFallback and only falls back when stemSeparationUsed is explicitly false', () => {
+    const explicitFullMix = parseBackendAnalyzeResponse({
+      ...validPayload,
+      phase1: {
+        ...validPayload.phase1,
+        transcriptionDetail: {
+          ...validPayload.phase1.transcriptionDetail,
+          fullMixFallback: true,
+          stemSeparationUsed: false,
+        },
+      },
+    });
+
+    const inferredFullMix = parseBackendAnalyzeResponse({
+      ...validPayload,
+      phase1: {
+        ...validPayload.phase1,
+        transcriptionDetail: {
+          ...validPayload.phase1.transcriptionDetail,
+          fullMixFallback: undefined,
+          stemSeparationUsed: false,
+        },
+      },
+    });
+
+    const missingFieldsStayFalse = parseBackendAnalyzeResponse({
+      ...validPayload,
+      phase1: {
+        ...validPayload.phase1,
+        transcriptionDetail: {
+          ...validPayload.phase1.transcriptionDetail,
+          fullMixFallback: undefined,
+          stemSeparationUsed: undefined,
+        },
+      },
+    });
+
+    expect(explicitFullMix.phase1.transcriptionDetail?.fullMixFallback).toBe(true);
+    expect(inferredFullMix.phase1.transcriptionDetail?.fullMixFallback).toBe(true);
+    expect(missingFieldsStayFalse.phase1.transcriptionDetail?.fullMixFallback).toBe(false);
   });
 
   it('treats malformed optional danceability objects as null', () => {

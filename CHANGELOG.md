@@ -2,6 +2,17 @@
 
 All notable changes to `ableton-sonic-analyzer` are documented here.
 
+## v2.1.0
+
+- Hardened `transcriptionDetail` in `apps/backend/analyze.py` for bass + hook extraction:
+  - added a backend noise floor (`0.05`) before merge
+  - added stem-aware deduplication for overlapping/near-duplicate notes
+  - capped retained notes at `500` for stem-aware runs and `200` for full-mix fallback
+  - added `fullMixFallback` to the transcription payload and stderr warnings for full-mix mode and truncation
+- Updated the Session Musician UI to parse `fullMixFallback` and show a subtle `FULL MIX — quality limited` badge without blocking the piano roll or export flow.
+- Flipped the App default so `MIDI TRANSCRIPTION` is on by default while leaving `STEM SEPARATION` off.
+- Updated backend docs for the two-layer confidence filtering model (backend noise floor plus UI slider) and the new transcription payload contract.
+
 ## v1.2.0
 
 - Added `apps/backend/scripts/genre_check.py`: DSP preflight reporter emitting rhythm cluster, synthesis tier, sidechain status, BPM, kickSwing, kickAccentVariance, and inharmonicity — no genre labels.
@@ -38,4 +49,3 @@ Known limitations for this `v1.0.0` cut:
 
 - Gemini access is still browser-held, so this is a local/dev release, not a stronger production/security milestone.
 - Fresh backend bootstrap from raw `apps/backend/requirements.txt` is still under-constrained and may require follow-up dependency pinning.
-

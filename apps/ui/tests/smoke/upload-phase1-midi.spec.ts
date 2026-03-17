@@ -165,6 +165,7 @@ test('phase1 dual-source session musician panel toggles between polyphonic and m
             noteCount: 2,
             averageConfidence: 0.83,
             stemSeparationUsed: true,
+            fullMixFallback: false,
             stemsTranscribed: ['bass', 'other'],
             dominantPitches: [
               { pitchMidi: 48, pitchName: 'C3', count: 4 },
@@ -224,7 +225,7 @@ test('phase1 dual-source session musician panel toggles between polyphonic and m
   await page.goto('/', { waitUntil: 'networkidle' });
   const fixturePath = path.resolve(testDir, './fixtures/silence.wav');
   await page.setInputFiles('#audio-upload', fixturePath);
-  await page.getByLabel('MIDI TRANSCRIPTION').check();
+  await expect(page.getByLabel('MIDI TRANSCRIPTION')).toBeChecked();
   await page.getByLabel('STEM SEPARATION').check();
   await page.getByRole('button', { name: /Initiate Analysis/i }).click();
 

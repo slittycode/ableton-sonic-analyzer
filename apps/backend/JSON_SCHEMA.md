@@ -221,8 +221,12 @@ Type: `object \| null`
 | Field | Type | Description | Units / Scale | LLM interpretation note |
 |---|---|---|---|---|
 | `rhythmDetail.onsetRate` | `float` | Approximate onset density from beat ticks. | events/sec (approx) | Higher values imply busier transient content or denser rhythmic events. |
-| `rhythmDetail.beatPositions` | `float[]` | First up-to-16 beat timestamps. | seconds | Use to align section/clip markers in DAW. |
+| `rhythmDetail.beatGrid` | `float[]` | Full-track beat timestamps from the detected beat grid (uncapped). | seconds | Use to align arrangement/clip markers across the full timeline. |
+| `rhythmDetail.downbeats` | `float[]` | Beat-1 timestamp for each detected 4-beat bar. | seconds | Useful for bar-aligned locators and section anchoring. |
+| `rhythmDetail.beatPositions` | `int[]` | Bar position for each beat in `beatGrid` (`1`, `2`, `3`, `4`). | beat index within bar | Aligns directly with `beatGrid` for bar-aware rhythm reconstruction. |
 | `rhythmDetail.grooveAmount` | `float` | Normalised beat interval variability. | unitless | Higher values imply more timing looseness/swing. |
+
+Note: `rhythmDetail.beatPositions` previously referred to a truncated beat-timestamp alias. That timestamp array is now exposed as `rhythmDetail.beatGrid` for the full track.
 
 ### `grooveDetail`
 
@@ -290,11 +294,21 @@ Type: `object \| null`
 
 Type: `object \| null`
 
+Implementation notes:
+
+- `transcriptionDetail` is tuned for bass + hook extraction, not broad pitch sketching.
+- The backend applies a noise-only confidence floor of `0.05` before merge so obviously bad detections never reach the UI.
+- The Session Musician confidence slider remains the primary user-facing quality dial with range `0.0-1.0` and default `0.2`.
+- Notes are deduplicated after merge, then capped:
+  - stem-aware runs keep at most `500` notes
+  - `full_mix` fallback runs keep at most `200` notes
+- `noteCount`, `averageConfidence`, `dominantPitches`, and `pitchRange` all describe the retained post-dedup, post-cap note set.
+
 | Field | Type | Description | Units / Scale | LLM interpretation note |
 |---|---|---|---|---|
 | `transcriptionDetail.transcriptionMethod` | `string` | Note transcription backend used for this pass. | categorical | Currently always `basic-pitch`; useful if more transcription backends are added later. |
-| `transcriptionDetail.noteCount` | `int` | Total number of note events after merging all transcribed sources. | count | Higher counts imply denser monophonic note content captured by Basic Pitch. |
-| `transcriptionDetail.averageConfidence` | `float` | Mean confidence across all merged note events. | 0.0-1.0 | Lower values indicate noisier or more ambiguous pitch tracking. |
+| `transcriptionDetail.noteCount` | `int` | Total number of retained note events after merge, deduplication, and capping. | count | Higher counts imply denser retained musical content rather than raw Basic Pitch event volume. |
+| `transcriptionDetail.averageConfidence` | `float` | Mean confidence across the retained merged note events. | 0.0-1.0 | Lower values indicate noisier or more ambiguous pitch tracking even after backend noise filtering. |
 | `transcriptionDetail.dominantPitches` | `array<object>` | Top 5 most frequent detected pitches. | list of pitch summary objects | Quick tonal summary for bassline and hook reconstruction. |
 | `transcriptionDetail.dominantPitches[].pitchMidi` | `int` | MIDI pitch number for the dominant pitch entry. | 0-127 | Directly usable for DAW note entry or tonal analysis. |
 | `transcriptionDetail.dominantPitches[].pitchName` | `string` | Note name for the dominant pitch entry. | note label | Human-readable pitch label for prompts and reports. |
@@ -305,8 +319,9 @@ Type: `object \| null`
 | `transcriptionDetail.pitchRange.minName` | `string \| null` | Note name of the lowest detected pitch. | note label | Human-readable lower pitch bound. |
 | `transcriptionDetail.pitchRange.maxName` | `string \| null` | Note name of the highest detected pitch. | note label | Human-readable upper pitch bound. |
 | `transcriptionDetail.stemSeparationUsed` | `bool` | Whether transcription ran on separated Demucs stems instead of the full mix. | boolean | `true` means the merged result came from one or more stems such as `bass` and `other`. |
+| `transcriptionDetail.fullMixFallback` | `bool` | `true` when the transcription ran on the full mix because usable stems were unavailable. | boolean | Treat `true` as a quality warning on dense material; downstream UX should inform rather than block. |
 | `transcriptionDetail.stemsTranscribed` | `string[]` | Ordered list of audio sources transcribed for this result. | source labels | Use to distinguish full-mix fallback from stem-based transcription. |
-| `transcriptionDetail.notes` | `array<object>` | Merged note events sorted by onset time. | list of note objects | Combined note timeline from stem-based or full-mix transcription. |
+| `transcriptionDetail.notes` | `array<object>` | Retained note events sorted by onset time after merge, deduplication, and capping. | list of note objects | Combined note timeline from stem-based or full-mix transcription, bounded for UI and export use. |
 | `transcriptionDetail.notes[].pitchMidi` | `int` | MIDI note number for the event. | 0-127 | Directly usable in piano-roll or MIDI regeneration workflows. |
 | `transcriptionDetail.notes[].pitchName` | `string` | Note name for the event. | note label | Human-readable pitch name for summaries and prompts. |
 | `transcriptionDetail.notes[].onsetSeconds` | `float` | Note onset time. | seconds | Place note start accurately in arrangement timeline. |
@@ -387,6 +402,8 @@ Type: `object \| null`
 | `structure.segments[].start` | `float` | Segment start time. | seconds | DAW locator start. |
 | `structure.segments[].end` | `float` | Segment end time. | seconds | DAW locator end. |
 | `structure.segments[].index` | `int` | Segment index. | integer index | Join key across segment outputs. |
+
+Future note: per-segment structural labels such as `"verse"`, `"chorus"`, and `"bridge"` are planned additions to `structure.segments`, but are not emitted yet.
 
 ### `arrangementDetail`
 

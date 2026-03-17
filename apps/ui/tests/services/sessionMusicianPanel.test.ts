@@ -204,6 +204,7 @@ describe('SessionMusicianPanel confidence helpers', () => {
       noteCount: 4,
       averageConfidence: 0.83,
       stemSeparationUsed: true,
+      fullMixFallback: false,
       stemsTranscribed: ['bass', 'other'],
       dominantPitches: [
         { pitchMidi: 48, pitchName: 'C3', count: 2 },
@@ -249,6 +250,52 @@ describe('SessionMusicianPanel confidence helpers', () => {
       transcriptionPathLabel: 'FULL MIX',
       stemSourcesLabel: null,
     });
+  });
+
+  it('shows a quality-limited badge for polyphonic full-mix fallback results', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(SessionMusicianPanel, {
+        phase1: {
+          ...basePhase1,
+          transcriptionDetail: {
+            transcriptionMethod: 'basic-pitch',
+            noteCount: 2,
+            averageConfidence: 0.42,
+            stemSeparationUsed: false,
+            fullMixFallback: true,
+            stemsTranscribed: ['full_mix'],
+            dominantPitches: [{ pitchMidi: 48, pitchName: 'C3', count: 2 }],
+            pitchRange: {
+              minMidi: 48,
+              maxMidi: 52,
+              minName: 'C3',
+              maxName: 'E3',
+            },
+            notes: [
+              {
+                pitchMidi: 48,
+                pitchName: 'C3',
+                onsetSeconds: 0.1,
+                durationSeconds: 0.4,
+                confidence: 0.48,
+                stemSource: 'full_mix',
+              },
+              {
+                pitchMidi: 52,
+                pitchName: 'E3',
+                onsetSeconds: 0.8,
+                durationSeconds: 0.2,
+                confidence: 0.36,
+                stemSource: 'full_mix',
+              },
+            ],
+          },
+        } as unknown as Phase1Result,
+      }),
+    );
+
+    expect(html).toContain('FULL MIX');
+    expect(html).toContain('FULL MIX — quality limited');
   });
 
   it('hides polyphonic provenance badges and updates helper copy in monophonic mixed-source mode', async () => {
@@ -298,6 +345,7 @@ describe('SessionMusicianPanel confidence helpers', () => {
             noteCount: 4,
             averageConfidence: 0.83,
             stemSeparationUsed: true,
+            fullMixFallback: false,
             stemsTranscribed: ['bass', 'other'],
             dominantPitches: [
               { pitchMidi: 48, pitchName: 'C3', count: 2 },

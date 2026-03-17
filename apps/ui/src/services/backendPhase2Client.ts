@@ -11,7 +11,7 @@ export async function analyzePhase2WithBackend(
   file: File,
   phase1Result: Phase1Result,
   modelName: string,
-  options: { apiBaseUrl: string; signal?: AbortSignal },
+  options: { apiBaseUrl: string; signal?: AbortSignal; phase1RequestId?: string },
 ): Promise<AnalyzePhase2BackendResult> {
   const { apiBaseUrl, signal } = options;
 
@@ -19,6 +19,9 @@ export async function analyzePhase2WithBackend(
   body.append('track', file);
   body.append('phase1_json', JSON.stringify(phase1Result));
   body.append('model_name', modelName);
+  if (options.phase1RequestId) {
+    body.append('phase1_request_id', options.phase1RequestId);
+  }
 
   const audioMetadata: DiagnosticLogEntry['audioMetadata'] = {
     name: file.name,

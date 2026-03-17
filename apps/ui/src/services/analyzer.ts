@@ -141,6 +141,7 @@ export async function analyzeAudio(
       analyzePhase2WithBackend(file, backendResult.phase1, modelName, {
         apiBaseUrl: appConfig.apiBaseUrl,
         signal: analysisOptions?.signal,
+        phase1RequestId: backendResult.requestId,
       }),
       analysisOptions?.signal,
     );

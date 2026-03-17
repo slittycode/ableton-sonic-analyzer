@@ -38,7 +38,7 @@ npx vitest run tests/services/backendPhase1Client.test.ts   # Single test file
 This is a two-phase audio analysis system:
 
 - **Phase 1 (local DSP):** Audio file → Python backend → structured metrics
-- **Phase 2 (optional AI):** Phase 1 result + audio → Gemini API directly from browser → Ableton Live recommendations
+- **Phase 2 (optional AI):** Phase 1 result + audio → backend /api/phase2 → Gemini API → Ableton Live recommendations
 
 ### Backend (`apps/backend`)
 
@@ -58,7 +58,7 @@ Single-page React 19 app with no router. View states are managed via React condi
 Key service files:
 
 - **`src/services/backendPhase1Client.ts`**: All HTTP transport to the backend. Multipart POST, typed error classes (`BackendClientError`), `AbortController` timeouts (estimate: 30s, analyze: 600s+), identity probe via `/openapi.json`.
-- **`src/services/geminiPhase2Client.ts`**: Direct Gemini API calls from browser. Handles file upload for large files, structured prompt engineering, retry with exponential backoff.
+- **`src/services/backendPhase2Client.ts`**: Phase 2 transport to the backend `/api/phase2` endpoint. Sends audio + Phase 1 JSON, receives Gemini advisory result.
 - **`src/types.ts`**: Source of truth for `Phase1Result`, `Phase2Result`, and all backend response shapes.
 - **`src/config.ts`**: Runtime resolution of `VITE_API_BASE_URL` and feature flags.
 
@@ -76,13 +76,13 @@ Error envelopes always include `requestId`, `error.code`, `error.message`, `erro
 # apps/ui/.env (copy from .env.example)
 VITE_API_BASE_URL="http://127.0.0.1:8100"
 VITE_ENABLE_PHASE2_GEMINI="true"
-VITE_GEMINI_API_KEY="your_key_here"
 
 # Backend (env var, no .env file)
 SONIC_ANALYZER_PORT=8100
+GEMINI_API_KEY="your_key_here"  # backend env var, not in the browser bundle
 ```
 
-Phase 2 Gemini is gated by `VITE_ENABLE_PHASE2_GEMINI`. Without it, only Phase 1 runs. The API key lives in the browser bundle — this project is marked as local/dev only (`v1.0.0`) until that moves server-side.
+Phase 2 Gemini is gated by `VITE_ENABLE_PHASE2_GEMINI`. Without it, only Phase 1 runs. `GEMINI_API_KEY` is read by the backend server at runtime.
 
 ## Key Guardrails
 
@@ -91,4 +91,4 @@ Phase 2 Gemini is gated by `VITE_ENABLE_PHASE2_GEMINI`. Without it, only Phase 1
 - **Backend tests use stdlib `unittest`**, not pytest. Frontend tests use Vitest in `node` environment (not jsdom).
 - **`npm run lint`** only type-checks `src/`; test files and `playwright.config.ts` are excluded from `tsconfig.json`.
 - **Canonical ports:** UI on 3100, backend on 8100. `./scripts/dev.sh` will fail loudly if either port is occupied.
-- **`--fast` flag** is accepted by `analyze.py` but is currently a no-op.
+- **`--fast` flag** is forwarded via form field `fast` or query param `fast` on `POST /api/analyze`. The estimate endpoint does not account for fast mode.

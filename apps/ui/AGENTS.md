@@ -23,7 +23,6 @@
 - Key env vars:
   - `VITE_API_BASE_URL`
   - `VITE_ENABLE_PHASE2_GEMINI`
-  - `VITE_GEMINI_API_KEY`
   - `RUN_GEMINI_LIVE_SMOKE`
   - `DISABLE_HMR`
 
@@ -149,7 +148,7 @@ RUN_GEMINI_LIVE_SMOKE=true VITE_ENABLE_PHASE2_GEMINI=true VITE_GEMINI_API_KEY=yo
 
 - `src/config.ts` falls back to `http://127.0.0.1:8100` if `VITE_API_BASE_URL` is unset.
 - `.env.example` uses `http://127.0.0.1:8100`; stale local `.env` files can still pin `localhost:8000` or `127.0.0.1:8010`, but the monorepo root `./scripts/dev.sh` overrides that for the spawned UI process.
-- Phase 2 Gemini is disabled unless both the feature flag and API key are present.
+- Phase 2 Gemini is disabled unless `VITE_ENABLE_PHASE2_GEMINI=true`. The `GEMINI_API_KEY` is a backend env var — not required in the browser bundle.
 - Audio files over 20MB take the Gemini Files API path; do not break that branch casually.
 - `npm run lint` does not cover tests because `tsconfig.json` excludes `tests`, `playwright.config.ts`, and `vitest.config.ts`.
 

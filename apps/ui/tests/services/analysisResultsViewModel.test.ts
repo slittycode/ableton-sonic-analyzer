@@ -268,6 +268,7 @@ describe('analysisResultsViewModel helpers', () => {
         noteCount: 6,
         averageConfidence: 0.83,
         stemSeparationUsed: true,
+        fullMixFallback: false,
         stemsTranscribed: ['bass', 'other'],
         dominantPitches: [
           { pitchMidi: 48, pitchName: 'C3', count: 4 },

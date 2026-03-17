@@ -323,6 +323,7 @@ describe('AnalysisResults UI wiring', () => {
             noteCount: 2,
             averageConfidence: 0.83,
             stemSeparationUsed: true,
+            fullMixFallback: false,
             stemsTranscribed: ['bass', 'other'],
             dominantPitches: [
               { pitchMidi: 48, pitchName: 'C3', count: 4 },
@@ -420,6 +421,7 @@ describe('AnalysisResults UI wiring', () => {
             noteCount: 1,
             averageConfidence: 0.61,
             stemSeparationUsed: false,
+            fullMixFallback: true,
             stemsTranscribed: ['full_mix'],
             dominantPitches: [{ pitchMidi: 60, pitchName: 'C4', count: 3 }],
             pitchRange: {
