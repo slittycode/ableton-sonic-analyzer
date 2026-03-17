@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
-export const INLINE_SIZE_LIMIT = 20_971_520;
+export const INLINE_SIZE_LIMIT = 104_857_600;
 
 const DEFAULT_SAMPLE_RATE = 48_000;
 const DEFAULT_CHANNELS = 2;

@@ -176,8 +176,8 @@ describe('AnalysisResults UI wiring', () => {
     );
 
     expect(html).toContain('SCANNING...');
-    expect(html).toContain('Phase 2: Advisory reconstruction');
-    expect(html).toContain('Draft — Phase 2 output is incomplete or unavailable.');
+    expect(html).toContain('AI Interpretation');
+    expect(html).toContain('Draft — AI interpretation is incomplete or unavailable.');
   });
 
   it('renders exactly two DSP badges for the current Phase 1 headings and one AI advisory badge', () => {

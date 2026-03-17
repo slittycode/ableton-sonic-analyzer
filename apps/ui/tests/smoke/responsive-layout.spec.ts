@@ -25,6 +25,27 @@ const PHASE1_STUB = {
   },
 };
 
+const PHASE2_STUB = {
+  trackCharacter: 'Deterministic smoke response.',
+  detectedCharacteristics: [],
+  arrangementOverview: { summary: 'Smoke summary.', segments: [] },
+  sonicElements: {
+    kick: 'Kick.',
+    bass: 'Bass.',
+    melodicArp: 'Arp.',
+    grooveAndTiming: 'Groove.',
+    effectsAndTexture: 'FX.',
+  },
+  mixAndMasterChain: [],
+  secretSauce: {
+    title: 'Smoke Sauce',
+    explanation: 'Smoke explanation.',
+    implementationSteps: [],
+  },
+  confidenceNotes: [],
+  abletonRecommendations: [],
+};
+
 function fixturePath(): string {
   return path.resolve(testDir, './fixtures/silence.wav');
 }
@@ -46,14 +67,121 @@ function stubRoutes(page: import('@playwright/test').Page) {
         }),
       });
     }),
-    page.route('**/api/analyze', async (route) => {
+    page.route('**/api/analysis-runs', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.fallback();
+        return;
+      }
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          requestId: 'req_responsive_001',
-          phase1: PHASE1_STUB,
-          diagnostics: { backendDurationMs: 400, engineVersion: 'smoke' },
+          runId: 'run_responsive_001',
+          requestedStages: {
+            symbolicMode: 'off',
+            symbolicBackend: 'auto',
+            interpretationMode: 'async',
+            interpretationProfile: 'producer_summary',
+            interpretationModel: 'gemini-3.1-pro-preview',
+          },
+          artifacts: {
+            sourceAudio: {
+              artifactId: 'artifact_responsive_001',
+              filename: 'silence.wav',
+              mimeType: 'audio/wav',
+              sizeBytes: 2048,
+              contentSha256: 'abc123',
+              path: '/tmp/silence.wav',
+            },
+          },
+          stages: {
+            measurement: {
+              status: 'queued',
+              authoritative: true,
+              result: null,
+              provenance: null,
+              diagnostics: null,
+              error: null,
+            },
+            symbolicExtraction: {
+              status: 'not_requested',
+              authoritative: false,
+              preferredAttemptId: null,
+              attemptsSummary: [],
+              result: null,
+              provenance: null,
+              diagnostics: null,
+              error: null,
+            },
+            interpretation: {
+              status: 'blocked',
+              authoritative: false,
+              preferredAttemptId: null,
+              attemptsSummary: [],
+              result: null,
+              provenance: null,
+              diagnostics: null,
+              error: null,
+            },
+          },
+        }),
+      });
+    }),
+    page.route('**/api/analysis-runs/run_responsive_001', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          runId: 'run_responsive_001',
+          requestedStages: {
+            symbolicMode: 'off',
+            symbolicBackend: 'auto',
+            interpretationMode: 'async',
+            interpretationProfile: 'producer_summary',
+            interpretationModel: 'gemini-3.1-pro-preview',
+          },
+          artifacts: {
+            sourceAudio: {
+              artifactId: 'artifact_responsive_001',
+              filename: 'silence.wav',
+              mimeType: 'audio/wav',
+              sizeBytes: 2048,
+              contentSha256: 'abc123',
+              path: '/tmp/silence.wav',
+            },
+          },
+          stages: {
+            measurement: {
+              status: 'completed',
+              authoritative: true,
+              result: PHASE1_STUB,
+              provenance: null,
+              diagnostics: { timings: { totalMs: 400, analysisMs: 360, serverOverheadMs: 40, flagsUsed: [], fileSizeBytes: 2048, fileDurationSeconds: 10, msPerSecondOfAudio: 40 } },
+              error: null,
+            },
+            symbolicExtraction: {
+              status: 'not_requested',
+              authoritative: false,
+              preferredAttemptId: null,
+              attemptsSummary: [],
+              result: null,
+              provenance: null,
+              diagnostics: null,
+              error: null,
+            },
+            interpretation: {
+              status: 'completed',
+              authoritative: false,
+              preferredAttemptId: 'int_responsive_001',
+              attemptsSummary: [
+                { attemptId: 'int_responsive_001', profileId: 'producer_summary', modelName: 'gemini-3.1-pro-preview', status: 'completed' },
+              ],
+              result: PHASE2_STUB,
+              provenance: null,
+              diagnostics: null,
+              error: null,
+            },
+          },
         }),
       });
     }),
@@ -71,7 +199,7 @@ test('mobile viewport (375px) renders landing and results in single column', asy
   await page.setInputFiles('#audio-upload', fixturePath());
   await page.getByRole('button', { name: /Initiate Analysis/i }).click();
   await expect(page.getByText('Analysis Results')).toBeVisible();
-  await expect(page.getByText('126')).toBeVisible();
+  await expect(page.getByText('126', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('System Diagnostics')).toBeVisible();
 });
 
@@ -83,9 +211,9 @@ test('tablet viewport (768px) renders results with readable metrics', async ({ p
   await page.setInputFiles('#audio-upload', fixturePath());
   await page.getByRole('button', { name: /Initiate Analysis/i }).click();
   await expect(page.getByText('Analysis Results')).toBeVisible();
-  await expect(page.getByText('126')).toBeVisible();
-  await expect(page.getByText(/F mi/)).toBeVisible();
-  await expect(page.getByText('4/4')).toBeVisible();
+  await expect(page.getByText('126', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('F minor', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('4/4', { exact: true }).first()).toBeVisible();
 });
 
 test('desktop viewport (1280px) renders two-column grid layout', async ({ page }) => {
@@ -119,7 +247,7 @@ test('mobile viewport moves the model selector into the input panel and hides th
   await page.goto('/', { waitUntil: 'networkidle' });
 
   await expect(page.getByText('SonicAnalyzer')).toBeVisible();
-  await expect(page.getByLabel('PHASE 2 ADVISORY')).toBeVisible();
+  await expect(page.getByLabel('AI INTERPRETATION')).toBeVisible();
   await expect(page.getByTestId('phase2-model-mobile')).toBeVisible();
   await expect(page.getByTestId('phase2-model-desktop')).not.toBeVisible();
   await expect(page.getByText('CPU')).not.toBeVisible();

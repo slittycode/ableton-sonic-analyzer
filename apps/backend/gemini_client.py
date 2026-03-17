@@ -19,7 +19,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # --- Constants & Configuration ---
-INLINE_SIZE_LIMIT = 20_971_520  # 20 MiB — matches TS geminiPhase2Client.ts
+INLINE_SIZE_LIMIT = 104_857_600  # 100 MiB — confirmed by Google on 2026-01-12
 GEMINI_TIMEOUT_SECONDS = 300  # 5 minutes
 GEMINI_MAX_RETRIES = 3
 GEMINI_RETRY_BASE_DELAY_MS = 2_000
@@ -494,7 +494,7 @@ def analyze_phase2(file_path: str, phase1_result: Dict[str, Any], model_name: st
             ),
         )
 
-    # 1. Inline Data (Fast path for smaller files, <= 20 MiB)
+    # 1. Inline Data (Fast path for smaller files, <= 100 MiB)
     if file_size <= INLINE_SIZE_LIMIT:
         with open(file_path, "rb") as f:
             file_bytes = f.read()

@@ -13,6 +13,7 @@
 - Prefer small, surgical edits over broad refactors.
 - Preserve the current contract between `analyze.py`, `server.py`, and the UI.
 - Read `README.md`, `ARCHITECTURE.md`, and `JSON_SCHEMA.md` before changing API or payload behavior.
+- Read `../../docs/ARCHITECTURE_STRATEGY.md` before proposing structural changes to the dependency stack, transcription pipeline, or the Layer 1/2/3 architecture. It records why the current design is shaped the way it is, dependency health verdicts, and the planned experiment sequence.
 - Treat `stdout` vs `stderr` behavior as part of the product contract, not just an implementation detail.
 - Do not silently change field names in raw CLI output or HTTP envelopes.
 

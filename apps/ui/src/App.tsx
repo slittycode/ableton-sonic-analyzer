@@ -12,15 +12,18 @@ import {
   isGeminiPhase2ConfigEnabled,
 } from './config';
 import { getAudioMimeTypeOrDefault, isSupportedAudioFile } from './services/audioFile';
-import { analyzeAudio } from './services/analyzer';
+import { analyzeAudio, monitorAnalysisRun } from './services/analyzer';
+import { createInterpretationAttempt, createSymbolicExtractionAttempt } from './services/analysisRunsClient';
 import {
   BackendClientError,
   deriveAnalyzeTimeoutMs,
   estimatePhase1WithBackend,
   mapBackendError,
 } from './services/backendPhase1Client';
-import { PHASE1_LABEL, PHASE2_LABEL } from './services/phaseLabels';
+import { MEASUREMENT_LABEL, INTERPRETATION_LABEL } from './services/phaseLabels';
 import {
+  AnalysisRunSnapshot,
+  AnalysisStageStatus,
   BackendAnalysisEstimate,
   DiagnosticLogEntry,
   Phase1Result,
@@ -55,40 +58,132 @@ function buildAudioMetadata(file: File): DiagnosticLogEntry['audioMetadata'] {
   };
 }
 
+type StageKey = NonNullable<DiagnosticLogEntry['stageKey']>;
+
 function replaceRunningLog(
   logs: DiagnosticLogEntry[],
-  source: DiagnosticLogEntry['source'],
+  stageKey: StageKey,
   nextLog: DiagnosticLogEntry,
 ): DiagnosticLogEntry[] {
-  return [...logs.filter((entry) => !(entry.source === source && entry.status === 'running')), nextLog];
+  return [...logs.filter((entry) => !(entry.stageKey === stageKey && entry.status === 'running')), nextLog];
 }
 
 function formatEstimateRange(estimate: BackendAnalysisEstimate): string {
   return `${Math.round(estimate.totalLowMs / 1000)}s-${Math.round(estimate.totalHighMs / 1000)}s`;
 }
 
-function getPhase2StatusBadge(
+function getInterpretationStatusBadge(
   phase2ConfigEnabled: boolean,
   phase2Requested: boolean,
 ): string | null {
-  if (!phase2ConfigEnabled) return 'PHASE 2 CONFIG OFF';
-  if (!phase2Requested) return 'PHASE 2 USER OFF';
+  if (!phase2ConfigEnabled) return 'INTERPRETATION CONFIG OFF';
+  if (!phase2Requested) return 'INTERPRETATION USER OFF';
   return null;
 }
 
-function getPhase2HelperCopy(
+function getInterpretationHelperCopy(
   phase2ConfigEnabled: boolean,
   phase2Requested: boolean,
 ): string {
   if (!phase2ConfigEnabled) {
-    return 'Developer kill-switch is off. Gemini advisory is unavailable in this build.';
+    return 'Developer kill-switch is off. AI interpretation is unavailable in this build.';
   }
 
   if (!phase2Requested) {
-    return 'Phase 1 will still run. Turn this on when you want the Gemini advisory pass after local DSP completes.';
+    return 'Measurement still runs. Turn this on when you want an AI-grounded interpretation after local analysis completes.';
   }
 
-  return 'Runs after Phase 1 succeeds and uses the selected Gemini model for advisory reconstruction output.';
+  return 'Runs after measurement succeeds and uses the selected model for grounded musical interpretation.';
+}
+
+function isTerminalStageStatus(status: AnalysisStageStatus): boolean {
+  return status === 'completed' || status === 'failed' || status === 'interrupted' || status === 'not_requested';
+}
+
+function stageDisplayLabel(stageKey: StageKey): string {
+  switch (stageKey) {
+    case 'measurement':
+      return 'Measurement';
+    case 'symbolicExtraction':
+      return 'Symbolic Extraction';
+    case 'interpretation':
+      return 'AI Interpretation';
+    default:
+      return 'System';
+  }
+}
+
+function buildStageLogMessage(stageKey: StageKey, status: AnalysisStageStatus, run: AnalysisRunSnapshot): string {
+  const stage =
+    stageKey === 'measurement'
+      ? run.stages.measurement
+      : stageKey === 'symbolicExtraction'
+        ? run.stages.symbolicExtraction
+        : run.stages.interpretation;
+  const error = stage.error;
+
+  if (status === 'failed' || status === 'interrupted') {
+    return error?.message ?? `${stageDisplayLabel(stageKey)} ${status}.`;
+  }
+
+  if (status === 'completed') {
+    switch (stageKey) {
+      case 'measurement':
+        return 'Measurement complete.';
+      case 'symbolicExtraction':
+        return 'Symbolic extraction complete.';
+      case 'interpretation':
+        return 'AI interpretation complete.';
+      default:
+        return 'Stage complete.';
+    }
+  }
+
+  if (status === 'not_requested') {
+    return stageKey === 'interpretation'
+      ? 'AI interpretation skipped.'
+      : 'Symbolic extraction was not requested.';
+  }
+
+  if (status === 'queued') {
+    return `${stageDisplayLabel(stageKey)} queued.`;
+  }
+
+  if (status === 'running') {
+    return `${stageDisplayLabel(stageKey)} in progress.`;
+  }
+
+  if (status === 'blocked') {
+    return `${stageDisplayLabel(stageKey)} waiting on measurement.`;
+  }
+
+  return `${stageDisplayLabel(stageKey)} ready to run.`;
+}
+
+function createStageLogEntry(
+  stageKey: StageKey,
+  status: DiagnosticLogEntry['status'],
+  message: string,
+  audioMetadata: DiagnosticLogEntry['audioMetadata'],
+  model: string,
+  requestId?: string,
+  errorCode?: string,
+): DiagnosticLogEntry {
+  return {
+    model,
+    phase: stageDisplayLabel(stageKey),
+    stageKey,
+    promptLength: 0,
+    responseLength: 0,
+    durationMs: 0,
+    audioMetadata,
+    timestamp: new Date().toISOString(),
+    requestId,
+    source: stageKey === 'interpretation' ? 'backend' : 'backend',
+    status,
+    message,
+    errorCode,
+  };
 }
 
 function getValidationSummaryLine(
@@ -103,16 +198,17 @@ function getValidationSummaryLine(
 
 export default function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [currentPhase, setCurrentPhase] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
   const [errorRetryable, setErrorRetryable] = useState(false);
   const [selectedModel, setSelectedModel] = useState(MODELS[0].id);
-  const [phase2Requested, setPhase2Requested] = useState(() => loadPhase2RequestedPreference());
+  const [interpretationRequested, setInterpretationRequested] = useState(() => loadPhase2RequestedPreference());
 
   const [phase1Result, setPhase1Result] = useState<Phase1Result | null>(null);
   const [phase2Result, setPhase2Result] = useState<Phase2Result | null>(null);
   const [phase2StatusMessage, setPhase2StatusMessage] = useState<string | null>(null);
   const [logs, setLogs] = useState<DiagnosticLogEntry[]>([]);
+  const [analysisRun, setAnalysisRun] = useState<AnalysisRunSnapshot | null>(null);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
 
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -123,22 +219,25 @@ export default function App() {
   const [estimateError, setEstimateError] = useState<string | null>(null);
   const [estimateWrongService, setEstimateWrongService] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
-  const [transcribeEnabled, setTranscribeEnabled] = useState(true);
-  const [stemSeparationEnabled, setStemSeparationEnabled] = useState(false);
+  const [symbolicExtractionRequested, setSymbolicExtractionRequested] = useState(true);
 
-  const phase1CompletedRef = useRef(false);
   const analysisStartedAtRef = useRef<number | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const phase2ConfigEnabled = isGeminiPhase2ConfigEnabled();
-  const phase2WillRun = phase2Requested && phase2ConfigEnabled;
-  const phase2StatusBadge = getPhase2StatusBadge(phase2ConfigEnabled, phase2Requested);
-  const phase2HelperCopy = getPhase2HelperCopy(phase2ConfigEnabled, phase2Requested);
-  const phase2ModelSelectorDisabled = isAnalyzing || !phase2ConfigEnabled || !phase2Requested;
+  const interpretationWillRun = interpretationRequested && phase2ConfigEnabled;
+  const phase2StatusBadge = getInterpretationStatusBadge(phase2ConfigEnabled, interpretationRequested);
+  const phase2HelperCopy = getInterpretationHelperCopy(phase2ConfigEnabled, interpretationRequested);
+  const phase2ModelSelectorDisabled = isAnalyzing || !phase2ConfigEnabled || !interpretationRequested;
   const cpuMeterPercent = useCpuMeter(isAnalyzing);
+  const previousRunRef = useRef<AnalysisRunSnapshot | null>(null);
+  const completionRef = useRef<{ measurement: boolean; interpretation: boolean }>({
+    measurement: false,
+    interpretation: false,
+  });
 
   useEffect(() => {
-    savePhase2RequestedPreference(phase2Requested);
-  }, [phase2Requested]);
+    savePhase2RequestedPreference(interpretationRequested);
+  }, [interpretationRequested]);
 
   useEffect(() => {
     if (!audioFile) {
@@ -155,10 +254,11 @@ export default function App() {
     setEstimateWrongService(false);
     setIsEstimateLoading(true);
 
+    // Legacy estimate route — retained pending canonicalization into analysis-runs API.
     estimatePhase1WithBackend(audioFile, {
       apiBaseUrl: appConfig.apiBaseUrl,
-      transcribe: transcribeEnabled,
-      separate: stemSeparationEnabled,
+      transcribe: symbolicExtractionRequested,
+      separate: symbolicExtractionRequested,
     })
       .then((result) => {
         if (isCancelled) return;
@@ -179,7 +279,7 @@ export default function App() {
     return () => {
       isCancelled = true;
     };
-  }, [audioFile, stemSeparationEnabled, transcribeEnabled]);
+  }, [audioFile, symbolicExtractionRequested]);
 
   useEffect(() => {
     if (!isAnalyzing || analysisStartedAtRef.current === null) {
@@ -205,9 +305,11 @@ export default function App() {
     setPhase2Result(null);
     setPhase2StatusMessage(null);
     setLogs([]);
+    setAnalysisRun(null);
+    setActiveRunId(null);
     setError(null);
-    setCurrentPhase(0);
-    phase1CompletedRef.current = false;
+    previousRunRef.current = null;
+    completionRef.current = { measurement: false, interpretation: false };
     analysisStartedAtRef.current = null;
     setElapsedMs(0);
     setEstimateWrongService(false);
@@ -222,13 +324,15 @@ export default function App() {
     setPhase2Result(null);
     setPhase2StatusMessage(null);
     setLogs([]);
+    setAnalysisRun(null);
+    setActiveRunId(null);
     setError(null);
-    setCurrentPhase(0);
     setAnalysisEstimate(null);
     setEstimateError(null);
     setIsEstimateLoading(false);
     setEstimateWrongService(false);
-    phase1CompletedRef.current = false;
+    previousRunRef.current = null;
+    completionRef.current = { measurement: false, interpretation: false };
     analysisStartedAtRef.current = null;
     setElapsedMs(0);
     setIsDemoLoading(false);
@@ -279,9 +383,75 @@ export default function App() {
     }
   }, [handleFileSelect, isAnalyzing, isDemoLoading]);
 
-  const handlePhase2RequestedChange = (requested: boolean) => {
-    setPhase2Requested(requested);
+  const handleInterpretationRequestedChange = (requested: boolean) => {
+    setInterpretationRequested(requested);
   };
+
+  const syncStageLog = useCallback((
+    currentLogs: DiagnosticLogEntry[],
+    stageKey: StageKey,
+    nextStatus: AnalysisStageStatus,
+    run: AnalysisRunSnapshot,
+    audioMetadata: DiagnosticLogEntry['audioMetadata'],
+    activeModel: string,
+    activeEstimate: BackendAnalysisEstimate | null,
+  ) => {
+    const model = stageKey === 'interpretation' ? activeModel : 'local-dsp-engine';
+    const stageError =
+      stageKey === 'measurement'
+        ? run.stages.measurement.error
+        : stageKey === 'symbolicExtraction'
+          ? run.stages.symbolicExtraction.error
+          : run.stages.interpretation.error;
+
+    if (nextStatus === 'queued' || nextStatus === 'running') {
+      return replaceRunningLog(currentLogs, stageKey, {
+        ...createStageLogEntry(
+          stageKey,
+          'running',
+          buildStageLogMessage(stageKey, nextStatus, run),
+          audioMetadata,
+          model,
+          run.runId,
+        ),
+        estimateLowMs: stageKey === 'measurement' ? activeEstimate?.totalLowMs : undefined,
+        estimateHighMs: stageKey === 'measurement' ? activeEstimate?.totalHighMs : undefined,
+      });
+    }
+
+    if (nextStatus === 'completed' && stageKey === 'symbolicExtraction') {
+      return replaceRunningLog(
+        currentLogs,
+        stageKey,
+        createStageLogEntry(
+          stageKey,
+          'success',
+          buildStageLogMessage(stageKey, nextStatus, run),
+          audioMetadata,
+          model,
+          run.runId,
+        ),
+      );
+    }
+
+    if (nextStatus === 'failed' || nextStatus === 'interrupted') {
+      return replaceRunningLog(
+        currentLogs,
+        stageKey,
+        createStageLogEntry(
+          stageKey,
+          'error',
+          buildStageLogMessage(stageKey, nextStatus, run),
+          audioMetadata,
+          model,
+          run.runId,
+          stageError?.code,
+        ),
+      );
+    }
+
+    return currentLogs;
+  }, []);
 
   const handleStartAnalysis = async () => {
     if (!audioFile) return;
@@ -298,17 +468,20 @@ export default function App() {
     abortControllerRef.current = ac;
 
     setIsAnalyzing(true);
-    setCurrentPhase(1);
     setError(null);
     setErrorRetryable(false);
     setPhase2StatusMessage(null);
-    phase1CompletedRef.current = false;
+    setAnalysisRun(null);
+    setActiveRunId(null);
+    previousRunRef.current = null;
+    completionRef.current = { measurement: false, interpretation: false };
     analysisStartedAtRef.current = Date.now();
 
     setLogs([
       {
         model: 'local-dsp-engine',
-        phase: PHASE1_LABEL,
+        phase: MEASUREMENT_LABEL,
+        stageKey: 'measurement',
         promptLength: 0,
         responseLength: 0,
         durationMs: 0,
@@ -328,18 +501,16 @@ export default function App() {
         activeModel,
         null,
         (result, log) => {
-          phase1CompletedRef.current = true;
-          setPhase1Result(result);
           setLogs((prev) => {
-            const nextLogs = replaceRunningLog(prev, 'backend', {
+            const nextLogs = replaceRunningLog(prev, 'measurement', {
               ...log,
               status: 'success',
-              message: log.message ?? 'Local DSP analysis complete.',
+              message: log.message ?? 'Measurement complete.',
               estimateLowMs: activeEstimate?.totalLowMs,
               estimateHighMs: activeEstimate?.totalHighMs,
             });
 
-            if (!phase2WillRun) {
+            if (!interpretationWillRun) {
               return nextLogs;
             }
 
@@ -347,33 +518,35 @@ export default function App() {
               ...nextLogs,
               {
                 model: activeModel,
-                phase: PHASE2_LABEL,
+                phase: INTERPRETATION_LABEL,
+                stageKey: 'interpretation',
                 promptLength: 0,
                 responseLength: 0,
                 durationMs: 0,
                 audioMetadata,
                 timestamp: new Date().toISOString(),
-                source: 'gemini',
+                source: 'backend',
                 status: 'running',
-                message: 'Generating advisory output',
+                message: 'AI interpretation in progress.',
               },
             ];
           });
-          setCurrentPhase(phase2WillRun ? 2 : 1);
+          completionRef.current.measurement = true;
+          setPhase1Result(result);
         },
         (result, log) => {
           setPhase2Result(result);
           setPhase2StatusMessage(log.message ?? null);
           setLogs((prev) => {
             const baseMessage =
-              log.message ?? (result ? 'Phase 2 advisory complete.' : 'Phase 2 advisory skipped.');
+              log.message ?? (result ? 'AI interpretation complete.' : 'AI interpretation skipped.');
             const validationSummaryLine = getValidationSummaryLine(log.validationReport);
             const logMessage = validationSummaryLine
               ? `${baseMessage}\n${validationSummaryLine}`
               : baseMessage;
 
-            if (phase2WillRun) {
-              return replaceRunningLog(prev, 'gemini', {
+            if (interpretationWillRun) {
+              return replaceRunningLog(prev, 'interpretation', {
                 ...log,
                 status: log.status ?? (result ? 'success' : 'skipped'),
                 message: logMessage,
@@ -387,38 +560,38 @@ export default function App() {
               },
             ];
           });
-          setCurrentPhase(0);
-          setIsAnalyzing(false);
-          abortControllerRef.current = null;
-          analysisStartedAtRef.current = null;
-          setElapsedMs(0);
+          completionRef.current.interpretation = true;
         },
         (rawError) => {
           const err = rawError instanceof Error ? rawError : new Error(String(rawError));
-          const isPhase1Failure = !phase1CompletedRef.current;
           const backendError = err instanceof BackendClientError ? err : null;
           const isCancelled = backendError?.code === 'USER_CANCELLED';
 
           setLogs((prev) => [
             ...prev.filter(
-              (entry) => !(entry.status === 'running' && entry.source === (isPhase1Failure ? 'backend' : 'gemini')),
+              (entry) =>
+                !(
+                  entry.status === 'running' &&
+                  (entry.stageKey === 'measurement' || entry.stageKey === 'interpretation')
+                ),
             ),
             {
-              model: isPhase1Failure ? 'local-dsp-engine' : activeModel,
-              phase: isPhase1Failure ? PHASE1_LABEL : PHASE2_LABEL,
+              model: 'system',
+              phase: 'Monitoring',
+              stageKey: 'system',
               promptLength: 0,
               responseLength: 0,
               durationMs: elapsedMs,
               audioMetadata,
               timestamp: new Date().toISOString(),
               requestId: backendError?.details?.requestId,
-              source: isPhase1Failure ? 'backend' : 'gemini',
+              source: 'system',
               status: isCancelled ? 'skipped' : 'error',
-              message: isCancelled ? 'Analysis cancelled by user.' : err.message,
+              message: isCancelled ? 'Monitoring stopped.' : err.message,
               errorCode: isCancelled ? undefined : backendError?.details?.serverCode ?? backendError?.code,
-              estimateLowMs: isPhase1Failure ? activeEstimate?.totalLowMs : undefined,
-              estimateHighMs: isPhase1Failure ? activeEstimate?.totalHighMs : undefined,
-              timings: isPhase1Failure ? backendError?.details?.diagnostics?.timings : undefined,
+              estimateLowMs: activeEstimate?.totalLowMs,
+              estimateHighMs: activeEstimate?.totalHighMs,
+              timings: backendError?.details?.diagnostics?.timings,
             },
           ]);
 
@@ -426,49 +599,223 @@ export default function App() {
             setError(err.message);
             setErrorRetryable(backendError?.details?.retryable === true);
           }
-          setIsAnalyzing(false);
-          setCurrentPhase(0);
-          abortControllerRef.current = null;
-          analysisStartedAtRef.current = null;
-          setElapsedMs(0);
         },
         {
-          transcribe: transcribeEnabled,
-          separate: stemSeparationEnabled,
+          symbolicRequested: symbolicExtractionRequested,
           timeoutMs: activeTimeoutMs,
           signal: ac.signal,
-          phase2Requested,
-          phase2ConfigEnabled,
+          interpretationRequested,
+          interpretationConfigEnabled: phase2ConfigEnabled,
+          onRunUpdate: (update) => {
+            setActiveRunId(update.runId);
+            setAnalysisRun(update.snapshot);
+            setPhase1Result(update.displayPhase1);
+            setPhase2Result(update.displayPhase2);
+            if (!update.displayPhase2 && isTerminalStageStatus(update.snapshot.stages.interpretation.status)) {
+              setPhase2StatusMessage(
+                update.snapshot.stages.interpretation.error?.message ??
+                  (update.snapshot.stages.interpretation.status === 'not_requested'
+                    ? interpretationRequested
+                      ? 'AI interpretation skipped because it was disabled by configuration.'
+                      : 'AI interpretation skipped because it was disabled in the UI.'
+                    : null),
+              );
+            }
+
+            const previous = previousRunRef.current;
+            setLogs((prev) => {
+              let nextLogs = prev;
+              const measurementStatus = update.snapshot.stages.measurement.status;
+              const symbolicStatus = update.snapshot.stages.symbolicExtraction.status;
+              const interpretationStatus = update.snapshot.stages.interpretation.status;
+
+              if (!previous || previous.stages.measurement.status !== measurementStatus) {
+                nextLogs = syncStageLog(
+                  nextLogs,
+                  'measurement',
+                  measurementStatus,
+                  update.snapshot,
+                  audioMetadata,
+                  activeModel,
+                  activeEstimate,
+                );
+              }
+
+              if (!previous || previous.stages.symbolicExtraction.status !== symbolicStatus) {
+                nextLogs = syncStageLog(
+                  nextLogs,
+                  'symbolicExtraction',
+                  symbolicStatus,
+                  update.snapshot,
+                  audioMetadata,
+                  activeModel,
+                  activeEstimate,
+                );
+              }
+
+              if (!previous || previous.stages.interpretation.status !== interpretationStatus) {
+                nextLogs = syncStageLog(
+                  nextLogs,
+                  'interpretation',
+                  interpretationStatus,
+                  update.snapshot,
+                  audioMetadata,
+                  activeModel,
+                  activeEstimate,
+                );
+              }
+
+              return nextLogs;
+            });
+            previousRunRef.current = update.snapshot;
+          },
         },
       );
     } catch (rawError) {
       const err = rawError instanceof Error ? rawError : new Error(String(rawError));
       setError(err.message);
       setErrorRetryable(err instanceof BackendClientError && err.details?.retryable === true);
+    } finally {
       setIsAnalyzing(false);
-      setCurrentPhase(0);
       abortControllerRef.current = null;
       analysisStartedAtRef.current = null;
       setElapsedMs(0);
     }
   };
 
-  const handleCancel = () => {
+  const handleStopMonitoring = () => {
     abortControllerRef.current?.abort();
   };
 
-  const isAnalyzeDisabled = isAnalyzing || estimateWrongService;
+  const handleRetrySymbolicExtraction = useCallback(async () => {
+    if (!audioFile || !activeRunId) return;
 
-  const statusTitle = currentPhase === 2 ? PHASE2_LABEL : PHASE1_LABEL;
-  const statusSummary =
-    currentPhase === 2
-      ? 'Generating the advisory pass from completed local DSP measurements.'
-      : 'Running the local DSP engine against the uploaded track.';
-  const statusDetail =
-    currentPhase === 2
-      ? 'Phase 1 is complete. Phase 2 is optional and UI-owned.'
-      : 'Measuring tempo, key, loudness, stereo, rhythm, melody, and spectral balance.';
-  const statusRequestState = currentPhase === 2 ? 'Generating advisory output' : 'Request in flight';
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    setIsAnalyzing(true);
+    setError(null);
+    setErrorRetryable(false);
+    analysisStartedAtRef.current = Date.now();
+
+    try {
+      await createSymbolicExtractionAttempt(activeRunId, {
+        apiBaseUrl: appConfig.apiBaseUrl,
+        symbolicMode: 'stem_notes',
+        symbolicBackend: 'auto',
+        signal: controller.signal,
+      });
+      await monitorAnalysisRun(
+        activeRunId,
+        audioFile,
+        selectedModel,
+        (result, log) => {
+          completionRef.current.measurement = true;
+          setPhase1Result(result);
+          setLogs((prev) => replaceRunningLog(prev, 'measurement', { ...log, status: 'success' }));
+        },
+        (result, log) => {
+          setPhase2Result(result);
+          setPhase2StatusMessage(log.message ?? null);
+          setLogs((prev) => replaceRunningLog(prev, 'interpretation', { ...log, status: log.status ?? 'success' }));
+        },
+        (rawError) => {
+          const err = rawError instanceof Error ? rawError : new Error(String(rawError));
+          if (!(err instanceof BackendClientError && err.code === 'USER_CANCELLED')) {
+            setError(err.message);
+          }
+        },
+        {
+          symbolicRequested: symbolicExtractionRequested,
+          interpretationRequested,
+          interpretationConfigEnabled: phase2ConfigEnabled,
+          signal: controller.signal,
+          onRunUpdate: (update) => {
+            setActiveRunId(update.runId);
+            setAnalysisRun(update.snapshot);
+            setPhase1Result(update.displayPhase1);
+            setPhase2Result(update.displayPhase2);
+            previousRunRef.current = update.snapshot;
+          },
+        },
+      );
+    } finally {
+      setIsAnalyzing(false);
+      abortControllerRef.current = null;
+      analysisStartedAtRef.current = null;
+      setElapsedMs(0);
+    }
+  }, [activeRunId, audioFile, interpretationRequested, phase2ConfigEnabled, selectedModel, symbolicExtractionRequested]);
+
+  const handleRetryInterpretation = useCallback(async () => {
+    if (!audioFile || !activeRunId) return;
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    setIsAnalyzing(true);
+    setError(null);
+    setErrorRetryable(false);
+    setPhase2StatusMessage(null);
+    analysisStartedAtRef.current = Date.now();
+
+    try {
+      await createInterpretationAttempt(activeRunId, {
+        apiBaseUrl: appConfig.apiBaseUrl,
+        interpretationProfile: 'producer_summary',
+        interpretationModel: selectedModel,
+        signal: controller.signal,
+      });
+      await monitorAnalysisRun(
+        activeRunId,
+        audioFile,
+        selectedModel,
+        (result, log) => {
+          completionRef.current.measurement = true;
+          setPhase1Result(result);
+          setLogs((prev) => replaceRunningLog(prev, 'measurement', { ...log, status: 'success' }));
+        },
+        (result, log) => {
+          setPhase2Result(result);
+          setPhase2StatusMessage(log.message ?? null);
+          setLogs((prev) => replaceRunningLog(prev, 'interpretation', { ...log, status: log.status ?? 'success' }));
+        },
+        (rawError) => {
+          const err = rawError instanceof Error ? rawError : new Error(String(rawError));
+          if (!(err instanceof BackendClientError && err.code === 'USER_CANCELLED')) {
+            setError(err.message);
+          }
+        },
+        {
+          symbolicRequested: symbolicExtractionRequested,
+          interpretationRequested,
+          interpretationConfigEnabled: phase2ConfigEnabled,
+          signal: controller.signal,
+          onRunUpdate: (update) => {
+            setActiveRunId(update.runId);
+            setAnalysisRun(update.snapshot);
+            setPhase1Result(update.displayPhase1);
+            setPhase2Result(update.displayPhase2);
+            previousRunRef.current = update.snapshot;
+          },
+        },
+      );
+    } finally {
+      setIsAnalyzing(false);
+      abortControllerRef.current = null;
+      analysisStartedAtRef.current = null;
+      setElapsedMs(0);
+    }
+  }, [activeRunId, audioFile, interpretationRequested, phase2ConfigEnabled, selectedModel, symbolicExtractionRequested]);
+
+  const isAnalyzeDisabled = isAnalyzing || estimateWrongService;
+  const hasRetryableRunStage = Boolean(
+    analysisRun &&
+      (
+        ['failed', 'interrupted'].includes(analysisRun.stages.measurement.status) ||
+        ['failed', 'interrupted'].includes(analysisRun.stages.symbolicExtraction.status) ||
+        ['failed', 'interrupted'].includes(analysisRun.stages.interpretation.status)
+      ),
+  );
+  const shouldShowStatusPanel = Boolean(audioUrl && audioFile && analysisRun && (isAnalyzing || hasRetryableRunStage));
 
   return (
     <div className="min-h-screen bg-bg-app px-3 py-3 md:px-6 md:py-5 font-sans flex items-center justify-center">
@@ -491,7 +838,7 @@ export default function App() {
 
           <div className="hidden sm:flex items-center space-x-4">
             <div className="flex items-center space-x-2">
-              <label className="text-[10px] font-mono text-text-secondary uppercase">Phase 2 Model</label>
+              <label className="text-[10px] font-mono text-text-secondary uppercase">Interpretation Model</label>
               <select
                 data-testid="phase2-model-desktop"
                 value={selectedModel}
@@ -551,7 +898,7 @@ export default function App() {
                     />
                     <label
                       className={`mt-4 rounded-sm border px-3 py-3 transition-colors cursor-pointer ${
-                        transcribeEnabled
+                        symbolicExtractionRequested
                           ? 'border-accent bg-accent/10 text-accent'
                           : 'border-border bg-bg-panel text-text-secondary'
                       } ${isAnalyzing ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -559,23 +906,23 @@ export default function App() {
                       <div className="flex items-start gap-3">
                         <input
                           type="checkbox"
-                          checked={transcribeEnabled}
-                          onChange={(e) => setTranscribeEnabled(e.target.checked)}
+                          checked={symbolicExtractionRequested}
+                          onChange={(e) => setSymbolicExtractionRequested(e.target.checked)}
                           disabled={isAnalyzing}
-                          aria-label="MIDI TRANSCRIPTION"
+                          aria-label="SYMBOLIC EXTRACTION"
                           className="mt-0.5 h-4 w-4 accent-accent"
                         />
                         <div className="space-y-1">
-                          <p className="text-[10px] font-mono uppercase tracking-wider">MIDI TRANSCRIPTION</p>
+                          <p className="text-[10px] font-mono uppercase tracking-wider">SYMBOLIC EXTRACTION</p>
                           <p className="text-[10px] font-mono uppercase tracking-wide opacity-80">
-                            Basic Pitch polyphonic analysis (+30-60s)
+                            Best-effort local note extraction from separated stems
                           </p>
                         </div>
                       </div>
                     </label>
                     <label
                       className={`mt-3 rounded-sm border px-3 py-3 transition-colors cursor-pointer ${
-                        phase2Requested && phase2ConfigEnabled
+                        interpretationRequested && phase2ConfigEnabled
                           ? 'border-accent bg-accent/10 text-accent'
                           : 'border-border bg-bg-panel text-text-secondary'
                       } ${isAnalyzing || !phase2ConfigEnabled ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -583,15 +930,15 @@ export default function App() {
                       <div className="flex items-start gap-3">
                         <input
                           type="checkbox"
-                          checked={phase2Requested}
-                          onChange={(e) => handlePhase2RequestedChange(e.target.checked)}
+                          checked={interpretationRequested}
+                          onChange={(e) => handleInterpretationRequestedChange(e.target.checked)}
                           disabled={isAnalyzing || !phase2ConfigEnabled}
-                          aria-label="PHASE 2 ADVISORY"
+                          aria-label="AI INTERPRETATION"
                           className="mt-0.5 h-4 w-4 accent-accent"
                         />
                         <div className="space-y-1">
                           <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-[10px] font-mono uppercase tracking-wider">PHASE 2 ADVISORY</p>
+                            <p className="text-[10px] font-mono uppercase tracking-wider">AI INTERPRETATION</p>
                             {phase2StatusBadge && (
                               <span
                                 data-testid="phase2-status-inline"
@@ -613,7 +960,7 @@ export default function App() {
                           htmlFor="phase2-model-mobile"
                           className="text-[10px] font-mono uppercase tracking-wider text-text-secondary"
                         >
-                          Phase 2 Model
+                          Interpretation Model
                         </label>
                         <select
                           id="phase2-model-mobile"
@@ -631,30 +978,6 @@ export default function App() {
                         </select>
                       </div>
                     </div>
-                    <label
-                      className={`mt-3 rounded-sm border px-3 py-3 transition-colors cursor-pointer ${
-                        stemSeparationEnabled
-                          ? 'border-accent bg-accent/10 text-accent'
-                          : 'border-border bg-bg-panel text-text-secondary'
-                      } ${isAnalyzing ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <input
-                          type="checkbox"
-                          checked={stemSeparationEnabled}
-                          onChange={(e) => setStemSeparationEnabled(e.target.checked)}
-                          disabled={isAnalyzing}
-                          aria-label="STEM SEPARATION"
-                          className="mt-0.5 h-4 w-4 accent-accent"
-                        />
-                        <div className="space-y-1">
-                          <p className="text-[10px] font-mono uppercase tracking-wider">STEM SEPARATION</p>
-                          <p className="text-[10px] font-mono uppercase tracking-wide opacity-80">
-                            Demucs pre-processing for better accuracy (+60-120s)
-                          </p>
-                        </div>
-                      </div>
-                    </label>
                     {!phase1Result && audioFile && (
                       <div className="mt-4 flex justify-end">
                         <button
@@ -687,15 +1010,16 @@ export default function App() {
                   className="flex-grow bg-bg-card border border-border rounded-b-sm p-4 relative flex flex-col"
                 >
                   {audioUrl && audioFile ? (
-                    isAnalyzing ? (
+                    shouldShowStatusPanel ? (
                       <AnalysisStatusPanel
-                        title={statusTitle}
-                        summary={statusSummary}
-                        detail={statusDetail}
-                        requestState={statusRequestState}
+                        run={analysisRun}
                         elapsedMs={elapsedMs}
                         estimate={analysisEstimate}
-                        onCancel={handleCancel}
+                        isActive={isAnalyzing}
+                        onStopMonitoring={handleStopMonitoring}
+                        onRetryMeasurement={audioFile ? handleStartAnalysis : undefined}
+                        onRetrySymbolic={analysisRun && ['failed', 'interrupted'].includes(analysisRun.stages.symbolicExtraction.status) ? handleRetrySymbolicExtraction : undefined}
+                        onRetryInterpretation={analysisRun && ['failed', 'interrupted'].includes(analysisRun.stages.interpretation.status) ? handleRetryInterpretation : undefined}
                       />
                     ) : (
                       <div className="h-full flex flex-col justify-between relative z-10 gap-4">
@@ -716,7 +1040,7 @@ export default function App() {
                                 </p>
                               </div>
                               <div className="max-w-xs text-[10px] font-mono uppercase tracking-wider text-text-secondary leading-relaxed">
-                                Phase 1 runs on the local DSP backend. Phase 2 advisory only starts after Phase 1 succeeds.
+                                Measurement runs locally first. Symbolic extraction and AI interpretation only start after measurement succeeds.
                               </div>
                             </div>
                             {estimateError && (

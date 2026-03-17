@@ -1,9 +1,11 @@
 import asyncio
 import base64
 import json
+import logging
 import mimetypes
 import os
 import random
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -28,7 +30,8 @@ from fastapi import FastAPI, File, Form, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from analyze import build_analysis_estimate, get_audio_duration_seconds
+from analysis_runtime import AnalysisRuntime, UnsupportedSymbolicModeError
+from analyze import analyze_transcription, build_analysis_estimate, get_audio_duration_seconds, separate_stems
 
 
 app = FastAPI(title="Sonic Analyzer Local API")
@@ -41,7 +44,8 @@ MAX_SNIPPET_LENGTH = 2000
 DEFAULT_SERVER_HOST = "0.0.0.0"
 DEFAULT_SERVER_PORT = 8100
 
-INLINE_SIZE_LIMIT = 20_971_520  # 20 MiB — matches geminiPhase2Client.ts
+INLINE_SIZE_LIMIT = 104_857_600  # 100 MiB — confirmed by Google on 2026-01-12
+WORKER_IDLE_SECONDS = 0.25
 ALLOWED_GEMINI_MODELS = {
     "gemini-2.5-flash",
     "gemini-2.5-pro",
@@ -67,6 +71,11 @@ GEMINI_RETRYABLE_SUBSTRINGS = [
 ]
 
 _PROMPTS_DIR = Path(__file__).parent / "prompts"
+_ANALYSIS_RUNTIME: AnalysisRuntime | None = None
+_BACKGROUND_TASKS: list[asyncio.Task[Any]] = []
+logger = logging.getLogger(__name__)
+
+LEGACY_ENDPOINT_SUNSET = "Wed, 31 Dec 2026 23:59:59 GMT"
 
 
 def _load_prompt_template(name: str) -> str:
@@ -78,6 +87,16 @@ def _load_prompt_template(name: str) -> str:
             f"Prompt template '{name}' not found at {path}. "
             "Re-run from the apps/backend directory."
         ) from None
+
+
+def _mark_legacy_endpoint_response(response: JSONResponse, *, endpoint: str) -> JSONResponse:
+    response.headers["Deprecation"] = "true"
+    response.headers["Sunset"] = LEGACY_ENDPOINT_SUNSET
+    response.headers["Link"] = '</api/analysis-runs>; rel="successor-version"'
+    response.headers["Warning"] = (
+        f'299 - "{endpoint} is deprecated; use /api/analysis-runs instead."'
+    )
+    return response
 
 
 PHASE2_PROMPT_TEMPLATE = _load_prompt_template("phase2_system.txt")
@@ -253,11 +272,30 @@ def _evict_expired_cache_entries() -> None:
 
 @app.on_event("startup")
 async def _start_cache_eviction() -> None:
+    get_analysis_runtime().recover_incomplete_attempts()
+
     async def _evict_loop() -> None:
         while True:
             await asyncio.sleep(300)
             _evict_expired_cache_entries()
-    asyncio.create_task(_evict_loop())
+
+    if not _BACKGROUND_TASKS:
+        _BACKGROUND_TASKS.extend(
+            [
+                asyncio.create_task(_evict_loop()),
+                asyncio.create_task(_measurement_worker_loop()),
+                asyncio.create_task(_symbolic_worker_loop()),
+                asyncio.create_task(_interpretation_worker_loop()),
+            ]
+        )
+
+
+@app.on_event("shutdown")
+async def _stop_background_tasks() -> None:
+    global _BACKGROUND_TASKS
+    for task in _BACKGROUND_TASKS:
+        task.cancel()
+    _BACKGROUND_TASKS = []
 
 
 def _coerce_number(value: Any, default: float = 0.0) -> float:
@@ -306,6 +344,20 @@ def _coerce_nullable_number(value: Any) -> float | None:
 
 def _current_time() -> datetime:
     return datetime.now()
+
+
+def resolve_runtime_dir() -> Path:
+    raw_value = os.getenv("SONIC_ANALYZER_RUNTIME_DIR", "").strip()
+    if raw_value:
+        return Path(raw_value)
+    return Path(__file__).parent / ".runtime"
+
+
+def get_analysis_runtime() -> AnalysisRuntime:
+    global _ANALYSIS_RUNTIME
+    if _ANALYSIS_RUNTIME is None:
+        _ANALYSIS_RUNTIME = AnalysisRuntime(resolve_runtime_dir())
+    return _ANALYSIS_RUNTIME
 
 
 def resolve_server_port() -> int:
@@ -395,6 +447,948 @@ def _cleanup_temp_path(temp_path: str | None) -> None:
             os.remove(temp_path)
         except OSError:
             pass
+
+
+async def _create_analysis_run_record(
+    *,
+    track: UploadFile,
+    symbolic_mode: str,
+    symbolic_backend: str,
+    interpretation_mode: str,
+    interpretation_profile: str,
+    interpretation_model: str | None,
+    legacy_request_id: str | None = None,
+) -> tuple[AnalysisRuntime, str]:
+    content = await track.read()
+    runtime = get_analysis_runtime()
+    created = runtime.create_run(
+        filename=track.filename or "upload.bin",
+        content=content,
+        mime_type=track.content_type or _get_audio_mime_type(track.filename or "upload.bin"),
+        symbolic_mode=symbolic_mode,
+        symbolic_backend=symbolic_backend,
+        interpretation_mode=interpretation_mode,
+        interpretation_profile=interpretation_profile,
+        interpretation_model=interpretation_model,
+        legacy_request_id=legacy_request_id,
+    )
+    return runtime, created["runId"]
+
+
+def _build_measurement_provenance(
+    *,
+    run_separation: bool,
+    run_transcribe: bool,
+    run_fast: bool,
+) -> dict[str, Any]:
+    return {
+        "schemaVersion": "measurement.v1",
+        "engineVersion": ENGINE_VERSION,
+        "requestOptions": {
+            "separate": run_separation,
+            "transcribe": run_transcribe,
+            "fast": run_fast,
+        },
+    }
+
+
+def _resolve_symbolic_mode_for_legacy(transcribe: bool) -> str:
+    return "stem_notes" if transcribe else "off"
+
+
+def _run_measurement_subprocess(
+    *,
+    audio_path: str,
+    file_size_bytes: int,
+    request_id: str,
+    request_started_at: datetime,
+    run_separation: bool,
+    run_transcribe: bool,
+    run_fast: bool,
+) -> dict[str, Any]:
+    estimate = _build_backend_estimate(audio_path, run_separation, run_transcribe)
+    command = ["./venv/bin/python", "analyze.py", audio_path, "--yes"]
+    flags_used: list[str] = []
+    if run_separation:
+        command.append("--separate")
+        flags_used.append("--separate")
+    if run_transcribe:
+        command.append("--transcribe")
+        flags_used.append("--transcribe")
+    if run_fast:
+        command.append("--fast")
+        flags_used.append("--fast")
+
+    timeout_seconds = _compute_timeout_seconds(estimate)
+    analysis_started_at = _current_time()
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout_seconds,
+        )
+    except subprocess.TimeoutExpired as exc:
+        analysis_completed_at = _current_time()
+        diagnostics = _build_diagnostics(
+            request_id=request_id,
+            estimate=estimate,
+            timeout_seconds=timeout_seconds,
+            request_started_at=request_started_at,
+            analysis_started_at=analysis_started_at,
+            analysis_completed_at=analysis_completed_at,
+            flags_used=flags_used,
+            file_size_bytes=file_size_bytes,
+            file_duration_seconds=None,
+            engine_version=ENGINE_VERSION,
+            stdout=exc.stdout,
+            stderr=exc.stderr,
+        )
+        return {
+            "ok": False,
+            "statusCode": 504,
+            "errorCode": "ANALYZER_TIMEOUT",
+            "message": "Local DSP analysis timed out before completion.",
+            "retryable": True,
+            "estimate": estimate,
+            "timeoutSeconds": timeout_seconds,
+            "flagsUsed": flags_used,
+            "requestStartedAt": request_started_at,
+            "analysisStartedAt": analysis_started_at,
+            "analysisCompletedAt": analysis_completed_at,
+            "stdout": exc.stdout,
+            "stderr": exc.stderr,
+            "diagnostics": diagnostics,
+        }
+    except Exception as exc:
+        analysis_completed_at = _current_time()
+        diagnostics = _build_diagnostics(
+            request_id=request_id,
+            estimate=estimate,
+            timeout_seconds=timeout_seconds,
+            request_started_at=request_started_at,
+            analysis_started_at=analysis_started_at,
+            analysis_completed_at=analysis_completed_at,
+            flags_used=flags_used,
+            file_size_bytes=file_size_bytes,
+            file_duration_seconds=None,
+            engine_version=ENGINE_VERSION,
+            stderr=exc,
+        )
+        return {
+            "ok": False,
+            "statusCode": 500,
+            "errorCode": "BACKEND_INTERNAL_ERROR",
+            "message": "Local DSP backend hit an unexpected server error.",
+            "retryable": False,
+            "estimate": estimate,
+            "timeoutSeconds": timeout_seconds,
+            "flagsUsed": flags_used,
+            "requestStartedAt": request_started_at,
+            "analysisStartedAt": analysis_started_at,
+            "analysisCompletedAt": analysis_completed_at,
+            "stderr": exc,
+            "diagnostics": diagnostics,
+        }
+
+    analysis_completed_at = _current_time()
+    if result.returncode != 0:
+        diagnostics = _build_diagnostics(
+            request_id=request_id,
+            estimate=estimate,
+            timeout_seconds=timeout_seconds,
+            request_started_at=request_started_at,
+            analysis_started_at=analysis_started_at,
+            analysis_completed_at=analysis_completed_at,
+            flags_used=flags_used,
+            file_size_bytes=file_size_bytes,
+            file_duration_seconds=None,
+            engine_version=ENGINE_VERSION,
+            stdout=result.stdout,
+            stderr=result.stderr,
+        )
+        return {
+            "ok": False,
+            "statusCode": 502,
+            "errorCode": "ANALYZER_FAILED",
+            "message": "Local DSP analysis failed before a valid result was produced.",
+            "retryable": True,
+            "estimate": estimate,
+            "timeoutSeconds": timeout_seconds,
+            "flagsUsed": flags_used,
+            "requestStartedAt": request_started_at,
+            "analysisStartedAt": analysis_started_at,
+            "analysisCompletedAt": analysis_completed_at,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "diagnostics": diagnostics,
+        }
+
+    stdout = result.stdout.strip()
+    if not stdout:
+        diagnostics = _build_diagnostics(
+            request_id=request_id,
+            estimate=estimate,
+            timeout_seconds=timeout_seconds,
+            request_started_at=request_started_at,
+            analysis_started_at=analysis_started_at,
+            analysis_completed_at=analysis_completed_at,
+            flags_used=flags_used,
+            file_size_bytes=file_size_bytes,
+            file_duration_seconds=None,
+            engine_version=ENGINE_VERSION,
+            stderr=result.stderr,
+        )
+        return {
+            "ok": False,
+            "statusCode": 502,
+            "errorCode": "ANALYZER_EMPTY_OUTPUT",
+            "message": "Local DSP analysis completed without returning any JSON.",
+            "retryable": False,
+            "estimate": estimate,
+            "timeoutSeconds": timeout_seconds,
+            "flagsUsed": flags_used,
+            "requestStartedAt": request_started_at,
+            "analysisStartedAt": analysis_started_at,
+            "analysisCompletedAt": analysis_completed_at,
+            "stderr": result.stderr,
+            "diagnostics": diagnostics,
+        }
+
+    try:
+        payload = json.loads(stdout)
+    except json.JSONDecodeError:
+        diagnostics = _build_diagnostics(
+            request_id=request_id,
+            estimate=estimate,
+            timeout_seconds=timeout_seconds,
+            request_started_at=request_started_at,
+            analysis_started_at=analysis_started_at,
+            analysis_completed_at=analysis_completed_at,
+            flags_used=flags_used,
+            file_size_bytes=file_size_bytes,
+            file_duration_seconds=None,
+            engine_version=ENGINE_VERSION,
+            stdout=stdout,
+            stderr=result.stderr,
+        )
+        return {
+            "ok": False,
+            "statusCode": 502,
+            "errorCode": "ANALYZER_INVALID_JSON",
+            "message": "Local DSP analysis returned malformed JSON.",
+            "retryable": False,
+            "estimate": estimate,
+            "timeoutSeconds": timeout_seconds,
+            "flagsUsed": flags_used,
+            "requestStartedAt": request_started_at,
+            "analysisStartedAt": analysis_started_at,
+            "analysisCompletedAt": analysis_completed_at,
+            "stdout": stdout,
+            "stderr": result.stderr,
+            "diagnostics": diagnostics,
+        }
+
+    if not isinstance(payload, dict):
+        diagnostics = _build_diagnostics(
+            request_id=request_id,
+            estimate=estimate,
+            timeout_seconds=timeout_seconds,
+            request_started_at=request_started_at,
+            analysis_started_at=analysis_started_at,
+            analysis_completed_at=analysis_completed_at,
+            flags_used=flags_used,
+            file_size_bytes=file_size_bytes,
+            file_duration_seconds=None,
+            engine_version=ENGINE_VERSION,
+            stdout=stdout,
+            stderr=result.stderr,
+        )
+        return {
+            "ok": False,
+            "statusCode": 502,
+            "errorCode": "ANALYZER_BAD_PAYLOAD",
+            "message": "Local DSP analysis returned a JSON payload that did not match the expected contract.",
+            "retryable": False,
+            "estimate": estimate,
+            "timeoutSeconds": timeout_seconds,
+            "flagsUsed": flags_used,
+            "analysisStartedAt": analysis_started_at,
+            "analysisCompletedAt": analysis_completed_at,
+            "stdout": stdout,
+            "stderr": result.stderr,
+            "diagnostics": diagnostics,
+        }
+
+    diagnostics = _build_diagnostics(
+        request_id=request_id,
+        estimate=estimate,
+        timeout_seconds=timeout_seconds,
+        request_started_at=request_started_at,
+        analysis_started_at=analysis_started_at,
+        analysis_completed_at=analysis_completed_at,
+        flags_used=flags_used,
+        file_size_bytes=file_size_bytes,
+        file_duration_seconds=payload.get("durationSeconds"),
+        engine_version=ENGINE_VERSION,
+    )
+    return {
+        "ok": True,
+        "payload": payload,
+        "estimate": estimate,
+        "timeoutSeconds": timeout_seconds,
+        "flagsUsed": flags_used,
+        "requestStartedAt": request_started_at,
+        "analysisStartedAt": analysis_started_at,
+        "analysisCompletedAt": analysis_completed_at,
+        "diagnostics": diagnostics,
+    }
+
+
+def _execute_measurement_run(
+    runtime: AnalysisRuntime,
+    run_id: str,
+    *,
+    request_id: str,
+    run_separation: bool,
+    run_transcribe: bool,
+    run_fast: bool,
+) -> dict[str, Any]:
+    source_artifact = runtime.get_source_artifact(run_id)
+    execution = _run_measurement_subprocess(
+        audio_path=source_artifact["path"],
+        file_size_bytes=source_artifact["sizeBytes"],
+        request_id=request_id,
+        request_started_at=_current_time(),
+        run_separation=run_separation,
+        run_transcribe=run_transcribe,
+        run_fast=run_fast,
+    )
+    provenance = _build_measurement_provenance(
+        run_separation=run_separation,
+        run_transcribe=run_transcribe,
+        run_fast=run_fast,
+    )
+    if execution["ok"]:
+        runtime.complete_measurement(
+            run_id,
+            payload=execution["payload"],
+            provenance=provenance,
+            diagnostics=execution["diagnostics"],
+        )
+        return execution
+
+    runtime.fail_measurement(
+        run_id,
+        error={
+            "code": execution["errorCode"],
+            "message": execution["message"],
+            "retryable": execution["retryable"],
+            "phase": ERROR_PHASE_LOCAL_DSP,
+        },
+        diagnostics=execution["diagnostics"],
+        provenance=provenance,
+    )
+    return execution
+
+
+def _execute_reserved_measurement_job(
+    runtime: AnalysisRuntime,
+    job: dict[str, Any],
+) -> dict[str, Any]:
+    run_id = str(job["runId"])
+    requested_symbolic_mode = str(job.get("requestedSymbolicMode", "off"))
+    try:
+        run_separation, run_transcribe = runtime.resolve_measurement_flags(
+            requested_symbolic_mode,
+        )
+    except UnsupportedSymbolicModeError as exc:
+        runtime.fail_measurement(
+            run_id,
+            error={
+                "code": "SYMBOLIC_MODE_UNSUPPORTED",
+                "message": str(exc),
+                "retryable": False,
+                "phase": ERROR_PHASE_LOCAL_DSP,
+            },
+            provenance={
+                "schemaVersion": "measurement.v1",
+                "engineVersion": ENGINE_VERSION,
+                "requestOptions": {
+                    "symbolicMode": requested_symbolic_mode,
+                },
+            },
+        )
+        return {
+            "ok": False,
+            "statusCode": 400,
+            "errorCode": "SYMBOLIC_MODE_UNSUPPORTED",
+            "message": str(exc),
+            "retryable": False,
+            "diagnostics": None,
+        }
+    return _execute_measurement_run(
+        runtime,
+        run_id,
+        request_id=run_id,
+        run_separation=run_separation,
+        run_transcribe=run_transcribe,
+        run_fast=False,
+    )
+
+
+def _resolve_transcription_backend(backend_id: str) -> Any:
+    if backend_id in ("", "auto", "default", "transcription-backend:auto"):
+        return None
+    raise RuntimeError(f"Unsupported symbolic backend '{backend_id}'.")
+
+
+def _get_or_materialize_stem_paths(
+    runtime: AnalysisRuntime,
+    run_id: str,
+    source_path: str,
+) -> dict[str, str] | None:
+    existing = runtime.get_artifacts_by_kind(run_id, "stem_")
+    stem_paths = {
+        artifact["kind"].removeprefix("stem_"): artifact["path"]
+        for artifact in existing
+        if isinstance(artifact.get("path"), str) and os.path.isfile(artifact["path"])
+    }
+    if "bass" in stem_paths or "other" in stem_paths:
+        return stem_paths
+
+    output_dir = tempfile.mkdtemp(prefix=f"asa_stems_{run_id}_", dir=runtime.runtime_dir)
+    try:
+        separated = separate_stems(source_path, output_dir=output_dir)
+        if not isinstance(separated, dict) or not separated:
+            return None
+
+        recorded_paths: dict[str, str] = {}
+        for stem_name, stem_path in separated.items():
+            if not isinstance(stem_path, str) or not os.path.isfile(stem_path):
+                continue
+            artifact = runtime.record_artifact(
+                run_id,
+                kind=f"stem_{stem_name}",
+                source_path=stem_path,
+                filename=Path(stem_path).name,
+                mime_type="audio/wav",
+                provenance={
+                    "generator": "demucs_htdemucs",
+                    "sourceRunId": run_id,
+                },
+            )
+            recorded_paths[stem_name] = artifact["path"]
+        return recorded_paths if recorded_paths else None
+    finally:
+        shutil.rmtree(output_dir, ignore_errors=True)
+
+
+def _execute_symbolic_attempt(
+    runtime: AnalysisRuntime,
+    attempt: dict[str, Any],
+) -> None:
+    started_at = _current_time()
+    run_id = str(attempt["runId"])
+    source_artifact = runtime.get_source_artifact(run_id)
+    provenance = {
+        "schemaVersion": "symbolic.v1",
+        "backendId": attempt["backendId"],
+        "mode": attempt["mode"],
+    }
+    try:
+        stem_paths = None
+        if attempt["mode"] == "stem_notes":
+            stem_paths = _get_or_materialize_stem_paths(
+                runtime,
+                run_id,
+                source_artifact["path"],
+            )
+        backend = _resolve_transcription_backend(str(attempt["backendId"]))
+        symbolic_payload = analyze_transcription(
+            source_artifact["path"],
+            stem_paths=stem_paths,
+            backend=backend,
+        )
+        transcription_detail = None
+        if isinstance(symbolic_payload, dict):
+            transcription_detail = symbolic_payload.get("transcriptionDetail")
+        diagnostics = {
+            "backendDurationMs": round(_elapsed_ms(started_at, _current_time()), 2),
+            "stemSeparationUsed": bool(stem_paths),
+            "sourceArtifactId": source_artifact["artifactId"],
+        }
+        if isinstance(transcription_detail, dict):
+            provenance["resolvedBackendId"] = transcription_detail.get("transcriptionMethod")
+        runtime.complete_symbolic_attempt(
+            str(attempt["attemptId"]),
+            result=transcription_detail if isinstance(transcription_detail, dict) else None,
+            provenance=provenance,
+            diagnostics=diagnostics,
+        )
+    except Exception as exc:
+        runtime.fail_symbolic_attempt(
+            str(attempt["attemptId"]),
+            error={
+                "code": "SYMBOLIC_EXTRACTION_FAILED",
+                "message": str(exc),
+                "retryable": True,
+                "phase": "symbolic_extraction",
+            },
+            provenance=provenance,
+            diagnostics={
+                "backendDurationMs": round(_elapsed_ms(started_at, _current_time()), 2),
+                "sourceArtifactId": source_artifact["artifactId"],
+            },
+        )
+
+
+def _run_interpretation_request(
+    *,
+    source_path: str,
+    filename: str,
+    file_size_bytes: int,
+    measurement_result: dict[str, Any],
+    symbolic_result: dict[str, Any] | None,
+    grounding_metadata: dict[str, Any],
+    model_name: str,
+    request_id: str,
+) -> dict[str, Any]:
+    request_started_at = _current_time()
+    flags_used: list[str] = []
+    mime_type = _get_audio_mime_type(filename)
+
+    if not _GENAI_AVAILABLE:
+        return {
+            "ok": False,
+            "statusCode": 500,
+            "errorCode": "GEMINI_NOT_INSTALLED",
+            "message": "google-genai package is not installed on the backend.",
+            "retryable": False,
+            "diagnostics": None,
+        }
+
+    api_key = os.getenv("GEMINI_API_KEY", "").strip()
+    if not api_key:
+        return {
+            "ok": False,
+            "statusCode": 500,
+            "errorCode": "GEMINI_NOT_CONFIGURED",
+            "message": "GEMINI_API_KEY is not set on the backend.",
+            "retryable": False,
+            "diagnostics": None,
+        }
+
+    if model_name not in ALLOWED_GEMINI_MODELS:
+        return {
+            "ok": False,
+            "statusCode": 400,
+            "errorCode": "INVALID_MODEL",
+            "message": f"model_name '{model_name}' is not allowed. Must be one of: {sorted(ALLOWED_GEMINI_MODELS)}",
+            "retryable": False,
+            "diagnostics": None,
+        }
+
+    prompt = _build_phase2_prompt(
+        measurement_result=measurement_result,
+        symbolic_result=symbolic_result,
+        grounding_metadata=grounding_metadata,
+    )
+    client = _genai.Client(
+        api_key=api_key,
+        http_options={"timeout": GEMINI_TIMEOUT_SECONDS * 1_000},
+    )
+    generate_config = _genai_types.GenerateContentConfig(
+        response_mime_type="application/json",
+        response_schema=PHASE2_RESPONSE_SCHEMA,
+    )
+    api_started_at = _current_time()
+    uploaded_gemini_file = None
+
+    try:
+        if file_size_bytes <= INLINE_SIZE_LIMIT:
+            flags_used.append("inline")
+            with open(source_path, "rb") as input_file:
+                audio_bytes = input_file.read()
+            audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
+            media_part = {"inline_data": {"data": audio_b64, "mime_type": mime_type}}
+
+            def _generate_inline() -> Any:
+                return client.models.generate_content(
+                    model=model_name,
+                    contents=[{"parts": [media_part, {"text": prompt}]}],
+                    config=generate_config,
+                )
+
+            response = asyncio.run(_gemini_with_retry(_generate_inline))
+            api_completed_at = _current_time()
+            message_suffix = "Phase 2 advisory complete."
+        else:
+            flags_used.append("files-api")
+
+            def _upload_file() -> Any:
+                return client.files.upload(
+                    file=source_path,
+                    config=_genai_types.UploadFileConfig(
+                        mime_type=mime_type,
+                        display_name=filename,
+                    ),
+                )
+
+            upload_start = _current_time()
+            uploaded_gemini_file = asyncio.run(_gemini_with_retry(_upload_file))
+            upload_end = _current_time()
+            media_part = {
+                "file_data": {
+                    "file_uri": uploaded_gemini_file.uri,
+                    "mime_type": uploaded_gemini_file.mime_type,
+                }
+            }
+
+            def _generate_files_api() -> Any:
+                return client.models.generate_content(
+                    model=model_name,
+                    contents=[{"parts": [media_part, {"text": prompt}]}],
+                    config=generate_config,
+                )
+
+            generate_start = _current_time()
+            response = asyncio.run(_gemini_with_retry(_generate_files_api))
+            generate_end = _current_time()
+            api_completed_at = _current_time()
+            message_suffix = (
+                "Phase 2 advisory complete. "
+                f"Upload: {int(_elapsed_ms(upload_start, upload_end))}ms, "
+                f"Generate: {int(_elapsed_ms(generate_start, generate_end))}ms"
+            )
+
+        response_text: str | None = getattr(response, "text", None)
+        phase2_result, skip_message = _parse_phase2_result(response_text)
+        diagnostics = _build_diagnostics(
+            request_id=request_id,
+            estimate={"totalLowMs": 0, "totalHighMs": 0},
+            timeout_seconds=GEMINI_TIMEOUT_SECONDS,
+            request_started_at=request_started_at,
+            analysis_started_at=api_started_at,
+            analysis_completed_at=api_completed_at,
+            flags_used=flags_used,
+            file_size_bytes=file_size_bytes,
+            file_duration_seconds=None,
+            engine_version=model_name,
+        )
+        if skip_message:
+            return {
+                "ok": True,
+                "phase2Result": None,
+                "message": skip_message,
+                "diagnostics": diagnostics,
+            }
+        return {
+            "ok": True,
+            "phase2Result": phase2_result,
+            "message": message_suffix,
+            "diagnostics": diagnostics,
+        }
+    except Exception as exc:
+        error_msg = str(exc)
+        status_code = 429 if "429" in error_msg or "quota" in error_msg.lower() else 502
+        diagnostics = _build_diagnostics(
+            request_id=request_id,
+            estimate={"totalLowMs": 0, "totalHighMs": 0},
+            timeout_seconds=GEMINI_TIMEOUT_SECONDS,
+            request_started_at=request_started_at,
+            analysis_started_at=api_started_at,
+            analysis_completed_at=_current_time(),
+            flags_used=flags_used,
+            file_size_bytes=file_size_bytes,
+            file_duration_seconds=None,
+            engine_version=model_name,
+            stderr=error_msg,
+        )
+        return {
+            "ok": False,
+            "statusCode": status_code,
+            "errorCode": "GEMINI_GENERATE_FAILED",
+            "message": f"Gemini generation failed: {error_msg[:200]}",
+            "retryable": True,
+            "diagnostics": diagnostics,
+        }
+    finally:
+        if uploaded_gemini_file:
+            try:
+                client.files.delete(name=uploaded_gemini_file.name)
+            except Exception:
+                pass
+
+
+def _execute_interpretation_attempt(
+    runtime: AnalysisRuntime,
+    attempt: dict[str, Any],
+) -> dict[str, Any]:
+    run_id = str(attempt["runId"])
+    source_artifact = runtime.get_source_artifact(run_id)
+    grounding = runtime.get_interpretation_grounding(run_id)
+    measurement_result = grounding["measurementResult"] or {}
+    symbolic_result = grounding["symbolicResult"]
+    grounding_metadata = {
+        "measurementIsAuthoritative": True,
+        "symbolicExtractionIsBestEffort": True,
+        "measurementOutputId": grounding["measurementOutputId"],
+        "symbolicAttemptId": grounding["symbolicAttemptId"],
+        "doNotPromoteSymbolicToMeasurement": True,
+    }
+    model_name = _coerce_string(attempt.get("modelName"), "gemini-2.5-flash")
+    execution = _run_interpretation_request(
+        source_path=source_artifact["path"],
+        filename=source_artifact["filename"],
+        file_size_bytes=source_artifact["sizeBytes"],
+        measurement_result=measurement_result,
+        symbolic_result=symbolic_result,
+        grounding_metadata=grounding_metadata,
+        model_name=model_name,
+        request_id=str(attempt["attemptId"]),
+    )
+    provenance = {
+        "schemaVersion": "interpretation.v1",
+        "profileId": attempt["profileId"],
+        "modelName": model_name,
+        "groundedMeasurementRunId": run_id,
+        "groundedMeasurementOutputId": grounding["measurementOutputId"],
+        "groundedSymbolicAttemptId": grounding["symbolicAttemptId"],
+    }
+    if execution["ok"]:
+        runtime.complete_interpretation_attempt(
+            str(attempt["attemptId"]),
+            result=execution["phase2Result"],
+            provenance=provenance,
+            diagnostics=execution["diagnostics"],
+            grounded_measurement_output_id=grounding["measurementOutputId"],
+            grounded_symbolic_attempt_id=grounding["symbolicAttemptId"],
+        )
+        return execution
+
+    runtime.fail_interpretation_attempt(
+        str(attempt["attemptId"]),
+        error={
+            "code": execution["errorCode"],
+            "message": execution["message"],
+            "retryable": execution["retryable"],
+            "phase": ERROR_PHASE_GEMINI,
+        },
+        provenance=provenance,
+        diagnostics=execution["diagnostics"],
+        grounded_measurement_output_id=grounding["measurementOutputId"],
+        grounded_symbolic_attempt_id=grounding["symbolicAttemptId"],
+    )
+    return execution
+
+
+def _resolve_phase2_run_id(
+    runtime: AnalysisRuntime,
+    *,
+    analysis_run_id: str | None,
+    phase1_request_id: str | None,
+) -> str:
+    if analysis_run_id:
+        runtime.get_run(analysis_run_id)
+        return analysis_run_id
+    if phase1_request_id:
+        return runtime.get_run_id_by_legacy_request_id(phase1_request_id)
+    raise KeyError("Missing analysis context")
+
+
+async def _measurement_worker_loop() -> None:
+    while True:
+        try:
+            job = await asyncio.to_thread(get_analysis_runtime().reserve_next_measurement_run)
+            if job is None:
+                await asyncio.sleep(WORKER_IDLE_SECONDS)
+                continue
+            await asyncio.to_thread(
+                _execute_reserved_measurement_job,
+                get_analysis_runtime(),
+                job,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            print(f"[warn] measurement worker loop failed: {exc}", file=sys.stderr)
+            await asyncio.sleep(WORKER_IDLE_SECONDS)
+
+
+async def _symbolic_worker_loop() -> None:
+    while True:
+        try:
+            attempt = await asyncio.to_thread(get_analysis_runtime().reserve_next_symbolic_attempt)
+            if attempt is None:
+                await asyncio.sleep(WORKER_IDLE_SECONDS)
+                continue
+            await asyncio.to_thread(
+                _execute_symbolic_attempt,
+                get_analysis_runtime(),
+                attempt,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            print(f"[warn] symbolic worker loop failed: {exc}", file=sys.stderr)
+            await asyncio.sleep(WORKER_IDLE_SECONDS)
+
+
+async def _interpretation_worker_loop() -> None:
+    while True:
+        try:
+            attempt = await asyncio.to_thread(get_analysis_runtime().reserve_next_interpretation_attempt)
+            if attempt is None:
+                await asyncio.sleep(WORKER_IDLE_SECONDS)
+                continue
+            await asyncio.to_thread(
+                _execute_interpretation_attempt,
+                get_analysis_runtime(),
+                attempt,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            print(f"[warn] interpretation worker loop failed: {exc}", file=sys.stderr)
+            await asyncio.sleep(WORKER_IDLE_SECONDS)
+
+
+@app.post("/api/analysis-runs")
+async def create_analysis_run(
+    track: UploadFile = File(...),
+    symbolic_mode: str = Form("off"),
+    symbolic_backend: str = Form("auto"),
+    interpretation_mode: str = Form("off"),
+    interpretation_profile: str = Form("producer_summary"),
+    interpretation_model: str | None = Form(None),
+) -> JSONResponse:
+    try:
+        runtime, run_id = await _create_analysis_run_record(
+            track=track,
+            symbolic_mode=symbolic_mode,
+            symbolic_backend=symbolic_backend,
+            interpretation_mode=interpretation_mode,
+            interpretation_profile=interpretation_profile,
+            interpretation_model=interpretation_model,
+        )
+        return JSONResponse(content=runtime.get_run(run_id))
+    except RuntimeError as exc:
+        return JSONResponse(
+            status_code=429,
+            content={
+                "error": {
+                    "code": "MEASUREMENT_QUEUE_FULL",
+                    "message": str(exc),
+                }
+            },
+        )
+    finally:
+        await track.close()
+
+
+@app.get("/api/analysis-runs/{run_id}")
+async def get_analysis_run(run_id: str) -> JSONResponse:
+    runtime = get_analysis_runtime()
+    try:
+        return JSONResponse(content=runtime.get_run(run_id))
+    except KeyError:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": {
+                    "code": "RUN_NOT_FOUND",
+                    "message": f"Analysis run '{run_id}' was not found.",
+                }
+            },
+        )
+
+
+@app.post("/api/analysis-runs/{run_id}/symbolic-extractions")
+async def create_symbolic_extraction_attempt(
+    run_id: str,
+    symbolic_mode: str = Form("stem_notes"),
+    symbolic_backend: str = Form("auto"),
+) -> JSONResponse:
+    runtime = get_analysis_runtime()
+    try:
+        if runtime.get_measurement_status(run_id) != "completed":
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "error": {
+                        "code": "MEASUREMENT_NOT_READY",
+                        "message": "Measurement must complete before symbolic extraction can run.",
+                    }
+                },
+            )
+        runtime.create_symbolic_attempt(
+            run_id,
+            backend_id=symbolic_backend,
+            mode=symbolic_mode,
+            status="queued",
+            provenance={
+                "schemaVersion": "symbolic.v1",
+                "backendId": symbolic_backend,
+                "mode": symbolic_mode,
+                "requestedViaApi": True,
+            },
+        )
+        return JSONResponse(status_code=202, content=runtime.get_run(run_id))
+    except KeyError:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": {
+                    "code": "RUN_NOT_FOUND",
+                    "message": f"Analysis run '{run_id}' was not found.",
+                }
+            },
+        )
+
+
+@app.post("/api/analysis-runs/{run_id}/interpretations")
+async def create_interpretation_attempt(
+    run_id: str,
+    interpretation_profile: str = Form("producer_summary"),
+    interpretation_model: str = Form("gemini-2.5-flash"),
+) -> JSONResponse:
+    runtime = get_analysis_runtime()
+    try:
+        if runtime.get_measurement_status(run_id) != "completed":
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "error": {
+                        "code": "MEASUREMENT_NOT_READY",
+                        "message": "Measurement must complete before interpretation can run.",
+                    }
+                },
+            )
+        runtime.create_interpretation_attempt(
+            run_id,
+            profile_id=interpretation_profile,
+            model_name=interpretation_model,
+            status="queued",
+            provenance={
+                "schemaVersion": "interpretation.v1",
+                "profileId": interpretation_profile,
+                "modelName": interpretation_model,
+                "requestedViaApi": True,
+            },
+        )
+        return JSONResponse(status_code=202, content=runtime.get_run(run_id))
+    except KeyError:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": {
+                    "code": "RUN_NOT_FOUND",
+                    "message": f"Analysis run '{run_id}' was not found.",
+                }
+            },
+        )
 
 
 def _safe_snippet(value: Any) -> str | None:
@@ -529,8 +1523,22 @@ async def _gemini_with_retry(
     raise RuntimeError("Max retries reached for Gemini Phase 2.")
 
 
-def _build_phase2_prompt(phase1_dict: dict[str, Any]) -> str:
-    return PHASE2_PROMPT_TEMPLATE + json.dumps(phase1_dict, indent=2)
+def _build_phase2_prompt(
+    *,
+    measurement_result: dict[str, Any],
+    symbolic_result: dict[str, Any] | None,
+    grounding_metadata: dict[str, Any],
+) -> str:
+    sections = [
+        PHASE2_PROMPT_TEMPLATE.rstrip(),
+        "\n\nAUTHORITATIVE_MEASUREMENT_RESULT_JSON:\n",
+        json.dumps(measurement_result, indent=2),
+        "\n\nOPTIONAL_SYMBOLIC_EXTRACTION_RESULT_JSON:\n",
+        json.dumps(symbolic_result, indent=2),
+        "\n\nGROUNDING_METADATA:\n",
+        json.dumps(grounding_metadata, indent=2),
+    ]
+    return "".join(sections)
 
 
 def _is_str(v: Any) -> bool:
@@ -730,6 +1738,7 @@ def _build_phase2_success_response(
 def _build_phase2_error_response(
     *,
     request_id: str,
+    analysis_run_id: str | None = None,
     status_code: int,
     error_code: str,
     message: str,
@@ -756,10 +1765,11 @@ def _build_phase2_error_response(
         engine_version=model_name,
         stderr=stderr,
     )
-    return JSONResponse(
+    return _mark_legacy_endpoint_response(JSONResponse(
         status_code=status_code,
         content={
             "requestId": request_id,
+            **({"analysisRunId": analysis_run_id} if analysis_run_id else {}),
             "error": {
                 "code": error_code,
                 "message": message,
@@ -768,7 +1778,7 @@ def _build_phase2_error_response(
             },
             "diagnostics": diagnostics,
         },
-    )
+    ), endpoint="/api/phase2")
 
 
 # ---------------------------------------------------------------------------
@@ -940,6 +1950,7 @@ def _build_error_response(
 def _build_success_response(
     *,
     request_id: str,
+    analysis_run_id: str | None,
     payload: dict[str, Any],
     timeout_seconds: int,
     estimate: dict[str, Any],
@@ -964,6 +1975,7 @@ def _build_success_response(
     return JSONResponse(
         content={
             "requestId": request_id,
+            "analysisRunId": analysis_run_id,
             "phase1": _build_phase1(payload),
             "diagnostics": diagnostics,
         }
@@ -1021,457 +2033,229 @@ async def analyze_audio(
         False, alias="fast", description="Pass --fast to analyze.py when true"
     ),
 ):
-    temp_path: str | None = None
     request_id = str(uuid4())
-    request_started_at = _current_time()
-    analysis_started_at: datetime | None = None
-    analysis_completed_at: datetime | None = None
+    logger.warning("Legacy compatibility endpoint hit: /api/analyze request_id=%s", request_id)
     try:
-        temp_path, file_size_bytes = _persist_upload(track)
         _ = dsp_json_override
-        run_separation = bool(separate or separate_query or separate_flag)
-        run_fast = bool(fast or fast_query)
-        estimate = _build_backend_estimate(temp_path, run_separation, transcribe)
-
-        command = ["./venv/bin/python", "analyze.py", temp_path, "--yes"]
-        flags_used: list[str] = []
-        if run_separation:
-            command.append("--separate")
-            flags_used.append("--separate")
-        if transcribe:
-            command.append("--transcribe")
-            flags_used.append("--transcribe")
-        if run_fast:
-            command.append("--fast")
-            flags_used.append("--fast")
-
-        timeout_seconds = _compute_timeout_seconds(estimate)
-        analysis_started_at = _current_time()
-        try:
-            result = subprocess.run(
-                command,
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=timeout_seconds,
-            )
-        except subprocess.TimeoutExpired as exc:
-            analysis_completed_at = _current_time()
-            return _build_error_response(
-                request_id=request_id,
-                status_code=504,
-                error_code="ANALYZER_TIMEOUT",
-                message="Local DSP analysis timed out before completion.",
-                retryable=True,
-                timeout_seconds=timeout_seconds,
-                estimate=estimate,
-                request_started_at=request_started_at,
-                analysis_started_at=analysis_started_at,
-                analysis_completed_at=analysis_completed_at,
-                flags_used=flags_used,
-                file_size_bytes=file_size_bytes,
-                file_duration_seconds=None,
-                stdout=exc.stdout,
-                stderr=exc.stderr,
-            )
-        except Exception as exc:
-            analysis_completed_at = _current_time()
-            return _build_error_response(
-                request_id=request_id,
-                status_code=500,
-                error_code="BACKEND_INTERNAL_ERROR",
-                message="Local DSP backend hit an unexpected server error.",
-                retryable=False,
-                timeout_seconds=timeout_seconds,
-                estimate=estimate,
-                request_started_at=request_started_at,
-                analysis_started_at=analysis_started_at,
-                analysis_completed_at=analysis_completed_at,
-                flags_used=flags_used,
-                file_size_bytes=file_size_bytes,
-                file_duration_seconds=None,
-                stderr=exc,
-            )
-        analysis_completed_at = _current_time()
-
-        if result.returncode != 0:
-            return _build_error_response(
-                request_id=request_id,
-                status_code=502,
-                error_code="ANALYZER_FAILED",
-                message="Local DSP analysis failed before a valid result was produced.",
-                retryable=True,
-                timeout_seconds=timeout_seconds,
-                estimate=estimate,
-                request_started_at=request_started_at,
-                analysis_started_at=analysis_started_at,
-                analysis_completed_at=analysis_completed_at,
-                flags_used=flags_used,
-                file_size_bytes=file_size_bytes,
-                file_duration_seconds=None,
-                stdout=result.stdout,
-                stderr=result.stderr,
-            )
-
-        stdout = result.stdout.strip()
-        if not stdout:
-            return _build_error_response(
-                request_id=request_id,
-                status_code=502,
-                error_code="ANALYZER_EMPTY_OUTPUT",
-                message="Local DSP analysis completed without returning any JSON.",
-                retryable=False,
-                timeout_seconds=timeout_seconds,
-                estimate=estimate,
-                request_started_at=request_started_at,
-                analysis_started_at=analysis_started_at,
-                analysis_completed_at=analysis_completed_at,
-                flags_used=flags_used,
-                file_size_bytes=file_size_bytes,
-                file_duration_seconds=None,
-                stderr=result.stderr,
-            )
-
-        try:
-            payload = json.loads(stdout)
-        except json.JSONDecodeError:
-            return _build_error_response(
-                request_id=request_id,
-                status_code=502,
-                error_code="ANALYZER_INVALID_JSON",
-                message="Local DSP analysis returned malformed JSON.",
-                retryable=False,
-                timeout_seconds=timeout_seconds,
-                estimate=estimate,
-                request_started_at=request_started_at,
-                analysis_started_at=analysis_started_at,
-                analysis_completed_at=analysis_completed_at,
-                flags_used=flags_used,
-                file_size_bytes=file_size_bytes,
-                file_duration_seconds=None,
-                stdout=stdout,
-                stderr=result.stderr,
-            )
-
-        if not isinstance(payload, dict):
-            return _build_error_response(
-                request_id=request_id,
-                status_code=502,
-                error_code="ANALYZER_BAD_PAYLOAD",
-                message="Local DSP analysis returned a JSON payload that did not match the expected contract.",
-                retryable=False,
-                timeout_seconds=timeout_seconds,
-                estimate=estimate,
-                request_started_at=request_started_at,
-                analysis_started_at=analysis_started_at,
-                analysis_completed_at=analysis_completed_at,
-                flags_used=flags_used,
-                file_size_bytes=file_size_bytes,
-                file_duration_seconds=None,
-                stdout=stdout,
-                stderr=result.stderr,
-            )
-
-        # Retain temp file for optional Phase 2 reuse; _pop_cached_temp_file owns cleanup
-        _cache_temp_file(request_id, temp_path, now=analysis_completed_at)
-        temp_path = None  # prevent finally block from deleting it
-
-        return _build_success_response(
-            request_id=request_id,
-            payload=payload,
-            timeout_seconds=timeout_seconds,
-            estimate=estimate,
-            request_started_at=request_started_at,
-            analysis_started_at=analysis_started_at,
-            analysis_completed_at=analysis_completed_at,
-            flags_used=flags_used,
-            file_size_bytes=file_size_bytes,
+        requested_symbolic_mode = _resolve_symbolic_mode_for_legacy(transcribe)
+        runtime, run_id = await _create_analysis_run_record(
+            track=track,
+            symbolic_mode=requested_symbolic_mode,
+            symbolic_backend="auto",
+            interpretation_mode="off",
+            interpretation_profile="producer_summary",
+            interpretation_model=None,
+            legacy_request_id=request_id,
         )
+        runtime.reserve_measurement_run(run_id)
+        resolved_run_separation, resolved_run_transcribe = runtime.resolve_measurement_flags(
+            requested_symbolic_mode,
+        )
+        execution = await asyncio.to_thread(
+            _execute_measurement_run,
+            runtime,
+            run_id,
+            request_id=request_id,
+            run_separation=resolved_run_separation or bool(separate or separate_query or separate_flag),
+            run_transcribe=resolved_run_transcribe,
+            run_fast=bool(fast or fast_query),
+        )
+        if not execution["ok"]:
+            return _mark_legacy_endpoint_response(JSONResponse(
+                status_code=execution["statusCode"],
+                content={
+                    "requestId": request_id,
+                    "analysisRunId": run_id,
+                    "error": {
+                        "code": execution["errorCode"],
+                        "message": execution["message"],
+                        "phase": ERROR_PHASE_LOCAL_DSP,
+                        "retryable": execution["retryable"],
+                    },
+                    "diagnostics": execution["diagnostics"],
+                },
+            ), endpoint="/api/analyze")
+
+        return _mark_legacy_endpoint_response(JSONResponse(
+            content={
+                "requestId": request_id,
+                "analysisRunId": run_id,
+                "phase1": _build_phase1(execution["payload"]),
+                "diagnostics": execution["diagnostics"],
+            }
+        ), endpoint="/api/analyze")
+    except RuntimeError as exc:
+        return _mark_legacy_endpoint_response(JSONResponse(
+            status_code=429,
+            content={
+                "requestId": request_id,
+                "error": {
+                    "code": "MEASUREMENT_QUEUE_FULL",
+                    "message": str(exc),
+                    "phase": ERROR_PHASE_LOCAL_DSP,
+                    "retryable": True,
+                },
+            },
+        ), endpoint="/api/analyze")
     finally:
         await track.close()
-        _cleanup_temp_path(temp_path)
 
 
 @app.post("/api/phase2")
 async def analyze_phase2(
     track: UploadFile = File(...),
-    phase1_json: str = Form(...),
+    phase1_json: str | None = Form(None),
     model_name: str = Form("gemini-2.5-flash"),
     phase1_request_id: str | None = Form(None),
+    analysis_run_id: str | None = Form(None),
 ) -> JSONResponse:
     """Run Gemini Phase 2 advisory reconstruction server-side.
 
-    Accepts the audio file + stringified Phase1Result.
+    Accepts the audio file plus deprecated compatibility fields.
+    Canonical measurement input is always resolved from server-owned analysis state.
     Returns { requestId, phase2: Phase2Result | null, message, diagnostics }.
     Skip cases (empty/bad JSON/bad shape from Gemini) return 200 with phase2=null.
     Infrastructure failures (timeout, auth, quota) return 4xx/5xx.
     """
-    if not _GENAI_AVAILABLE:
-        return JSONResponse(
-            status_code=500,
-            content={
-                "requestId": str(uuid4()),
-                "error": {
-                    "code": "GEMINI_NOT_INSTALLED",
-                    "message": "google-genai package is not installed on the backend.",
-                    "phase": ERROR_PHASE_GEMINI,
-                    "retryable": False,
-                },
-            },
-        )
-
-    api_key = os.getenv("GEMINI_API_KEY", "").strip()
-    if not api_key:
-        return JSONResponse(
-            status_code=500,
-            content={
-                "requestId": str(uuid4()),
-                "error": {
-                    "code": "GEMINI_NOT_CONFIGURED",
-                    "message": "GEMINI_API_KEY is not set on the backend.",
-                    "phase": ERROR_PHASE_GEMINI,
-                    "retryable": False,
-                },
-            },
-        )
-
-    if model_name not in ALLOWED_GEMINI_MODELS:
-        return JSONResponse(
-            status_code=400,
-            content={
-                "requestId": str(uuid4()),
-                "error": {
-                    "code": "INVALID_MODEL",
-                    "message": f"model_name '{model_name}' is not allowed. Must be one of: {sorted(ALLOWED_GEMINI_MODELS)}",
-                    "phase": ERROR_PHASE_GEMINI,
-                    "retryable": False,
-                },
-            },
-        )
-
-    temp_path: str | None = None
     request_id = str(uuid4())
-    request_started_at = _current_time()
-    api_started_at: datetime | None = None
-    api_completed_at: datetime | None = None
-    flags_used: list[str] = []
-    file_size_bytes = 0
-
+    logger.warning("Legacy compatibility endpoint hit: /api/phase2 request_id=%s", request_id)
     try:
-        # 1. Persist upload (use cached path from Phase 1 if available)
-        cached_path = _pop_cached_temp_file(phase1_request_id)
-        if cached_path:
-            temp_path = cached_path
-            file_size_bytes = os.path.getsize(cached_path)
-            filename = track.filename or "upload.bin"
-            await track.close()
-        else:
-            temp_path, file_size_bytes = _persist_upload(track)
-            filename = track.filename or "upload.bin"
-        mime_type = _get_audio_mime_type(filename)
+        if not _GENAI_AVAILABLE:
+            return _mark_legacy_endpoint_response(JSONResponse(
+                status_code=500,
+                content={
+                    "requestId": request_id,
+                    "error": {
+                        "code": "GEMINI_NOT_INSTALLED",
+                        "message": "google-genai package is not installed on the backend.",
+                        "phase": ERROR_PHASE_GEMINI,
+                        "retryable": False,
+                    },
+                },
+            ), endpoint="/api/phase2")
 
-        # 2. Parse phase1_json — use as-is (already normalized by frontend)
+        api_key = os.getenv("GEMINI_API_KEY", "").strip()
+        if not api_key:
+            return _mark_legacy_endpoint_response(JSONResponse(
+                status_code=500,
+                content={
+                    "requestId": request_id,
+                    "error": {
+                        "code": "GEMINI_NOT_CONFIGURED",
+                        "message": "GEMINI_API_KEY is not set on the backend.",
+                        "phase": ERROR_PHASE_GEMINI,
+                        "retryable": False,
+                    },
+                },
+            ), endpoint="/api/phase2")
+
+        if model_name not in ALLOWED_GEMINI_MODELS:
+            return _mark_legacy_endpoint_response(JSONResponse(
+                status_code=400,
+                content={
+                    "requestId": request_id,
+                    "error": {
+                        "code": "INVALID_MODEL",
+                        "message": f"model_name '{model_name}' is not allowed. Must be one of: {sorted(ALLOWED_GEMINI_MODELS)}",
+                        "phase": ERROR_PHASE_GEMINI,
+                        "retryable": False,
+                    },
+                },
+            ), endpoint="/api/phase2")
+
+        runtime = get_analysis_runtime()
         try:
-            phase1_dict = json.loads(phase1_json)
-        except json.JSONDecodeError:
+            run_id = _resolve_phase2_run_id(
+                runtime,
+                analysis_run_id=analysis_run_id,
+                phase1_request_id=phase1_request_id,
+            )
+        except KeyError:
+            missing_context = not analysis_run_id and not phase1_request_id
             return _build_phase2_error_response(
                 request_id=request_id,
-                status_code=400,
-                error_code="PHASE2_BAD_PHASE1_JSON",
-                message="phase1_json field could not be parsed as JSON.",
+                status_code=400 if missing_context else 404,
+                error_code="PHASE2_MISSING_ANALYSIS_CONTEXT" if missing_context else "RUN_NOT_FOUND",
+                message=(
+                    "Phase 2 now requires a server-owned analysis run. "
+                    "Provide analysis_run_id or phase1_request_id from /api/analyze."
+                    if missing_context
+                    else "The referenced analysis run was not found."
+                ),
                 retryable=False,
                 model_name=model_name,
-                request_started_at=request_started_at,
+                request_started_at=_current_time(),
                 api_started_at=None,
                 api_completed_at=None,
-                flags_used=flags_used,
-                file_size_bytes=file_size_bytes,
+                flags_used=[],
+                file_size_bytes=0,
             )
-        if not isinstance(phase1_dict, dict):
+
+        if runtime.get_measurement_status(run_id) != "completed":
             return _build_phase2_error_response(
                 request_id=request_id,
-                status_code=400,
-                error_code="PHASE2_BAD_PHASE1_JSON",
-                message="phase1_json must be a JSON object.",
+                status_code=409,
+                analysis_run_id=run_id,
+                error_code="MEASUREMENT_NOT_READY",
+                message="Server-owned measurement output is not ready for interpretation yet.",
                 retryable=False,
                 model_name=model_name,
-                request_started_at=request_started_at,
+                request_started_at=_current_time(),
                 api_started_at=None,
                 api_completed_at=None,
-                flags_used=flags_used,
-                file_size_bytes=file_size_bytes,
+                flags_used=[],
+                file_size_bytes=0,
             )
 
-        # 3. Build prompt
-        prompt = _build_phase2_prompt(phase1_dict)
-
-        # 4. Create Gemini client
-        client = _genai.Client(
-            api_key=api_key,
-            http_options={"timeout": GEMINI_TIMEOUT_SECONDS * 1_000},
-        )
-        generate_config = _genai_types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=PHASE2_RESPONSE_SCHEMA,
-        )
-
-        # 5. Inline or Files API path — threshold matches INLINE_SIZE_LIMIT in TS
-        api_started_at = _current_time()
-        uploaded_gemini_file = None
-
-        if file_size_bytes <= INLINE_SIZE_LIMIT:
-            flags_used.append("inline")
-            with open(temp_path, "rb") as f:
-                audio_bytes = f.read()
-            audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
-            media_part = {"inline_data": {"data": audio_b64, "mime_type": mime_type}}
-
-            def _generate_inline() -> Any:
-                return client.models.generate_content(
-                    model=model_name,
-                    contents=[{"parts": [media_part, {"text": prompt}]}],
-                    config=generate_config,
-                )
-
-            try:
-                response = await _gemini_with_retry(_generate_inline)
-            except Exception as exc:
-                api_completed_at = _current_time()
-                error_msg = str(exc)
-                status_code = 429 if "429" in error_msg or "quota" in error_msg.lower() else 502
-                return _build_phase2_error_response(
-                    request_id=request_id,
-                    status_code=status_code,
-                    error_code="GEMINI_GENERATE_FAILED",
-                    message=f"Gemini generation failed: {error_msg[:200]}",
-                    retryable=True,
-                    model_name=model_name,
-                    request_started_at=request_started_at,
-                    api_started_at=api_started_at,
-                    api_completed_at=_current_time(),
-                    flags_used=flags_used,
-                    file_size_bytes=file_size_bytes,
-                    stderr=error_msg,
-                )
-
-            api_completed_at = _current_time()
-            message_suffix = "Phase 2 advisory complete."
-
-        else:
-            flags_used.append("files-api")
-
-            def _upload_file() -> Any:
-                return client.files.upload(
-                    file=temp_path,
-                    config=_genai_types.UploadFileConfig(
-                        mime_type=mime_type,
-                        display_name=filename,
-                    ),
-                )
-
-            try:
-                upload_start = _current_time()
-                uploaded_gemini_file = await _gemini_with_retry(_upload_file)
-                upload_end = _current_time()
-            except Exception as exc:
-                api_completed_at = _current_time()
-                return _build_phase2_error_response(
-                    request_id=request_id,
-                    status_code=502,
-                    error_code="GEMINI_UPLOAD_FAILED",
-                    message=f"Gemini file upload failed: {str(exc)[:200]}",
-                    retryable=True,
-                    model_name=model_name,
-                    request_started_at=request_started_at,
-                    api_started_at=api_started_at,
-                    api_completed_at=_current_time(),
-                    flags_used=flags_used,
-                    file_size_bytes=file_size_bytes,
-                    stderr=str(exc),
-                )
-
-            media_part = {
-                "file_data": {
-                    "file_uri": uploaded_gemini_file.uri,
-                    "mime_type": uploaded_gemini_file.mime_type,
-                }
-            }
-
-            def _generate_files_api() -> Any:
-                return client.models.generate_content(
-                    model=model_name,
-                    contents=[{"parts": [media_part, {"text": prompt}]}],
-                    config=generate_config,
-                )
-
-            try:
-                generate_start = _current_time()
-                response = await _gemini_with_retry(_generate_files_api)
-                generate_end = _current_time()
-            except Exception as exc:
-                api_completed_at = _current_time()
-                error_msg = str(exc)
-                status_code = 429 if "429" in error_msg or "quota" in error_msg.lower() else 502
-                return _build_phase2_error_response(
-                    request_id=request_id,
-                    status_code=status_code,
-                    error_code="GEMINI_GENERATE_FAILED",
-                    message=f"Gemini generation failed: {error_msg[:200]}",
-                    retryable=True,
-                    model_name=model_name,
-                    request_started_at=request_started_at,
-                    api_started_at=api_started_at,
-                    api_completed_at=_current_time(),
-                    flags_used=flags_used,
-                    file_size_bytes=file_size_bytes,
-                    stderr=error_msg,
-                )
-            finally:
-                # Always delete the uploaded file — mirrors try/finally in TS
-                if uploaded_gemini_file:
-                    try:
-                        await asyncio.to_thread(
-                            lambda: client.files.delete(name=uploaded_gemini_file.name)
-                        )
-                    except Exception:
-                        pass  # files auto-expire ~24h; cleanup failures must not fail the analysis
-
-            api_completed_at = _current_time()
-            upload_ms = int(_elapsed_ms(upload_start, upload_end))
-            generate_ms = int(_elapsed_ms(generate_start, generate_end))
-            message_suffix = f"Phase 2 advisory complete. Upload: {upload_ms}ms, Generate: {generate_ms}ms"
-
-        # 6. Parse and validate Gemini response
-        response_text: str | None = getattr(response, "text", None)
-        phase2_result, skip_message = _parse_phase2_result(response_text)
-
-        if skip_message:
-            return _build_phase2_success_response(
-                request_id=request_id,
-                phase2_result=None,
-                message=skip_message,
-                model_name=model_name,
-                request_started_at=request_started_at,
-                api_started_at=api_started_at,
-                api_completed_at=api_completed_at,
-                flags_used=flags_used,
-                file_size_bytes=file_size_bytes,
-            )
-
-        return _build_phase2_success_response(
-            request_id=request_id,
-            phase2_result=phase2_result,
-            message=message_suffix,
+        attempt_id = runtime.create_interpretation_attempt(
+            run_id,
+            profile_id="producer_summary",
             model_name=model_name,
-            request_started_at=request_started_at,
-            api_started_at=api_started_at,
-            api_completed_at=api_completed_at,
-            flags_used=flags_used,
-            file_size_bytes=file_size_bytes,
+            status="queued",
+            provenance={
+                "schemaVersion": "interpretation.v1",
+                "compatibilityWrapper": True,
+                "deprecatedPhase1JsonAccepted": phase1_json is not None,
+                "requestedVia": "legacy_phase2_endpoint",
+            },
         )
+        runtime.reserve_interpretation_attempt(attempt_id)
+        execution = await asyncio.to_thread(
+            _execute_interpretation_attempt,
+            runtime,
+            {
+                "attemptId": attempt_id,
+                "runId": run_id,
+                "profileId": "producer_summary",
+                "modelName": model_name,
+            },
+        )
+        if execution["ok"]:
+            return _mark_legacy_endpoint_response(JSONResponse(
+                content={
+                    "requestId": request_id,
+                    "analysisRunId": run_id,
+                    "phase2": execution["phase2Result"],
+                    "message": execution["message"],
+                    "diagnostics": execution["diagnostics"],
+                }
+            ), endpoint="/api/phase2")
+        return _mark_legacy_endpoint_response(JSONResponse(
+            status_code=execution["statusCode"],
+            content={
+                "requestId": request_id,
+                "analysisRunId": run_id,
+                "error": {
+                    "code": execution["errorCode"],
+                    "message": execution["message"],
+                    "phase": ERROR_PHASE_GEMINI,
+                    "retryable": execution["retryable"],
+                },
+                "diagnostics": execution["diagnostics"],
+            },
+        ), endpoint="/api/phase2")
 
     except Exception as exc:
-        api_completed_at = api_completed_at or _current_time()
         return _build_phase2_error_response(
             request_id=request_id,
             status_code=500,
@@ -1479,16 +2263,15 @@ async def analyze_phase2(
             message="Phase 2 backend hit an unexpected server error.",
             retryable=False,
             model_name=model_name,
-            request_started_at=request_started_at,
-            api_started_at=api_started_at,
-            api_completed_at=api_completed_at,
-            flags_used=flags_used,
-            file_size_bytes=file_size_bytes,
+            request_started_at=_current_time(),
+            api_started_at=None,
+            api_completed_at=_current_time(),
+            flags_used=[],
+            file_size_bytes=0,
             stderr=str(exc),
         )
     finally:
         await track.close()
-        _cleanup_temp_path(temp_path)
 
 
 if __name__ == "__main__":

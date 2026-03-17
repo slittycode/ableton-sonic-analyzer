@@ -50,14 +50,136 @@ function stubEstimateRoute(page: import('@playwright/test').Page, requestId: str
 }
 
 function stubAnalyzeRoute(page: import('@playwright/test').Page, requestId = 'req_phase2_degrade') {
-  return page.route('**/api/analyze', async (route) => {
+  return page.route('**/api/analysis-runs', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.fallback();
+      return;
+    }
+
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        requestId,
-        phase1: PHASE1_STUB,
-        diagnostics: { backendDurationMs: 400, engineVersion: 'smoke' },
+        runId: requestId,
+        requestedStages: {
+          symbolicMode: 'off',
+          symbolicBackend: 'auto',
+          interpretationMode: 'off',
+          interpretationProfile: 'producer_summary',
+          interpretationModel: null,
+        },
+        artifacts: {
+          sourceAudio: {
+            artifactId: `${requestId}_artifact`,
+            filename: 'silence.wav',
+            mimeType: 'audio/wav',
+            sizeBytes: 2048,
+            contentSha256: 'abc123',
+            path: '/tmp/silence.wav',
+          },
+        },
+        stages: {
+          measurement: {
+            status: 'queued',
+            authoritative: true,
+            result: null,
+            provenance: null,
+            diagnostics: null,
+            error: null,
+          },
+          symbolicExtraction: {
+            status: 'not_requested',
+            authoritative: false,
+            preferredAttemptId: null,
+            attemptsSummary: [],
+            result: null,
+            provenance: null,
+            diagnostics: null,
+            error: null,
+          },
+          interpretation: {
+            status: 'not_requested',
+            authoritative: false,
+            preferredAttemptId: null,
+            attemptsSummary: [],
+            result: null,
+            provenance: null,
+            diagnostics: null,
+            error: null,
+          },
+        },
+      }),
+    });
+  });
+}
+
+function stubRunPoll(
+  page: import('@playwright/test').Page,
+  runId: string,
+  options: {
+    interpretationMode: 'off' | 'async';
+    interpretationStatus: 'not_requested' | 'completed' | 'failed';
+    interpretationResult?: Record<string, unknown> | null;
+    interpretationError?: { code: string; message: string };
+  },
+) {
+  return page.route(`**/api/analysis-runs/${runId}`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        runId,
+        requestedStages: {
+          symbolicMode: 'off',
+          symbolicBackend: 'auto',
+          interpretationMode: options.interpretationMode,
+          interpretationProfile: 'producer_summary',
+          interpretationModel: options.interpretationMode === 'off' ? null : 'gemini-3.1-pro-preview',
+        },
+        artifacts: {
+          sourceAudio: {
+            artifactId: `${runId}_artifact`,
+            filename: 'silence.wav',
+            mimeType: 'audio/wav',
+            sizeBytes: 2048,
+            contentSha256: 'abc123',
+            path: '/tmp/silence.wav',
+          },
+        },
+        stages: {
+          measurement: {
+            status: 'completed',
+            authoritative: true,
+            result: PHASE1_STUB,
+            provenance: null,
+            diagnostics: { timings: { totalMs: 400, analysisMs: 360, serverOverheadMs: 40, flagsUsed: [], fileSizeBytes: 2048, fileDurationSeconds: 10, msPerSecondOfAudio: 40 } },
+            error: null,
+          },
+          symbolicExtraction: {
+            status: 'not_requested',
+            authoritative: false,
+            preferredAttemptId: null,
+            attemptsSummary: [],
+            result: null,
+            provenance: null,
+            diagnostics: null,
+            error: null,
+          },
+          interpretation: {
+            status: options.interpretationStatus,
+            authoritative: false,
+            preferredAttemptId: options.interpretationStatus === 'completed' ? `${runId}_int` : null,
+            attemptsSummary: options.interpretationStatus === 'completed'
+              ? [{ attemptId: `${runId}_int`, profileId: 'producer_summary', modelName: 'gemini-3.1-pro-preview', status: 'completed' }]
+              : [],
+            result: options.interpretationResult ?? null,
+            provenance: null,
+            diagnostics: null,
+            error: options.interpretationError
+              ? { ...options.interpretationError, retryable: true, phase: 'interpretation' }
+              : null,
+          },
+        },
       }),
     });
   });
@@ -71,11 +193,15 @@ test('Phase 2 controls show config-disabled state when the env kill-switch is of
   await disablePhase2ForTest(page);
   await stubEstimateRoute(page, 'req_est_p2off');
   await stubAnalyzeRoute(page);
+  await stubRunPoll(page, 'req_phase2_degrade', {
+    interpretationMode: 'off',
+    interpretationStatus: 'not_requested',
+  });
 
   await page.goto('/', { waitUntil: 'networkidle' });
 
-  await expect(page.getByLabel('PHASE 2 ADVISORY')).toBeDisabled();
-  await expect(page.getByTestId('phase2-status-inline')).toHaveText('PHASE 2 CONFIG OFF');
+  await expect(page.getByLabel('AI INTERPRETATION')).toBeDisabled();
+  await expect(page.getByTestId('phase2-status-inline')).toHaveText('INTERPRETATION CONFIG OFF');
   await expect(page.getByTestId('phase2-model-desktop')).toBeDisabled();
 
   await page.setInputFiles('#audio-upload', fixturePath());
@@ -84,7 +210,7 @@ test('Phase 2 controls show config-disabled state when the env kill-switch is of
   await expectAnalysisResultsVisible(page);
   await expect(page.getByText('126')).toBeVisible();
   await expect(
-    page.getByText('Phase 2 advisory skipped because it was disabled by configuration.', { exact: true }).first(),
+    page.getByText('AI interpretation skipped because it was disabled by configuration.', { exact: true }).first(),
   ).toBeVisible();
 });
 
@@ -92,18 +218,22 @@ test('turning Phase 2 off in the UI runs Phase 1 only and records the user-disab
   await enablePhase2ForTest(page);
   await stubEstimateRoute(page, 'req_est_user_off');
   await stubAnalyzeRoute(page, 'req_user_off');
+  await stubRunPoll(page, 'req_user_off', {
+    interpretationMode: 'off',
+    interpretationStatus: 'not_requested',
+  });
 
   await page.goto('/', { waitUntil: 'networkidle' });
   await page.setInputFiles('#audio-upload', fixturePath());
-  await page.getByLabel('PHASE 2 ADVISORY').uncheck();
+  await page.getByLabel('AI INTERPRETATION').uncheck();
 
-  await expect(page.getByTestId('phase2-status-inline')).toHaveText('PHASE 2 USER OFF');
+  await expect(page.getByTestId('phase2-status-inline')).toHaveText('INTERPRETATION USER OFF');
 
   await page.getByRole('button', { name: /Initiate Analysis/i }).click();
 
   await expectAnalysisResultsVisible(page);
   await expect(
-    page.getByText('Phase 2 advisory skipped because it was disabled in the UI.', { exact: true }).first(),
+    page.getByText('AI interpretation skipped because it was disabled in the UI.', { exact: true }).first(),
   ).toBeVisible();
 });
 
@@ -111,17 +241,25 @@ test('Phase 2 runs Phase 1 and delegates Gemini to the backend when enabled', as
   await enablePhase2ForTest(page);
   await stubEstimateRoute(page, 'req_est_p2_backend');
   await stubAnalyzeRoute(page, 'req_p2_backend');
-  await page.route('**/api/phase2', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        requestId: 'req_p2_backend',
-        phase2: null,
-        message: 'Phase 2 advisory skipped because Gemini returned an empty response.',
-        diagnostics: { backendDurationMs: 50, engineVersion: 'gemini-2.5-flash' },
-      }),
-    });
+  await stubRunPoll(page, 'req_p2_backend', {
+    interpretationMode: 'async',
+    interpretationStatus: 'completed',
+    interpretationResult: {
+      trackCharacter: 'Grounded interpretation output.',
+      detectedCharacteristics: [],
+      arrangementOverview: { summary: 'Four sections.', segments: [] },
+      sonicElements: {
+        kick: 'Kick',
+        bass: 'Bass',
+        melodicArp: 'Arp',
+        grooveAndTiming: 'Groove',
+        effectsAndTexture: 'Texture',
+      },
+      mixAndMasterChain: [],
+      secretSauce: { title: 'Sauce', explanation: 'Do thing', implementationSteps: [] },
+      confidenceNotes: [],
+      abletonRecommendations: [],
+    },
   });
 
   await page.goto('/', { waitUntil: 'networkidle' });
@@ -130,32 +268,26 @@ test('Phase 2 runs Phase 1 and delegates Gemini to the backend when enabled', as
   await page.getByRole('button', { name: /Initiate Analysis/i }).click();
 
   await expectAnalysisResultsVisible(page);
-  await expect(page.getByText('126')).toBeVisible();
-  await expect(
-    page.getByText('Phase 2 advisory skipped because Gemini returned an empty response.', { exact: true }).first(),
-  ).toBeVisible();
+  await expect(page.getByText('126', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Sauce', exact: true })).toBeVisible();
 });
 
 test('malformed Gemini Phase 2 response degrades gracefully to skipped', async ({ page }) => {
   await enablePhase2ForTest(page);
   await stubEstimateRoute(page, 'req_est_p2_malformed');
   await stubAnalyzeRoute(page, 'req_p2_malformed');
-  await page.route('**/api/phase2', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        requestId: 'req_p2_malformed',
-        phase2: null,
-        message: 'Phase 2 advisory skipped because Gemini returned invalid JSON.',
-        diagnostics: { backendDurationMs: 100, engineVersion: 'gemini-2.5-flash' },
-      }),
-    });
+  await stubRunPoll(page, 'req_p2_malformed', {
+    interpretationMode: 'async',
+    interpretationStatus: 'failed',
+    interpretationError: {
+      code: 'INTERPRETATION_FAILED',
+      message: 'Gemini returned invalid JSON.',
+    },
   });
 
   await page.goto('/', { waitUntil: 'networkidle' });
   await page.setInputFiles('#audio-upload', fixturePath());
-  await expect(page.getByLabel('PHASE 2 ADVISORY')).toBeChecked();
+  await expect(page.getByLabel('AI INTERPRETATION')).toBeChecked();
 
   await page.getByRole('button', { name: /Initiate Analysis/i }).click();
 
@@ -163,6 +295,6 @@ test('malformed Gemini Phase 2 response degrades gracefully to skipped', async (
   await expect(page.getByText('126')).toBeVisible();
   await expect(page.getByText('System Diagnostics')).toBeVisible();
   await expect(
-    page.getByText('Phase 2 advisory skipped because Gemini returned invalid JSON.', { exact: true }).first(),
+    page.getByText('Gemini returned invalid JSON.', { exact: true }).first(),
   ).toBeVisible();
 });

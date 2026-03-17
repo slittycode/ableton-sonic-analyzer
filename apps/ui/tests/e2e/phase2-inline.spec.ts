@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { writeMusicalReferenceWav } from './support/audioFixtures';
+import { INLINE_SIZE_LIMIT, writeMusicalReferenceWav } from './support/audioFixtures';
 import {
   DEFAULT_PHASE2_MODEL,
   expectNoCommonConnectivityErrors,
@@ -20,7 +20,7 @@ test('live Gemini inline path uses inlineData without Files API traffic', async 
 
   const fixturePath = testInfo.outputPath('phase2-inline-reference.wav');
   const fixture = await writeMusicalReferenceWav(fixturePath);
-  expect(fixture.byteLength).toBeLessThanOrEqual(20_971_520);
+  expect(fixture.byteLength).toBeLessThanOrEqual(INLINE_SIZE_LIMIT);
 
   const geminiTraffic = observeGeminiTraffic(page);
 

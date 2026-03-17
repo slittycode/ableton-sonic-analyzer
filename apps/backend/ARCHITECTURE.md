@@ -231,7 +231,7 @@ When the analyzer never produces a valid JSON object, `timings.fileDurationSecon
 1. Optionally use a cached temp file from a prior Phase 1 request (keyed by `phase1_request_id` form field); fall back to persisting the uploaded file if no cache hit.
 2. Parse `phase1_json` form field — used as-is (already normalized by the frontend).
 3. Build the Gemini prompt: system prompt from `prompts/phase2_system.txt` + Phase 1 JSON appended.
-4. Upload the audio inline (≤20 MiB) or via the Gemini Files API (>20 MiB).
+4. Upload the audio inline (≤100 MiB) or via the Gemini Files API (>100 MiB).
 5. Call `generateContent` with structured output schema; retry on transient errors.
 6. Parse and validate the response against the Phase 2 schema.
 7. Return `{ requestId, phase2: Phase2Result | null, message, diagnostics }`.

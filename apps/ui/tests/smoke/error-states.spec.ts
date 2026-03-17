@@ -25,8 +25,95 @@ const PHASE1_STUB = {
   },
 };
 
+const PHASE2_STUB = {
+  trackCharacter: 'Deterministic smoke response.',
+  detectedCharacteristics: [],
+  arrangementOverview: { summary: 'Smoke summary.', segments: [] },
+  sonicElements: {
+    kick: 'Kick.',
+    bass: 'Bass.',
+    melodicArp: 'Arp.',
+    grooveAndTiming: 'Groove.',
+    effectsAndTexture: 'FX.',
+  },
+  mixAndMasterChain: [],
+  secretSauce: {
+    title: 'Smoke Sauce',
+    explanation: 'Smoke explanation.',
+    implementationSteps: [],
+  },
+  confidenceNotes: [],
+  abletonRecommendations: [],
+};
+
 function fixturePath(): string {
   return path.resolve(testDir, './fixtures/silence.wav');
+}
+
+type RunSnapshotOverrides = {
+  requestedStages?: Record<string, unknown>;
+  stages?: {
+    measurement?: Record<string, unknown>;
+    symbolicExtraction?: Record<string, unknown>;
+    interpretation?: Record<string, unknown>;
+  };
+};
+
+function buildRunSnapshot(runId: string, overrides: RunSnapshotOverrides = {}) {
+  return {
+    runId,
+    requestedStages: {
+      symbolicMode: 'off',
+      symbolicBackend: 'auto',
+      interpretationMode: 'async',
+      interpretationProfile: 'producer_summary',
+      interpretationModel: 'gemini-3.1-pro-preview',
+      ...overrides.requestedStages,
+    },
+    artifacts: {
+      sourceAudio: {
+        artifactId: `artifact_${runId}`,
+        filename: 'silence.wav',
+        mimeType: 'audio/wav',
+        sizeBytes: 2048,
+        contentSha256: 'abc123',
+        path: '/tmp/silence.wav',
+      },
+    },
+    stages: {
+      measurement: {
+        status: 'queued',
+        authoritative: true,
+        result: null,
+        provenance: null,
+        diagnostics: null,
+        error: null,
+        ...overrides.stages?.measurement,
+      },
+      symbolicExtraction: {
+        status: 'not_requested',
+        authoritative: false,
+        preferredAttemptId: null,
+        attemptsSummary: [],
+        result: null,
+        provenance: null,
+        diagnostics: null,
+        error: null,
+        ...overrides.stages?.symbolicExtraction,
+      },
+      interpretation: {
+        status: 'blocked',
+        authoritative: false,
+        preferredAttemptId: null,
+        attemptsSummary: [],
+        result: null,
+        provenance: null,
+        diagnostics: null,
+        error: null,
+        ...overrides.stages?.interpretation,
+      },
+    },
+  };
 }
 
 async function loadFileAndClick(page: import('@playwright/test').Page) {
@@ -56,7 +143,11 @@ function stubEstimateRoute(page: import('@playwright/test').Page) {
 test('backend 500 shows error banner and ERROR status in diagnostic log', async ({ page }) => {
   await stubEstimateRoute(page);
 
-  await page.route('**/api/analyze', async (route) => {
+  await page.route('**/api/analysis-runs', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.fallback();
+      return;
+    }
     await route.fulfill({
       status: 500,
       contentType: 'application/json',
@@ -74,20 +165,23 @@ test('backend 500 shows error banner and ERROR status in diagnostic log', async 
 
   await loadFileAndClick(page);
 
-  const errorBanner = page.locator('div.p-3.text-error');
+  const errorBanner = page.locator('div.p-3.bg-error\\/10');
   await expect(errorBanner).toBeVisible();
   await expect(errorBanner).toContainText('ERROR');
   await expect(errorBanner).toContainText('Internal server error during analysis.');
 
   await expect(page.getByText('System Diagnostics')).toBeVisible();
-  const errorBadge = page.locator('text=ERROR').first();
-  await expect(errorBadge).toBeVisible();
+  await expect(page.getByText('BACKEND_INTERNAL_ERROR')).toBeVisible();
 });
 
 test('backend 502 (analyzer failed) shows error message in banner', async ({ page }) => {
   await stubEstimateRoute(page);
 
-  await page.route('**/api/analyze', async (route) => {
+  await page.route('**/api/analysis-runs', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.fallback();
+      return;
+    }
     await route.fulfill({
       status: 502,
       contentType: 'application/json',
@@ -105,7 +199,7 @@ test('backend 502 (analyzer failed) shows error message in banner', async ({ pag
 
   await loadFileAndClick(page);
 
-  const errorBanner = page.locator('div.p-3.text-error');
+  const errorBanner = page.locator('div.p-3.bg-error\\/10');
   await expect(errorBanner).toBeVisible();
   await expect(errorBanner).toContainText('Analyzer subprocess exited with non-zero status.');
 
@@ -116,15 +210,19 @@ test('backend 502 (analyzer failed) shows error message in banner', async ({ pag
 test('network failure shows NETWORK_UNREACHABLE-style error', async ({ page }) => {
   await stubEstimateRoute(page);
 
-  await page.route('**/api/analyze', async (route) => {
+  await page.route('**/api/analysis-runs', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.fallback();
+      return;
+    }
     await route.abort('connectionrefused');
   });
 
   await loadFileAndClick(page);
 
-  const errorBanner = page.locator('div.p-3.text-error');
+  const errorBanner = page.locator('div.p-3.bg-error\\/10');
   await expect(errorBanner).toBeVisible();
-  await expect(errorBanner).toContainText('ERROR');
+  await expect(errorBanner).toContainText('Cannot reach the local DSP backend');
 });
 
 test('estimate endpoint failure shows yellow warning but does not block analysis', async ({ page }) => {
@@ -136,15 +234,56 @@ test('estimate endpoint failure shows yellow warning but does not block analysis
     });
   });
 
-  await page.route('**/api/analyze', async (route) => {
+  await page.route('**/api/analysis-runs', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.fallback();
+      return;
+    }
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({
-        requestId: 'req_est_fallback',
-        phase1: PHASE1_STUB,
-        diagnostics: { backendDurationMs: 400, engineVersion: 'smoke' },
-      }),
+      body: JSON.stringify(buildRunSnapshot('run_estimate_fallback')),
+    });
+  });
+
+  await page.route('**/api/analysis-runs/run_estimate_fallback', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(
+        buildRunSnapshot('run_estimate_fallback', {
+          stages: {
+            measurement: {
+              status: 'completed',
+              result: PHASE1_STUB,
+              diagnostics: {
+                timings: {
+                  totalMs: 400,
+                  analysisMs: 360,
+                  serverOverheadMs: 40,
+                  flagsUsed: [],
+                  fileSizeBytes: 2048,
+                  fileDurationSeconds: 10,
+                  msPerSecondOfAudio: 40,
+                },
+              },
+            },
+            interpretation: {
+              status: 'completed',
+              preferredAttemptId: 'int_estimate_fallback',
+              attemptsSummary: [
+                {
+                  attemptId: 'int_estimate_fallback',
+                  profileId: 'producer_summary',
+                  modelName: 'gemini-3.1-pro-preview',
+                  status: 'completed',
+                },
+              ],
+              result: PHASE2_STUB,
+            },
+          },
+        }),
+      ),
     });
   });
 
@@ -199,7 +338,11 @@ test('wrong backend service warning disables initiate analysis until the backend
 test('error banner dismiss button removes the error', async ({ page }) => {
   await stubEstimateRoute(page);
 
-  await page.route('**/api/analyze', async (route) => {
+  await page.route('**/api/analysis-runs', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.fallback();
+      return;
+    }
     await route.fulfill({
       status: 500,
       contentType: 'application/json',
@@ -217,14 +360,11 @@ test('error banner dismiss button removes the error', async ({ page }) => {
 
   await loadFileAndClick(page);
 
-  const errorBanner = page.locator('div.p-3.text-error');
+  const errorBanner = page.locator('div.p-3.bg-error\\/10');
   await expect(errorBanner).toBeVisible();
   await expect(errorBanner).toContainText('Server error for dismiss test.');
-
-  // No Retry button for non-retryable errors
   await expect(errorBanner.getByRole('button', { name: /Retry/i })).toHaveCount(0);
 
-  // Click the dismiss (X) button
   const dismissBtn = errorBanner.getByLabel('Dismiss error');
   await expect(dismissBtn).toBeVisible();
   await dismissBtn.click();
@@ -236,8 +376,12 @@ test('error banner shows Retry button for retryable errors', async ({ page }) =>
   await stubEstimateRoute(page);
 
   let callCount = 0;
-  await page.route('**/api/analyze', async (route) => {
-    callCount++;
+  await page.route('**/api/analysis-runs', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.fallback();
+      return;
+    }
+    callCount += 1;
     if (callCount === 1) {
       await route.fulfill({
         status: 503,
@@ -252,93 +396,134 @@ test('error banner shows Retry button for retryable errors', async ({ page }) =>
           },
         }),
       });
-    } else {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          requestId: 'req_retry_ok',
-          phase1: PHASE1_STUB,
-          diagnostics: { backendDurationMs: 200, engineVersion: 'smoke' },
-        }),
-      });
+      return;
     }
-  });
 
-  // Stub the backend Phase 2 endpoint so it completes quickly when enabled
-  await page.route('**/api/phase2', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({
-        requestId: 'req_retry_p2',
-        phase2: null,
-        message: 'Phase 2 advisory skipped because Gemini returned an empty response.',
-        diagnostics: { backendDurationMs: 50, engineVersion: 'gemini-2.5-flash' },
-      }),
+      body: JSON.stringify(buildRunSnapshot('run_retry_ok')),
+    });
+  });
+
+  await page.route('**/api/analysis-runs/run_retry_ok', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(
+        buildRunSnapshot('run_retry_ok', {
+          stages: {
+            measurement: {
+              status: 'completed',
+              result: PHASE1_STUB,
+              diagnostics: {
+                timings: {
+                  totalMs: 200,
+                  analysisMs: 180,
+                  serverOverheadMs: 20,
+                  flagsUsed: [],
+                  fileSizeBytes: 2048,
+                  fileDurationSeconds: 10,
+                  msPerSecondOfAudio: 20,
+                },
+              },
+            },
+            interpretation: {
+              status: 'completed',
+              preferredAttemptId: 'int_retry_ok',
+              attemptsSummary: [
+                {
+                  attemptId: 'int_retry_ok',
+                  profileId: 'producer_summary',
+                  modelName: 'gemini-3.1-pro-preview',
+                  status: 'completed',
+                },
+              ],
+              result: PHASE2_STUB,
+            },
+          },
+        }),
+      ),
     });
   });
 
   await loadFileAndClick(page);
 
-  const errorBanner = page.locator('div.p-3.text-error');
+  const errorBanner = page.locator('div.p-3.bg-error\\/10');
   await expect(errorBanner).toBeVisible();
   await expect(errorBanner).toContainText('Backend temporarily unavailable.');
 
-  // Retry button should be visible for retryable errors
   const retryBtn = errorBanner.getByRole('button', { name: /Retry/i });
   await expect(retryBtn).toBeVisible();
-
-  // Click retry — should trigger re-analysis and succeed this time
   await retryBtn.click();
+
   await expect(page.getByText('Analysis Results')).toBeVisible({ timeout: 30000 });
 });
 
-test('cancel during phase 2 returns to idle without an error banner and logs skipped advisory', async ({ page }) => {
+test('stop monitoring during interpretation preserves completed measurement without showing an error banner', async ({ page }) => {
   await stubEstimateRoute(page);
 
-  await page.route('**/api/analyze', async (route) => {
+  await page.route('**/api/analysis-runs', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.fallback();
+      return;
+    }
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({
-        requestId: 'req_phase2_cancel',
-        phase1: PHASE1_STUB,
-        diagnostics: { backendDurationMs: 250, engineVersion: 'smoke' },
-      }),
+      body: JSON.stringify(buildRunSnapshot('run_stop_monitoring')),
     });
   });
 
-  let releasePhase2Route: (() => void) | null = null;
-  await page.route('**/api/phase2', async (route) => {
-    await new Promise<void>((resolve) => {
-      releasePhase2Route = resolve;
-    });
-
+  await page.route('**/api/analysis-runs/run_stop_monitoring', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({
-        requestId: 'req_phase2_cancel',
-        phase2: null,
-        message: 'Phase 2 advisory skipped because Gemini returned an empty response.',
-        diagnostics: { backendDurationMs: 100, engineVersion: 'gemini-2.5-flash' },
-      }),
+      body: JSON.stringify(
+        buildRunSnapshot('run_stop_monitoring', {
+          stages: {
+            measurement: {
+              status: 'completed',
+              result: PHASE1_STUB,
+              diagnostics: {
+                timings: {
+                  totalMs: 250,
+                  analysisMs: 220,
+                  serverOverheadMs: 30,
+                  flagsUsed: [],
+                  fileSizeBytes: 2048,
+                  fileDurationSeconds: 10,
+                  msPerSecondOfAudio: 25,
+                },
+              },
+            },
+            interpretation: {
+              status: 'running',
+              preferredAttemptId: 'int_stop_monitoring',
+              attemptsSummary: [
+                {
+                  attemptId: 'int_stop_monitoring',
+                  profileId: 'producer_summary',
+                  modelName: 'gemini-3.1-pro-preview',
+                  status: 'running',
+                },
+              ],
+            },
+          },
+        }),
+      ),
     });
   });
 
   await loadFileAndClick(page);
 
-  await expect(page.getByText('Generating the advisory pass from completed local DSP measurements.')).toBeVisible();
-
-  const cancelButton = page.getByRole('button', { name: /Cancel analysis/i });
-  await expect(cancelButton).toBeVisible();
-  await cancelButton.click();
-
-  releasePhase2Route?.();
-
-  await expect(page.locator('div.p-3.text-error')).toHaveCount(0);
   await expect(page.getByText('Analysis Results')).toBeVisible();
-  await expect(page.getByText('Analysis cancelled by user.')).toBeVisible();
-  await expect(page.getByText('SKIPPED')).toBeVisible();
+
+  const stopButton = page.getByRole('button', { name: /Stop monitoring/i });
+  await expect(stopButton).toBeVisible();
+  await stopButton.click();
+
+  await expect(page.locator('div.p-3.bg-error\\/10')).toHaveCount(0);
+  await expect(page.getByText('Analysis Results')).toBeVisible();
+  await expect(page.getByText('Monitoring stopped.')).toBeVisible();
 });

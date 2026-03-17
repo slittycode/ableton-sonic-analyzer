@@ -25,6 +25,27 @@ const PHASE1_STUB = {
   },
 };
 
+const PHASE2_STUB = {
+  trackCharacter: 'Deterministic smoke response.',
+  detectedCharacteristics: [],
+  arrangementOverview: { summary: 'Smoke summary.', segments: [] },
+  sonicElements: {
+    kick: 'Kick.',
+    bass: 'Bass.',
+    melodicArp: 'Arp.',
+    grooveAndTiming: 'Groove.',
+    effectsAndTexture: 'FX.',
+  },
+  mixAndMasterChain: [],
+  secretSauce: {
+    title: 'Smoke Sauce',
+    explanation: 'Smoke explanation.',
+    implementationSteps: [],
+  },
+  confidenceNotes: [],
+  abletonRecommendations: [],
+};
+
 function fixturePath(): string {
   return path.resolve(testDir, './fixtures/silence.wav');
 }
@@ -46,14 +67,121 @@ function stubRoutes(page: import('@playwright/test').Page) {
         }),
       });
     }),
-    page.route('**/api/analyze', async (route) => {
+    page.route('**/api/analysis-runs', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.fallback();
+        return;
+      }
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          requestId: 'req_ui_001',
-          phase1: PHASE1_STUB,
-          diagnostics: { backendDurationMs: 400, engineVersion: 'smoke' },
+          runId: 'run_ui_001',
+          requestedStages: {
+            symbolicMode: 'off',
+            symbolicBackend: 'auto',
+            interpretationMode: 'async',
+            interpretationProfile: 'producer_summary',
+            interpretationModel: 'gemini-3.1-pro-preview',
+          },
+          artifacts: {
+            sourceAudio: {
+              artifactId: 'artifact_ui_001',
+              filename: 'silence.wav',
+              mimeType: 'audio/wav',
+              sizeBytes: 2048,
+              contentSha256: 'abc123',
+              path: '/tmp/silence.wav',
+            },
+          },
+          stages: {
+            measurement: {
+              status: 'queued',
+              authoritative: true,
+              result: null,
+              provenance: null,
+              diagnostics: null,
+              error: null,
+            },
+            symbolicExtraction: {
+              status: 'not_requested',
+              authoritative: false,
+              preferredAttemptId: null,
+              attemptsSummary: [],
+              result: null,
+              provenance: null,
+              diagnostics: null,
+              error: null,
+            },
+            interpretation: {
+              status: 'blocked',
+              authoritative: false,
+              preferredAttemptId: null,
+              attemptsSummary: [],
+              result: null,
+              provenance: null,
+              diagnostics: null,
+              error: null,
+            },
+          },
+        }),
+      });
+    }),
+    page.route('**/api/analysis-runs/run_ui_001', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          runId: 'run_ui_001',
+          requestedStages: {
+            symbolicMode: 'off',
+            symbolicBackend: 'auto',
+            interpretationMode: 'async',
+            interpretationProfile: 'producer_summary',
+            interpretationModel: 'gemini-3.1-pro-preview',
+          },
+          artifacts: {
+            sourceAudio: {
+              artifactId: 'artifact_ui_001',
+              filename: 'silence.wav',
+              mimeType: 'audio/wav',
+              sizeBytes: 2048,
+              contentSha256: 'abc123',
+              path: '/tmp/silence.wav',
+            },
+          },
+          stages: {
+            measurement: {
+              status: 'completed',
+              authoritative: true,
+              result: PHASE1_STUB,
+              provenance: null,
+              diagnostics: { timings: { totalMs: 400, analysisMs: 360, serverOverheadMs: 40, flagsUsed: [], fileSizeBytes: 2048, fileDurationSeconds: 10, msPerSecondOfAudio: 40 } },
+              error: null,
+            },
+            symbolicExtraction: {
+              status: 'not_requested',
+              authoritative: false,
+              preferredAttemptId: null,
+              attemptsSummary: [],
+              result: null,
+              provenance: null,
+              diagnostics: null,
+              error: null,
+            },
+            interpretation: {
+              status: 'completed',
+              authoritative: false,
+              preferredAttemptId: 'int_ui_001',
+              attemptsSummary: [
+                { attemptId: 'int_ui_001', profileId: 'producer_summary', modelName: 'gemini-3.1-pro-preview', status: 'completed' },
+              ],
+              result: PHASE2_STUB,
+              provenance: null,
+              diagnostics: null,
+              error: null,
+            },
+          },
         }),
       });
     }),
@@ -96,15 +224,127 @@ test('CPU indicator animates during analysis', async ({ page }) => {
     });
   });
 
-  await page.route('**/api/analyze', async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+  await page.route('**/api/analysis-runs', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.fallback();
+      return;
+    }
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        requestId: 'req_cpu_001',
-        phase1: PHASE1_STUB,
-        diagnostics: { backendDurationMs: 400, engineVersion: 'smoke' },
+        runId: 'run_cpu_001',
+        requestedStages: {
+          symbolicMode: 'off',
+          symbolicBackend: 'auto',
+          interpretationMode: 'async',
+          interpretationProfile: 'producer_summary',
+          interpretationModel: 'gemini-3.1-pro-preview',
+        },
+        artifacts: {
+          sourceAudio: {
+            artifactId: 'artifact_cpu_001',
+            filename: 'silence.wav',
+            mimeType: 'audio/wav',
+            sizeBytes: 2048,
+            contentSha256: 'abc123',
+            path: '/tmp/silence.wav',
+          },
+        },
+        stages: {
+          measurement: {
+            status: 'queued',
+            authoritative: true,
+            result: null,
+            provenance: null,
+            diagnostics: null,
+            error: null,
+          },
+          symbolicExtraction: {
+            status: 'not_requested',
+            authoritative: false,
+            preferredAttemptId: null,
+            attemptsSummary: [],
+            result: null,
+            provenance: null,
+            diagnostics: null,
+            error: null,
+          },
+          interpretation: {
+            status: 'blocked',
+            authoritative: false,
+            preferredAttemptId: null,
+            attemptsSummary: [],
+            result: null,
+            provenance: null,
+            diagnostics: null,
+            error: null,
+          },
+        },
+      }),
+    });
+  });
+
+  let pollCount = 0;
+  await page.route('**/api/analysis-runs/run_cpu_001', async (route) => {
+    pollCount += 1;
+    if (pollCount === 1) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        runId: 'run_cpu_001',
+        requestedStages: {
+          symbolicMode: 'off',
+          symbolicBackend: 'auto',
+          interpretationMode: 'async',
+          interpretationProfile: 'producer_summary',
+          interpretationModel: 'gemini-3.1-pro-preview',
+        },
+        artifacts: {
+          sourceAudio: {
+            artifactId: 'artifact_cpu_001',
+            filename: 'silence.wav',
+            mimeType: 'audio/wav',
+            sizeBytes: 2048,
+            contentSha256: 'abc123',
+            path: '/tmp/silence.wav',
+          },
+        },
+        stages: {
+          measurement: {
+            status: 'completed',
+            authoritative: true,
+            result: PHASE1_STUB,
+            provenance: null,
+            diagnostics: { timings: { totalMs: 400, analysisMs: 360, serverOverheadMs: 40, flagsUsed: [], fileSizeBytes: 2048, fileDurationSeconds: 10, msPerSecondOfAudio: 40 } },
+            error: null,
+          },
+          symbolicExtraction: {
+            status: 'not_requested',
+            authoritative: false,
+            preferredAttemptId: null,
+            attemptsSummary: [],
+            result: null,
+            provenance: null,
+            diagnostics: null,
+            error: null,
+          },
+          interpretation: {
+            status: 'completed',
+            authoritative: false,
+            preferredAttemptId: 'int_cpu_001',
+            attemptsSummary: [
+              { attemptId: 'int_cpu_001', profileId: 'producer_summary', modelName: 'gemini-3.1-pro-preview', status: 'completed' },
+            ],
+            result: PHASE2_STUB,
+            provenance: null,
+            diagnostics: null,
+            error: null,
+          },
+        },
       }),
     });
   });
@@ -130,13 +370,13 @@ test('diagnostic log shows SUCCESS badge and model info after analysis', async (
   await expect(page.getByText('Analysis Results')).toBeVisible();
   await expect(page.getByText('System Diagnostics')).toBeVisible();
 
-  const successBadge = page.locator('.bg-success\\/10').filter({ hasText: 'SUCCESS' });
+  const diagnostics = page.locator('.mt-12.space-y-4');
+  const successBadge = diagnostics.locator('.bg-success\\/10').filter({ hasText: 'SUCCESS' }).first();
   await expect(successBadge).toBeVisible();
 
   await expect(page.getByText('local-dsp-engine')).toBeVisible();
 
   // Scope to the diagnostics section to avoid matching the FileUpload file card
-  const diagnostics = page.locator('.mt-12.space-y-4');
   await expect(diagnostics.getByText('silence.wav')).toBeVisible();
   await expect(diagnostics.getByText('audio/wav')).toBeVisible();
 });
@@ -149,14 +389,14 @@ test('top metric cards show TEMPO, KEY SIG, METER, CHARACTER after analysis', as
 
   await expect(page.getByText('Analysis Results')).toBeVisible();
 
-  await expect(page.getByText('TEMPO')).toBeVisible();
-  await expect(page.getByText('KEY SIG')).toBeVisible();
-  await expect(page.getByText('METER')).toBeVisible();
-  await expect(page.getByText('CHARACTER')).toBeVisible();
+  await expect(page.getByText('TEMPO', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('KEY SIG', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('METER', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('CHARACTER', { exact: true }).first()).toBeVisible();
 
-  await expect(page.getByText('126')).toBeVisible();
-  await expect(page.getByText(/F mi/)).toBeVisible();
-  await expect(page.getByText('4/4')).toBeVisible();
+  await expect(page.getByText('126', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('F minor', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('4/4', { exact: true }).first()).toBeVisible();
 });
 
 test('header shows SonicAnalyzer brand and Local DSP Engine label', async ({ page }) => {

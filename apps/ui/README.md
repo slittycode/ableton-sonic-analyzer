@@ -277,7 +277,7 @@ Current behavior:
 - The user can choose from the baked-in Gemini model list in `src/App.tsx`.
 - The prompt uses the uploaded audio file plus the completed `phase1` payload.
 - Phase 2 results drive the arrangement narrative, sonic element cards, mix chain, patch framework, secret sauce, and recommendation sections.
-- Audio files at or below 20MB are sent to Gemini as inline base64. Audio files above 20MB are uploaded via the Gemini Files API before generation and deleted immediately after; the diagnostic log shows upload and generation durations separately.
+- Audio files at or below 100MB are sent to Gemini as inline base64. Audio files above 100MB are uploaded via the Gemini Files API before generation and deleted immediately after; the diagnostic log shows upload and generation durations separately.
 
 ## Export Behavior
 
@@ -307,7 +307,7 @@ Notes about tests:
 - most smoke tests stub the backend and Gemini calls
 - `tests/smoke/upload-phase1-live.spec.ts` checks a real backend if `VITE_API_BASE_URL` is reachable
 - `tests/smoke/upload-phase1-live.spec.ts` uses `TEST_FLAC_PATH` when it points to an existing file, otherwise it silently falls back to `tests/smoke/fixtures/silence.wav`
-- `tests/smoke/upload-phase2-live-gemini.spec.ts` is opt-in and checks the real Gemini Files API path against a generated `>20MB` WAV when `RUN_GEMINI_LIVE_SMOKE=true`, `VITE_ENABLE_PHASE2_GEMINI=true`, and `VITE_GEMINI_API_KEY` is set
+- `tests/smoke/upload-phase2-live-gemini.spec.ts` is opt-in and checks the real Gemini Files API path against a generated `>100MB` WAV when `RUN_GEMINI_LIVE_SMOKE=true`, `VITE_ENABLE_PHASE2_GEMINI=true`, and `VITE_GEMINI_API_KEY` is set
 
 Run the live backend smoke against a real FLAC when one is available:
 

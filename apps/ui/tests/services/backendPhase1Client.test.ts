@@ -1,5 +1,4 @@
 import {
-  analyzePhase1WithBackend,
   estimatePhase1WithBackend,
   parseBackendAnalyzeResponse,
   BackendClientError,
@@ -168,9 +167,13 @@ afterEach(() => {
 
 describe('parseBackendAnalyzeResponse', () => {
   it('accepts a valid backend payload', () => {
-    const parsed = parseBackendAnalyzeResponse(validPayload);
+    const parsed = parseBackendAnalyzeResponse({
+      ...validPayload,
+      analysisRunId: 'run_123',
+    });
 
     expect(parsed.requestId).toBe('req_123');
+    expect(parsed.analysisRunId).toBe('run_123');
     expect(parsed.phase1.bpm).toBe(128);
     expect(parsed.diagnostics?.engineVersion).toBe('0.4.0');
     expect(parsed.diagnostics?.timings).toEqual(validPayload.diagnostics.timings);
@@ -568,168 +571,7 @@ describe('estimatePhase1WithBackend', () => {
       ),
     ).rejects.toMatchObject({ code: 'BACKEND_WRONG_SERVICE' });
 
-    await expect(
-      analyzePhase1WithBackend(
-        new File(['wave'], 'track.mp3', { type: 'audio/mpeg' }),
-        null,
-        { apiBaseUrl: 'http://127.0.0.1:8100' },
-      ),
-    ).rejects.toMatchObject({ code: 'BACKEND_WRONG_SERVICE' });
-
     const openApiCalls = fetchMock.mock.calls.filter(([input]) => String(input).endsWith('/openapi.json'));
     expect(openApiCalls).toHaveLength(1);
-  });
-});
-
-describe('analyzePhase1WithBackend structured errors', () => {
-  it('maps structured timeout responses to backend timeout errors', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            requestId: 'req_timeout_001',
-            error: {
-              code: 'ANALYZER_TIMEOUT',
-              message: 'Local DSP analysis timed out before completion.',
-              phase: 'phase1_local_dsp',
-              retryable: true,
-            },
-            diagnostics: {
-              backendDurationMs: 42000,
-              timeoutSeconds: 53,
-              estimatedLowMs: 22000,
-              estimatedHighMs: 38000,
-              timings: {
-                totalMs: 42120,
-                analysisMs: 42000,
-                serverOverheadMs: 120,
-                flagsUsed: ['--transcribe'],
-                fileSizeBytes: 654321,
-                fileDurationSeconds: null,
-                msPerSecondOfAudio: null,
-              },
-            },
-          }),
-          {
-            status: 504,
-            headers: {
-              'Content-Type': 'application/json',
-            },
-          },
-        ),
-      ),
-    );
-
-    await expect(
-      analyzePhase1WithBackend(
-        new File(['wave'], 'track.mp3', { type: 'audio/mpeg' }),
-        null,
-        { apiBaseUrl: 'http://127.0.0.1:8100' },
-      ),
-    ).rejects.toMatchObject({
-      code: 'BACKEND_TIMEOUT',
-      message: 'Local DSP analysis timed out before completion.',
-      details: {
-        status: 504,
-        serverCode: 'ANALYZER_TIMEOUT',
-        requestId: 'req_timeout_001',
-        diagnostics: {
-          timings: {
-            totalMs: 42120,
-            analysisMs: 42000,
-            serverOverheadMs: 120,
-            flagsUsed: ['--transcribe'],
-            fileSizeBytes: 654321,
-            fileDurationSeconds: null,
-            msPerSecondOfAudio: null,
-          },
-        },
-      },
-    });
-  });
-
-  it('sends transcribe=false by default for analysis requests', async () => {
-    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-      const formData = init?.body as FormData;
-      expect(formData.get('transcribe')).toBe('false');
-      expect(formData.get('separate')).toBe('false');
-
-      return new Response(JSON.stringify(validPayload), {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-    });
-
-    vi.stubGlobal('fetch', fetchMock);
-
-    await analyzePhase1WithBackend(
-      new File(['wave'], 'track.mp3', { type: 'audio/mpeg' }),
-      null,
-      { apiBaseUrl: 'http://127.0.0.1:8100' },
-    );
-
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('sends transcribe=true and separate=true when stem-aware analysis is enabled', async () => {
-    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-      const formData = init?.body as FormData;
-      expect(formData.get('transcribe')).toBe('true');
-      expect(formData.get('separate')).toBe('true');
-
-      return new Response(JSON.stringify(validPayload), {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-    });
-
-    vi.stubGlobal('fetch', fetchMock);
-
-    await analyzePhase1WithBackend(
-      new File(['wave'], 'track.mp3', { type: 'audio/mpeg' }),
-      null,
-      { apiBaseUrl: 'http://127.0.0.1:8100', transcribe: true, separate: true },
-    );
-
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('honors an explicit analysis timeout override when the browser aborts the request', async () => {
-    vi.useFakeTimers();
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
-        const signal = init?.signal;
-
-        return new Promise((_resolve, reject) => {
-          signal?.addEventListener('abort', () => {
-            reject(new DOMException('The operation was aborted.', 'AbortError'));
-          });
-        });
-      }),
-    );
-
-    const request = analyzePhase1WithBackend(
-      new File(['wave'], 'track.mp3', { type: 'audio/mpeg' }),
-      null,
-      { apiBaseUrl: 'http://127.0.0.1:8100', timeoutMs: 456000 },
-    );
-
-    const expectation = expect(request).rejects.toMatchObject({
-      code: 'CLIENT_TIMEOUT',
-      message: 'The UI timed out waiting for the local DSP backend response.',
-      details: {
-        timeoutMs: 456000,
-      },
-    });
-
-    await vi.advanceTimersByTimeAsync(456000);
-
-    await expectation;
   });
 });

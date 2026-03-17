@@ -1,8 +1,8 @@
 import { test, expect } from "@playwright/test";
 import { promises as fs } from "node:fs";
 
-const INLINE_SIZE_LIMIT = 20_971_520;
-const LIVE_GEMINI_TARGET_BYTES = 25 * 1024 * 1024;
+const INLINE_SIZE_LIMIT = 104_857_600;
+const LIVE_GEMINI_TARGET_BYTES = INLINE_SIZE_LIMIT + 2 * 1024 * 1024;
 const backendBaseUrl = process.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8100";
 const liveGeminiEnabled = process.env.RUN_GEMINI_LIVE_SMOKE === "true";
 const geminiPhase2Enabled = process.env.VITE_ENABLE_PHASE2_GEMINI === "true";

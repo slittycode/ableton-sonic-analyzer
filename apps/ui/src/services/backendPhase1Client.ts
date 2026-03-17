@@ -120,48 +120,16 @@ export async function estimatePhase1WithBackend(
   }
 }
 
-export async function analyzePhase1WithBackend(
-  file: File,
-  dspJsonOverride: string | null,
-  options: AnalyzePhase1Options,
-): Promise<BackendAnalyzeResponse> {
-  try {
-    const response = await postBackendMultipart(
-      `${options.apiBaseUrl}/api/analyze`,
-      buildTrackFormData(
-        file,
-        dspJsonOverride,
-        options.transcribe ?? false,
-        options.separate ?? false,
-      ),
-      options.timeoutMs ?? DEFAULT_BACKEND_TIMEOUT_MS,
-      options.signal,
-    );
-
-    const payload = await parseJsonPayload(response, "DSP backend");
-
-    return parseBackendAnalyzeResponse(payload);
-  } catch (error) {
-    const diagnosedError = await maybePromoteWrongServiceError(error, options.apiBaseUrl);
-    if (diagnosedError instanceof BackendClientError) {
-      throw diagnosedError;
-    }
-    throw new BackendClientError(
-      "BACKEND_BAD_RESPONSE",
-      `DSP backend response did not match the expected contract: ${formatError(diagnosedError)}`,
-      { cause: diagnosedError },
-    );
-  }
-}
-
 export function parseBackendAnalyzeResponse(payload: unknown): BackendAnalyzeResponse {
   const root = expectRecord(payload, "response");
   const requestId = expectOptionalString(root, "requestId") ?? "unknown";
+  const analysisRunId = expectOptionalString(root, "analysisRunId") ?? undefined;
   const phase1 = parsePhase1Result(root.phase1);
   const diagnostics = parseOptionalBackendDiagnostics(root.diagnostics);
 
   return {
     requestId,
+    analysisRunId,
     phase1,
     diagnostics,
   };
@@ -509,7 +477,7 @@ function parseOptionalBackendTimings(value: unknown): BackendTimingDiagnostics |
   };
 }
 
-function parsePhase1Result(value: unknown): Phase1Result {
+export function parsePhase1Result(value: unknown): Phase1Result {
   const phase1 = expectRecord(value, "phase1");
   const spectralBalance = expectRecord(phase1.spectralBalance, "phase1.spectralBalance");
   const melodyDetail = parseOptionalMelodyDetail(phase1);

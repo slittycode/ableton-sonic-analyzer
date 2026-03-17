@@ -9,7 +9,10 @@
       "Bash(./venv/bin/python -c \"import server; print\\(len\\(server.PHASE2_PROMPT_TEMPLATE\\)\\)\")",
       "Bash(./venv/bin/python -m unittest discover -s tests)",
       "Bash(./venv/bin/python -c \":*)",
-      "Bash(./venv/bin/python -m unittest tests.test_analyze.AnalyzeStructuralSnapshotTests.test_rhythm_detail_exposes_full_grid_downbeats_and_bar_positions)"
+      "Bash(./venv/bin/python -m unittest tests.test_analyze.AnalyzeStructuralSnapshotTests.test_rhythm_detail_exposes_full_grid_downbeats_and_bar_positions)",
+      "Bash(./venv/bin/python -m unittest tests.test_analysis_runtime -v)",
+      "Bash(./venv/bin/python -m unittest tests.test_server -v)",
+      "Bash(./venv/bin/python -m unittest tests.test_analysis_runtime tests.test_server -v)"
     ]
   }
 }

@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { downloadFile, generateMarkdown } from '../utils/exportUtils';
-import { PHASE2_LABEL } from '../services/phaseLabels';
+import { INTERPRETATION_LABEL } from '../services/phaseLabels';
 import { SessionMusicianPanel } from './SessionMusicianPanel';
 import { PhaseSourceBadge } from './PhaseSourceBadge';
 import { StickyNav, type StickyNavSection } from './StickyNav';
@@ -409,7 +409,7 @@ export function AnalysisResults({
         <div className="flex items-center justify-between border-b border-border pb-2">
           <h2 className="text-sm font-mono uppercase tracking-wider flex items-center gap-2 text-text-secondary">
             <span className="w-2 h-2 bg-accent rounded-full"></span>
-            {PHASE2_LABEL}
+            {INTERPRETATION_LABEL}
             <PhaseSourceBadge source="advisory" />
           </h2>
         </div>
@@ -423,7 +423,7 @@ export function AnalysisResults({
         )}
         {!hasRenderablePhase2Content && !phase2StatusMessage && (
           <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">
-            Draft — Phase 2 output is incomplete or unavailable.
+            Draft — AI interpretation is incomplete or unavailable.
           </p>
         )}
       </div>
@@ -448,7 +448,7 @@ export function AnalysisResults({
               <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
               Detected Characteristics
             </h2>
-            <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">PHASE 2</span>
+            <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">AI INTERP</span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {phase2.detectedCharacteristics.map((item, idx) => (

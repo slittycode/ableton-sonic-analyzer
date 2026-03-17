@@ -98,6 +98,8 @@ export interface Phase1Result {
   perceptual?: Record<string, unknown> | null;
 }
 
+export type MeasurementResult = Omit<Phase1Result, 'transcriptionDetail'>;
+
 export type RecommendationCategory =
   | "SYNTHESIS"
   | "DYNAMICS"
@@ -189,8 +191,102 @@ export interface BackendDiagnostics {
 
 export interface BackendAnalyzeResponse {
   requestId: string;
+  // COMPAT: non-canonical, do not use in primary flow.
+  analysisRunId?: string;
   phase1: Phase1Result;
   diagnostics?: BackendDiagnostics;
+}
+
+export type AnalysisStageStatus =
+  | 'queued'
+  | 'running'
+  | 'blocked'
+  | 'ready'
+  | 'completed'
+  | 'failed'
+  | 'interrupted'
+  | 'not_requested';
+
+export interface AnalysisStageError {
+  code: string;
+  message: string;
+  retryable?: boolean;
+  phase?: string;
+}
+
+export interface AnalysisRunArtifact {
+  artifactId: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  contentSha256: string;
+  path: string;
+}
+
+export interface AnalysisRunRequestedStages {
+  symbolicMode: string;
+  symbolicBackend: string;
+  interpretationMode: string;
+  interpretationProfile: string;
+  interpretationModel: string | null;
+}
+
+export interface MeasurementStageSnapshot {
+  status: AnalysisStageStatus;
+  authoritative: true;
+  result: MeasurementResult | null;
+  provenance: Record<string, unknown> | null;
+  diagnostics: Record<string, unknown> | null;
+  error: AnalysisStageError | null;
+}
+
+export interface SymbolicExtractionAttemptSummary {
+  attemptId: string;
+  backendId: string;
+  mode: string;
+  status: AnalysisStageStatus;
+}
+
+export interface InterpretationAttemptSummary {
+  attemptId: string;
+  profileId: string;
+  modelName: string | null;
+  status: AnalysisStageStatus;
+}
+
+export interface SymbolicExtractionStageSnapshot {
+  status: AnalysisStageStatus;
+  authoritative: false;
+  preferredAttemptId: string | null;
+  attemptsSummary: SymbolicExtractionAttemptSummary[];
+  result: TranscriptionDetail | null;
+  provenance: Record<string, unknown> | null;
+  diagnostics: Record<string, unknown> | null;
+  error: AnalysisStageError | null;
+}
+
+export interface InterpretationStageSnapshot {
+  status: AnalysisStageStatus;
+  authoritative: false;
+  preferredAttemptId: string | null;
+  attemptsSummary: InterpretationAttemptSummary[];
+  result: Phase2Result | null;
+  provenance: Record<string, unknown> | null;
+  diagnostics: Record<string, unknown> | null;
+  error: AnalysisStageError | null;
+}
+
+export interface AnalysisRunSnapshot {
+  runId: string;
+  requestedStages: AnalysisRunRequestedStages;
+  artifacts: {
+    sourceAudio: AnalysisRunArtifact;
+  };
+  stages: {
+    measurement: MeasurementStageSnapshot;
+    symbolicExtraction: SymbolicExtractionStageSnapshot;
+    interpretation: InterpretationStageSnapshot;
+  };
 }
 
 export interface BackendEstimateStage {
@@ -230,6 +326,7 @@ export type DiagnosticLogStatus = "running" | "success" | "error" | "skipped";
 export interface DiagnosticLogEntry {
   model: string;
   phase: string;
+  stageKey?: 'measurement' | 'symbolicExtraction' | 'interpretation' | 'system';
   promptLength: number;
   responseLength: number;
   durationMs: number;

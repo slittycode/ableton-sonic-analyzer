@@ -1,20 +1,20 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type {
-  BackendAnalyzeResponse,
+  AnalysisRunSnapshot,
   DiagnosticLogEntry,
   Phase1Result,
   Phase2Result,
 } from '../../src/types';
 
 const {
-  analyzePhase1WithBackendMock,
-  analyzePhase2WithBackendMock,
+  createAnalysisRunMock,
+  getAnalysisRunMock,
   isGeminiPhase2ConfigEnabledMock,
   validatePhase2ConsistencyMock,
 } = vi.hoisted(() => ({
-  analyzePhase1WithBackendMock: vi.fn(),
-  analyzePhase2WithBackendMock: vi.fn(),
+  createAnalysisRunMock: vi.fn(),
+  getAnalysisRunMock: vi.fn(),
   isGeminiPhase2ConfigEnabledMock: vi.fn(() => true),
   validatePhase2ConsistencyMock: vi.fn(),
 }));
@@ -34,14 +34,21 @@ vi.mock('../../src/services/backendPhase1Client', async () => {
 
   return {
     ...actual,
-    analyzePhase1WithBackend: analyzePhase1WithBackendMock,
     mapBackendError: (error: unknown) => (error instanceof Error ? error : new Error(String(error))),
   };
 });
 
-vi.mock('../../src/services/backendPhase2Client', () => ({
-  analyzePhase2WithBackend: analyzePhase2WithBackendMock,
-}));
+vi.mock('../../src/services/analysisRunsClient', async () => {
+  const actual = await vi.importActual<typeof import('../../src/services/analysisRunsClient')>(
+    '../../src/services/analysisRunsClient',
+  );
+
+  return {
+    ...actual,
+    createAnalysisRun: createAnalysisRunMock,
+    getAnalysisRun: getAnalysisRunMock,
+  };
+});
 
 vi.mock('../../src/services/phase2Validator', () => ({
   validatePhase2Consistency: validatePhase2ConsistencyMock,
@@ -122,35 +129,164 @@ const phase2Result: Phase2Result = {
 };
 
 afterEach(() => {
-  analyzePhase1WithBackendMock.mockReset();
-  analyzePhase2WithBackendMock.mockReset();
+  createAnalysisRunMock.mockReset();
+  getAnalysisRunMock.mockReset();
   isGeminiPhase2ConfigEnabledMock.mockReset();
   validatePhase2ConsistencyMock.mockReset();
   isGeminiPhase2ConfigEnabledMock.mockReturnValue(true);
 });
 
+function makeRunSnapshot(overrides?: Partial<AnalysisRunSnapshot>): AnalysisRunSnapshot {
+  return {
+    runId: 'run_123',
+    requestedStages: {
+      symbolicMode: 'stem_notes',
+      symbolicBackend: 'auto',
+      interpretationMode: 'async',
+      interpretationProfile: 'producer_summary',
+      interpretationModel: 'gemini-2.5-pro',
+    },
+    artifacts: {
+      sourceAudio: {
+        artifactId: 'artifact_123',
+        filename: 'track.mp3',
+        mimeType: 'audio/mpeg',
+        sizeBytes: 4096,
+        contentSha256: 'abc123',
+        path: '/tmp/track.mp3',
+      },
+    },
+    stages: {
+      measurement: {
+        status: 'completed',
+        authoritative: true,
+        result: phase1Result,
+        provenance: null,
+        diagnostics: {
+          backendDurationMs: 1420,
+          timings: {
+            totalMs: 1560,
+            analysisMs: 1420,
+            serverOverheadMs: 140,
+            flagsUsed: ['--transcribe'],
+            fileSizeBytes: 543210,
+            fileDurationSeconds: 184.2,
+            msPerSecondOfAudio: 7.71,
+          },
+        },
+        error: null,
+      },
+      symbolicExtraction: {
+        status: 'completed',
+        authoritative: false,
+        preferredAttemptId: 'sym_123',
+        attemptsSummary: [
+          {
+            attemptId: 'sym_123',
+            backendId: 'auto',
+            mode: 'stem_notes',
+            status: 'completed',
+          },
+        ],
+        result: phase1Result.transcriptionDetail ?? null,
+        provenance: null,
+        diagnostics: null,
+        error: null,
+      },
+      interpretation: {
+        status: 'completed',
+        authoritative: false,
+        preferredAttemptId: 'int_123',
+        attemptsSummary: [
+          {
+            attemptId: 'int_123',
+            profileId: 'producer_summary',
+            modelName: 'gemini-2.5-pro',
+            status: 'completed',
+          },
+        ],
+        result: phase2Result,
+        provenance: null,
+        diagnostics: null,
+        error: null,
+      },
+    },
+    ...overrides,
+  };
+}
+
 describe('analyzeAudio', () => {
-  it('attaches backend timings to the phase 1 success log', async () => {
-    const backendResult: BackendAnalyzeResponse = {
-      requestId: 'req_123',
-      phase1: phase1Result,
-      diagnostics: {
-        backendDurationMs: 1420,
-        timings: {
-          totalMs: 1560,
-          analysisMs: 1420,
-          serverOverheadMs: 140,
-          flagsUsed: ['--transcribe'],
-          fileSizeBytes: 543210,
-          fileDurationSeconds: 184.2,
-          msPerSecondOfAudio: 7.71,
+  it('creates and polls a canonical analysis run instead of calling legacy wrapper endpoints', async () => {
+    createAnalysisRunMock.mockResolvedValue(makeRunSnapshot({
+      stages: {
+        measurement: {
+          status: 'queued',
+          authoritative: true,
+          result: null,
+          provenance: null,
+          diagnostics: null,
+          error: null,
+        },
+        symbolicExtraction: {
+          status: 'blocked',
+          authoritative: false,
+          preferredAttemptId: null,
+          attemptsSummary: [],
+          result: null,
+          provenance: null,
+          diagnostics: null,
+          error: null,
+        },
+        interpretation: {
+          status: 'blocked',
+          authoritative: false,
+          preferredAttemptId: null,
+          attemptsSummary: [],
+          result: null,
+          provenance: null,
+          diagnostics: null,
+          error: null,
         },
       },
-    };
-    analyzePhase1WithBackendMock.mockResolvedValue(backendResult);
+    }));
+    getAnalysisRunMock
+      .mockResolvedValueOnce(makeRunSnapshot({
+        stages: {
+          measurement: {
+            status: 'running',
+            authoritative: true,
+            result: null,
+            provenance: null,
+            diagnostics: null,
+            error: null,
+          },
+          symbolicExtraction: {
+            status: 'blocked',
+            authoritative: false,
+            preferredAttemptId: null,
+            attemptsSummary: [],
+            result: null,
+            provenance: null,
+            diagnostics: null,
+            error: null,
+          },
+          interpretation: {
+            status: 'blocked',
+            authoritative: false,
+            preferredAttemptId: null,
+            attemptsSummary: [],
+            result: null,
+            provenance: null,
+            diagnostics: null,
+            error: null,
+          },
+        },
+      }))
+      .mockResolvedValueOnce(makeRunSnapshot());
 
     const file = new File(['audio-data'], 'track.mp3', { type: 'audio/mpeg' });
     let phase1Log: DiagnosticLogEntry | undefined;
+    const onRunUpdate = vi.fn();
 
     await analyzeAudio(
       file,
@@ -163,53 +299,149 @@ describe('analyzeAudio', () => {
       (error) => {
         throw error;
       },
-      { transcribe: true, separate: false, phase2Requested: false },
+      {
+        symbolicRequested: true,
+        interpretationRequested: true,
+        interpretationConfigEnabled: true,
+        onRunUpdate,
+        pollIntervalMs: 0,
+      },
     );
 
-    expect(phase1Log?.requestId).toBe('req_123');
-    expect(phase1Log?.timings).toEqual(backendResult.diagnostics?.timings);
+    expect(createAnalysisRunMock).toHaveBeenCalledWith(
+      file,
+      expect.objectContaining({
+        symbolicMode: 'stem_notes',
+        symbolicBackend: 'auto',
+        interpretationMode: 'async',
+        interpretationProfile: 'producer_summary',
+        interpretationModel: 'gemini-2.5-pro',
+      }),
+    );
+    expect(getAnalysisRunMock).toHaveBeenCalledWith('run_123', expect.any(Object));
+    expect(onRunUpdate).toHaveBeenCalled();
+    expect(phase1Log?.phase).toContain('Measurement');
   });
 
-  it('forwards an explicit timeout budget to the backend phase 1 client', async () => {
-    const backendResult: BackendAnalyzeResponse = {
-      requestId: 'req_456',
-      phase1: phase1Result,
-    };
-    analyzePhase1WithBackendMock.mockResolvedValue(backendResult);
-
+  it('passes projected phase 1 and phase 2 results to completion callbacks', async () => {
+    createAnalysisRunMock.mockResolvedValue(makeRunSnapshot());
+    getAnalysisRunMock.mockResolvedValue(makeRunSnapshot());
     const file = new File(['audio-data'], 'track.mp3', { type: 'audio/mpeg' });
+    const onPhase1Complete = vi.fn();
+    const onPhase2Complete = vi.fn();
 
     await analyzeAudio(
       file,
       'gemini-2.5-pro',
       null,
-      () => {},
-      () => {},
+      onPhase1Complete,
+      onPhase2Complete,
       (error) => {
         throw error;
       },
-      { transcribe: true, separate: true, timeoutMs: 456000, phase2Requested: false },
+      {
+        symbolicRequested: true,
+        interpretationRequested: true,
+        interpretationConfigEnabled: true,
+        pollIntervalMs: 0,
+      },
     );
 
-    expect(analyzePhase1WithBackendMock).toHaveBeenCalledWith(
-      file,
-      null,
+    expect(onPhase1Complete).toHaveBeenCalledWith(
       expect.objectContaining({
-        apiBaseUrl: 'http://127.0.0.1:8100',
-        transcribe: true,
-        separate: true,
-        timeoutMs: 456000,
+        bpm: 128,
+      }),
+      expect.objectContaining({
+        phase: expect.stringContaining('Measurement'),
+      }),
+    );
+    expect(onPhase2Complete).toHaveBeenCalledWith(
+      phase2Result,
+      expect.objectContaining({
+        phase: expect.stringContaining('Interpretation'),
       }),
     );
   });
 
-  it('skips phase 2 with a user-disabled reason when the UI toggle is off', async () => {
-    const backendResult: BackendAnalyzeResponse = {
-      requestId: 'req_user_off',
-      phase1: phase1Result,
-    };
-    analyzePhase1WithBackendMock.mockResolvedValue(backendResult);
-
+  it('skips interpretation cleanly when it is disabled in the UI', async () => {
+    createAnalysisRunMock.mockResolvedValue(makeRunSnapshot({
+      requestedStages: {
+        symbolicMode: 'stem_notes',
+        symbolicBackend: 'auto',
+        interpretationMode: 'off',
+        interpretationProfile: 'producer_summary',
+        interpretationModel: null,
+      },
+      stages: {
+        measurement: {
+          status: 'completed',
+          authoritative: true,
+          result: phase1Result,
+          provenance: null,
+          diagnostics: null,
+          error: null,
+        },
+        symbolicExtraction: {
+          status: 'completed',
+          authoritative: false,
+          preferredAttemptId: 'sym_123',
+          attemptsSummary: [],
+          result: phase1Result.transcriptionDetail ?? null,
+          provenance: null,
+          diagnostics: null,
+          error: null,
+        },
+        interpretation: {
+          status: 'not_requested',
+          authoritative: false,
+          preferredAttemptId: null,
+          attemptsSummary: [],
+          result: null,
+          provenance: null,
+          diagnostics: null,
+          error: null,
+        },
+      },
+    }));
+    getAnalysisRunMock.mockResolvedValue(makeRunSnapshot({
+      requestedStages: {
+        symbolicMode: 'stem_notes',
+        symbolicBackend: 'auto',
+        interpretationMode: 'off',
+        interpretationProfile: 'producer_summary',
+        interpretationModel: null,
+      },
+      stages: {
+        measurement: {
+          status: 'completed',
+          authoritative: true,
+          result: phase1Result,
+          provenance: null,
+          diagnostics: null,
+          error: null,
+        },
+        symbolicExtraction: {
+          status: 'completed',
+          authoritative: false,
+          preferredAttemptId: 'sym_123',
+          attemptsSummary: [],
+          result: phase1Result.transcriptionDetail ?? null,
+          provenance: null,
+          diagnostics: null,
+          error: null,
+        },
+        interpretation: {
+          status: 'not_requested',
+          authoritative: false,
+          preferredAttemptId: null,
+          attemptsSummary: [],
+          result: null,
+          provenance: null,
+          diagnostics: null,
+          error: null,
+        },
+      },
+    }));
     const file = new File(['audio-data'], 'track.mp3', { type: 'audio/mpeg' });
     const onPhase2Complete = vi.fn();
 
@@ -223,43 +455,64 @@ describe('analyzeAudio', () => {
         throw error;
       },
       {
-        phase2Requested: false,
-        phase2ConfigEnabled: true,
+        symbolicRequested: true,
+        interpretationRequested: false,
+        interpretationConfigEnabled: true,
+        pollIntervalMs: 0,
       },
     );
 
-    expect(analyzePhase2WithBackendMock).not.toHaveBeenCalled();
     expect(onPhase2Complete).toHaveBeenCalledWith(
       null,
       expect.objectContaining({
-        phase: 'Phase 2: Advisory skipped',
+        phase: expect.stringContaining('Skipped'),
         status: 'skipped',
-        message: 'Phase 2 advisory skipped because it was disabled in the UI.',
       }),
     );
   });
 
-  it('treats a phase 2 abort as user-cancelled and suppresses the late advisory result', async () => {
-    isGeminiPhase2ConfigEnabledMock.mockReturnValue(true);
-
-    const backendResult: BackendAnalyzeResponse = {
-      requestId: 'req_phase2_cancel',
-      phase1: phase1Result,
-    };
-    analyzePhase1WithBackendMock.mockResolvedValue(backendResult);
-
-    let resolvePhase2:
-      | ((value: { result: { trackCharacter: string }; log: DiagnosticLogEntry }) => void)
-      | null = null;
-    analyzePhase2WithBackendMock.mockImplementation(
+  it('treats stop-monitoring as user-cancelled and suppresses later results', async () => {
+    createAnalysisRunMock.mockResolvedValue(makeRunSnapshot({
+      stages: {
+        measurement: {
+          status: 'running',
+          authoritative: true,
+          result: null,
+          provenance: null,
+          diagnostics: null,
+          error: null,
+        },
+        symbolicExtraction: {
+          status: 'blocked',
+          authoritative: false,
+          preferredAttemptId: null,
+          attemptsSummary: [],
+          result: null,
+          provenance: null,
+          diagnostics: null,
+          error: null,
+        },
+        interpretation: {
+          status: 'blocked',
+          authoritative: false,
+          preferredAttemptId: null,
+          attemptsSummary: [],
+          result: null,
+          provenance: null,
+          diagnostics: null,
+          error: null,
+        },
+      },
+    }));
+    let resolvePoll: ((value: AnalysisRunSnapshot) => void) | null = null;
+    getAnalysisRunMock.mockImplementation(
       () =>
         new Promise((resolve) => {
-          resolvePhase2 = resolve;
+          resolvePoll = resolve;
         }),
     );
-
     const file = new File(['audio-data'], 'track.mp3', { type: 'audio/mpeg' });
-    const onPhase1Complete = vi.fn();
+    const onRunUpdate = vi.fn();
     const onPhase2Complete = vi.fn();
     const onError = vi.fn();
     const controller = new AbortController();
@@ -268,53 +521,34 @@ describe('analyzeAudio', () => {
       file,
       'gemini-2.5-pro',
       null,
-      onPhase1Complete,
+      () => {},
       onPhase2Complete,
       onError,
-      { signal: controller.signal, phase2Requested: true, phase2ConfigEnabled: true },
+      {
+        symbolicRequested: true,
+        interpretationRequested: true,
+        interpretationConfigEnabled: true,
+        signal: controller.signal,
+        onRunUpdate,
+        pollIntervalMs: 0,
+      },
     );
 
-    await vi.waitFor(() => expect(analyzePhase2WithBackendMock).toHaveBeenCalledTimes(1));
-
     controller.abort();
-    resolvePhase2?.({
-      result: { trackCharacter: 'late advisory result' },
-      log: {
-        model: 'gemini-2.5-pro',
-        phase: 'Phase 2: Advisory',
-        promptLength: 10,
-        responseLength: 20,
-        durationMs: 100,
-        audioMetadata: {
-          name: file.name,
-          size: file.size,
-          type: file.type,
-        },
-        timestamp: new Date().toISOString(),
-        source: 'backend',
-        status: 'success',
-        message: 'Phase 2 advisory complete.',
-      },
-    } as never);
+    resolvePoll?.(makeRunSnapshot());
 
     await promise;
 
-    expect(onPhase1Complete).toHaveBeenCalledTimes(1);
+    expect(onRunUpdate).not.toHaveBeenCalled();
     expect(onPhase2Complete).not.toHaveBeenCalled();
     expect(onError).toHaveBeenCalledTimes(1);
     expect(onError.mock.calls[0]?.[0]).toBeInstanceOf(BackendClientError);
     expect((onError.mock.calls[0]?.[0] as BackendClientError).code).toBe('USER_CANCELLED');
   });
 
-  it('attaches a validation report to the phase 2 log when advisory output is available', async () => {
-    isGeminiPhase2ConfigEnabledMock.mockReturnValue(true);
-
-    const backendResult: BackendAnalyzeResponse = {
-      requestId: 'req_phase2_validation',
-      phase1: phase1Result,
-    };
-    analyzePhase1WithBackendMock.mockResolvedValue(backendResult);
-
+  it('attaches a validation report to the interpretation log when output is available', async () => {
+    createAnalysisRunMock.mockResolvedValue(makeRunSnapshot());
+    getAnalysisRunMock.mockResolvedValue(makeRunSnapshot());
     const validationReport = {
       violations: [
         {
@@ -332,25 +566,6 @@ describe('analyzeAudio', () => {
       },
     };
     validatePhase2ConsistencyMock.mockReturnValue(validationReport);
-    analyzePhase2WithBackendMock.mockResolvedValue({
-      result: phase2Result,
-      log: {
-        model: 'gemini-2.5-pro',
-        phase: 'Phase 2: Advisory reconstruction',
-        promptLength: 10,
-        responseLength: 20,
-        durationMs: 100,
-        audioMetadata: {
-          name: 'track.mp3',
-          size: 10,
-          type: 'audio/mpeg',
-        },
-        timestamp: new Date().toISOString(),
-        source: 'backend',
-        status: 'success',
-        message: 'Phase 2 advisory complete.',
-      },
-    });
 
     const file = new File(['audio-data'], 'track.mp3', { type: 'audio/mpeg' });
     const onPhase2Complete = vi.fn();
@@ -364,48 +579,29 @@ describe('analyzeAudio', () => {
       (error) => {
         throw error;
       },
-      { phase2Requested: true, phase2ConfigEnabled: true },
+      {
+        symbolicRequested: true,
+        interpretationRequested: true,
+        interpretationConfigEnabled: true,
+        pollIntervalMs: 0,
+      },
     );
 
-    expect(validatePhase2ConsistencyMock).toHaveBeenCalledWith(backendResult.phase1, phase2Result);
+    expect(validatePhase2ConsistencyMock).toHaveBeenCalledWith(phase1Result, phase2Result);
     expect(onPhase2Complete).toHaveBeenCalledWith(
       phase2Result,
       expect.objectContaining({
-        requestId: 'req_phase2_validation',
+        requestId: 'run_123',
         validationReport,
       }),
     );
   });
 
   it('silently skips validation when the validator throws', async () => {
-    isGeminiPhase2ConfigEnabledMock.mockReturnValue(true);
-
-    const backendResult: BackendAnalyzeResponse = {
-      requestId: 'req_phase2_validation_throw',
-      phase1: phase1Result,
-    };
-    analyzePhase1WithBackendMock.mockResolvedValue(backendResult);
+    createAnalysisRunMock.mockResolvedValue(makeRunSnapshot());
+    getAnalysisRunMock.mockResolvedValue(makeRunSnapshot());
     validatePhase2ConsistencyMock.mockImplementation(() => {
       throw new Error('validator blew up');
-    });
-    analyzePhase2WithBackendMock.mockResolvedValue({
-      result: phase2Result,
-      log: {
-        model: 'gemini-2.5-pro',
-        phase: 'Phase 2: Advisory reconstruction',
-        promptLength: 10,
-        responseLength: 20,
-        durationMs: 100,
-        audioMetadata: {
-          name: 'track.mp3',
-          size: 10,
-          type: 'audio/mpeg',
-        },
-        timestamp: new Date().toISOString(),
-        source: 'backend',
-        status: 'success',
-        message: 'Phase 2 advisory complete.',
-      },
     });
 
     const file = new File(['audio-data'], 'track.mp3', { type: 'audio/mpeg' });
@@ -419,14 +615,19 @@ describe('analyzeAudio', () => {
       () => {},
       onPhase2Complete,
       onError,
-      { phase2Requested: true, phase2ConfigEnabled: true },
+      {
+        symbolicRequested: true,
+        interpretationRequested: true,
+        interpretationConfigEnabled: true,
+        pollIntervalMs: 0,
+      },
     );
 
-    expect(validatePhase2ConsistencyMock).toHaveBeenCalledWith(backendResult.phase1, phase2Result);
+    expect(validatePhase2ConsistencyMock).toHaveBeenCalledWith(phase1Result, phase2Result);
     expect(onError).not.toHaveBeenCalled();
     expect(onPhase2Complete).toHaveBeenCalledTimes(1);
     expect(onPhase2Complete.mock.calls[0]?.[0]).toBe(phase2Result);
     expect(onPhase2Complete.mock.calls[0]?.[1]?.validationReport).toBeUndefined();
-    expect(onPhase2Complete.mock.calls[0]?.[1]?.requestId).toBe('req_phase2_validation_throw');
+    expect(onPhase2Complete.mock.calls[0]?.[1]?.requestId).toBe('run_123');
   });
 });

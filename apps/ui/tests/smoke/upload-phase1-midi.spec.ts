@@ -10,6 +10,12 @@ function hasMultipartBoolean(body: string, fieldName: string, expected: boolean)
   return pattern.test(normalizedBody);
 }
 
+function hasMultipartTextField(body: string, fieldName: string, expected: string): boolean {
+  const normalizedBody = body.replace(/\r?\n/g, '\n');
+  const pattern = new RegExp(`name="${fieldName}"\\n\\n${expected}\\n`);
+  return pattern.test(normalizedBody);
+}
+
 async function stubGeminiPhase2(page: import('@playwright/test').Page) {
   await page.route('**://generativelanguage.googleapis.com/**', async (route) => {
     await route.fulfill({
@@ -131,92 +137,217 @@ test('phase1 dual-source session musician panel toggles between polyphonic and m
     });
   });
 
-  await page.route('**/api/analyze', async (route) => {
+  await page.route('**/api/analysis-runs', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.fallback();
+      return;
+    }
     const body = route.request().postData() ?? '';
-    expect(hasMultipartBoolean(body, 'transcribe', true)).toBe(true);
-    expect(hasMultipartBoolean(body, 'separate', true)).toBe(true);
+    expect(hasMultipartTextField(body, 'symbolic_mode', 'stem_notes')).toBe(true);
+    expect(hasMultipartTextField(body, 'symbolic_backend', 'auto')).toBe(true);
 
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        requestId: 'req_smoke_midi_001',
-        phase1: {
-          bpm: 126,
-          bpmConfidence: 0.93,
-          key: 'F minor',
-          keyConfidence: 0.88,
-          timeSignature: '4/4',
-          durationSeconds: 210.6,
-          lufsIntegrated: -7.9,
-          truePeak: -0.2,
-          stereoWidth: 0.69,
-          stereoCorrelation: 0.84,
-          spectralBalance: {
-            subBass: -0.7,
-            lowBass: 1.2,
-            mids: -0.3,
-            upperMids: 0.4,
-            highs: 1.0,
-            brilliance: 0.8,
-          },
-          transcriptionDetail: {
-            transcriptionMethod: 'basic-pitch',
-            noteCount: 2,
-            averageConfidence: 0.83,
-            stemSeparationUsed: true,
-            fullMixFallback: false,
-            stemsTranscribed: ['bass', 'other'],
-            dominantPitches: [
-              { pitchMidi: 48, pitchName: 'C3', count: 4 },
-              { pitchMidi: 55, pitchName: 'G3', count: 3 },
-            ],
-            pitchRange: {
-              minMidi: 48,
-              maxMidi: 67,
-              minName: 'C3',
-              maxName: 'G4',
-            },
-            notes: [
-              {
-                pitchMidi: 48,
-                pitchName: 'C3',
-                onsetSeconds: 0.1,
-                durationSeconds: 0.4,
-                confidence: 0.92,
-                stemSource: 'bass',
-              },
-              {
-                pitchMidi: 67,
-                pitchName: 'G4',
-                onsetSeconds: 0.5,
-                durationSeconds: 0.2,
-                confidence: 0.74,
-                stemSource: 'other',
-              },
-            ],
-          },
-          melodyDetail: {
-            noteCount: 3,
-            notes: [
-              { midi: 60, onset: 0.2, duration: 0.3 },
-              { midi: 64, onset: 0.8, duration: 0.2 },
-              { midi: 67, onset: 1.2, duration: 0.4 },
-            ],
-            dominantNotes: [60, 64, 67],
-            pitchRange: { min: 60, max: 67 },
-            pitchConfidence: 0.72,
-            midiFile: null,
-            sourceSeparated: true,
-            vibratoPresent: false,
-            vibratoExtent: 0,
-            vibratoRate: 0,
-            vibratoConfidence: 0.1,
+        runId: 'run_smoke_midi_001',
+        requestedStages: {
+          symbolicMode: 'stem_notes',
+          symbolicBackend: 'auto',
+          interpretationMode: 'async',
+          interpretationProfile: 'producer_summary',
+          interpretationModel: 'gemini-3.1-pro-preview',
+        },
+        artifacts: {
+          sourceAudio: {
+            artifactId: 'artifact_smoke_midi_001',
+            filename: 'silence.wav',
+            mimeType: 'audio/wav',
+            sizeBytes: 2048,
+            contentSha256: 'abc123',
+            path: '/tmp/silence.wav',
           },
         },
-        diagnostics: {
-          backendDurationMs: 980,
-          engineVersion: 'smoke-midi',
+        stages: {
+          measurement: {
+            status: 'queued',
+            authoritative: true,
+            result: null,
+            provenance: null,
+            diagnostics: null,
+            error: null,
+          },
+          symbolicExtraction: {
+            status: 'blocked',
+            authoritative: false,
+            preferredAttemptId: null,
+            attemptsSummary: [],
+            result: null,
+            provenance: null,
+            diagnostics: null,
+            error: null,
+          },
+          interpretation: {
+            status: 'blocked',
+            authoritative: false,
+            preferredAttemptId: null,
+            attemptsSummary: [],
+            result: null,
+            provenance: null,
+            diagnostics: null,
+            error: null,
+          },
+        },
+      }),
+    });
+  });
+
+  await page.route('**/api/analysis-runs/run_smoke_midi_001', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        runId: 'run_smoke_midi_001',
+        requestedStages: {
+          symbolicMode: 'stem_notes',
+          symbolicBackend: 'auto',
+          interpretationMode: 'async',
+          interpretationProfile: 'producer_summary',
+          interpretationModel: 'gemini-3.1-pro-preview',
+        },
+        artifacts: {
+          sourceAudio: {
+            artifactId: 'artifact_smoke_midi_001',
+            filename: 'silence.wav',
+            mimeType: 'audio/wav',
+            sizeBytes: 2048,
+            contentSha256: 'abc123',
+            path: '/tmp/silence.wav',
+          },
+        },
+        stages: {
+          measurement: {
+            status: 'completed',
+            authoritative: true,
+            result: {
+              bpm: 126,
+              bpmConfidence: 0.93,
+              key: 'F minor',
+              keyConfidence: 0.88,
+              timeSignature: '4/4',
+              durationSeconds: 210.6,
+              lufsIntegrated: -7.9,
+              truePeak: -0.2,
+              stereoWidth: 0.69,
+              stereoCorrelation: 0.84,
+              spectralBalance: {
+                subBass: -0.7,
+                lowBass: 1.2,
+                mids: -0.3,
+                upperMids: 0.4,
+                highs: 1.0,
+                brilliance: 0.8,
+              },
+              melodyDetail: {
+                noteCount: 3,
+                notes: [
+                  { midi: 60, onset: 0.2, duration: 0.3 },
+                  { midi: 64, onset: 0.8, duration: 0.2 },
+                  { midi: 67, onset: 1.2, duration: 0.4 },
+                ],
+                dominantNotes: [60, 64, 67],
+                pitchRange: { min: 60, max: 67 },
+                pitchConfidence: 0.72,
+                midiFile: null,
+                sourceSeparated: true,
+                vibratoPresent: false,
+                vibratoExtent: 0,
+                vibratoRate: 0,
+                vibratoConfidence: 0.1,
+              },
+            },
+            provenance: null,
+            diagnostics: { timings: { totalMs: 980, analysisMs: 900, serverOverheadMs: 80, flagsUsed: ['--transcribe', '--separate'], fileSizeBytes: 2048, fileDurationSeconds: 10, msPerSecondOfAudio: 98 } },
+            error: null,
+          },
+          symbolicExtraction: {
+            status: 'completed',
+            authoritative: false,
+            preferredAttemptId: 'sym_smoke_midi_001',
+            attemptsSummary: [
+              { attemptId: 'sym_smoke_midi_001', backendId: 'auto', mode: 'stem_notes', status: 'completed' },
+            ],
+            result: {
+              transcriptionMethod: 'basic-pitch',
+              noteCount: 2,
+              averageConfidence: 0.83,
+              stemSeparationUsed: true,
+              fullMixFallback: false,
+              stemsTranscribed: ['bass', 'other'],
+              dominantPitches: [
+                { pitchMidi: 48, pitchName: 'C3', count: 4 },
+                { pitchMidi: 55, pitchName: 'G3', count: 3 },
+              ],
+              pitchRange: {
+                minMidi: 48,
+                maxMidi: 67,
+                minName: 'C3',
+                maxName: 'G4',
+              },
+              notes: [
+                {
+                  pitchMidi: 48,
+                  pitchName: 'C3',
+                  onsetSeconds: 0.1,
+                  durationSeconds: 0.4,
+                  confidence: 0.92,
+                  stemSource: 'bass',
+                },
+                {
+                  pitchMidi: 67,
+                  pitchName: 'G4',
+                  onsetSeconds: 0.5,
+                  durationSeconds: 0.2,
+                  confidence: 0.74,
+                  stemSource: 'other',
+                },
+              ],
+            },
+            provenance: null,
+            diagnostics: null,
+            error: null,
+          },
+          interpretation: {
+            status: 'completed',
+            authoritative: false,
+            preferredAttemptId: 'int_smoke_midi_001',
+            attemptsSummary: [
+              { attemptId: 'int_smoke_midi_001', profileId: 'producer_summary', modelName: 'gemini-3.1-pro-preview', status: 'completed' },
+            ],
+            result: {
+              trackCharacter: 'Deterministic smoke response.',
+              detectedCharacteristics: [],
+              arrangementOverview: { summary: 'Smoke summary.', segments: [] },
+              sonicElements: {
+                kick: 'Kick.',
+                bass: 'Bass.',
+                melodicArp: 'Arp.',
+                grooveAndTiming: 'Groove.',
+                effectsAndTexture: 'FX.',
+              },
+              mixAndMasterChain: [],
+              secretSauce: {
+                title: 'Smoke Sauce',
+                explanation: 'Smoke explanation.',
+                implementationSteps: ['Step 1'],
+              },
+              confidenceNotes: [],
+              abletonRecommendations: [],
+            },
+            provenance: null,
+            diagnostics: null,
+            error: null,
+          },
         },
       }),
     });
@@ -225,8 +356,7 @@ test('phase1 dual-source session musician panel toggles between polyphonic and m
   await page.goto('/', { waitUntil: 'networkidle' });
   const fixturePath = path.resolve(testDir, './fixtures/silence.wav');
   await page.setInputFiles('#audio-upload', fixturePath);
-  await expect(page.getByLabel('MIDI TRANSCRIPTION')).toBeChecked();
-  await page.getByLabel('STEM SEPARATION').check();
+  await expect(page.getByLabel('SYMBOLIC EXTRACTION')).toBeChecked();
   await page.getByRole('button', { name: /Initiate Analysis/i }).click();
 
   const panel = page.locator('section').filter({ hasText: /SESSION MUSICIAN/i }).first();
@@ -317,35 +447,159 @@ test('missing melodyDetail shows MIDI unavailable state', async ({ page }) => {
     });
   });
 
-  await page.route('**/api/analyze', async (route) => {
+  await page.route('**/api/analysis-runs', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.fallback();
+      return;
+    }
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        requestId: 'req_smoke_midi_awaiting_001',
-        phase1: {
-          bpm: 126,
-          bpmConfidence: 0.93,
-          key: 'F minor',
-          keyConfidence: 0.88,
-          timeSignature: '4/4',
-          durationSeconds: 210.6,
-          lufsIntegrated: -7.9,
-          truePeak: -0.2,
-          stereoWidth: 0.69,
-          stereoCorrelation: 0.84,
-          spectralBalance: {
-            subBass: -0.7,
-            lowBass: 1.2,
-            mids: -0.3,
-            upperMids: 0.4,
-            highs: 1.0,
-            brilliance: 0.8,
+        runId: 'run_smoke_midi_awaiting_001',
+        requestedStages: {
+          symbolicMode: 'off',
+          symbolicBackend: 'auto',
+          interpretationMode: 'async',
+          interpretationProfile: 'producer_summary',
+          interpretationModel: 'gemini-3.1-pro-preview',
+        },
+        artifacts: {
+          sourceAudio: {
+            artifactId: 'artifact_smoke_midi_awaiting_001',
+            filename: 'silence.wav',
+            mimeType: 'audio/wav',
+            sizeBytes: 2048,
+            contentSha256: 'abc123',
+            path: '/tmp/silence.wav',
           },
         },
-        diagnostics: {
-          backendDurationMs: 980,
-          engineVersion: 'smoke-midi-awaiting',
+        stages: {
+          measurement: {
+            status: 'queued',
+            authoritative: true,
+            result: null,
+            provenance: null,
+            diagnostics: null,
+            error: null,
+          },
+          symbolicExtraction: {
+            status: 'not_requested',
+            authoritative: false,
+            preferredAttemptId: null,
+            attemptsSummary: [],
+            result: null,
+            provenance: null,
+            diagnostics: null,
+            error: null,
+          },
+          interpretation: {
+            status: 'blocked',
+            authoritative: false,
+            preferredAttemptId: null,
+            attemptsSummary: [],
+            result: null,
+            provenance: null,
+            diagnostics: null,
+            error: null,
+          },
+        },
+      }),
+    });
+  });
+
+  await page.route('**/api/analysis-runs/run_smoke_midi_awaiting_001', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        runId: 'run_smoke_midi_awaiting_001',
+        requestedStages: {
+          symbolicMode: 'off',
+          symbolicBackend: 'auto',
+          interpretationMode: 'async',
+          interpretationProfile: 'producer_summary',
+          interpretationModel: 'gemini-3.1-pro-preview',
+        },
+        artifacts: {
+          sourceAudio: {
+            artifactId: 'artifact_smoke_midi_awaiting_001',
+            filename: 'silence.wav',
+            mimeType: 'audio/wav',
+            sizeBytes: 2048,
+            contentSha256: 'abc123',
+            path: '/tmp/silence.wav',
+          },
+        },
+        stages: {
+          measurement: {
+            status: 'completed',
+            authoritative: true,
+            result: {
+              bpm: 126,
+              bpmConfidence: 0.93,
+              key: 'F minor',
+              keyConfidence: 0.88,
+              timeSignature: '4/4',
+              durationSeconds: 210.6,
+              lufsIntegrated: -7.9,
+              truePeak: -0.2,
+              stereoWidth: 0.69,
+              stereoCorrelation: 0.84,
+              spectralBalance: {
+                subBass: -0.7,
+                lowBass: 1.2,
+                mids: -0.3,
+                upperMids: 0.4,
+                highs: 1.0,
+                brilliance: 0.8,
+              },
+            },
+            provenance: null,
+            diagnostics: { timings: { totalMs: 980, analysisMs: 900, serverOverheadMs: 80, flagsUsed: [], fileSizeBytes: 2048, fileDurationSeconds: 10, msPerSecondOfAudio: 98 } },
+            error: null,
+          },
+          symbolicExtraction: {
+            status: 'not_requested',
+            authoritative: false,
+            preferredAttemptId: null,
+            attemptsSummary: [],
+            result: null,
+            provenance: null,
+            diagnostics: null,
+            error: null,
+          },
+          interpretation: {
+            status: 'completed',
+            authoritative: false,
+            preferredAttemptId: 'int_smoke_midi_awaiting_001',
+            attemptsSummary: [
+              { attemptId: 'int_smoke_midi_awaiting_001', profileId: 'producer_summary', modelName: 'gemini-3.1-pro-preview', status: 'completed' },
+            ],
+            result: {
+              trackCharacter: 'Deterministic smoke response.',
+              detectedCharacteristics: [],
+              arrangementOverview: { summary: 'Smoke summary.', segments: [] },
+              sonicElements: {
+                kick: 'Kick.',
+                bass: 'Bass.',
+                melodicArp: 'Arp.',
+                grooveAndTiming: 'Groove.',
+                effectsAndTexture: 'FX.',
+              },
+              mixAndMasterChain: [],
+              secretSauce: {
+                title: 'Smoke Sauce',
+                explanation: 'Smoke explanation.',
+                implementationSteps: ['Step 1'],
+              },
+              confidenceNotes: [],
+              abletonRecommendations: [],
+            },
+            provenance: null,
+            diagnostics: null,
+            error: null,
+          },
         },
       }),
     });

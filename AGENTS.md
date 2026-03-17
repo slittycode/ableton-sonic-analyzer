@@ -15,6 +15,7 @@
 - Preserve imported app histories and app-local changelogs.
 - Treat the monorepo root as the entrypoint for development, verification, and release prep.
 - Start here for stack-wide work, then switch to the app-local AGENTS file for app-specific editing and testing guidance.
+- Before proposing structural changes to the architecture, dependency stack, or transcription pipeline, read `docs/ARCHITECTURE_STRATEGY.md`. It records why the current design is shaped the way it is, the dependency health verdicts, and the planned experiment sequence. It is a living document — update it when experiments produce results.
 
 ## Main Commands
 
