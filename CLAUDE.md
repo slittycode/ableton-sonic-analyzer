@@ -86,10 +86,6 @@ Single-page React 19 app with no router. View states are managed via React condi
 
 `Phase1Result` in `src/types.ts` and the `phase1` field in `BackendAnalyzeResponse` are the interface between apps. **Do not rename fields on either side without updating both.** Error envelopes always include `requestId`, `error.code`, `error.message`, `error.retryable`, and `diagnostics`. Read `apps/backend/ARCHITECTURE.md` before changing the HTTP shape.
 
-### `gemini-for-claude-mcp/`
-
-Standalone TypeScript MCP server package at the repo root — **not part of the main app**. Provides Gemini tool access to Claude Code sessions. Has its own `package.json`, tests, and build. Ignore it when working on the audio analysis application.
-
 ## Environment Variables
 
 ```bash
