@@ -53,6 +53,10 @@ pydantic_core==2.41.5
 python-multipart==0.0.22
 requests==2.32.5
 resampy==0.4.2
+# setuptools<71 required: resampy 0.4.2 (pinned by basic-pitch 0.4.0) imports
+# pkg_resources, which setuptools>=71 no longer ships as a standalone module.
+# Remove this pin when basic-pitch is replaced with a maintained backend (Stage 3).
+setuptools<71
 retrying==1.4.2
 scikit-learn==1.8.0
 scipy==1.17.1

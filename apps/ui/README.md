@@ -97,12 +97,12 @@ Supported shell-based overrides:
 
 ```bash
 export VITE_GEMINI_API_KEY="your_real_key_here"
-cd /Users/christiansmith/code/projects/ableton-sonic-analyzer
+cd /Users/christiansmith/code/projects/asa
 ./scripts/dev.sh
 ```
 
 ```bash
-cd /Users/christiansmith/code/projects/ableton-sonic-analyzer
+cd /Users/christiansmith/code/projects/asa
 VITE_GEMINI_API_KEY="your_real_key_here" ./scripts/dev.sh
 ```
 

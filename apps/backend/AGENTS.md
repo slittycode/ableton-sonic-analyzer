@@ -2,7 +2,7 @@
 
 ## Scope
 
-- This file applies to `apps/backend` inside the `ableton-sonic-analyzer` monorepo.
+- This file applies to `apps/backend` inside the `asa` monorepo.
 - The repo is a local Python audio-analysis service with two entry points:
   - `analyze.py`: raw CLI analyzer
   - `server.py`: FastAPI wrapper around the CLI
@@ -35,6 +35,7 @@ python3.11 -m venv venv
 
 - Main runtime dependencies are pinned in `requirements.txt`.
 - Python `3.12+` is not a supported full-feature local bootstrap target on macOS arm64 because `basic-pitch` on Darwin pulls a `tensorflow-macos` / NumPy combination that does not resolve cleanly.
+- `requirements.txt` pins `setuptools<71`. This is required because `resampy 0.4.2` (pinned by `basic-pitch 0.4.0`) imports `pkg_resources`, which `setuptools>=71` no longer ships as a standalone module. This pin will be removed when the transcription backend is replaced (Stage 3 migration).
 - If audio/DSP imports fail, check local native dependencies before editing code.
 
 ## Main Commands

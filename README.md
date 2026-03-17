@@ -1,4 +1,4 @@
-# ableton-sonic-analyzer
+# asa
 
 Local/dev monorepo for the Sonic Analyzer project.
 

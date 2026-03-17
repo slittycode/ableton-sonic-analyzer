@@ -2,7 +2,7 @@
 
 ## Scope
 
-- This file applies to `apps/ui` inside the `ableton-sonic-analyzer` monorepo.
+- This file applies to `apps/ui` inside the `asa` monorepo.
 - Stack: React 19, TypeScript, Vite 6, Tailwind CSS v4, Vitest, Playwright.
 - The app talks to the local `sonic-analyzer` backend.
 - No repo-local `.cursorrules`, `.cursor/rules/`, or `.github/copilot-instructions.md` exist here as of 2026-03-10.

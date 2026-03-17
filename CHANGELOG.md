@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to `ableton-sonic-analyzer` are documented here.
+All notable changes to `asa` are documented here.
 
 ## v2.1.0
 

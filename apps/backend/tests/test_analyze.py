@@ -565,5 +565,42 @@ class AnalyzeTranscriptionHelperTests(unittest.TestCase):
         return result, stderr_buffer.getvalue()
 
 
+class TranscriptionBackendAbstractionTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.repo_root = Path(__file__).resolve().parent.parent
+        cls.analyze_path = cls.repo_root / "analyze.py"
+        spec = importlib.util.spec_from_file_location("analyze_module_abstraction_test", cls.analyze_path)
+        if spec is None or spec.loader is None:
+            raise AssertionError("Could not load analyze.py for abstraction tests.")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        cls.analyze = module
+
+    def test_basic_pitch_backend_name(self) -> None:
+        backend = self.analyze.BasicPitchBackend()
+        self.assertEqual(backend.name, "basic-pitch")
+
+    def test_basic_pitch_backend_satisfies_protocol(self) -> None:
+        backend = self.analyze.BasicPitchBackend()
+        self.assertIsInstance(backend, self.analyze.TranscriptionBackend)
+
+    def test_analyze_transcription_returns_transcription_detail_key(self) -> None:
+        # basic-pitch import will fail in test env — the key must still be present
+        result = self.analyze.analyze_transcription("nonexistent.wav")
+        self.assertIn("transcriptionDetail", result)
+
+    def test_analyze_transcription_accepts_stub_backend(self) -> None:
+        class _StubBackend:
+            name = "stub"
+
+            def transcribe(self, audio_path, stem_paths=None):
+                return {"transcriptionDetail": None}
+
+        stub = _StubBackend()
+        result = self.analyze.analyze_transcription("nonexistent.wav", backend=stub)
+        self.assertEqual(result, {"transcriptionDetail": None})
+
+
 if __name__ == "__main__":
     unittest.main()

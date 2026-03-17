@@ -2624,6 +2624,31 @@ FULL_MIX_TRANSCRIPTION_NOTE_CAP = 200
 TRANSCRIPTION_MIN_ACTIVE_WINDOW_SECONDS = 0.1
 TRANSCRIPTION_NEAR_DUPLICATE_SECONDS = 0.03
 
+from typing import Protocol, runtime_checkable
+
+
+@runtime_checkable
+class TranscriptionBackend(Protocol):
+    """Interface for pluggable audio-to-MIDI transcription backends.
+
+    Stage 3 migration: implement this Protocol to swap basic-pitch for
+    a maintained alternative without changing analyze_transcription() callers.
+    """
+
+    name: str  # written to transcriptionDetail.transcriptionMethod in output
+
+    def transcribe(
+        self,
+        audio_path: str,
+        stem_paths: dict | None = None,
+    ) -> dict:
+        """Return a transcriptionDetail dict.
+
+        Return shape must match the existing transcriptionDetail contract
+        documented in JSON_SCHEMA.md. On failure, return {"transcriptionDetail": None}.
+        """
+        ...
+
 
 def _transcription_source_paths(
     audio_path: str, stem_paths: dict | None = None
@@ -2974,130 +2999,159 @@ def _deduplicate_transcription_notes(notes: list[dict]) -> list[dict]:
     return sorted(cleaned_notes, key=lambda note: note["onsetSeconds"])
 
 
-def analyze_transcription_basic_pitch(
-    audio_path: str, stem_paths: dict | None = None
-) -> dict:
-    try:
-        from basic_pitch.inference import predict
-        from basic_pitch import ICASSP_2022_MODEL_PATH
-    except Exception as e:
-        print(f"[warn] Basic Pitch import failed: {e}", file=sys.stderr)
-        return {"transcriptionDetail": None}
+class BasicPitchBackend:
+    """Transcription backend wrapping the basic-pitch library."""
 
-    try:
-        transcription_sources = _transcription_source_paths(audio_path, stem_paths)
-        full_mix_fallback = (
-            len(transcription_sources) == 1
-            and transcription_sources[0][0] == "full_mix"
-        )
-        if full_mix_fallback:
-            print(
-                "[warn] transcriptionDetail: running on full mix — quality may be low for dense material",
-                file=sys.stderr,
+    name = "basic-pitch"
+
+    def transcribe(
+        self,
+        audio_path: str,
+        stem_paths: dict | None = None,
+    ) -> dict:
+        try:
+            from basic_pitch.inference import predict
+            from basic_pitch import ICASSP_2022_MODEL_PATH
+        except Exception as e:
+            print(f"[warn] Basic Pitch import failed: {e}", file=sys.stderr)
+            return {"transcriptionDetail": None}
+
+        try:
+            transcription_sources = _transcription_source_paths(audio_path, stem_paths)
+            full_mix_fallback = (
+                len(transcription_sources) == 1
+                and transcription_sources[0][0] == "full_mix"
             )
-        notes = []
-        stems_transcribed = [
-            stem_source for stem_source, _source_path in transcription_sources
-        ]
-
-        for stem_source, source_path in transcription_sources:
-            source_notes, source_midi_values, source_confidence_values = (
-                _extract_basic_pitch_notes(
-                    source_path,
-                    stem_source,
-                    predict,
-                    ICASSP_2022_MODEL_PATH,
+            if full_mix_fallback:
+                print(
+                    "[warn] transcriptionDetail: running on full mix — quality may be low for dense material",
+                    file=sys.stderr,
                 )
-            )
-            notes.extend(source_notes)
+            notes = []
+            stems_transcribed = [
+                stem_source for stem_source, _source_path in transcription_sources
+            ]
 
-        notes.sort(key=lambda note: note["onsetSeconds"])
-        notes = _deduplicate_transcription_notes(notes)
-        stem_separation_used = any(
-            stem_source in ("bass", "other") for stem_source in stems_transcribed
-        )
-        note_cap = (
-            FULL_MIX_TRANSCRIPTION_NOTE_CAP
-            if full_mix_fallback
-            else TRANSCRIPTION_NOTE_CAP
-        )
-        if len(notes) > note_cap:
-            original_count = len(notes)
-            ranked_notes = sorted(
-                notes,
-                key=lambda note: (
-                    -float(note.get("confidence", 0.0)),
-                    -float(note.get("durationSeconds", 0.0)),
-                    float(note.get("onsetSeconds", 0.0)),
-                ),
+            for stem_source, source_path in transcription_sources:
+                source_notes, source_midi_values, source_confidence_values = (
+                    _extract_basic_pitch_notes(
+                        source_path,
+                        stem_source,
+                        predict,
+                        ICASSP_2022_MODEL_PATH,
+                    )
+                )
+                notes.extend(source_notes)
+
+            notes.sort(key=lambda note: note["onsetSeconds"])
+            notes = _deduplicate_transcription_notes(notes)
+            stem_separation_used = any(
+                stem_source in ("bass", "other") for stem_source in stems_transcribed
             )
-            notes = sorted(
-                ranked_notes[:note_cap],
-                key=lambda note: note["onsetSeconds"],
+            note_cap = (
+                FULL_MIX_TRANSCRIPTION_NOTE_CAP
+                if full_mix_fallback
+                else TRANSCRIPTION_NOTE_CAP
             )
-            print(
-                f"[warn] transcriptionDetail: truncated to {note_cap} notes (was {original_count})",
-                file=sys.stderr,
+            if len(notes) > note_cap:
+                original_count = len(notes)
+                ranked_notes = sorted(
+                    notes,
+                    key=lambda note: (
+                        -float(note.get("confidence", 0.0)),
+                        -float(note.get("durationSeconds", 0.0)),
+                        float(note.get("onsetSeconds", 0.0)),
+                    ),
+                )
+                notes = sorted(
+                    ranked_notes[:note_cap],
+                    key=lambda note: note["onsetSeconds"],
+                )
+                print(
+                    f"[warn] transcriptionDetail: truncated to {note_cap} notes (was {original_count})",
+                    file=sys.stderr,
+                )
+
+            if len(notes) == 0:
+                return {
+                    "transcriptionDetail": {
+                        "transcriptionMethod": self.name,
+                        "noteCount": 0,
+                        "averageConfidence": 0.0,
+                        "dominantPitches": [],
+                        "pitchRange": {
+                            "minMidi": None,
+                            "maxMidi": None,
+                            "minName": None,
+                            "maxName": None,
+                        },
+                        "stemSeparationUsed": stem_separation_used,
+                        "fullMixFallback": full_mix_fallback,
+                        "stemsTranscribed": stems_transcribed,
+                        "notes": [],
+                    }
+                }
+
+            midi_values = [int(note["pitchMidi"]) for note in notes]
+            confidence_values = [float(note["confidence"]) for note in notes]
+            dominant_pitches = [
+                {
+                    "pitchMidi": int(pitch_midi),
+                    "pitchName": midi_to_note_name(int(pitch_midi)),
+                    "count": int(count),
+                }
+                for pitch_midi, count in Counter(midi_values).most_common(5)
+            ]
+
+            min_midi = int(min(midi_values))
+            max_midi = int(max(midi_values))
+            average_confidence = round(
+                float(np.mean(np.asarray(confidence_values, dtype=np.float64))), 4
             )
 
-        if len(notes) == 0:
             return {
                 "transcriptionDetail": {
-                    "transcriptionMethod": "basic-pitch",
-                    "noteCount": 0,
-                    "averageConfidence": 0.0,
-                    "dominantPitches": [],
+                    "transcriptionMethod": self.name,
+                    "noteCount": int(len(notes)),
+                    "averageConfidence": average_confidence,
+                    "dominantPitches": dominant_pitches,
                     "pitchRange": {
-                        "minMidi": None,
-                        "maxMidi": None,
-                        "minName": None,
-                        "maxName": None,
+                        "minMidi": min_midi,
+                        "maxMidi": max_midi,
+                        "minName": midi_to_note_name(min_midi),
+                        "maxName": midi_to_note_name(max_midi),
                     },
                     "stemSeparationUsed": stem_separation_used,
                     "fullMixFallback": full_mix_fallback,
                     "stemsTranscribed": stems_transcribed,
-                    "notes": [],
+                    "notes": notes,
                 }
             }
+        except Exception as e:
+            print(f"[warn] Basic Pitch transcription failed: {e}", file=sys.stderr)
+            return {"transcriptionDetail": None}
 
-        midi_values = [int(note["pitchMidi"]) for note in notes]
-        confidence_values = [float(note["confidence"]) for note in notes]
-        dominant_pitches = [
-            {
-                "pitchMidi": int(pitch_midi),
-                "pitchName": midi_to_note_name(int(pitch_midi)),
-                "count": int(count),
-            }
-            for pitch_midi, count in Counter(midi_values).most_common(5)
-        ]
 
-        min_midi = int(min(midi_values))
-        max_midi = int(max(midi_values))
-        average_confidence = round(
-            float(np.mean(np.asarray(confidence_values, dtype=np.float64))), 4
-        )
+def analyze_transcription(
+    audio_path: str,
+    stem_paths: dict | None = None,
+    backend: TranscriptionBackend | None = None,
+) -> dict:
+    """Run transcription via the specified backend, defaulting to BasicPitchBackend.
 
-        return {
-            "transcriptionDetail": {
-                "transcriptionMethod": "basic-pitch",
-                "noteCount": int(len(notes)),
-                "averageConfidence": average_confidence,
-                "dominantPitches": dominant_pitches,
-                "pitchRange": {
-                    "minMidi": min_midi,
-                    "maxMidi": max_midi,
-                    "minName": midi_to_note_name(min_midi),
-                    "maxName": midi_to_note_name(max_midi),
-                },
-                "stemSeparationUsed": stem_separation_used,
-                "fullMixFallback": full_mix_fallback,
-                "stemsTranscribed": stems_transcribed,
-                "notes": notes,
-            }
-        }
-    except Exception as e:
-        print(f"[warn] Basic Pitch transcription failed: {e}", file=sys.stderr)
-        return {"transcriptionDetail": None}
+    Pass a custom backend implementing TranscriptionBackend to use an alternative
+    transcription engine (Stage 3 migration point).
+    """
+    if backend is None:
+        backend = BasicPitchBackend()
+    return backend.transcribe(audio_path, stem_paths)
+
+
+def analyze_transcription_basic_pitch(
+    audio_path: str, stem_paths: dict | None = None
+) -> dict:
+    """Deprecated: use analyze_transcription() instead."""
+    return analyze_transcription(audio_path, stem_paths=stem_paths)
 
 
 # ── Main ───────────────────────────────────────────────────────────────────
@@ -3316,7 +3370,7 @@ def main():
             if len(transcription_stem_paths) == 0:
                 transcription_stem_paths = None
         result.update(
-            analyze_transcription_basic_pitch(
+            analyze_transcription(
                 audio_path, stem_paths=transcription_stem_paths
             )
         )
