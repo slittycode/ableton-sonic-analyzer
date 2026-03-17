@@ -107,53 +107,48 @@ test('turning Phase 2 off in the UI runs Phase 1 only and records the user-disab
   ).toBeVisible();
 });
 
-test('Phase 2 start is blocked when the UI requests Gemini but no API key is configured', async ({ page }) => {
-  let analyzeCalled = false;
-
-  await page.addInitScript(() => {
-    window.__VITE_ENABLE_PHASE2_GEMINI_OVERRIDE__ = 'true';
-    window.__VITE_GEMINI_API_KEY_OVERRIDE__ = '';
-  });
-  await stubEstimateRoute(page, 'req_est_no_key');
-  await page.route('**/api/analyze', async (route) => {
-    analyzeCalled = true;
-    await route.abort();
+test('Phase 2 runs Phase 1 and delegates Gemini to the backend when enabled', async ({ page }) => {
+  await enablePhase2ForTest(page);
+  await stubEstimateRoute(page, 'req_est_p2_backend');
+  await stubAnalyzeRoute(page, 'req_p2_backend');
+  await page.route('**/api/phase2', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        requestId: 'req_p2_backend',
+        phase2: null,
+        message: 'Phase 2 advisory skipped because Gemini returned an empty response.',
+        diagnostics: { backendDurationMs: 50, engineVersion: 'gemini-2.5-flash' },
+      }),
+    });
   });
 
   await page.goto('/', { waitUntil: 'networkidle' });
   await page.setInputFiles('#audio-upload', fixturePath());
 
-  await expect(page.getByTestId('phase2-status-inline')).toHaveText('PHASE 2 KEY MISSING');
-  await expect(page.getByText(/apps\/ui\/\.env/i)).toBeVisible();
-
   await page.getByRole('button', { name: /Initiate Analysis/i }).click();
 
+  await expectAnalysisResultsVisible(page);
+  await expect(page.getByText('126')).toBeVisible();
   await expect(
-    page.getByText(/ERROR: Phase 2 Advisory is enabled, but VITE_GEMINI_API_KEY is missing\./i),
+    page.getByText('Phase 2 advisory skipped because Gemini returned an empty response.', { exact: true }).first(),
   ).toBeVisible();
-  await expect(page.getByText(/export VITE_GEMINI_API_KEY=/i).first()).toBeVisible();
-  await expect(page.getByText(/VITE_GEMINI_API_KEY=\.\.\. \.\/scripts\/dev\.sh/i).first()).toBeVisible();
-  expect(analyzeCalled).toBe(false);
-  await expect(page.getByText('Analysis Results')).toHaveCount(0);
 });
 
 test('malformed Gemini Phase 2 response degrades gracefully to skipped', async ({ page }) => {
   await enablePhase2ForTest(page);
   await stubEstimateRoute(page, 'req_est_p2_malformed');
   await stubAnalyzeRoute(page, 'req_p2_malformed');
-  await page.route('**://generativelanguage.googleapis.com/**', async (route) => {
+  await page.route('**/api/phase2', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        candidates: [
-          {
-            content: {
-              role: 'model',
-              parts: [{ text: 'This is not valid JSON for phase 2 {{{broken' }],
-            },
-          },
-        ],
+        requestId: 'req_p2_malformed',
+        phase2: null,
+        message: 'Phase 2 advisory skipped because Gemini returned invalid JSON.',
+        diagnostics: { backendDurationMs: 100, engineVersion: 'gemini-2.5-flash' },
       }),
     });
   });

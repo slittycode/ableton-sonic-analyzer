@@ -46,7 +46,7 @@ cd apps/backend
 
 ## Release Notes
 
-- The monorepo tag `v1.0.0` is a root release marker.
+- The monorepo root tag `v1.0.0` was the initial release marker. Current tags: `v1.2.0` (root), `ui-v1.6.0` (frontend).
 - App-level changelogs remain app-local history and should not be rewritten to mirror the root tag.
 - This release is local/dev only until Gemini access moves out of the browser.
 

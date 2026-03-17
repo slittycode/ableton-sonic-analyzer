@@ -19,9 +19,6 @@ export default defineConfig(({mode}) => {
             ) {
               return 'vendor-react';
             }
-            if (id.includes('@google/genai')) {
-              return 'vendor-google-ai';
-            }
             if (id.includes('wavesurfer.js')) {
               return 'vendor-waveform';
             }

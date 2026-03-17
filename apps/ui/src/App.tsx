@@ -9,8 +9,6 @@ import { useCpuMeter } from './hooks/useCpuMeter';
 import { useGlobalDrag } from './hooks/useGlobalDrag';
 import {
   appConfig,
-  canRunGeminiPhase2,
-  hasGeminiPhase2ApiKey,
   isGeminiPhase2ConfigEnabled,
 } from './config';
 import { getAudioMimeTypeOrDefault, isSupportedAudioFile } from './services/audioFile';
@@ -69,33 +67,18 @@ function formatEstimateRange(estimate: BackendAnalysisEstimate): string {
   return `${Math.round(estimate.totalLowMs / 1000)}s-${Math.round(estimate.totalHighMs / 1000)}s`;
 }
 
-function getPhase2BlockedMessage(
-  phase2ConfigEnabled: boolean,
-  phase2Requested: boolean,
-  phase2ApiKeyPresent: boolean,
-): string | null {
-  if (phase2ConfigEnabled && phase2Requested && !phase2ApiKeyPresent) {
-    return 'Phase 2 Advisory is enabled, but VITE_GEMINI_API_KEY is missing. Add it to apps/ui/.env, run export VITE_GEMINI_API_KEY=..., or start with VITE_GEMINI_API_KEY=... ./scripts/dev.sh.';
-  }
-
-  return null;
-}
-
 function getPhase2StatusBadge(
   phase2ConfigEnabled: boolean,
   phase2Requested: boolean,
-  phase2ApiKeyPresent: boolean,
 ): string | null {
   if (!phase2ConfigEnabled) return 'PHASE 2 CONFIG OFF';
   if (!phase2Requested) return 'PHASE 2 USER OFF';
-  if (!phase2ApiKeyPresent) return 'PHASE 2 KEY MISSING';
   return null;
 }
 
 function getPhase2HelperCopy(
   phase2ConfigEnabled: boolean,
   phase2Requested: boolean,
-  phase2ApiKeyPresent: boolean,
 ): string {
   if (!phase2ConfigEnabled) {
     return 'Developer kill-switch is off. Gemini advisory is unavailable in this build.';
@@ -103,10 +86,6 @@ function getPhase2HelperCopy(
 
   if (!phase2Requested) {
     return 'Phase 1 will still run. Turn this on when you want the Gemini advisory pass after local DSP completes.';
-  }
-
-  if (!phase2ApiKeyPresent) {
-    return 'Enabled in the UI, but VITE_GEMINI_API_KEY is missing. Add it to apps/ui/.env, run export VITE_GEMINI_API_KEY=..., or start with VITE_GEMINI_API_KEY=... ./scripts/dev.sh.';
   }
 
   return 'Runs after Phase 1 succeeds and uses the selected Gemini model for advisory reconstruction output.';
@@ -151,24 +130,9 @@ export default function App() {
   const analysisStartedAtRef = useRef<number | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const phase2ConfigEnabled = isGeminiPhase2ConfigEnabled();
-  const phase2ApiKeyPresent = hasGeminiPhase2ApiKey();
-  const phase2CanRun = canRunGeminiPhase2();
-  const phase2WillRun = phase2Requested && phase2CanRun;
-  const phase2BlockedMessage = getPhase2BlockedMessage(
-    phase2ConfigEnabled,
-    phase2Requested,
-    phase2ApiKeyPresent,
-  );
-  const phase2StatusBadge = getPhase2StatusBadge(
-    phase2ConfigEnabled,
-    phase2Requested,
-    phase2ApiKeyPresent,
-  );
-  const phase2HelperCopy = getPhase2HelperCopy(
-    phase2ConfigEnabled,
-    phase2Requested,
-    phase2ApiKeyPresent,
-  );
+  const phase2WillRun = phase2Requested && phase2ConfigEnabled;
+  const phase2StatusBadge = getPhase2StatusBadge(phase2ConfigEnabled, phase2Requested);
+  const phase2HelperCopy = getPhase2HelperCopy(phase2ConfigEnabled, phase2Requested);
   const phase2ModelSelectorDisabled = isAnalyzing || !phase2ConfigEnabled || !phase2Requested;
   const cpuMeterPercent = useCpuMeter(isAnalyzing);
 
@@ -317,20 +281,10 @@ export default function App() {
 
   const handlePhase2RequestedChange = (requested: boolean) => {
     setPhase2Requested(requested);
-
-    if (error === phase2BlockedMessage) {
-      setError(null);
-      setErrorRetryable(false);
-    }
   };
 
   const handleStartAnalysis = async () => {
     if (!audioFile) return;
-    if (phase2BlockedMessage) {
-      setError(phase2BlockedMessage);
-      setErrorRetryable(false);
-      return;
-    }
 
     const activeFile = audioFile;
     const activeModel = selectedModel;

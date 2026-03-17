@@ -2,7 +2,6 @@
 
 All notable changes to `ableton-sonic-analyzer` are documented here.
 
-<<<<<<< HEAD
 ## v1.2.0
 
 - Added `apps/backend/scripts/genre_check.py`: DSP preflight reporter emitting rhythm cluster, synthesis tier, sidechain status, BPM, kickSwing, kickAccentVariance, and inharmonicity — no genre labels.
@@ -17,20 +16,11 @@ All notable changes to `ableton-sonic-analyzer` are documented here.
 ## v1.1.0
 
 - Standardized full-feature backend bootstrap on Python `3.11.x` for macOS arm64 and documented the `3.12+` Darwin limitation across all root and backend docs.
-- Added `apps/backend/scripts/bootstrap.sh`.
-- Replaced loose backend dependency list with the validated Python 3.11 frozen lock set.
-- Updated `scripts/dev.sh` missing-venv error to point to bootstrap helper.
-- Added `apps/backend/tests/test_bootstrap_scripts.py`.
-=======
-## v1.1.0
-
-- Standardized full-feature backend bootstrap on Python `3.11.x` for macOS arm64 and documented the `3.12+` Darwin limitation across all root and backend docs.
 - Added `apps/backend/scripts/bootstrap.sh` — requires `python3.11`, creates the backend venv, upgrades pip, and installs the pinned stack.
 - Replaced the loose backend dependency list with the validated Python 3.11 frozen lock set in `apps/backend/requirements.txt`.
 - Updated `scripts/dev.sh` so a missing backend venv error points directly to `./apps/backend/scripts/bootstrap.sh`.
 - Added `apps/backend/tests/test_bootstrap_scripts.py` covering the missing-interpreter and missing-venv failure paths.
 - Closed the `v1.0.0` known limitation: fresh backend bootstrap is now reproducible from a clean Python 3.11 install.
->>>>>>> 1ba0f11df99a88eefd669d3db69fae16257dc529
 
 ## v1.0.0
 

@@ -1,4 +1,4 @@
-import { appConfig, canRunGeminiPhase2, isGeminiPhase2ConfigEnabled } from '../config';
+import { appConfig, isGeminiPhase2ConfigEnabled } from '../config';
 import { getAudioMimeTypeOrDefault } from './audioFile';
 import { analyzePhase1WithBackend, createUserCancelledError, mapBackendError } from './backendPhase1Client';
 import { PHASE1_LABEL, PHASE2_SKIPPED_LABEL } from './phaseLabels';
@@ -136,25 +136,10 @@ export async function analyzeAudio(
       return;
     }
 
-    if (!canRunGeminiPhase2()) {
-      onPhase2Complete(
-        null,
-        buildPhase2SkippedLog(
-          audioMetadata,
-          backendResult.requestId,
-          'Phase 2 advisory skipped because Gemini is enabled but no API key is configured.',
-        ),
-      );
-      return;
-    }
-
-    const { analyzePhase2WithGemini } = await import('./geminiPhase2Client');
+    const { analyzePhase2WithBackend } = await import('./backendPhase2Client');
     const phase2 = await raceWithCancellation(
-      analyzePhase2WithGemini({
-        file,
-        modelName,
-        phase1Result: backendResult.phase1,
-        audioMetadata,
+      analyzePhase2WithBackend(file, backendResult.phase1, modelName, {
+        apiBaseUrl: appConfig.apiBaseUrl,
         signal: analysisOptions?.signal,
       }),
       analysisOptions?.signal,

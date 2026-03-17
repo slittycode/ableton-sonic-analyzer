@@ -265,12 +265,17 @@ test('error banner shows Retry button for retryable errors', async ({ page }) =>
     }
   });
 
-  // Stub Gemini so Phase 2 completes quickly when enabled
-  await page.route('**://generativelanguage.googleapis.com/**', async (route) => {
+  // Stub the backend Phase 2 endpoint so it completes quickly when enabled
+  await page.route('**/api/phase2', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ candidates: [] }),
+      body: JSON.stringify({
+        requestId: 'req_retry_p2',
+        phase2: null,
+        message: 'Phase 2 advisory skipped because Gemini returned an empty response.',
+        diagnostics: { backendDurationMs: 50, engineVersion: 'gemini-2.5-flash' },
+      }),
     });
   });
 
@@ -304,16 +309,21 @@ test('cancel during phase 2 returns to idle without an error banner and logs ski
     });
   });
 
-  let releaseGeminiRoute: (() => void) | null = null;
-  await page.route('**://generativelanguage.googleapis.com/**', async (route) => {
+  let releasePhase2Route: (() => void) | null = null;
+  await page.route('**/api/phase2', async (route) => {
     await new Promise<void>((resolve) => {
-      releaseGeminiRoute = resolve;
+      releasePhase2Route = resolve;
     });
 
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ candidates: [] }),
+      body: JSON.stringify({
+        requestId: 'req_phase2_cancel',
+        phase2: null,
+        message: 'Phase 2 advisory skipped because Gemini returned an empty response.',
+        diagnostics: { backendDurationMs: 100, engineVersion: 'gemini-2.5-flash' },
+      }),
     });
   });
 
@@ -325,7 +335,7 @@ test('cancel during phase 2 returns to idle without an error banner and logs ski
   await expect(cancelButton).toBeVisible();
   await cancelButton.click();
 
-  releaseGeminiRoute?.();
+  releasePhase2Route?.();
 
   await expect(page.locator('div.p-3.text-error')).toHaveCount(0);
   await expect(page.getByText('Analysis Results')).toBeVisible();

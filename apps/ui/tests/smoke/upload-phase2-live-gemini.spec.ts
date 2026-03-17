@@ -6,9 +6,8 @@ const LIVE_GEMINI_TARGET_BYTES = 25 * 1024 * 1024;
 const backendBaseUrl = process.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8100";
 const liveGeminiEnabled = process.env.RUN_GEMINI_LIVE_SMOKE === "true";
 const geminiPhase2Enabled = process.env.VITE_ENABLE_PHASE2_GEMINI === "true";
-const geminiApiKey = process.env.VITE_GEMINI_API_KEY?.trim() ?? "";
 
-async function backendSupportsPhase1Routes(baseUrl: string): Promise<boolean> {
+async function backendSupportsPhase2Route(baseUrl: string): Promise<boolean> {
   const controller = new AbortController();
   const timeoutHandle = setTimeout(() => controller.abort(), 2_500);
   try {
@@ -18,7 +17,11 @@ async function backendSupportsPhase1Routes(baseUrl: string): Promise<boolean> {
     if (!response.ok) return false;
 
     const spec = (await response.json()) as { paths?: Record<string, unknown> };
-    return Boolean(spec.paths?.["/api/analyze"] && spec.paths?.["/api/analyze/estimate"]);
+    return Boolean(
+      spec.paths?.["/api/analyze"] &&
+      spec.paths?.["/api/analyze/estimate"] &&
+      spec.paths?.["/api/phase2"],
+    );
   } catch {
     return false;
   } finally {
@@ -54,51 +57,22 @@ async function writeOversizedSilentWav(filePath: string, targetBytes = LIVE_GEMI
   return buffer.byteLength;
 }
 
-function isGeminiUploadRequest(url: string, method: string): boolean {
-  return method === "POST" && url.includes("generativelanguage.googleapis.com") && url.includes("/upload/") && url.includes("/files");
-}
-
-function isGeminiGenerateRequest(url: string, method: string): boolean {
-  return method === "POST" && url.includes("generativelanguage.googleapis.com") && url.includes(":generateContent");
-}
-
-function isGeminiDeleteRequest(url: string, method: string): boolean {
-  return method === "DELETE" && url.includes("generativelanguage.googleapis.com") && url.includes("/files/");
-}
-
-test("live Gemini Files API path uses file upload, fileData generation, and cleanup for large audio", async ({ page }, testInfo) => {
+test("live Gemini Files API path: large audio triggers server-side upload+generate+delete sequence", async ({ page }, testInfo) => {
   test.setTimeout(8 * 60 * 1_000);
   test.skip(!liveGeminiEnabled, "RUN_GEMINI_LIVE_SMOKE must be true to run the live Gemini smoke test.");
   test.skip(!geminiPhase2Enabled, "VITE_ENABLE_PHASE2_GEMINI must be true for the live Gemini smoke test.");
-  test.skip(geminiApiKey.length === 0, "VITE_GEMINI_API_KEY must be set for the live Gemini smoke test.");
   test.skip(
-    !(await backendSupportsPhase1Routes(backendBaseUrl)),
-    `Backend at ${backendBaseUrl} does not expose /api/analyze and /api/analyze/estimate.`,
+    !(await backendSupportsPhase2Route(backendBaseUrl)),
+    `Backend at ${backendBaseUrl} must expose /api/analyze, /api/analyze/estimate, and /api/phase2.`,
   );
 
   const largeWavPath = testInfo.outputPath("live-gemini-large-silence.wav");
   const fileSizeBytes = await writeOversizedSilentWav(largeWavPath);
   expect(fileSizeBytes).toBeGreaterThan(INLINE_SIZE_LIMIT);
 
-  const googleRequestOrder: string[] = [];
-  page.on("request", (request) => {
-    const url = request.url();
-    const method = request.method();
-    if (isGeminiUploadRequest(url, method)) googleRequestOrder.push("upload");
-    if (isGeminiGenerateRequest(url, method)) googleRequestOrder.push("generate");
-    if (isGeminiDeleteRequest(url, method)) googleRequestOrder.push("delete");
-  });
-
-  const uploadRequestPromise = page.waitForRequest(
-    (request) => isGeminiUploadRequest(request.url(), request.method()),
-    { timeout: 8 * 60 * 1_000 },
-  );
-  const generateRequestPromise = page.waitForRequest(
-    (request) => isGeminiGenerateRequest(request.url(), request.method()),
-    { timeout: 8 * 60 * 1_000 },
-  );
-  const deleteRequestPromise = page.waitForRequest(
-    (request) => isGeminiDeleteRequest(request.url(), request.method()),
+  // Monitor the browser→backend phase2 request (Gemini calls happen server-side now).
+  const phase2RequestPromise = page.waitForRequest(
+    (request) => request.method() === "POST" && request.url().includes("/api/phase2"),
     { timeout: 8 * 60 * 1_000 },
   );
 
@@ -115,30 +89,15 @@ test("live Gemini Files API path uses file upload, fileData generation, and clea
 
     await page.getByRole("button", { name: /Initiate Analysis/i }).click();
 
-    const uploadRequest = await uploadRequestPromise;
-    const generateRequest = await generateRequestPromise;
-    const deleteRequest = await deleteRequestPromise;
-    const generateBody = generateRequest.postData() ?? "";
-
-    expect(uploadRequest.method()).toBe("POST");
-    expect(uploadRequest.url()).toContain("/upload/");
-    expect(generateRequest.method()).toBe("POST");
-    expect(generateRequest.url()).toContain(":generateContent");
-    expect(generateBody).toContain('"fileData"');
-    expect(generateBody).toContain('"fileUri"');
-    expect(generateBody).not.toContain('"inlineData"');
-    expect(deleteRequest.method()).toBe("DELETE");
-    expect(deleteRequest.url()).toContain("/files/");
-
-    const uploadIndex = googleRequestOrder.indexOf("upload");
-    const generateIndex = googleRequestOrder.indexOf("generate");
-    const deleteIndex = googleRequestOrder.indexOf("delete");
-    expect(uploadIndex).toBeGreaterThanOrEqual(0);
-    expect(generateIndex).toBeGreaterThan(uploadIndex);
-    expect(deleteIndex).toBeGreaterThan(generateIndex);
+    const phase2Request = await phase2RequestPromise;
+    expect(phase2Request.method()).toBe("POST");
+    expect(phase2Request.url()).toContain("/api/phase2");
 
     await expect(page.getByText("Analysis Results")).toBeVisible({ timeout: 8 * 60 * 1_000 });
     await expect(page.getByText("System Diagnostics")).toBeVisible();
+
+    // Files API path returns a message with upload+generate timings.
+    // Inline path returns "Phase 2 advisory complete." without timing breakdown.
     await expect(page.getByText(/Phase 2 advisory complete\. Upload: \d+ms, Generate: \d+ms/)).toBeVisible({
       timeout: 8 * 60 * 1_000,
     });

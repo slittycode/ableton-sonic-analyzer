@@ -1273,7 +1273,7 @@ def analyze_perceptual(mono: np.ndarray, sample_rate: int = 44100) -> dict:
         return {"perceptual": None}
 
 
-def analyze_essentia_features(mono: np.ndarray) -> dict:
+def analyze_essentia_features(mono: np.ndarray, sample_rate: int = 44100) -> dict:
     """Frame-by-frame averages of ZeroCrossingRate, HFC, SpectralComplexity, Dissonance."""
     try:
         frame_size = 2048
@@ -1285,7 +1285,7 @@ def analyze_essentia_features(mono: np.ndarray) -> dict:
             orderBy="magnitude",
             magnitudeThreshold=0.00001,
             maxPeaks=50,
-            sampleRate=44100,
+            sampleRate=sample_rate,
         )
 
         zcr_algo = es.ZeroCrossingRate()
@@ -2883,8 +2883,6 @@ def main():
     run_fast = "--fast" in optional_args
     run_transcribe = "--transcribe" in optional_args
     auto_yes = "--yes" in optional_args
-    # TODO: When enabled, use hopSize=4096 for frame-based algorithms except BPM/key.
-    _ = run_fast
     stems = None
 
     analysis_estimate = get_audio_duration_seconds(audio_path)
@@ -2907,6 +2905,53 @@ def main():
     except Exception as e:
         print(f"Error loading mono audio: {e}", file=sys.stderr)
         sys.exit(1)
+
+    if run_fast:
+        if analyze_fast is None:
+            print("Error: analyze_fast module not available.", file=sys.stderr)
+            sys.exit(1)
+        print("Running fast analysis...", file=sys.stderr)
+        result = analyze_fast(mono, sample_rate)
+        output = {
+            "bpm": result.get("bpm"),
+            "bpmConfidence": result.get("bpmConfidence"),
+            "bpmPercival": result.get("bpmPercival"),
+            "bpmAgreement": result.get("bpmAgreement"),
+            "key": result.get("key"),
+            "keyConfidence": result.get("keyConfidence"),
+            "timeSignature": result.get("timeSignature"),
+            "durationSeconds": result.get("durationSeconds"),
+            "sampleRate": result.get("sampleRate"),
+            "lufsIntegrated": result.get("lufsIntegrated"),
+            "lufsRange": result.get("lufsRange"),
+            "truePeak": result.get("truePeak"),
+            "crestFactor": result.get("crestFactor"),
+            "dynamicSpread": result.get("dynamicSpread"),
+            "dynamicCharacter": result.get("dynamicCharacter"),
+            "stereoDetail": result.get("stereoDetail"),
+            "spectralBalance": result.get("spectralBalance"),
+            "spectralDetail": result.get("spectralDetail"),
+            "rhythmDetail": result.get("rhythmDetail"),
+            "melodyDetail": result.get("melodyDetail"),
+            "transcriptionDetail": result.get("transcriptionDetail"),
+            "grooveDetail": result.get("grooveDetail"),
+            "sidechainDetail": result.get("sidechainDetail"),
+            "effectsDetail": result.get("effectsDetail"),
+            "synthesisCharacter": result.get("synthesisCharacter"),
+            "danceability": result.get("danceability"),
+            "structure": result.get("structure"),
+            "arrangementDetail": result.get("arrangementDetail"),
+            "segmentLoudness": result.get("segmentLoudness"),
+            "segmentSpectral": result.get("segmentSpectral"),
+            "segmentStereo": result.get("segmentStereo"),
+            "segmentKey": result.get("segmentKey"),
+            "chordDetail": result.get("chordDetail"),
+            "perceptual": result.get("perceptual"),
+            "essentiaFeatures": result.get("essentiaFeatures"),
+        }
+        print("Done.", file=sys.stderr)
+        print(json.dumps(output, indent=2))
+        return
 
     try:
         stereo, sr, num_channels = load_stereo(audio_path)
@@ -3022,7 +3067,7 @@ def main():
     result.update(analyze_perceptual(mono, sample_rate))
 
     # Essentia features
-    result.update(analyze_essentia_features(mono))
+    result.update(analyze_essentia_features(mono, sample_rate))
 
     # Optional Basic Pitch transcription pass
     if run_transcribe:

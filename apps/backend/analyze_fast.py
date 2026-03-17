@@ -39,8 +39,8 @@ def analyze_fast(mono: np.ndarray, sample_rate: int = 44100) -> dict:
     try:
         rhythm_extractor = es.RhythmExtractor2013(method="multifeature")
         bpm, beats, bpm_confidence, _, _ = rhythm_extractor(mono)
-        result["bpm"] = round(float(bpm), 2) if bpm else None
-        result["bpmConfidence"] = round(float(bpm_confidence), 3) if bpm_confidence else None
+        result["bpm"] = round(float(bpm), 2) if bpm is not None else None
+        result["bpmConfidence"] = round(float(bpm_confidence), 3) if bpm_confidence is not None else None
     except Exception as e:
         print(f"[warn] Fast mode BPM analysis failed: {e}", file=sys.stderr)
         result["bpm"] = None
@@ -51,13 +51,13 @@ def analyze_fast(mono: np.ndarray, sample_rate: int = 44100) -> dict:
     try:
         percival = es.PercivalBpmEstimator()
         bpm_percival = percival(mono)
-        result["bpmPercival"] = round(float(bpm_percival), 2) if bpm_percival else None
+        result["bpmPercival"] = round(float(bpm_percival), 2) if bpm_percival is not None else None
     except Exception as e:
         print(f"[warn] Fast mode Percival BPM failed: {e}", file=sys.stderr)
         result["bpmPercival"] = None
 
     # BPM agreement
-    if result.get("bpm") and result.get("bpmPercival"):
+    if result.get("bpm") is not None and result.get("bpmPercival") is not None:
         result["bpmAgreement"] = abs(result["bpm"] - result["bpmPercival"]) < 2.0
     else:
         result["bpmAgreement"] = None
@@ -67,7 +67,7 @@ def analyze_fast(mono: np.ndarray, sample_rate: int = 44100) -> dict:
         key_extractor = es.KeyExtractor(profileType="temperley")
         key, scale, strength = key_extractor(mono)
         result["key"] = f"{key} {scale}".title() if key and scale else None
-        result["keyConfidence"] = round(float(strength), 3) if strength else None
+        result["keyConfidence"] = round(float(strength), 3) if strength is not None else None
     except Exception as e:
         print(f"[warn] Fast mode key analysis failed: {e}", file=sys.stderr)
         result["key"] = None
@@ -85,12 +85,12 @@ def analyze_fast(mono: np.ndarray, sample_rate: int = 44100) -> dict:
 
     # Basic loudness (LUFS integrated and range)
     try:
-        # Need stereo for LUFS, create pseudo-stereo from mono
-        stereo = np.stack([mono, mono], axis=0)
+        # Need stereo for LUFS — Essentia expects shape (N, 2), not (2, N)
+        stereo = np.stack([mono, mono], axis=-1)
         loudness_algo = es.LoudnessEBUR128(sampleRate=sample_rate)
-        lufs_integrated, lufs_range = loudness_algo(stereo)
-        result["lufsIntegrated"] = round(float(lufs_integrated), 2) if lufs_integrated else None
-        result["lufsRange"] = round(float(lufs_range), 2) if lufs_range else None
+        _, _, lufs_integrated, lufs_range = loudness_algo(stereo)
+        result["lufsIntegrated"] = round(float(lufs_integrated), 2) if lufs_integrated is not None else None
+        result["lufsRange"] = round(float(lufs_range), 2) if lufs_range is not None else None
     except Exception as e:
         print(f"[warn] Fast mode loudness analysis failed: {e}", file=sys.stderr)
         result["lufsIntegrated"] = None
@@ -99,7 +99,7 @@ def analyze_fast(mono: np.ndarray, sample_rate: int = 44100) -> dict:
     # True peak (from stereo)
     try:
         if stereo is not None:
-            max_peak = max(np.max(np.abs(stereo[0])), np.max(np.abs(stereo[1])))
+            max_peak = np.max(np.abs(stereo))
             result["truePeak"] = round(float(max_peak), 6) if max_peak > 0 else None
         else:
             result["truePeak"] = None

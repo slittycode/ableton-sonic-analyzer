@@ -36,11 +36,10 @@ Backend environment:
 ./apps/backend/scripts/bootstrap.sh
 ```
 
-<<<<<<< HEAD
 The backend bootstrap path is verified on Python `3.11.x`. The bootstrap
 script recreates `apps/backend/venv` from scratch and is the supported recovery
 path if the local backend environment becomes stale or broken.
-=======
+
 Manual equivalent:
 
 ```bash
@@ -56,7 +55,6 @@ full-feature local development on macOS arm64.
 Current limitation: Python `3.12+` is not a supported full-feature backend
 bootstrap target on macOS arm64 because `basic-pitch` on Darwin pulls a
 `tensorflow-macos` / NumPy combination that does not resolve cleanly.
->>>>>>> 1ba0f11df99a88eefd669d3db69fae16257dc529
 
 Run the full stack from the repo root:
 
@@ -133,25 +131,13 @@ cd apps/backend
 
 ## Release Position
 
-This monorepo is being cut as a **local/dev `v1.0.0`** baseline.
+The initial monorepo cut was **local/dev `v1.0.0`**. Current tags: `v1.2.0` (root), `ui-v1.6.0` (frontend).
 
 The current quality bar is met for local development and iterative product work.
 It should not be presented as a stronger production/security milestone until
 Gemini access is moved out of the browser bundle.
 
-## Push Checklist
-
-```bash
-git remote add origin <new-repo-url>
-git push -u origin main
-git push origin v1.0.0
-```
-
 Keep the backend bootstrap limitation in mind when handing the repo to another machine:
 
 - prefer Python `3.11.x`
-<<<<<<< HEAD
-- use `./apps/backend/scripts/bootstrap.sh` as the supported environment recovery path
-=======
 - run `./apps/backend/scripts/bootstrap.sh` from the repo root before starting the local stack
->>>>>>> 1ba0f11df99a88eefd669d3db69fae16257dc529

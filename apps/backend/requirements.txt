@@ -70,4 +70,5 @@ treetable==0.2.6
 typing-inspection==0.4.2
 typing_extensions==4.15.0
 urllib3==2.6.3
+google-genai>=1.14.0,<2.0.0
 uvicorn==0.41.0
