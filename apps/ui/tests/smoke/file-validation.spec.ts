@@ -46,14 +46,155 @@ function stubBackendRoutes(page: import('@playwright/test').Page) {
         }),
       });
     }),
-    page.route('**/api/analyze', async (route) => {
+    page.route('**/api/analysis-runs', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.fallback();
+        return;
+      }
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          requestId: 'req_file_001',
-          phase1: PHASE1_STUB,
-          diagnostics: { backendDurationMs: 400, engineVersion: 'smoke' },
+          runId: 'run_file_validation_001',
+          requestedStages: {
+            symbolicMode: 'stem_notes',
+            symbolicBackend: 'auto',
+            interpretationMode: 'async',
+            interpretationProfile: 'producer_summary',
+            interpretationModel: 'gemini-3.1-pro-preview',
+          },
+          artifacts: {
+            sourceAudio: {
+              artifactId: 'artifact_file_validation_001',
+              filename: 'silence.wav',
+              mimeType: 'audio/wav',
+              sizeBytes: 2048,
+              contentSha256: 'abc123',
+              path: '/tmp/silence.wav',
+            },
+          },
+          stages: {
+            measurement: {
+              status: 'queued',
+              authoritative: true,
+              result: null,
+              provenance: null,
+              diagnostics: null,
+              error: null,
+            },
+            symbolicExtraction: {
+              status: 'blocked',
+              authoritative: false,
+              preferredAttemptId: null,
+              attemptsSummary: [],
+              result: null,
+              provenance: null,
+              diagnostics: null,
+              error: null,
+            },
+            interpretation: {
+              status: 'blocked',
+              authoritative: false,
+              preferredAttemptId: null,
+              attemptsSummary: [],
+              result: null,
+              provenance: null,
+              diagnostics: null,
+              error: null,
+            },
+          },
+        }),
+      });
+    }),
+    page.route('**/api/analysis-runs/run_file_validation_001', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          runId: 'run_file_validation_001',
+          requestedStages: {
+            symbolicMode: 'stem_notes',
+            symbolicBackend: 'auto',
+            interpretationMode: 'async',
+            interpretationProfile: 'producer_summary',
+            interpretationModel: 'gemini-3.1-pro-preview',
+          },
+          artifacts: {
+            sourceAudio: {
+              artifactId: 'artifact_file_validation_001',
+              filename: 'silence.wav',
+              mimeType: 'audio/wav',
+              sizeBytes: 2048,
+              contentSha256: 'abc123',
+              path: '/tmp/silence.wav',
+            },
+          },
+          stages: {
+            measurement: {
+              status: 'completed',
+              authoritative: true,
+              result: PHASE1_STUB,
+              provenance: null,
+              diagnostics: {
+                timings: {
+                  totalMs: 980,
+                  analysisMs: 900,
+                  serverOverheadMs: 80,
+                  flagsUsed: [],
+                  fileSizeBytes: 2048,
+                  fileDurationSeconds: 10,
+                  msPerSecondOfAudio: 98,
+                },
+              },
+              error: null,
+            },
+            symbolicExtraction: {
+              status: 'not_requested',
+              authoritative: false,
+              preferredAttemptId: null,
+              attemptsSummary: [],
+              result: null,
+              provenance: null,
+              diagnostics: null,
+              error: null,
+            },
+            interpretation: {
+              status: 'completed',
+              authoritative: false,
+              preferredAttemptId: 'int_file_validation_001',
+              attemptsSummary: [
+                {
+                  attemptId: 'int_file_validation_001',
+                  profileId: 'producer_summary',
+                  modelName: 'gemini-3.1-pro-preview',
+                  status: 'completed',
+                },
+              ],
+              result: {
+                trackCharacter: 'Deterministic file validation smoke response.',
+                detectedCharacteristics: [],
+                arrangementOverview: { summary: 'Smoke summary.', segments: [] },
+                sonicElements: {
+                  kick: 'Kick.',
+                  bass: 'Bass.',
+                  melodicArp: 'Arp.',
+                  grooveAndTiming: 'Groove.',
+                  effectsAndTexture: 'FX.',
+                },
+                mixAndMasterChain: [],
+                secretSauce: {
+                  title: 'Smoke Sauce',
+                  explanation: 'Smoke explanation.',
+                  implementationSteps: [],
+                },
+                confidenceNotes: [],
+                abletonRecommendations: [],
+              },
+              provenance: null,
+              diagnostics: null,
+              error: null,
+            },
+          },
         }),
       });
     }),

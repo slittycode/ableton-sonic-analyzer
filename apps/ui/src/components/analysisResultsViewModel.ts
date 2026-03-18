@@ -1,4 +1,4 @@
-import { AbletonRecommendation, Phase1Result, Phase2Result } from "../types";
+import { AbletonRecommendation, MeasurementResult, Phase2Result, TranscriptionDetail } from "../types";
 
 export type ConfidenceLevel = "High" | "Moderate" | "Low";
 
@@ -312,7 +312,7 @@ function parseNoveltyTimestamps(noveltyNotes: string | undefined, totalDuration:
 }
 
 export function buildArrangementViewModel(
-  phase1: Phase1Result,
+  phase1: MeasurementResult,
   arrangementOverview: Phase2Result["arrangementOverview"] | undefined,
 ): ArrangementViewModel | null {
   if (!arrangementOverview || !Array.isArray(arrangementOverview.segments) || arrangementOverview.segments.length === 0) {
@@ -384,9 +384,8 @@ function midiToNoteName(midi: number): string {
   return `${noteNames[clamped % 12]}${octave}`;
 }
 
-export function buildMelodyInsights(phase1: Phase1Result): MelodyInsightsViewModel | null {
-  const transcriptionDetail =
-    phase1.transcriptionDetail && phase1.transcriptionDetail.noteCount > 0 ? phase1.transcriptionDetail : null;
+export function buildMelodyInsights(phase1: MeasurementResult, symbolic: TranscriptionDetail | null): MelodyInsightsViewModel | null {
+  const transcriptionDetail = symbolic && symbolic.noteCount > 0 ? symbolic : null;
   if (transcriptionDetail) {
     const noteCount = Number.isFinite(transcriptionDetail.noteCount)
       ? Math.max(0, Math.round(transcriptionDetail.noteCount))
@@ -435,7 +434,7 @@ export function buildMelodyInsights(phase1: Phase1Result): MelodyInsightsViewMod
 
 function getSonicMeasurements(
   key: string,
-  phase1: Phase1Result,
+  phase1: MeasurementResult,
   melodyInsights: MelodyInsightsViewModel | null,
 ): SonicMeasurementViewModel[] {
   const sets: Record<string, SonicMeasurementViewModel[]> = {
@@ -496,11 +495,12 @@ function getSonicMeasurements(
 }
 
 export function buildSonicElementCards(
-  phase1: Phase1Result,
+  phase1: MeasurementResult,
+  symbolic: TranscriptionDetail | null,
   sonicElements: Phase2Result["sonicElements"] | undefined,
 ): SonicElementCardViewModel[] {
   if (!sonicElements || typeof sonicElements !== "object") return [];
-  const melodyInsights = buildMelodyInsights(phase1);
+  const melodyInsights = buildMelodyInsights(phase1, symbolic);
 
   return Object.entries(sonicElements)
     .filter(([, value]) => {
@@ -698,7 +698,7 @@ function uniqueParameters(parameters: ChainParameterViewModel[], maxCount = 4): 
 
 function buildDerivedChainParameters(
   group: ProcessingGroup,
-  phase1: Phase1Result,
+  phase1: MeasurementResult,
   highEnd: HighEndInference = { cues: [], stereoAware: false },
 ): ChainParameterViewModel[] {
   switch (group) {
@@ -773,7 +773,7 @@ function buildProTip(group: ProcessingGroup): string {
   return tips[group];
 }
 
-function makeLimiterFallbackCard(phase1: Phase1Result, nextOrder: number): MixChainCardViewModel {
+function makeLimiterFallbackCard(phase1: MeasurementResult, nextOrder: number): MixChainCardViewModel {
   return {
     id: "fallback-limiter",
     order: nextOrder,
@@ -848,7 +848,7 @@ function compactMixChainGroups(groups: MixChainGroupViewModel[]): MixChainGroupV
 }
 
 export function buildMixChainGroups(
-  phase1: Phase1Result,
+  phase1: MeasurementResult,
   chain: Phase2Result["mixAndMasterChain"] | undefined,
   sonicElements?: Phase2Result["sonicElements"],
 ): MixChainGroupViewModel[] {
@@ -961,7 +961,7 @@ function groupRecommendationsByDevice(recommendations: AbletonRecommendation[]):
   }));
 }
 
-function buildPatchFallbackParameters(phase1: Phase1Result): ChainParameterViewModel[] {
+function buildPatchFallbackParameters(phase1: MeasurementResult): ChainParameterViewModel[] {
   return [
     { label: "Tempo", value: `${Math.round(phase1.bpm)} BPM` },
     { label: "Key", value: phase1.key ?? "Unknown" },
@@ -984,7 +984,7 @@ function isMidiFocusedGroup(device: string, category: string): boolean {
 }
 
 function buildStereoWidthPatchCard(
-  phase1: Phase1Result,
+  phase1: MeasurementResult,
   phase2: Phase2Result,
   order: number,
 ): PatchCardViewModel {
@@ -1016,14 +1016,15 @@ function buildStereoWidthPatchCard(
 }
 
 export function buildPatchCards(
-  phase1: Phase1Result,
+  phase1: MeasurementResult,
+  symbolic: TranscriptionDetail | null,
   phase2: Phase2Result | null,
 ): PatchCardViewModel[] {
   if (!phase2) {
     return [];
   }
 
-  const melodyInsights = buildMelodyInsights(phase1);
+  const melodyInsights = buildMelodyInsights(phase1, symbolic);
   const recommendations = Array.isArray(phase2.abletonRecommendations) ? phase2.abletonRecommendations : [];
   const grouped = groupRecommendationsByDevice(recommendations);
   const characteristicContext = Array.isArray(phase2.detectedCharacteristics)

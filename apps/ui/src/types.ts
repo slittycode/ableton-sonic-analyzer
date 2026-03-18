@@ -94,9 +94,10 @@ export interface Phase1Result {
     bassRhythmDensity: number;
   } | null;
   reverbDetail?: {
-    rt60: number;
+    rt60: number | null;
     isWet: boolean;
-    tailEnergyRatio: number;
+    tailEnergyRatio: number | null;
+    measured: boolean;
   } | null;
   vocalDetail?: {
     hasVocals: boolean;
@@ -127,6 +128,13 @@ export interface Phase1Result {
     harmonicRatio: number;
     fundamentalHz: number;
     kickCount: number;
+  } | null;
+  genreDetail?: {
+    genre: string;
+    confidence: number;
+    secondaryGenre: string | null;
+    genreFamily: 'house' | 'techno' | 'dnb' | 'ambient' | 'trance' | 'dubstep' | 'breaks' | 'other';
+    topScores: { genre: string; score: number }[];
   } | null;
   effectsDetail?: Record<string, unknown> | null;
   synthesisCharacter?: Record<string, unknown> | null;

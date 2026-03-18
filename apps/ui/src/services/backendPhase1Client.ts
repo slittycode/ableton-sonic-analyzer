@@ -511,6 +511,12 @@ export function parsePhase1Result(value: unknown): Phase1Result {
     transcriptionDetail,
     grooveDetail: isRecord(phase1.grooveDetail) ? phase1.grooveDetail : null,
     sidechainDetail: isRecord(phase1.sidechainDetail) ? phase1.sidechainDetail : null,
+    acidDetail: parseOptionalAcidDetail(phase1.acidDetail),
+    reverbDetail: parseOptionalReverbDetail(phase1.reverbDetail),
+    vocalDetail: parseOptionalVocalDetail(phase1.vocalDetail),
+    supersawDetail: parseOptionalSupersawDetail(phase1.supersawDetail),
+    bassDetail: parseOptionalBassDetail(phase1.bassDetail),
+    kickDetail: parseOptionalKickDetail(phase1.kickDetail),
     effectsDetail: isRecord(phase1.effectsDetail) ? phase1.effectsDetail : null,
     synthesisCharacter: isRecord(phase1.synthesisCharacter) ? phase1.synthesisCharacter : null,
     danceability: parseOptionalDanceability(phase1.danceability),
@@ -533,6 +539,91 @@ function parseOptionalDanceability(value: unknown): DanceabilityResult | null {
   if (danceability === null || dfa === null) return null;
 
   return { danceability, dfa };
+}
+
+function parseOptionalAcidDetail(value: unknown): Phase1Result["acidDetail"] {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value)) return null;
+  return {
+    isAcid: value.isAcid === true,
+    confidence: toNumberOrFallback(value.confidence, 0),
+    resonanceLevel: toNumberOrFallback(value.resonanceLevel, 0),
+    centroidOscillationHz: toNumberOrFallback(value.centroidOscillationHz, 0),
+    bassRhythmDensity: toNumberOrFallback(value.bassRhythmDensity, 0),
+  };
+}
+
+function parseOptionalReverbDetail(value: unknown): Phase1Result["reverbDetail"] {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value)) return null;
+  return {
+    rt60: toNumber(value.rt60),
+    isWet: value.isWet === true,
+    tailEnergyRatio: toNumber(value.tailEnergyRatio),
+    measured: value.measured === true,
+  };
+}
+
+function parseOptionalVocalDetail(value: unknown): Phase1Result["vocalDetail"] {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value)) return null;
+  return {
+    hasVocals: value.hasVocals === true,
+    confidence: toNumberOrFallback(value.confidence, 0),
+    vocalEnergyRatio: toNumberOrFallback(value.vocalEnergyRatio, 0),
+    formantStrength: toNumberOrFallback(value.formantStrength, 0),
+    mfccLikelihood: toNumberOrFallback(value.mfccLikelihood, 0),
+  };
+}
+
+function parseOptionalSupersawDetail(value: unknown): Phase1Result["supersawDetail"] {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value)) return null;
+  return {
+    isSupersaw: value.isSupersaw === true,
+    confidence: toNumberOrFallback(value.confidence, 0),
+    voiceCount: toNumberOrFallback(value.voiceCount, 0),
+    avgDetuneCents: toNumberOrFallback(value.avgDetuneCents, 0),
+    spectralComplexity: toNumberOrFallback(value.spectralComplexity, 0),
+  };
+}
+
+function parseOptionalBassDetail(value: unknown): Phase1Result["bassDetail"] {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value)) return null;
+  const type = String(value.type ?? "medium");
+  const validTypes = ["punchy", "medium", "rolling", "sustained"] as const;
+  const bassType = validTypes.includes(type as typeof validTypes[number])
+    ? (type as typeof validTypes[number])
+    : "medium";
+  return {
+    averageDecayMs: toNumberOrFallback(value.averageDecayMs, 0),
+    type: bassType,
+    transientRatio: toNumberOrFallback(value.transientRatio, 0),
+    fundamentalHz: toNumberOrFallback(value.fundamentalHz, 0),
+    transientCount: toNumberOrFallback(value.transientCount, 0),
+    swingPercent: toNumberOrFallback(value.swingPercent, 0),
+    grooveType: parseGrooveType(value.grooveType),
+  };
+}
+
+function parseGrooveType(value: unknown): "straight" | "slight-swing" | "heavy-swing" | "shuffle" {
+  const valid = ["straight", "slight-swing", "heavy-swing", "shuffle"] as const;
+  const str = String(value ?? "straight");
+  if (valid.includes(str as typeof valid[number])) return str as typeof valid[number];
+  return "straight";
+}
+
+function parseOptionalKickDetail(value: unknown): Phase1Result["kickDetail"] {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value)) return null;
+  return {
+    isDistorted: value.isDistorted === true,
+    thd: toNumberOrFallback(value.thd, 0),
+    harmonicRatio: toNumberOrFallback(value.harmonicRatio, 0),
+    fundamentalHz: toNumberOrFallback(value.fundamentalHz, 0),
+    kickCount: toNumberOrFallback(value.kickCount, 0),
+  };
 }
 
 function parseOptionalMelodyDetail(phase1: UnknownRecord): Phase1Result["melodyDetail"] | undefined {

@@ -115,6 +115,30 @@ const ALL_PHASE1_FIELDS: string[] = [
   // Sidechain
   'sidechainDetail.pumpingStrength',
   'sidechainDetail.pumpingConfidence',
+  // Acid
+  'acidDetail.isAcid',
+  'acidDetail.confidence',
+  'acidDetail.resonanceLevel',
+  // Reverb
+  'reverbDetail.rt60',
+  'reverbDetail.isWet',
+  'reverbDetail.tailEnergyRatio',
+  // Vocal
+  'vocalDetail.hasVocals',
+  'vocalDetail.confidence',
+  'vocalDetail.vocalEnergyRatio',
+  // Supersaw
+  'supersawDetail.isSupersaw',
+  'supersawDetail.confidence',
+  // Bass
+  'bassDetail.type',
+  'bassDetail.fundamentalHz',
+  'bassDetail.swingPercent',
+  'bassDetail.grooveType',
+  // Kick
+  'kickDetail.isDistorted',
+  'kickDetail.thd',
+  'kickDetail.fundamentalHz',
   // Synthesis
   'synthesisCharacter.inharmonicity',
   'synthesisCharacter.oddToEvenRatio',

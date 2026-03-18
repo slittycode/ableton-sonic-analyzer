@@ -101,6 +101,49 @@ const validPayload = {
     sidechainDetail: {
       confidence: 0.31,
     },
+    acidDetail: {
+      isAcid: true,
+      confidence: 0.68,
+      resonanceLevel: 0.45,
+      centroidOscillationHz: 120,
+      bassRhythmDensity: 6.2,
+    },
+    reverbDetail: {
+      rt60: 0.82,
+      isWet: true,
+      tailEnergyRatio: 0.41,
+      measured: true,
+    },
+    vocalDetail: {
+      hasVocals: true,
+      confidence: 0.72,
+      vocalEnergyRatio: 0.35,
+      formantStrength: 0.48,
+      mfccLikelihood: 0.61,
+    },
+    supersawDetail: {
+      isSupersaw: false,
+      confidence: 0.12,
+      voiceCount: 1,
+      avgDetuneCents: 3.2,
+      spectralComplexity: 0.18,
+    },
+    bassDetail: {
+      averageDecayMs: 85,
+      type: 'punchy',
+      transientRatio: 0.72,
+      fundamentalHz: 55,
+      transientCount: 48,
+      swingPercent: 3.5,
+      grooveType: 'straight',
+    },
+    kickDetail: {
+      isDistorted: false,
+      thd: 0.08,
+      harmonicRatio: 0.22,
+      fundamentalHz: 52,
+      kickCount: 64,
+    },
     effectsDetail: {
       reverbLikely: true,
     },
@@ -189,6 +232,73 @@ describe('parseBackendAnalyzeResponse', () => {
     expect(parsed.phase1.segmentLoudness).toEqual(validPayload.phase1.segmentLoudness);
     expect(parsed.phase1.perceptual).toEqual(validPayload.phase1.perceptual);
     expect(parsed.phase1.danceability).toEqual(validPayload.phase1.danceability);
+
+    // Detector fields survive parsing
+    expect(parsed.phase1.acidDetail).toEqual({
+      isAcid: true,
+      confidence: 0.68,
+      resonanceLevel: 0.45,
+      centroidOscillationHz: 120,
+      bassRhythmDensity: 6.2,
+    });
+    expect(parsed.phase1.reverbDetail).toEqual({
+      rt60: 0.82,
+      isWet: true,
+      tailEnergyRatio: 0.41,
+      measured: true,
+    });
+    expect(parsed.phase1.vocalDetail).toEqual({
+      hasVocals: true,
+      confidence: 0.72,
+      vocalEnergyRatio: 0.35,
+      formantStrength: 0.48,
+      mfccLikelihood: 0.61,
+    });
+    expect(parsed.phase1.supersawDetail).toEqual({
+      isSupersaw: false,
+      confidence: 0.12,
+      voiceCount: 1,
+      avgDetuneCents: 3.2,
+      spectralComplexity: 0.18,
+    });
+    expect(parsed.phase1.bassDetail).toEqual({
+      averageDecayMs: 85,
+      type: 'punchy',
+      transientRatio: 0.72,
+      fundamentalHz: 55,
+      transientCount: 48,
+      swingPercent: 3.5,
+      grooveType: 'straight',
+    });
+    expect(parsed.phase1.kickDetail).toEqual({
+      isDistorted: false,
+      thd: 0.08,
+      harmonicRatio: 0.22,
+      fundamentalHz: 52,
+      kickCount: 64,
+    });
+  });
+
+  it('parses null/missing detector fields as null', () => {
+    const payload = {
+      ...validPayload,
+      phase1: {
+        ...validPayload.phase1,
+        acidDetail: null,
+        reverbDetail: null,
+        vocalDetail: undefined,
+        supersawDetail: null,
+        bassDetail: null,
+        kickDetail: null,
+      },
+    };
+    const parsed = parseBackendAnalyzeResponse(payload);
+    expect(parsed.phase1.acidDetail).toBeNull();
+    expect(parsed.phase1.reverbDetail).toBeNull();
+    expect(parsed.phase1.vocalDetail).toBeNull();
+    expect(parsed.phase1.supersawDetail).toBeNull();
+    expect(parsed.phase1.bassDetail).toBeNull();
+    expect(parsed.phase1.kickDetail).toBeNull();
   });
 
   it('throws when phase1 is missing', () => {

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Phase1Result, Phase2Result } from '../types';
+import { MeasurementResult, Phase1Result, Phase2Result, TranscriptionDetail } from '../types';
 import {
   Activity,
   ChevronDown,
@@ -31,7 +31,8 @@ import {
 } from './analysisResultsViewModel';
 
 interface AnalysisResultsProps {
-  phase1: Phase1Result | null;
+  measurement: MeasurementResult | null;
+  symbolic: TranscriptionDetail | null;
   phase2: Phase2Result | null;
   phase2StatusMessage?: string | null;
   sourceFileName?: string | null;
@@ -156,7 +157,7 @@ function toFiniteNumber(value: unknown): number | null {
   return null;
 }
 
-function getChordStrength(phase1: Phase1Result): number | null {
+function getChordStrength(phase1: MeasurementResult): number | null {
   const chordDetail = phase1.chordDetail;
   if (!chordDetail || typeof chordDetail !== 'object' || Array.isArray(chordDetail)) {
     return null;
@@ -166,7 +167,8 @@ function getChordStrength(phase1: Phase1Result): number | null {
 }
 
 export function AnalysisResults({
-  phase1,
+  measurement,
+  symbolic,
   phase2,
   phase2StatusMessage = null,
   sourceFileName = null,
@@ -179,11 +181,14 @@ export function AnalysisResults({
 
   const sessionId = useMemo(() => new Date().getTime().toString(36).toUpperCase(), []);
 
-  if (!phase1) return null;
+  if (!measurement) return null;
 
   const handleExportJSON = () => {
+    const phase1ForExport: Phase1Result = symbolic
+      ? { ...measurement, transcriptionDetail: symbolic }
+      : measurement;
     const data = {
-      phase1,
+      phase1: phase1ForExport,
       phase2,
       exportedAt: new Date().toISOString(),
     };
@@ -191,7 +196,10 @@ export function AnalysisResults({
   };
 
   const handleExportMD = () => {
-    const markdown = generateMarkdown(phase1, phase2, phase2StatusMessage);
+    const phase1ForExport: Phase1Result = symbolic
+      ? { ...measurement, transcriptionDetail: symbolic }
+      : measurement;
+    const markdown = generateMarkdown(phase1ForExport, phase2, phase2StatusMessage);
     downloadFile(markdown, 'track-analysis.md', 'text/markdown');
   };
 
@@ -215,20 +223,20 @@ export function AnalysisResults({
     setShowSources((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const finalBpm = Math.round(phase1.bpm);
-  const finalKey = phase1.key ?? 'Unknown';
+  const finalBpm = Math.round(measurement.bpm);
+  const finalKey = measurement.key ?? 'Unknown';
 
   const confidenceBadges = toConfidenceBadges(phase2?.confidenceNotes);
-  const arrangement = buildArrangementViewModel(phase1, phase2?.arrangementOverview);
-  const sonicCards = buildSonicElementCards(phase1, phase2?.sonicElements);
-  const mixGroups = buildMixChainGroups(phase1, phase2?.mixAndMasterChain, phase2?.sonicElements);
-  const patchCards = buildPatchCards(phase1, phase2);
+  const arrangement = buildArrangementViewModel(measurement, phase2?.arrangementOverview);
+  const sonicCards = buildSonicElementCards(measurement, symbolic, phase2?.sonicElements);
+  const mixGroups = buildMixChainGroups(measurement, phase2?.mixAndMasterChain, phase2?.sonicElements);
+  const patchCards = buildPatchCards(measurement, symbolic, phase2);
   const characteristicPills = Array.isArray(phase2?.detectedCharacteristics)
     ? phase2.detectedCharacteristics.slice(0, 4)
     : [];
-  const danceability = phase1.danceability;
-  const keyIsApproximate = phase1.keyConfidence <= 0.6;
-  const chordStrength = getChordStrength(phase1);
+  const danceability = measurement.danceability;
+  const keyIsApproximate = measurement.keyConfidence <= 0.6;
+  const chordStrength = getChordStrength(measurement);
   const chordsAreApproximate = chordStrength !== null && chordStrength <= 0.7;
   const hasRenderablePhase2Content =
     confidenceBadges.length > 0 ||
@@ -301,12 +309,12 @@ export function AnalysisResults({
             <div className="w-full bg-bg-app h-1 mt-3 overflow-hidden border border-border/30">
               <motion.div
                 initial={{ width: 0 }}
-                animate={{ width: `${phase1.bpmConfidence * 100}%` }}
+                animate={{ width: `${measurement.bpmConfidence * 100}%` }}
                 className="h-full bg-accent shadow-[0_0_5px_var(--color-accent)]"
               />
             </div>
             <p className="text-[10px] font-mono text-text-secondary mt-1 opacity-70">
-              CONF: {Math.min(Math.round(phase1.bpmConfidence * 100), 100) + '%'}
+              CONF: {Math.min(Math.round(measurement.bpmConfidence * 100), 100) + '%'}
             </p>
           </div>
         </div>
@@ -329,12 +337,12 @@ export function AnalysisResults({
             <div className="w-full bg-bg-app h-1 mt-3 overflow-hidden border border-border/30">
               <motion.div
                 initial={{ width: 0 }}
-                animate={{ width: `${phase1.keyConfidence * 100}%` }}
+                animate={{ width: `${measurement.keyConfidence * 100}%` }}
                 className="h-full bg-accent shadow-[0_0_5px_var(--color-accent)]"
               />
             </div>
             <p className="text-[10px] font-mono text-text-secondary mt-1 opacity-70">
-              CONF: {(phase1.keyConfidence * 100).toFixed(0)}%
+              CONF: {(measurement.keyConfidence * 100).toFixed(0)}%
             </p>
           </div>
         </div>
@@ -346,7 +354,7 @@ export function AnalysisResults({
               <Clock className="w-4 h-4 text-accent" />
               <span className="text-[10px] font-mono uppercase">METER</span>
             </div>
-            <p className="text-3xl font-display font-bold text-text-primary mt-1 w-full truncate">{phase1.timeSignature}</p>
+            <p className="text-3xl font-display font-bold text-text-primary mt-1 w-full truncate">{measurement.timeSignature}</p>
             <p className="text-[10px] font-mono text-text-secondary mt-auto opacity-70">DETECTED</p>
           </div>
         </div>
@@ -628,7 +636,7 @@ export function AnalysisResults({
       )}
 
       <div id="section-session" className="scroll-mt-24">
-        <SessionMusicianPanel phase1={phase1} sourceFileName={sourceFileName} />
+        <SessionMusicianPanel measurement={measurement} symbolic={symbolic} sourceFileName={sourceFileName} />
       </div>
 
       {sonicCards.length > 0 && (
@@ -704,11 +712,11 @@ export function AnalysisResults({
                               <div className="absolute inset-y-0 left-1/2 w-px bg-text-secondary/70" />
                               <div
                                 className="absolute inset-y-0 bg-accent/50 border border-accent/60 rounded"
-                                style={calculateStereoBandStyle(phase1.stereoWidth)}
+                                style={calculateStereoBandStyle(measurement.stereoWidth)}
                               />
                             </div>
                             <p className="text-[10px] font-mono text-text-secondary mt-1">
-                              Width band: {phase1.stereoWidth.toFixed(2)} around center
+                              Width band: {measurement.stereoWidth.toFixed(2)} around center
                             </p>
                           </div>
                         )}

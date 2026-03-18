@@ -26,8 +26,9 @@ import {
   AnalysisStageStatus,
   BackendAnalysisEstimate,
   DiagnosticLogEntry,
-  Phase1Result,
+  MeasurementResult,
   Phase2Result,
+  TranscriptionDetail,
 } from './types';
 import {
   loadPhase2RequestedPreference,
@@ -203,7 +204,8 @@ export default function App() {
   const [selectedModel, setSelectedModel] = useState(MODELS[0].id);
   const [interpretationRequested, setInterpretationRequested] = useState(() => loadPhase2RequestedPreference());
 
-  const [phase1Result, setPhase1Result] = useState<Phase1Result | null>(null);
+  const [measurementResult, setMeasurementResult] = useState<MeasurementResult | null>(null);
+  const [symbolicResult, setSymbolicResult] = useState<TranscriptionDetail | null>(null);
   const [phase2Result, setPhase2Result] = useState<Phase2Result | null>(null);
   const [phase2StatusMessage, setPhase2StatusMessage] = useState<string | null>(null);
   const [logs, setLogs] = useState<DiagnosticLogEntry[]>([]);
@@ -301,7 +303,8 @@ export default function App() {
     if (audioUrl) URL.revokeObjectURL(audioUrl);
     setAudioFile(file);
     setAudioUrl(URL.createObjectURL(file));
-    setPhase1Result(null);
+    setMeasurementResult(null);
+    setSymbolicResult(null);
     setPhase2Result(null);
     setPhase2StatusMessage(null);
     setLogs([]);
@@ -320,7 +323,8 @@ export default function App() {
     setAudioFile(null);
     if (audioUrl) URL.revokeObjectURL(audioUrl);
     setAudioUrl(null);
-    setPhase1Result(null);
+    setMeasurementResult(null);
+    setSymbolicResult(null);
     setPhase2Result(null);
     setPhase2StatusMessage(null);
     setLogs([]);
@@ -532,7 +536,14 @@ export default function App() {
             ];
           });
           completionRef.current.measurement = true;
-          setPhase1Result(result);
+          if (result) {
+            const { transcriptionDetail, ...measurement } = result;
+            setMeasurementResult(measurement);
+            setSymbolicResult(transcriptionDetail ?? null);
+          } else {
+            setMeasurementResult(null);
+            setSymbolicResult(null);
+          }
         },
         (result, log) => {
           setPhase2Result(result);
@@ -609,7 +620,15 @@ export default function App() {
           onRunUpdate: (update) => {
             setActiveRunId(update.runId);
             setAnalysisRun(update.snapshot);
-            setPhase1Result(update.displayPhase1);
+            const p1 = update.displayPhase1;
+            if (p1) {
+              const { transcriptionDetail, ...measurement } = p1;
+              setMeasurementResult(measurement);
+              setSymbolicResult(transcriptionDetail ?? null);
+            } else {
+              setMeasurementResult(null);
+              setSymbolicResult(null);
+            }
             setPhase2Result(update.displayPhase2);
             if (!update.displayPhase2 && isTerminalStageStatus(update.snapshot.stages.interpretation.status)) {
               setPhase2StatusMessage(
@@ -710,7 +729,14 @@ export default function App() {
         selectedModel,
         (result, log) => {
           completionRef.current.measurement = true;
-          setPhase1Result(result);
+          if (result) {
+            const { transcriptionDetail, ...measurement } = result;
+            setMeasurementResult(measurement);
+            setSymbolicResult(transcriptionDetail ?? null);
+          } else {
+            setMeasurementResult(null);
+            setSymbolicResult(null);
+          }
           setLogs((prev) => replaceRunningLog(prev, 'measurement', { ...log, status: 'success' }));
         },
         (result, log) => {
@@ -732,7 +758,15 @@ export default function App() {
           onRunUpdate: (update) => {
             setActiveRunId(update.runId);
             setAnalysisRun(update.snapshot);
-            setPhase1Result(update.displayPhase1);
+            const p1 = update.displayPhase1;
+            if (p1) {
+              const { transcriptionDetail, ...measurement } = p1;
+              setMeasurementResult(measurement);
+              setSymbolicResult(transcriptionDetail ?? null);
+            } else {
+              setMeasurementResult(null);
+              setSymbolicResult(null);
+            }
             setPhase2Result(update.displayPhase2);
             previousRunRef.current = update.snapshot;
           },
@@ -770,7 +804,14 @@ export default function App() {
         selectedModel,
         (result, log) => {
           completionRef.current.measurement = true;
-          setPhase1Result(result);
+          if (result) {
+            const { transcriptionDetail, ...measurement } = result;
+            setMeasurementResult(measurement);
+            setSymbolicResult(transcriptionDetail ?? null);
+          } else {
+            setMeasurementResult(null);
+            setSymbolicResult(null);
+          }
           setLogs((prev) => replaceRunningLog(prev, 'measurement', { ...log, status: 'success' }));
         },
         (result, log) => {
@@ -792,7 +833,15 @@ export default function App() {
           onRunUpdate: (update) => {
             setActiveRunId(update.runId);
             setAnalysisRun(update.snapshot);
-            setPhase1Result(update.displayPhase1);
+            const p1 = update.displayPhase1;
+            if (p1) {
+              const { transcriptionDetail, ...measurement } = p1;
+              setMeasurementResult(measurement);
+              setSymbolicResult(transcriptionDetail ?? null);
+            } else {
+              setMeasurementResult(null);
+              setSymbolicResult(null);
+            }
             setPhase2Result(update.displayPhase2);
             previousRunRef.current = update.snapshot;
           },
@@ -978,7 +1027,7 @@ export default function App() {
                         </select>
                       </div>
                     </div>
-                    {!phase1Result && audioFile && (
+                    {!measurementResult && audioFile && (
                       <div className="mt-4 flex justify-end">
                         <button
                           onClick={handleStartAnalysis}
@@ -1025,7 +1074,7 @@ export default function App() {
                       <div className="h-full flex flex-col justify-between relative z-10 gap-4">
                         <WaveformPlayer audioUrl={audioUrl} audioFile={audioFile} />
 
-                        {!phase1Result && (
+                        {!measurementResult && (
                           <div className="rounded-sm border border-border bg-bg-panel p-4 space-y-3">
                             <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
                               <div>
@@ -1097,7 +1146,7 @@ export default function App() {
               </div>
             )}
 
-            {phase1Result ? (
+            {measurementResult ? (
               <Suspense
                 fallback={
                   <div className="space-y-6">
@@ -1112,7 +1161,8 @@ export default function App() {
                 }
               >
                 <AnalysisResults
-                  phase1={phase1Result}
+                  measurement={measurementResult}
+                  symbolic={symbolicResult}
                   phase2={phase2Result}
                   phase2StatusMessage={phase2StatusMessage}
                   sourceFileName={audioFile?.name ?? null}

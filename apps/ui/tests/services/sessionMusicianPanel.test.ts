@@ -8,9 +8,9 @@ import {
   formatFilteredNoteCount,
   SessionMusicianPanel,
 } from '../../src/components/SessionMusicianPanel';
-import { Phase1Result } from '../../src/types';
+import { MeasurementResult, TranscriptionDetail } from '../../src/types';
 
-const basePhase1: Phase1Result = {
+const baseMeasurement: MeasurementResult = {
   bpm: 128,
   bpmConfidence: 0.91,
   key: 'A minor',
@@ -41,8 +41,8 @@ describe('SessionMusicianPanel confidence helpers', () => {
   it('shows the melody low-confidence warning at the inclusive 0.15 threshold', () => {
     const html = renderToStaticMarkup(
       React.createElement(SessionMusicianPanel, {
-        phase1: {
-          ...basePhase1,
+        measurement: {
+          ...baseMeasurement,
           melodyDetail: {
             noteCount: 1,
             notes: [{ midi: 60, onset: 0.2, duration: 0.3 }],
@@ -57,6 +57,7 @@ describe('SessionMusicianPanel confidence helpers', () => {
             vibratoConfidence: 0.1,
           },
         },
+        symbolic: null,
       }),
     );
 
@@ -68,8 +69,8 @@ describe('SessionMusicianPanel confidence helpers', () => {
   it('does not show the melody low-confidence warning above the threshold', () => {
     const html = renderToStaticMarkup(
       React.createElement(SessionMusicianPanel, {
-        phase1: {
-          ...basePhase1,
+        measurement: {
+          ...baseMeasurement,
           melodyDetail: {
             noteCount: 1,
             notes: [{ midi: 60, onset: 0.2, duration: 0.3 }],
@@ -84,6 +85,7 @@ describe('SessionMusicianPanel confidence helpers', () => {
             vibratoConfidence: 0.1,
           },
         },
+        symbolic: null,
       }),
     );
 
@@ -93,8 +95,8 @@ describe('SessionMusicianPanel confidence helpers', () => {
   it('renders monophonic stats without a filtered prefix and disables the confidence slider', () => {
     const html = renderToStaticMarkup(
       React.createElement(SessionMusicianPanel, {
-        phase1: {
-          ...basePhase1,
+        measurement: {
+          ...baseMeasurement,
           melodyDetail: {
             noteCount: 3,
             notes: [
@@ -113,6 +115,7 @@ describe('SessionMusicianPanel confidence helpers', () => {
             vibratoConfidence: 0.1,
           },
         },
+        symbolic: null,
       }),
     );
 
@@ -199,7 +202,7 @@ describe('SessionMusicianPanel confidence helpers', () => {
   });
 
   it('derives transcription provenance only for the active polyphonic source', () => {
-    const mixedSourceTranscriptionDetail: NonNullable<Phase1Result['transcriptionDetail']> = {
+    const mixedSourceTranscriptionDetail: TranscriptionDetail = {
       transcriptionMethod: 'basic-pitch-legacy',
       noteCount: 4,
       averageConfidence: 0.83,
@@ -255,42 +258,40 @@ describe('SessionMusicianPanel confidence helpers', () => {
   it('shows a quality-limited badge for polyphonic full-mix fallback results', () => {
     const html = renderToStaticMarkup(
       React.createElement(SessionMusicianPanel, {
-        phase1: {
-          ...basePhase1,
-          transcriptionDetail: {
-            transcriptionMethod: 'basic-pitch-legacy',
-            noteCount: 2,
-            averageConfidence: 0.42,
-            stemSeparationUsed: false,
-            fullMixFallback: true,
-            stemsTranscribed: ['full_mix'],
-            dominantPitches: [{ pitchMidi: 48, pitchName: 'C3', count: 2 }],
-            pitchRange: {
-              minMidi: 48,
-              maxMidi: 52,
-              minName: 'C3',
-              maxName: 'E3',
-            },
-            notes: [
-              {
-                pitchMidi: 48,
-                pitchName: 'C3',
-                onsetSeconds: 0.1,
-                durationSeconds: 0.4,
-                confidence: 0.48,
-                stemSource: 'full_mix',
-              },
-              {
-                pitchMidi: 52,
-                pitchName: 'E3',
-                onsetSeconds: 0.8,
-                durationSeconds: 0.2,
-                confidence: 0.36,
-                stemSource: 'full_mix',
-              },
-            ],
+        measurement: baseMeasurement,
+        symbolic: {
+          transcriptionMethod: 'basic-pitch-legacy',
+          noteCount: 2,
+          averageConfidence: 0.42,
+          stemSeparationUsed: false,
+          fullMixFallback: true,
+          stemsTranscribed: ['full_mix'],
+          dominantPitches: [{ pitchMidi: 48, pitchName: 'C3', count: 2 }],
+          pitchRange: {
+            minMidi: 48,
+            maxMidi: 52,
+            minName: 'C3',
+            maxName: 'E3',
           },
-        } as unknown as Phase1Result,
+          notes: [
+            {
+              pitchMidi: 48,
+              pitchName: 'C3',
+              onsetSeconds: 0.1,
+              durationSeconds: 0.4,
+              confidence: 0.48,
+              stemSource: 'full_mix',
+            },
+            {
+              pitchMidi: 52,
+              pitchName: 'E3',
+              onsetSeconds: 0.8,
+              durationSeconds: 0.2,
+              confidence: 0.36,
+              stemSource: 'full_mix',
+            },
+          ],
+        },
       }),
     );
 
@@ -321,8 +322,8 @@ describe('SessionMusicianPanel confidence helpers', () => {
 
     const html = renderToStaticMarkup(
       React.createElement(MockedSessionMusicianPanel, {
-        phase1: {
-          ...basePhase1,
+        measurement: {
+          ...baseMeasurement,
           melodyDetail: {
             noteCount: 3,
             notes: [
@@ -340,34 +341,34 @@ describe('SessionMusicianPanel confidence helpers', () => {
             vibratoRate: 0,
             vibratoConfidence: 0.1,
           },
-          transcriptionDetail: {
-            transcriptionMethod: 'basic-pitch-legacy',
-            noteCount: 4,
-            averageConfidence: 0.83,
-            stemSeparationUsed: true,
-            fullMixFallback: false,
-            stemsTranscribed: ['bass', 'other'],
-            dominantPitches: [
-              { pitchMidi: 48, pitchName: 'C3', count: 2 },
-              { pitchMidi: 60, pitchName: 'C4', count: 2 },
-            ],
-            pitchRange: {
-              minMidi: 48,
-              maxMidi: 60,
-              minName: 'C3',
-              maxName: 'C4',
-            },
-            notes: [
-              {
-                pitchMidi: 48,
-                pitchName: 'C3',
-                onsetSeconds: 0,
-                durationSeconds: 0.5,
-                confidence: 0.92,
-                stemSource: 'bass',
-              },
-            ],
+        },
+        symbolic: {
+          transcriptionMethod: 'basic-pitch-legacy',
+          noteCount: 4,
+          averageConfidence: 0.83,
+          stemSeparationUsed: true,
+          fullMixFallback: false,
+          stemsTranscribed: ['bass', 'other'],
+          dominantPitches: [
+            { pitchMidi: 48, pitchName: 'C3', count: 2 },
+            { pitchMidi: 60, pitchName: 'C4', count: 2 },
+          ],
+          pitchRange: {
+            minMidi: 48,
+            maxMidi: 60,
+            minName: 'C3',
+            maxName: 'C4',
           },
+          notes: [
+            {
+              pitchMidi: 48,
+              pitchName: 'C3',
+              onsetSeconds: 0,
+              durationSeconds: 0.5,
+              confidence: 0.92,
+              stemSource: 'bass',
+            },
+          ],
         },
       }),
     );

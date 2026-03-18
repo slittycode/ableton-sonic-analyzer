@@ -2,9 +2,9 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { AnalysisResults, toggleOpenKeySet } from '../../src/components/AnalysisResults';
 import { MIDI_DOWNLOAD_FILE_NAME } from '../../src/components/SessionMusicianPanel';
-import { Phase1Result, Phase2Result } from '../../src/types';
+import { MeasurementResult, Phase2Result, TranscriptionDetail } from '../../src/types';
 
-const basePhase1: Phase1Result = {
+const baseMeasurement: MeasurementResult = {
   bpm: 126,
   bpmConfidence: 0.91,
   key: 'F minor',
@@ -100,6 +100,43 @@ const basePhase2: Phase2Result = {
   ],
 };
 
+const baseSymbolic: TranscriptionDetail = {
+  transcriptionMethod: 'basic-pitch-legacy',
+  noteCount: 2,
+  averageConfidence: 0.83,
+  stemSeparationUsed: true,
+  fullMixFallback: false,
+  stemsTranscribed: ['bass', 'other'],
+  dominantPitches: [
+    { pitchMidi: 48, pitchName: 'C3', count: 4 },
+    { pitchMidi: 55, pitchName: 'G3', count: 3 },
+  ],
+  pitchRange: {
+    minMidi: 48,
+    maxMidi: 67,
+    minName: 'C3',
+    maxName: 'G4',
+  },
+  notes: [
+    {
+      pitchMidi: 48,
+      pitchName: 'C3',
+      onsetSeconds: 0.1,
+      durationSeconds: 0.4,
+      confidence: 0.92,
+      stemSource: 'bass',
+    },
+    {
+      pitchMidi: 67,
+      pitchName: 'G4',
+      onsetSeconds: 0.5,
+      durationSeconds: 0.2,
+      confidence: 0.74,
+      stemSource: 'other',
+    },
+  ],
+};
+
 describe('AnalysisResults UI wiring', () => {
   it('toggles only the targeted sonic card key', () => {
     const initial = new Set<string>(['kick']);
@@ -120,7 +157,8 @@ describe('AnalysisResults UI wiring', () => {
   it('renders mix and patch cards using strict grid layout', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
-        phase1: basePhase1,
+        measurement: baseMeasurement,
+        symbolic: null,
         phase2: basePhase2,
         sourceFileName: 'example.wav',
       }),
@@ -150,7 +188,8 @@ describe('AnalysisResults UI wiring', () => {
 
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
-        phase1: basePhase1,
+        measurement: baseMeasurement,
+        symbolic: null,
         phase2: phase2WithTags,
         sourceFileName: 'example.wav',
       }),
@@ -169,7 +208,8 @@ describe('AnalysisResults UI wiring', () => {
   it('renders character scanning fallback when phase2 is unavailable', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
-        phase1: basePhase1,
+        measurement: baseMeasurement,
+        symbolic: null,
         phase2: null,
         sourceFileName: 'example.wav',
       }),
@@ -183,7 +223,8 @@ describe('AnalysisResults UI wiring', () => {
   it('renders exactly two DSP badges for the current Phase 1 headings and one AI advisory badge', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
-        phase1: basePhase1,
+        measurement: baseMeasurement,
+        symbolic: null,
         phase2: basePhase2,
         sourceFileName: 'example.wav',
       }),
@@ -197,10 +238,11 @@ describe('AnalysisResults UI wiring', () => {
   it('shows the key low-confidence warning at the inclusive 0.60 threshold', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
-        phase1: {
-          ...basePhase1,
+        measurement: {
+          ...baseMeasurement,
           keyConfidence: 0.6,
         },
+        symbolic: null,
         phase2: null,
         sourceFileName: 'example.wav',
       }),
@@ -214,10 +256,11 @@ describe('AnalysisResults UI wiring', () => {
   it('does not show the key low-confidence warning above the threshold', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
-        phase1: {
-          ...basePhase1,
+        measurement: {
+          ...baseMeasurement,
           keyConfidence: 0.61,
         },
+        symbolic: null,
         phase2: null,
         sourceFileName: 'example.wav',
       }),
@@ -229,12 +272,13 @@ describe('AnalysisResults UI wiring', () => {
   it('shows the chord low-confidence warning at the inclusive 0.70 threshold', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
-        phase1: {
-          ...basePhase1,
+        measurement: {
+          ...baseMeasurement,
           chordDetail: {
             chordStrength: 0.7,
           },
         },
+        symbolic: null,
         phase2: basePhase2,
         sourceFileName: 'example.wav',
       }),
@@ -248,12 +292,13 @@ describe('AnalysisResults UI wiring', () => {
   it('does not show the chord low-confidence warning above the threshold', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
-        phase1: {
-          ...basePhase1,
+        measurement: {
+          ...baseMeasurement,
           chordDetail: {
             chordStrength: 0.71,
           },
         },
+        symbolic: null,
         phase2: basePhase2,
         sourceFileName: 'example.wav',
       }),
@@ -265,13 +310,14 @@ describe('AnalysisResults UI wiring', () => {
   it('renders a danceability section when backend danceability data is present', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
-        phase1: {
-          ...basePhase1,
+        measurement: {
+          ...baseMeasurement,
           danceability: {
             danceability: 1.24,
             dfa: 0.87,
           },
-        } as Phase1Result,
+        },
+        symbolic: null,
         phase2: basePhase2,
         sourceFileName: 'example.wav',
       }),
@@ -290,7 +336,8 @@ describe('AnalysisResults UI wiring', () => {
   it('renders symbolic-note unavailable state when melodyDetail is missing', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
-        phase1: basePhase1,
+        measurement: baseMeasurement,
+        symbolic: null,
         phase2: basePhase2,
         sourceFileName: 'example.wav',
       }),
@@ -303,8 +350,8 @@ describe('AnalysisResults UI wiring', () => {
   it('shows the symbolic toggle state by default when both sources are available', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
-        phase1: {
-          ...basePhase1,
+        measurement: {
+          ...baseMeasurement,
           melodyDetail: {
             noteCount: 1,
             notes: [{ midi: 72, onset: 0.1, duration: 0.2 }],
@@ -318,43 +365,8 @@ describe('AnalysisResults UI wiring', () => {
             vibratoRate: 0,
             vibratoConfidence: 0,
           },
-          transcriptionDetail: {
-            transcriptionMethod: 'basic-pitch-legacy',
-            noteCount: 2,
-            averageConfidence: 0.83,
-            stemSeparationUsed: true,
-            fullMixFallback: false,
-            stemsTranscribed: ['bass', 'other'],
-            dominantPitches: [
-              { pitchMidi: 48, pitchName: 'C3', count: 4 },
-              { pitchMidi: 55, pitchName: 'G3', count: 3 },
-            ],
-            pitchRange: {
-              minMidi: 48,
-              maxMidi: 67,
-              minName: 'C3',
-              maxName: 'G4',
-            },
-            notes: [
-              {
-                pitchMidi: 48,
-                pitchName: 'C3',
-                onsetSeconds: 0.1,
-                durationSeconds: 0.4,
-                confidence: 0.92,
-                stemSource: 'bass',
-              },
-              {
-                pitchMidi: 67,
-                pitchName: 'G4',
-                onsetSeconds: 0.5,
-                durationSeconds: 0.2,
-                confidence: 0.74,
-                stemSource: 'other',
-              },
-            ],
-          },
         },
+        symbolic: baseSymbolic,
         phase2: basePhase2,
         sourceFileName: 'example.wav',
       }),
@@ -380,8 +392,8 @@ describe('AnalysisResults UI wiring', () => {
   it('shows Essentia source badges when only melodyDetail is available', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
-        phase1: {
-          ...basePhase1,
+        measurement: {
+          ...baseMeasurement,
           melodyDetail: {
             noteCount: 3,
             notes: [
@@ -400,6 +412,7 @@ describe('AnalysisResults UI wiring', () => {
             vibratoConfidence: 0.1,
           },
         },
+        symbolic: null,
         phase2: basePhase2,
         sourceFileName: 'example.wav',
       }),
@@ -414,33 +427,31 @@ describe('AnalysisResults UI wiring', () => {
   it('renders full-mix provenance when transcription did not use Demucs stems', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
-        phase1: {
-          ...basePhase1,
-          transcriptionDetail: {
-            transcriptionMethod: 'basic-pitch-legacy',
-            noteCount: 1,
-            averageConfidence: 0.61,
-            stemSeparationUsed: false,
-            fullMixFallback: true,
-            stemsTranscribed: ['full_mix'],
-            dominantPitches: [{ pitchMidi: 60, pitchName: 'C4', count: 3 }],
-            pitchRange: {
-              minMidi: 60,
-              maxMidi: 60,
-              minName: 'C4',
-              maxName: 'C4',
-            },
-            notes: [
-              {
-                pitchMidi: 60,
-                pitchName: 'C4',
-                onsetSeconds: 0.2,
-                durationSeconds: 0.5,
-                confidence: 0.61,
-                stemSource: 'full_mix',
-              },
-            ],
+        measurement: baseMeasurement,
+        symbolic: {
+          transcriptionMethod: 'basic-pitch-legacy',
+          noteCount: 1,
+          averageConfidence: 0.61,
+          stemSeparationUsed: false,
+          fullMixFallback: true,
+          stemsTranscribed: ['full_mix'],
+          dominantPitches: [{ pitchMidi: 60, pitchName: 'C4', count: 3 }],
+          pitchRange: {
+            minMidi: 60,
+            maxMidi: 60,
+            minName: 'C4',
+            maxName: 'C4',
           },
+          notes: [
+            {
+              pitchMidi: 60,
+              pitchName: 'C4',
+              onsetSeconds: 0.2,
+              durationSeconds: 0.5,
+              confidence: 0.61,
+              stemSource: 'full_mix',
+            },
+          ],
         },
         phase2: basePhase2,
         sourceFileName: 'example.wav',
@@ -454,7 +465,8 @@ describe('AnalysisResults UI wiring', () => {
   it('renders arrangement novelty and spectral note labels with fixed segment palette colors', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
-        phase1: basePhase1,
+        measurement: baseMeasurement,
+        symbolic: null,
         phase2: basePhase2,
         sourceFileName: 'example.wav',
       }),
@@ -471,7 +483,8 @@ describe('AnalysisResults UI wiring', () => {
   it('renders a sticky device navigator with section anchors', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
-        phase1: basePhase1,
+        measurement: baseMeasurement,
+        symbolic: null,
         phase2: basePhase2,
         sourceFileName: 'example.wav',
       }),

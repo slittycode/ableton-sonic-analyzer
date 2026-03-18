@@ -8,9 +8,9 @@ import {
   truncateAtSentenceBoundary,
   truncateBySentenceCount,
 } from '../../src/components/analysisResultsViewModel';
-import { Phase2Result } from '../../src/types';
+import { MeasurementResult, Phase2Result, TranscriptionDetail } from '../../src/types';
 
-const phase1 = {
+const measurement: MeasurementResult = {
   bpm: 126,
   bpmConfidence: 0.93,
   key: 'F minor',
@@ -49,6 +49,43 @@ const phase1 = {
   },
 };
 
+const symbolic: TranscriptionDetail = {
+  transcriptionMethod: 'basic-pitch-legacy',
+  noteCount: 6,
+  averageConfidence: 0.83,
+  stemSeparationUsed: true,
+  fullMixFallback: false,
+  stemsTranscribed: ['bass', 'other'],
+  dominantPitches: [
+    { pitchMidi: 48, pitchName: 'C3', count: 4 },
+    { pitchMidi: 55, pitchName: 'G3', count: 3 },
+  ],
+  pitchRange: {
+    minMidi: 48,
+    maxMidi: 79,
+    minName: 'C3',
+    maxName: 'G5',
+  },
+  notes: [
+    {
+      pitchMidi: 48,
+      pitchName: 'C3',
+      onsetSeconds: 0.2,
+      durationSeconds: 0.3,
+      confidence: 0.81,
+      stemSource: 'bass',
+    },
+    {
+      pitchMidi: 79,
+      pitchName: 'G5',
+      onsetSeconds: 0.8,
+      durationSeconds: 0.2,
+      confidence: 0.85,
+      stemSource: 'other',
+    },
+  ],
+};
+
 describe('analysisResultsViewModel helpers', () => {
   it('truncates long text at sentence boundaries', () => {
     const long = `${'A'.repeat(610)}. Final sentence should not be included.`;
@@ -80,7 +117,7 @@ describe('analysisResultsViewModel helpers', () => {
   });
 
   it('builds arrangement timeline segments and novelty markers', () => {
-    const arrangement = buildArrangementViewModel(phase1, {
+    const arrangement = buildArrangementViewModel(measurement, {
       summary: 'Intro to drop transition.',
       segments: [
         { index: 1, startTime: 0, endTime: 32, lufs: -9.2, description: 'Intro: low energy opener' },
@@ -99,7 +136,7 @@ describe('analysisResultsViewModel helpers', () => {
   });
 
   it('caps width & stereo card content at six sentences', () => {
-    const sonicCards = buildSonicElementCards(phase1, {
+    const sonicCards = buildSonicElementCards(measurement, null, {
       kick: 'Kick sentence.',
       bass: 'Bass sentence.',
       melodicArp: 'Arp sentence.',
@@ -120,7 +157,7 @@ describe('analysisResultsViewModel helpers', () => {
 
   it('keeps protected singleton mix groups visually separate', () => {
     const groups = buildMixChainGroups(
-      phase1,
+      measurement,
       [
         {
           order: 1,
@@ -179,7 +216,7 @@ describe('analysisResultsViewModel helpers', () => {
 
   it('merges only adjacent unprotected singleton groups and caps merges at two groups', () => {
     const groups = buildMixChainGroups(
-      phase1,
+      measurement,
       [
         {
           order: 1,
@@ -251,7 +288,7 @@ describe('analysisResultsViewModel helpers', () => {
       ],
     } as Phase2Result;
 
-    const cards = buildPatchCards(phase1, phase2);
+    const cards = buildPatchCards(measurement, null, phase2);
 
     expect(cards.length).toBeGreaterThan(0);
     expect(cards[0].parameters.length).toBeGreaterThanOrEqual(3);
@@ -261,45 +298,7 @@ describe('analysisResultsViewModel helpers', () => {
   });
 
   it('builds melody insights from phase1 transcription payload', () => {
-    const insights = buildMelodyInsights({
-      ...phase1,
-      transcriptionDetail: {
-        transcriptionMethod: 'basic-pitch-legacy',
-        noteCount: 6,
-        averageConfidence: 0.83,
-        stemSeparationUsed: true,
-        fullMixFallback: false,
-        stemsTranscribed: ['bass', 'other'],
-        dominantPitches: [
-          { pitchMidi: 48, pitchName: 'C3', count: 4 },
-          { pitchMidi: 55, pitchName: 'G3', count: 3 },
-        ],
-        pitchRange: {
-          minMidi: 48,
-          maxMidi: 79,
-          minName: 'C3',
-          maxName: 'G5',
-        },
-        notes: [
-          {
-            pitchMidi: 48,
-            pitchName: 'C3',
-            onsetSeconds: 0.2,
-            durationSeconds: 0.3,
-            confidence: 0.81,
-            stemSource: 'bass',
-          },
-          {
-            pitchMidi: 79,
-            pitchName: 'G5',
-            onsetSeconds: 0.8,
-            durationSeconds: 0.2,
-            confidence: 0.85,
-            stemSource: 'other',
-          },
-        ],
-      },
-    });
+    const insights = buildMelodyInsights(measurement, symbolic);
 
     expect(insights).not.toBeNull();
     expect(insights?.noteCount).toBe(6);

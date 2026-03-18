@@ -10,7 +10,7 @@ import {
   SlidersHorizontal,
   Square,
 } from 'lucide-react';
-import { Phase1Result } from '../types';
+import { MeasurementResult, TranscriptionDetail } from '../types';
 import { downloadMidiFile } from '../services/midi/midiExport';
 import { previewNotes, PreviewHandle } from '../services/midi/midiPreview';
 import { gridLabel, quantizeNotes } from '../services/midi/quantization';
@@ -50,7 +50,7 @@ export function formatFilteredNoteCount(
 
 export function deriveTranscriptionProvenance(
   activeSource: 'polyphonic' | 'monophonic' | 'none',
-  transcriptionDetail: Phase1Result['transcriptionDetail'] | null | undefined,
+  transcriptionDetail: TranscriptionDetail | null | undefined,
 ): { transcriptionPathLabel: string | null; stemSourcesLabel: string | null } {
   if (activeSource !== 'polyphonic' || !transcriptionDetail) {
     return {
@@ -169,13 +169,14 @@ function drawPianoRoll(canvas: HTMLCanvasElement, notes: MidiDisplayNote[], dura
 }
 
 interface SessionMusicianPanelProps {
-  phase1: Phase1Result;
+  measurement: MeasurementResult;
+  symbolic: TranscriptionDetail | null;
   sourceFileName?: string | null;
 }
 
-export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusicianPanelProps) {
-  const melodyDetail = phase1.melodyDetail;
-  const transcriptionDetail = phase1.transcriptionDetail ?? null;
+export function SessionMusicianPanel({ measurement, symbolic, sourceFileName }: SessionMusicianPanelProps) {
+  const melodyDetail = measurement.melodyDetail;
+  const transcriptionDetail = symbolic;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const previewRef = useRef<PreviewHandle | null>(null);
   const [isPreviewing, setIsPreviewing] = useState(false);
@@ -228,14 +229,14 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
   }, [activeNotes, activeSource, confidenceThreshold]);
 
   const displayNotes = useMemo(
-    () => quantizeNotes(filteredNotes, phase1.bpm || 120, quantizeOptions),
-    [filteredNotes, phase1.bpm, quantizeOptions],
+    () => quantizeNotes(filteredNotes, measurement.bpm || 120, quantizeOptions),
+    [filteredNotes, measurement.bpm, quantizeOptions],
   );
 
   const duration = useMemo(() => {
-    if (!displayNotes.length) return Math.max(1, phase1.durationSeconds || 1);
-    return Math.max(...displayNotes.map((note) => note.startTime + note.duration), phase1.durationSeconds || 1, 1);
-  }, [displayNotes, phase1.durationSeconds]);
+    if (!displayNotes.length) return Math.max(1, measurement.durationSeconds || 1);
+    return Math.max(...displayNotes.map((note) => note.startTime + note.duration), measurement.durationSeconds || 1, 1);
+  }, [displayNotes, measurement.durationSeconds]);
 
   useEffect(() => {
     if (!canvasRef.current || activeSource === 'none' || !expanded) return;
@@ -274,8 +275,8 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
 
   const handleDownload = useCallback(() => {
     if (!displayNotes.length) return;
-    downloadMidiFile(displayNotes, phase1.bpm, MIDI_DOWNLOAD_FILE_NAME);
-  }, [displayNotes, phase1.bpm]);
+    downloadMidiFile(displayNotes, measurement.bpm, MIDI_DOWNLOAD_FILE_NAME);
+  }, [displayNotes, measurement.bpm]);
 
   const stats = useMemo(() => {
     if (activeSource === 'none' || !activeNotes.length) return null;
