@@ -346,7 +346,7 @@ def analyze_fast(mono: np.ndarray, sample_rate: int) -> dict:
 
 ## Implementation Order
 
-**HOLD:** Wait for Codex DSP preflight reframe validation before starting Phases 1-4.
+~~**HOLD:** Wait for Codex DSP preflight reframe validation before starting Phases 1-4.~~ _(Superseded — see ARCHITECTURE_STRATEGY.md)_
 
 1. **Week 1:** Ground truth dataset (Phase 0)
    - 10 tracks matching your actual library
@@ -370,7 +370,7 @@ def analyze_fast(mono: np.ndarray, sample_rate: int) -> dict:
 **Dependencies:**
 - Phases 1-3 require ground truth dataset (Phase 0)
 - Phase 4 (fast mode) has no dependencies
-- All phases should wait for Codex DSP preflight validation
+- ~~All phases should wait for Codex DSP preflight validation~~ _(Superseded — see ARCHITECTURE_STRATEGY.md)_
 
 ---
 
@@ -424,16 +424,16 @@ def analyze_fast(mono: np.ndarray, sample_rate: int) -> dict:
 ## Deliverables Checklist
 
 ### Code
-- [ ] `scripts/calibrate_confidence.py`
-- [ ] `apps/ui/src/services/phase2Validator.ts`
+- [x] `scripts/calibrate_confidence.py`
+- [x] `apps/ui/src/services/phase2Validator.ts`
 - [ ] `apps/ui/src/components/Phase2ConsistencyReport.tsx`
-- [ ] `apps/ui/src/services/fieldAnalytics.ts`
-- [ ] `apps/backend/analyze_fast.py`
+- [x] `apps/ui/src/services/fieldAnalytics.ts`
+- [x] `apps/backend/analyze_fast.py`
 
 ### Documentation
 - [ ] `tests/ground_truth/README.md`
-- [ ] `docs/confidence_calibration_results.md`
-- [ ] `docs/field_utilization_report.md`
+- [x] `docs/confidence_calibration_results.md`
+- [x] `docs/field_utilization_report.md`
 
 ### Updated Files
 - [ ] `apps/backend/analyze.py` (fast mode entry point)
@@ -458,6 +458,10 @@ def analyze_fast(mono: np.ndarray, sample_rate: int) -> dict:
 - DSP provides rhythm cluster + synthesis tier as **context**
 - Gemini names genre from **audio perception** with DSP as anchoring
 - Cross-check notes contradictions but does not override
+
+**2026-03-18 — Status sync:**
+1. Checked off deliverables already present in the repo (shipped in v1.2.0+): `calibrate_confidence.py`, `phase2Validator.ts`, `fieldAnalytics.ts`, `analyze_fast.py`, `confidence_calibration_results.md`, `field_utilization_report.md`. Remaining: `Phase2ConsistencyReport.tsx`, `tests/ground_truth/README.md`.
+2. Struck through HOLD gates (Implementation Order + Dependencies) — Codex DSP preflight reframe validation landed and is superseded by `ARCHITECTURE_STRATEGY.md`.
 
 ---
 
