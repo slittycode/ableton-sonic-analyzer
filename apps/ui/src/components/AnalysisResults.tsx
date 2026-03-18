@@ -413,6 +413,83 @@ export function AnalysisResults({
         </div>
       )}
 
+      {(() => {
+        const { acidDetail, reverbDetail, vocalDetail, supersawDetail, bassDetail, kickDetail } = measurement;
+        const hasAny = acidDetail || reverbDetail || vocalDetail || supersawDetail || bassDetail || kickDetail;
+        if (!hasAny) return null;
+        return (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between border-b border-border pb-2">
+              <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
+                <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
+                Detector Analysis
+              </h2>
+              <span className="text-[10px] font-mono bg-bg-panel border border-border px-2 py-1 rounded font-bold text-text-secondary">
+                PHASE 1
+              </span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {acidDetail && (
+                <div className="bg-bg-card border border-border rounded-sm p-4">
+                  <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mb-2">Acid Bass</p>
+                  <p className="text-xl font-display font-bold text-text-primary">{acidDetail.isAcid ? 'DETECTED' : 'NOT DETECTED'}</p>
+                  <p className="text-xs font-mono text-text-secondary mt-1">Confidence: {(acidDetail.confidence * 100).toFixed(0)}%</p>
+                  {acidDetail.isAcid && (
+                    <p className="text-xs font-mono text-text-secondary">Resonance: {acidDetail.resonanceLevel.toFixed(2)}</p>
+                  )}
+                </div>
+              )}
+              {reverbDetail && (
+                <div className="bg-bg-card border border-border rounded-sm p-4">
+                  <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mb-2">Reverb</p>
+                  <p className="text-xl font-display font-bold text-text-primary">{reverbDetail.isWet ? 'WET' : 'DRY'}</p>
+                  {reverbDetail.measured && reverbDetail.rt60 !== null ? (
+                    <p className="text-xs font-mono text-text-secondary mt-1">RT60: {reverbDetail.rt60.toFixed(2)}s</p>
+                  ) : (
+                    <p className="text-xs font-mono text-text-secondary mt-1 opacity-50">RT60: N/A</p>
+                  )}
+                </div>
+              )}
+              {vocalDetail && (
+                <div className="bg-bg-card border border-border rounded-sm p-4">
+                  <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mb-2">Vocals</p>
+                  <p className="text-xl font-display font-bold text-text-primary">{vocalDetail.hasVocals ? 'PRESENT' : 'ABSENT'}</p>
+                  <p className="text-xs font-mono text-text-secondary mt-1">Confidence: {(vocalDetail.confidence * 100).toFixed(0)}%</p>
+                </div>
+              )}
+              {supersawDetail && (
+                <div className="bg-bg-card border border-border rounded-sm p-4">
+                  <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mb-2">Supersaw</p>
+                  <p className="text-xl font-display font-bold text-text-primary">{supersawDetail.isSupersaw ? 'DETECTED' : 'NOT DETECTED'}</p>
+                  <p className="text-xs font-mono text-text-secondary mt-1">Confidence: {(supersawDetail.confidence * 100).toFixed(0)}%</p>
+                  {supersawDetail.isSupersaw && (
+                    <p className="text-xs font-mono text-text-secondary">Voices: {supersawDetail.voiceCount}</p>
+                  )}
+                </div>
+              )}
+              {bassDetail && (
+                <div className="bg-bg-card border border-border rounded-sm p-4">
+                  <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mb-2">Bass Character</p>
+                  <p className="text-xl font-display font-bold text-text-primary uppercase">{bassDetail.type}</p>
+                  <p className="text-xs font-mono text-text-secondary mt-1">Decay: {bassDetail.averageDecayMs.toFixed(0)}ms</p>
+                  <p className="text-xs font-mono text-text-secondary">Groove: {bassDetail.grooveType}</p>
+                </div>
+              )}
+              {kickDetail && (
+                <div className="bg-bg-card border border-border rounded-sm p-4">
+                  <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mb-2">Kick</p>
+                  <p className="text-xl font-display font-bold text-text-primary">{kickDetail.kickCount} HITS</p>
+                  <p className="text-xs font-mono text-text-secondary mt-1">Fundamental: {kickDetail.fundamentalHz.toFixed(0)}Hz</p>
+                  {kickDetail.isDistorted && (
+                    <p className="text-xs font-mono text-accent mt-1">DISTORTED</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       <div className="space-y-2">
         <div className="flex items-center justify-between border-b border-border pb-2">
           <h2 className="text-sm font-mono uppercase tracking-wider flex items-center gap-2 text-text-secondary">
