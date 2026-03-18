@@ -15,7 +15,7 @@ Conventions:
 
 Top-level keys:
 
-`bpm`, `bpmConfidence`, `bpmPercival`, `bpmAgreement`, `key`, `keyConfidence`, `timeSignature`, `durationSeconds`, `sampleRate`, `lufsIntegrated`, `lufsRange`, `truePeak`, `crestFactor`, `dynamicSpread`, `dynamicCharacter`, `stereoDetail`, `spectralBalance`, `spectralDetail`, `rhythmDetail`, `melodyDetail`, `transcriptionDetail`, `grooveDetail`, `sidechainDetail`, `effectsDetail`, `synthesisCharacter`, `danceability`, `structure`, `arrangementDetail`, `segmentLoudness`, `segmentSpectral`, `segmentStereo`, `segmentKey`, `chordDetail`, `perceptual`, `essentiaFeatures`.
+`bpm`, `bpmConfidence`, `bpmPercival`, `bpmAgreement`, `key`, `keyConfidence`, `timeSignature`, `durationSeconds`, `sampleRate`, `lufsIntegrated`, `lufsRange`, `truePeak`, `crestFactor`, `dynamicSpread`, `dynamicCharacter`, `stereoDetail`, `spectralBalance`, `spectralDetail`, `rhythmDetail`, `melodyDetail`, `transcriptionDetail`, `grooveDetail`, `sidechainDetail`, `acidDetail`, `reverbDetail`, `vocalDetail`, `supersawDetail`, `bassDetail`, `kickDetail`, `effectsDetail`, `synthesisCharacter`, `danceability`, `structure`, `arrangementDetail`, `segmentLoudness`, `segmentSpectral`, `segmentStereo`, `segmentKey`, `chordDetail`, `perceptual`, `essentiaFeatures`.
 
 ## Relationship To `POST /api/analyze`
 
@@ -485,3 +485,89 @@ Type: `object \| null`
 - global key (`key`) with manual confirmation
 - arrangement locators (`structure.segments`)
 - low-end/stereo safety (`stereoDetail`, especially sub-bass fields)
+
+---
+
+## `acidDetail`
+
+Acid synthesis detection via spectral centroid oscillation, resonance measurement, and bass rhythm density.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `isAcid` | boolean | True when composite score ≥ 0.45 |
+| `confidence` | number | Composite score 0–1 (40% resonance + 35% centroid oscillation + 25% bass rhythm) |
+| `resonanceLevel` | number | Peak energy in 800–5000 Hz resonance band relative to total |
+| `centroidOscillationHz` | number | Standard deviation of per-frame spectral centroid |
+| `bassRhythmDensity` | number | Onset rate in sub-200 Hz band (onsets per second) |
+
+Returns `null` on failure.
+
+## `reverbDetail`
+
+Reverb tail estimation via energy decay analysis.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `rt60` | number | Estimated RT60 decay time in seconds |
+| `isWet` | boolean | True when RT60 > 1.0s and tail energy ratio > 0.3 |
+| `tailEnergyRatio` | number | Energy in decay tail relative to total energy |
+
+Returns `null` on failure.
+
+## `vocalDetail`
+
+Vocal presence detection via MFCC analysis, formant matching, and vocal-band energy ratio.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `hasVocals` | boolean | True when composite score ≥ 0.45 |
+| `confidence` | number | Composite score 0–1 (35% energy + 35% formant + 30% MFCC) |
+| `vocalEnergyRatio` | number | Energy in 150–1500 Hz vocal band relative to total |
+| `formantStrength` | number | Formant peak match score at 500/1500/2500 Hz |
+| `mfccLikelihood` | number | MFCC distribution match to vocal pattern |
+
+Returns `null` on failure.
+
+## `supersawDetail`
+
+Supersaw/unison detection via spectral peak clustering and detune measurement.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `isSupersaw` | boolean | True when composite score indicates unison voices |
+| `confidence` | number | Composite score 0–1 (35% voice count + 35% detune + 30% consistency) |
+| `voiceCount` | number | Estimated number of near-unison voices |
+| `avgDetuneCents` | number | Average detune spread between cluster members in cents |
+| `spectralComplexity` | number | Spectral complexity metric from peak analysis |
+
+Returns `null` on failure.
+
+## `bassDetail`
+
+Bass character analysis via lowpass-filtered onset detection, decay measurement, and groove analysis.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `averageDecayMs` | number | Mean decay time to −6 dB per bass onset in milliseconds |
+| `type` | string | One of `"punchy"`, `"medium"`, `"rolling"`, `"sustained"` |
+| `transientRatio` | number | Ratio of transient energy to sustained energy |
+| `fundamentalHz` | number | Estimated bass fundamental frequency (30–120 Hz) |
+| `transientCount` | number | Number of detected bass onsets |
+| `swingPercent` | number | Swing amount from lag-1 autocorrelation of onset intervals |
+| `grooveType` | string | One of `"straight"`, `"slight-swing"`, `"heavy-swing"`, `"shuffle"` |
+
+Returns `null` on failure.
+
+## `kickDetail`
+
+Kick drum distortion analysis via THD measurement and harmonic ratio computation.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `isDistorted` | boolean | True when THD > 0.15 or harmonicRatio < 0.5 |
+| `thd` | number | Total harmonic distortion (harmonic power / fundamental power) |
+| `harmonicRatio` | number | Ratio of harmonic to inharmonic content in kick band |
+| `fundamentalHz` | number | Detected kick fundamental frequency |
+| `kickCount` | number | Number of detected kick transients |
+
+Returns `null` on failure.

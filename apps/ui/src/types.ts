@@ -86,6 +86,48 @@ export interface Phase1Result {
   transcriptionDetail?: TranscriptionDetail | null;
   grooveDetail?: Record<string, unknown> | null;
   sidechainDetail?: Record<string, unknown> | null;
+  acidDetail?: {
+    isAcid: boolean;
+    confidence: number;
+    resonanceLevel: number;
+    centroidOscillationHz: number;
+    bassRhythmDensity: number;
+  } | null;
+  reverbDetail?: {
+    rt60: number;
+    isWet: boolean;
+    tailEnergyRatio: number;
+  } | null;
+  vocalDetail?: {
+    hasVocals: boolean;
+    confidence: number;
+    vocalEnergyRatio: number;
+    formantStrength: number;
+    mfccLikelihood: number;
+  } | null;
+  supersawDetail?: {
+    isSupersaw: boolean;
+    confidence: number;
+    voiceCount: number;
+    avgDetuneCents: number;
+    spectralComplexity: number;
+  } | null;
+  bassDetail?: {
+    averageDecayMs: number;
+    type: 'punchy' | 'medium' | 'rolling' | 'sustained';
+    transientRatio: number;
+    fundamentalHz: number;
+    transientCount: number;
+    swingPercent: number;
+    grooveType: 'straight' | 'slight-swing' | 'heavy-swing' | 'shuffle';
+  } | null;
+  kickDetail?: {
+    isDistorted: boolean;
+    thd: number;
+    harmonicRatio: number;
+    fundamentalHz: number;
+    kickCount: number;
+  } | null;
   effectsDetail?: Record<string, unknown> | null;
   synthesisCharacter?: Record<string, unknown> | null;
   danceability?: DanceabilityResult | null;

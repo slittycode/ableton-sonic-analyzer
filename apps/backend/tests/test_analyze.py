@@ -29,7 +29,9 @@ EXPECTED_TOP_LEVEL_KEYS = {
     "lufsIntegrated", "lufsRange", "truePeak", "crestFactor",
     "dynamicSpread", "dynamicCharacter", "stereoDetail", "spectralBalance",
     "spectralDetail", "rhythmDetail", "melodyDetail", "transcriptionDetail",
-    "grooveDetail", "sidechainDetail", "effectsDetail", "synthesisCharacter",
+    "grooveDetail", "sidechainDetail", "acidDetail", "reverbDetail",
+    "vocalDetail", "supersawDetail", "bassDetail", "kickDetail",
+    "effectsDetail", "synthesisCharacter",
     "danceability", "structure", "arrangementDetail",
     "segmentLoudness", "segmentSpectral", "segmentStereo", "segmentKey",
     "chordDetail", "perceptual", "essentiaFeatures",
@@ -600,6 +602,402 @@ class TranscriptionBackendAbstractionTests(unittest.TestCase):
         stub = _StubBackend()
         result = self.analyze.analyze_transcription("nonexistent.wav", backend=stub)
         self.assertEqual(result, {"transcriptionDetail": None})
+
+
+class AcidDetailTests(unittest.TestCase):
+    """Tests for analyze_acid_detail — TB-303 acid bassline detection."""
+
+    @classmethod
+    def setUpClass(cls):
+        analyze_path = Path(__file__).resolve().parents[1] / "analyze.py"
+        spec = importlib.util.spec_from_file_location("analyze_acid_test", analyze_path)
+        if spec is None or spec.loader is None:
+            raise AssertionError("Could not load analyze.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        cls.analyze = module
+
+    def test_returns_none_for_empty_signal(self):
+        mono = np.array([], dtype=np.float32)
+        result = self.analyze.analyze_acid_detail(mono, 44100, bpm=128.0)
+        self.assertEqual(result, {"acidDetail": None})
+
+    def test_returns_none_when_bpm_is_none(self):
+        mono = np.zeros(44100, dtype=np.float32)
+        result = self.analyze.analyze_acid_detail(mono, 44100, bpm=None)
+        self.assertEqual(result, {"acidDetail": None})
+
+    def test_short_signal_returns_low_confidence(self):
+        """Very short silence should produce zero-confidence acid result."""
+        mono = np.zeros(44100, dtype=np.float32)
+        result = self.analyze.analyze_acid_detail(mono, 44100, bpm=128.0)
+        detail = result.get("acidDetail")
+        self.assertIsNotNone(detail)
+        self.assertFalse(detail["isAcid"])
+        self.assertEqual(detail["confidence"], 0.0)
+
+    def test_output_schema_fields(self):
+        """All expected fields must be present in the output."""
+        sr = 44100
+        duration = 3.0
+        t = np.linspace(0, duration, int(sr * duration), endpoint=False, dtype=np.float32)
+        mono = 0.5 * np.sin(2 * np.pi * 200 * t).astype(np.float32)
+        result = self.analyze.analyze_acid_detail(mono, sr, bpm=130.0)
+        detail = result.get("acidDetail")
+        self.assertIsNotNone(detail)
+        expected_keys = {"isAcid", "confidence", "resonanceLevel", "centroidOscillationHz", "bassRhythmDensity"}
+        self.assertEqual(set(detail.keys()), expected_keys)
+
+    def test_resonant_sweeping_bass_scores_higher(self):
+        """A signal with resonant bass + centroid movement should score higher than silence."""
+        sr = 44100
+        duration = 4.0
+        n_samples = int(sr * duration)
+        t = np.linspace(0, duration, n_samples, endpoint=False, dtype=np.float32)
+        sweep_freq = 150 + 550 * (t / duration)
+        mono = 0.5 * np.sin(2 * np.pi * sweep_freq * t)
+        mono += 0.3 * np.sin(2 * np.pi * sweep_freq * 2 * t)
+        mono = mono.astype(np.float32)
+        result = self.analyze.analyze_acid_detail(mono, sr, bpm=130.0)
+        detail = result["acidDetail"]
+        self.assertGreater(detail["centroidOscillationHz"], 0)
+        self.assertGreater(detail["resonanceLevel"], 0)
+
+    def test_confidence_bounded_zero_to_one(self):
+        """Confidence must always be in [0, 1]."""
+        sr = 44100
+        mono = np.random.randn(int(sr * 2.0)).astype(np.float32) * 0.3
+        result = self.analyze.analyze_acid_detail(mono, sr, bpm=140.0)
+        detail = result["acidDetail"]
+        self.assertGreaterEqual(detail["confidence"], 0.0)
+        self.assertLessEqual(detail["confidence"], 1.0)
+
+
+class ReverbDetailTests(unittest.TestCase):
+    """Tests for analyze_reverb_detail — RT60 estimation from decay slopes."""
+
+    @classmethod
+    def setUpClass(cls):
+        analyze_path = Path(__file__).resolve().parents[1] / "analyze.py"
+        spec = importlib.util.spec_from_file_location("analyze_reverb_test", analyze_path)
+        if spec is None or spec.loader is None:
+            raise AssertionError("Could not load analyze.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        cls.analyze = module
+
+    def _make_decaying_signal(self, sr: int, n_transients: int, rt60_target: float, duration: float = 6.0) -> np.ndarray:
+        """Generate a signal with clear transients followed by exponential decay."""
+        n_samples = int(sr * duration)
+        mono = np.zeros(n_samples, dtype=np.float32)
+        beat_samples = int(sr * (60.0 / 130.0))
+        decay_rate = np.log(1000) / (rt60_target * sr)
+
+        for i in range(n_transients):
+            onset = i * beat_samples
+            if onset >= n_samples:
+                break
+            burst_len = min(200, n_samples - onset)
+            t = np.arange(burst_len, dtype=np.float32)
+            decay_env = np.exp(-decay_rate * t)
+            mono[onset:onset + burst_len] += (0.8 * decay_env * np.sin(2 * np.pi * 440 * t / sr)).astype(np.float32)
+
+        return mono
+
+    def test_returns_none_for_empty_signal(self):
+        mono = np.array([], dtype=np.float32)
+        result = self.analyze.analyze_reverb_detail(mono, 44100, bpm=128.0)
+        self.assertEqual(result, {"reverbDetail": None})
+
+    def test_output_schema_fields(self):
+        """All expected fields must be present."""
+        sr = 44100
+        mono = self._make_decaying_signal(sr, n_transients=8, rt60_target=0.4, duration=6.0)
+        result = self.analyze.analyze_reverb_detail(mono, sr, bpm=130.0)
+        detail = result.get("reverbDetail")
+        self.assertIsNotNone(detail)
+        self.assertEqual(set(detail.keys()), {"rt60", "isWet", "tailEnergyRatio"})
+
+    def test_rt60_bounded(self):
+        """RT60 must be >= 0 and <= 3.0 (capped)."""
+        sr = 44100
+        mono = self._make_decaying_signal(sr, n_transients=8, rt60_target=0.3, duration=6.0)
+        result = self.analyze.analyze_reverb_detail(mono, sr, bpm=130.0)
+        detail = result["reverbDetail"]
+        self.assertGreaterEqual(detail["rt60"], 0.0)
+        self.assertLessEqual(detail["rt60"], 3.0)
+
+    def test_tail_energy_ratio_bounded(self):
+        """tailEnergyRatio must always be in [0, 1]."""
+        sr = 44100
+        mono = self._make_decaying_signal(sr, n_transients=8, rt60_target=0.5, duration=6.0)
+        result = self.analyze.analyze_reverb_detail(mono, sr, bpm=130.0)
+        detail = result["reverbDetail"]
+        self.assertGreaterEqual(detail["tailEnergyRatio"], 0.0)
+        self.assertLessEqual(detail["tailEnergyRatio"], 1.0)
+
+    def test_is_wet_matches_rt60_threshold(self):
+        """`isWet` must be True iff rt60 > 0.5."""
+        sr = 44100
+        mono = self._make_decaying_signal(sr, n_transients=10, rt60_target=1.2, duration=8.0)
+        result = self.analyze.analyze_reverb_detail(mono, sr, bpm=130.0)
+        detail = result["reverbDetail"]
+        self.assertEqual(detail["isWet"], detail["rt60"] > 0.5)
+
+    def test_fallback_on_no_bpm(self):
+        """None BPM uses fallback (120 BPM) and does not crash."""
+        sr = 44100
+        mono = self._make_decaying_signal(sr, n_transients=6, rt60_target=0.4, duration=5.0)
+        result = self.analyze.analyze_reverb_detail(mono, sr, bpm=None)
+        self.assertIn("reverbDetail", result)
+
+    def test_short_silence_returns_fallback(self):
+        """Short silent signals return a safe fallback dict, not null."""
+        mono = np.zeros(44100 // 2, dtype=np.float32)
+        result = self.analyze.analyze_reverb_detail(mono, 44100, bpm=128.0)
+        detail = result.get("reverbDetail")
+        self.assertIsNotNone(detail)
+        self.assertIn("rt60", detail)
+
+
+class VocalDetailTests(unittest.TestCase):
+    """Tests for analyze_vocal_detail — vocal presence detection."""
+
+    @classmethod
+    def setUpClass(cls):
+        analyze_path = Path(__file__).resolve().parents[1] / "analyze.py"
+        spec = importlib.util.spec_from_file_location("analyze_vocal_test", analyze_path)
+        if spec is None or spec.loader is None:
+            raise AssertionError("Could not load analyze.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        cls.analyze = module
+
+    def test_returns_none_for_empty_signal(self):
+        mono = np.array([], dtype=np.float32)
+        result = self.analyze.analyze_vocal_detail(mono, 44100, bpm=128.0)
+        self.assertEqual(result, {"vocalDetail": None})
+
+    def test_returns_none_for_short_signal(self):
+        mono = np.zeros(1024, dtype=np.float32)
+        result = self.analyze.analyze_vocal_detail(mono, 44100, bpm=128.0)
+        self.assertEqual(result, {"vocalDetail": None})
+
+    def test_output_schema_fields(self):
+        """All expected fields must be present."""
+        sr = 44100
+        t = np.linspace(0, 2.0, int(sr * 2.0), endpoint=False, dtype=np.float32)
+        mono = 0.3 * np.sin(2 * np.pi * 440 * t).astype(np.float32)
+        result = self.analyze.analyze_vocal_detail(mono, sr, bpm=120.0)
+        detail = result.get("vocalDetail")
+        self.assertIsNotNone(detail)
+        expected_keys = {"hasVocals", "confidence", "vocalEnergyRatio", "formantStrength", "mfccLikelihood"}
+        self.assertEqual(set(detail.keys()), expected_keys)
+
+    def test_confidence_bounded_zero_to_one(self):
+        sr = 44100
+        mono = np.random.randn(int(sr * 2.0)).astype(np.float32) * 0.3
+        result = self.analyze.analyze_vocal_detail(mono, sr, bpm=120.0)
+        detail = result["vocalDetail"]
+        self.assertGreaterEqual(detail["confidence"], 0.0)
+        self.assertLessEqual(detail["confidence"], 1.0)
+
+    def test_silence_has_low_confidence(self):
+        """Silence should not be detected as vocals."""
+        sr = 44100
+        mono = np.zeros(int(sr * 2.0), dtype=np.float32)
+        result = self.analyze.analyze_vocal_detail(mono, sr, bpm=120.0)
+        detail = result["vocalDetail"]
+        self.assertIsNotNone(detail)
+        self.assertFalse(detail["hasVocals"])
+
+
+class SupersawDetailTests(unittest.TestCase):
+    """Tests for analyze_supersaw_detail — detuned unison detection."""
+
+    @classmethod
+    def setUpClass(cls):
+        analyze_path = Path(__file__).resolve().parents[1] / "analyze.py"
+        spec = importlib.util.spec_from_file_location("analyze_supersaw_test", analyze_path)
+        if spec is None or spec.loader is None:
+            raise AssertionError("Could not load analyze.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        cls.analyze = module
+
+    def test_returns_none_for_empty_signal(self):
+        mono = np.array([], dtype=np.float32)
+        result = self.analyze.analyze_supersaw_detail(mono, 44100, bpm=128.0)
+        self.assertEqual(result, {"supersawDetail": None})
+
+    def test_returns_none_for_short_signal(self):
+        mono = np.zeros(2048, dtype=np.float32)
+        result = self.analyze.analyze_supersaw_detail(mono, 44100, bpm=128.0)
+        self.assertEqual(result, {"supersawDetail": None})
+
+    def test_output_schema_fields(self):
+        """All expected fields must be present."""
+        sr = 44100
+        duration = 2.0
+        t = np.linspace(0, duration, int(sr * duration), endpoint=False, dtype=np.float32)
+        mono = 0.3 * np.sin(2 * np.pi * 440 * t).astype(np.float32)
+        result = self.analyze.analyze_supersaw_detail(mono, sr, bpm=128.0)
+        detail = result.get("supersawDetail")
+        self.assertIsNotNone(detail)
+        expected_keys = {"isSupersaw", "confidence", "voiceCount", "avgDetuneCents", "spectralComplexity"}
+        self.assertEqual(set(detail.keys()), expected_keys)
+
+    def test_confidence_bounded_zero_to_one(self):
+        sr = 44100
+        mono = np.random.randn(int(sr * 2.0)).astype(np.float32) * 0.3
+        result = self.analyze.analyze_supersaw_detail(mono, sr, bpm=128.0)
+        detail = result["supersawDetail"]
+        self.assertGreaterEqual(detail["confidence"], 0.0)
+        self.assertLessEqual(detail["confidence"], 1.0)
+
+    def test_detuned_saws_score_higher_than_single_sine(self):
+        """Multiple detuned sawtooth waves should score higher than a single sine."""
+        sr = 44100
+        duration = 3.0
+        t = np.linspace(0, duration, int(sr * duration), endpoint=False, dtype=np.float32)
+        # Single sine
+        single = 0.3 * np.sin(2 * np.pi * 440 * t).astype(np.float32)
+        result_single = self.analyze.analyze_supersaw_detail(single, sr, bpm=128.0)
+        # Detuned stack (5 voices, ±15 cents)
+        stack = np.zeros_like(t)
+        base_freq = 440.0
+        for detune_cents in [-15, -7, 0, 7, 15]:
+            freq = base_freq * (2.0 ** (detune_cents / 1200.0))
+            stack += 0.15 * np.sin(2 * np.pi * freq * t)
+        stack = stack.astype(np.float32)
+        result_stack = self.analyze.analyze_supersaw_detail(stack, sr, bpm=128.0)
+        self.assertGreaterEqual(
+            result_stack["supersawDetail"]["voiceCount"],
+            result_single["supersawDetail"]["voiceCount"],
+        )
+
+
+class BassDetailTests(unittest.TestCase):
+    """Tests for analyze_bass_detail — bass character analysis."""
+
+    @classmethod
+    def setUpClass(cls):
+        analyze_path = Path(__file__).resolve().parents[1] / "analyze.py"
+        spec = importlib.util.spec_from_file_location("analyze_bass_test", analyze_path)
+        if spec is None or spec.loader is None:
+            raise AssertionError("Could not load analyze.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        cls.analyze = module
+
+    def test_returns_none_for_empty_signal(self):
+        mono = np.array([], dtype=np.float32)
+        result = self.analyze.analyze_bass_detail(mono, 44100, bpm=128.0)
+        self.assertEqual(result, {"bassDetail": None})
+
+    def test_returns_none_for_short_signal(self):
+        """Signal shorter than 1 second should return None."""
+        mono = np.zeros(22050, dtype=np.float32)
+        result = self.analyze.analyze_bass_detail(mono, 44100, bpm=128.0)
+        self.assertEqual(result, {"bassDetail": None})
+
+    def test_output_schema_fields(self):
+        """All expected fields must be present."""
+        sr = 44100
+        duration = 3.0
+        t = np.linspace(0, duration, int(sr * duration), endpoint=False, dtype=np.float32)
+        mono = 0.5 * np.sin(2 * np.pi * 60 * t).astype(np.float32)
+        result = self.analyze.analyze_bass_detail(mono, sr, bpm=128.0)
+        detail = result.get("bassDetail")
+        self.assertIsNotNone(detail)
+        expected_keys = {"averageDecayMs", "type", "transientRatio", "fundamentalHz", "transientCount", "swingPercent", "grooveType"}
+        self.assertEqual(set(detail.keys()), expected_keys)
+
+    def test_groove_type_valid_values(self):
+        """grooveType must be one of the defined categories."""
+        sr = 44100
+        duration = 4.0
+        t = np.linspace(0, duration, int(sr * duration), endpoint=False, dtype=np.float32)
+        mono = 0.5 * np.sin(2 * np.pi * 80 * t).astype(np.float32)
+        result = self.analyze.analyze_bass_detail(mono, sr, bpm=130.0)
+        detail = result.get("bassDetail")
+        if detail is not None:
+            self.assertIn(detail["grooveType"], {"straight", "slight-swing", "heavy-swing", "shuffle"})
+            self.assertIn(detail["type"], {"punchy", "medium", "rolling", "sustained"})
+
+    def test_fallback_on_no_bpm(self):
+        """None BPM uses fallback (120 BPM) and does not crash."""
+        sr = 44100
+        t = np.linspace(0, 3.0, int(sr * 3.0), endpoint=False, dtype=np.float32)
+        mono = 0.5 * np.sin(2 * np.pi * 60 * t).astype(np.float32)
+        result = self.analyze.analyze_bass_detail(mono, sr, bpm=None)
+        self.assertIn("bassDetail", result)
+
+
+class KickDetailTests(unittest.TestCase):
+    """Tests for analyze_kick_detail — kick drum distortion and THD."""
+
+    @classmethod
+    def setUpClass(cls):
+        analyze_path = Path(__file__).resolve().parents[1] / "analyze.py"
+        spec = importlib.util.spec_from_file_location("analyze_kick_test", analyze_path)
+        if spec is None or spec.loader is None:
+            raise AssertionError("Could not load analyze.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        cls.analyze = module
+
+    def test_returns_none_for_empty_signal(self):
+        mono = np.array([], dtype=np.float32)
+        result = self.analyze.analyze_kick_detail(mono, 44100, bpm=128.0)
+        self.assertEqual(result, {"kickDetail": None})
+
+    def test_returns_none_for_short_signal(self):
+        mono = np.zeros(2048, dtype=np.float32)
+        result = self.analyze.analyze_kick_detail(mono, 44100, bpm=128.0)
+        self.assertEqual(result, {"kickDetail": None})
+
+    def test_output_schema_fields(self):
+        """All expected fields must be present."""
+        sr = 44100
+        duration = 4.0
+        n = int(sr * duration)
+        t = np.linspace(0, duration, n, endpoint=False, dtype=np.float32)
+        # Simulate kick-like transients at 60 Hz
+        beat_samples = int(sr * 0.5)  # 120 BPM
+        mono = np.zeros(n, dtype=np.float32)
+        for i in range(int(duration * 2)):
+            onset = i * beat_samples
+            if onset + 2000 < n:
+                burst = np.arange(2000, dtype=np.float32)
+                mono[onset:onset + 2000] = 0.8 * np.sin(2 * np.pi * 60 * burst / sr) * np.exp(-burst / 500)
+        result = self.analyze.analyze_kick_detail(mono, sr, bpm=120.0)
+        detail = result.get("kickDetail")
+        self.assertIsNotNone(detail)
+        expected_keys = {"isDistorted", "thd", "harmonicRatio", "fundamentalHz", "kickCount"}
+        self.assertEqual(set(detail.keys()), expected_keys)
+
+    def test_thd_bounded(self):
+        """THD should be in [0, 1]."""
+        sr = 44100
+        duration = 3.0
+        n = int(sr * duration)
+        t = np.linspace(0, duration, n, endpoint=False, dtype=np.float32)
+        mono = 0.5 * np.sin(2 * np.pi * 60 * t).astype(np.float32)
+        result = self.analyze.analyze_kick_detail(mono, sr, bpm=128.0)
+        detail = result.get("kickDetail")
+        if detail is not None:
+            self.assertGreaterEqual(detail["thd"], 0.0)
+            self.assertLessEqual(detail["thd"], 1.0)
+
+    def test_fallback_on_no_bpm(self):
+        """None BPM uses fallback (120 BPM) and does not crash."""
+        sr = 44100
+        duration = 3.0
+        t = np.linspace(0, duration, int(sr * duration), endpoint=False, dtype=np.float32)
+        mono = 0.5 * np.sin(2 * np.pi * 60 * t).astype(np.float32)
+        result = self.analyze.analyze_kick_detail(mono, sr, bpm=None)
+        self.assertIn("kickDetail", result)
 
 
 if __name__ == "__main__":

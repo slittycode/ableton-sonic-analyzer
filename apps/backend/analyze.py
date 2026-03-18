@@ -1985,6 +1985,823 @@ def analyze_effects_detail(
         return {"effectsDetail": None}
 
 
+def analyze_acid_detail(
+    mono: np.ndarray,
+    sample_rate: int = 44100,
+    bpm: float | None = None,
+) -> dict:
+    """Detect TB-303-style acid basslines from resonance, filter sweeps, and rhythm density.
+
+    Ported from sonic-architect-app/services/acidDetection.ts.
+    """
+    try:
+        mono_arr = np.asarray(mono, dtype=np.float32)
+        if mono_arr.ndim != 1 or mono_arr.size < 2:
+            return {"acidDetail": None}
+
+        if bpm is None or not np.isfinite(bpm) or bpm <= 0:
+            return {"acidDetail": None}
+
+        frame_size = 2048
+        hop_size = 512
+        acid_bass_low = 100.0
+        acid_bass_high = 800.0
+
+        low_bin = int(np.floor(acid_bass_low * frame_size / sample_rate))
+        high_bin = min(
+            int(np.ceil(acid_bass_high * frame_size / sample_rate)),
+            frame_size // 2 - 1,
+        )
+        if low_bin >= high_bin or low_bin < 0:
+            return {"acidDetail": None}
+
+        spectrum_algo = es.Spectrum(size=frame_size)
+        windowing = es.Windowing(type="hann", size=frame_size)
+
+        centroids: list[float] = []
+        band_rms_values: list[float] = []
+        prev_band_rms = 0.0
+        onset_count = 0
+
+        for frame in es.FrameGenerator(mono_arr, frameSize=frame_size, hopSize=hop_size):
+            if frame.size < frame_size:
+                padded = np.zeros(frame_size, dtype=np.float32)
+                padded[: frame.size] = frame
+                frame = padded
+            windowed = windowing(frame)
+            spectrum = spectrum_algo(windowed)
+
+            band = spectrum[low_bin : high_bin + 1]
+            if band.size == 0:
+                continue
+
+            freqs = np.arange(low_bin, high_bin + 1, dtype=np.float64) * (sample_rate / frame_size)
+            mags = band.astype(np.float64)
+            mag_sum = float(np.sum(mags))
+            centroid = float(np.sum(freqs * mags) / mag_sum) if mag_sum > 0 else 0.0
+            centroids.append(centroid)
+
+            band_power = float(np.sum(mags ** 2))
+            rms = float(np.sqrt(band_power / max(1, band.size)))
+            band_rms_values.append(rms)
+
+            if rms > prev_band_rms * 1.5 and rms > 0.001:
+                onset_count += 1
+            prev_band_rms = rms
+
+        if len(centroids) < 10:
+            return {
+                "acidDetail": {
+                    "isAcid": False,
+                    "confidence": 0.0,
+                    "resonanceLevel": 0.0,
+                    "centroidOscillationHz": 0.0,
+                    "bassRhythmDensity": 0.0,
+                }
+            }
+
+        centroids_arr = np.array(centroids, dtype=np.float64)
+        rms_arr = np.array(band_rms_values, dtype=np.float64)
+
+        centroid_oscillation = float(np.std(centroids_arr))
+        max_rms = float(np.max(rms_arr))
+        mean_rms = float(np.mean(rms_arr))
+        resonance_level = min(1.0, (max_rms - mean_rms) / mean_rms) if mean_rms > 0 else 0.0
+
+        duration = float(mono_arr.size) / sample_rate
+        bass_rhythm_density = onset_count / duration if duration > 0 else 0.0
+        expected_16th_density = (bpm / 60.0) * 4.0
+        rhythm_score = min(1.0, bass_rhythm_density / (expected_16th_density * 0.5))
+        centroid_score = min(1.0, centroid_oscillation / 100.0)
+        confidence = float(np.clip(centroid_score * 0.4 + resonance_level * 0.4 + rhythm_score * 0.2, 0.0, 1.0))
+        is_acid = confidence > 0.45
+
+        return {
+            "acidDetail": {
+                "isAcid": is_acid,
+                "confidence": round(confidence, 2),
+                "resonanceLevel": round(resonance_level, 2),
+                "centroidOscillationHz": round(centroid_oscillation),
+                "bassRhythmDensity": round(bass_rhythm_density, 1),
+            }
+        }
+    except Exception as e:
+        print(f"[warn] Acid detection failed: {e}", file=sys.stderr)
+        return {"acidDetail": None}
+
+
+def analyze_reverb_detail(
+    mono: np.ndarray,
+    sample_rate: int = 44100,
+    bpm: float | None = None,
+) -> dict:
+    """Estimate RT60 reverberation time from energy decay slopes after transients.
+
+    Ported from sonic-architect-app/services/reverbAnalysis.ts.
+    """
+    _TRANSIENT_THRESHOLD = 2.0
+    _MIN_TRANSIENTS = 4
+    _ANALYSIS_WINDOW_S = 2.0
+    _HOP_MS = 20.0
+    _SMOOTH_WINDOW = 10
+    _DIRECT_MS = 50.0
+
+    try:
+        mono_arr = np.asarray(mono, dtype=np.float32)
+        if mono_arr.ndim != 1 or mono_arr.size < 2:
+            return {"reverbDetail": None}
+
+        if bpm is None or not np.isfinite(bpm) or bpm <= 0:
+            bpm = 120.0
+
+        hop_samples = max(1, int(round((_HOP_MS / 1000.0) * sample_rate)))
+        n_frames = (mono_arr.size - hop_samples) // hop_samples + 1
+        envelope = np.zeros(n_frames, dtype=np.float64)
+        for i in range(n_frames):
+            start = i * hop_samples
+            seg = mono_arr[start : start + hop_samples].astype(np.float64)
+            envelope[i] = float(np.sqrt(np.mean(seg ** 2)))
+
+        if envelope.size < 20:
+            return {"reverbDetail": {"rt60": 0.3, "isWet": False, "tailEnergyRatio": 0.1}}
+
+        min_dist_frames = max(1, int(np.floor((((60.0 / bpm) * 1000.0) / _HOP_MS) * 0.5)))
+        transient_indices: list[int] = []
+        running_avg = 0.0
+
+        for i in range(envelope.size):
+            if i < _SMOOTH_WINDOW:
+                running_avg = float(np.mean(envelope[: i + 1]))
+            else:
+                running_avg = (running_avg * (_SMOOTH_WINDOW - 1) + envelope[i]) / _SMOOTH_WINDOW
+
+            if envelope[i] > running_avg * _TRANSIENT_THRESHOLD and envelope[i] > 0.001:
+                last = transient_indices[-1] if transient_indices else -min_dist_frames
+                if i - last >= min_dist_frames:
+                    transient_indices.append(i)
+
+        if len(transient_indices) < _MIN_TRANSIENTS:
+            return {"reverbDetail": {"rt60": 0.5, "isWet": False, "tailEnergyRatio": 0.2}}
+
+        max_decay_frames = int(np.floor((_ANALYSIS_WINDOW_S * 1000.0) / _HOP_MS))
+        direct_end_frames = max(1, int(np.floor(_DIRECT_MS / _HOP_MS)))
+        rt60_estimates: list[float] = []
+        tail_ratios: list[float] = []
+
+        for t_idx in range(len(transient_indices) - 1):
+            start_f = transient_indices[t_idx]
+            peak_e = envelope[start_f]
+            if peak_e < 0.001:
+                continue
+
+            end_f = min(start_f + max_decay_frames, transient_indices[t_idx + 1])
+            if end_f <= start_f + 5:
+                continue
+
+            direct_end = start_f + direct_end_frames
+            direct_energy = float(np.sum(envelope[start_f : min(direct_end, end_f)] ** 2))
+            tail_energy = float(np.sum(envelope[min(direct_end, end_f) : end_f] ** 2))
+            total_energy = direct_energy + tail_energy
+            if total_energy > 0:
+                tail_ratios.append(tail_energy / total_energy)
+
+            seg = envelope[start_f:end_f]
+            valid = seg > 0
+            if not np.any(valid):
+                continue
+            decay_db = 20.0 * np.log10(np.clip(seg[valid] / peak_e, 1e-10, None))
+            if decay_db.size < 5:
+                continue
+
+            n = decay_db.size
+            x = np.arange(n, dtype=np.float64)
+            x_mean, y_mean = float(np.mean(x)), float(np.mean(decay_db))
+            num = float(np.sum((x - x_mean) * (decay_db - y_mean)))
+            den = float(np.sum((x - x_mean) ** 2))
+            if den == 0:
+                continue
+            slope = num / den
+            if slope >= 0:
+                continue
+            rt60 = abs(-60.0 / (slope / (_HOP_MS / 1000.0)))
+            if 0.0 < rt60 < 5.0:
+                rt60_estimates.append(rt60)
+
+        if not rt60_estimates:
+            return {"reverbDetail": {"rt60": 0.3, "isWet": False, "tailEnergyRatio": 0.1}}
+
+        avg_rt60 = float(np.mean(rt60_estimates))
+        avg_tail = float(np.mean(tail_ratios)) if tail_ratios else 0.2
+        capped_rt60 = round(min(3.0, avg_rt60), 2)
+        return {
+            "reverbDetail": {
+                "rt60": capped_rt60,
+                "isWet": avg_rt60 > 0.5,
+                "tailEnergyRatio": round(float(np.clip(avg_tail, 0.0, 1.0)), 2),
+            }
+        }
+    except Exception as e:
+        print(f"[warn] Reverb analysis failed: {e}", file=sys.stderr)
+        return {"reverbDetail": None}
+
+
+def analyze_vocal_detail(
+    mono: np.ndarray,
+    sample_rate: int = 44100,
+    bpm: float | None = None,
+) -> dict:
+    """Detect vocal presence via spectral energy ratio, formant peaks, and MFCC likelihood.
+
+    Ported from sonic-architect-app/services/vocalDetection.ts.
+    Uses Essentia MFCC (already computed elsewhere), Spectrum, and SpectralPeaks
+    for formant detection instead of browser FFT.
+    """
+    try:
+        mono_arr = np.asarray(mono, dtype=np.float32)
+        if mono_arr.ndim != 1 or mono_arr.size < 2048:
+            return {"vocalDetail": None}
+
+        frame_size = 2048
+        hop_size = 512
+
+        # --- Frequency band boundaries ---
+        vocal_fund_low = 150.0   # Hz — low male voice
+        vocal_fund_high = 1500.0 # Hz — high female voice
+        formant_low = 300.0      # Hz — first formant
+        formant_high = 4000.0    # Hz — third formant
+
+        window = es.Windowing(type="hann", size=frame_size)
+        spectrum = es.Spectrum(size=frame_size)
+
+        vocal_energy_sum = 0.0
+        formant_energy_sum = 0.0
+        total_energy_sum = 0.0
+
+        # Expected formant centre frequencies for an average adult voice
+        expected_formants = [500.0, 1500.0, 2500.0]
+        formant_tolerance = 200.0  # Hz
+        formant_match_total = 0
+        formant_frames = 0
+
+        spectral_peaks_algo = es.SpectralPeaks(
+            orderBy="frequency",
+            magnitudeThreshold=0.00001,
+            maxPeaks=60,
+            sampleRate=sample_rate,
+        )
+
+        for frame in es.FrameGenerator(mono_arr, frameSize=frame_size, hopSize=hop_size):
+            spec = spectrum(window(frame))
+            if spec.size == 0:
+                continue
+
+            freq_resolution = float(sample_rate) / float(frame_size)
+            # Band energy via spectrum bins
+            for k in range(spec.size):
+                freq = k * freq_resolution
+                energy = float(spec[k]) ** 2
+                total_energy_sum += energy
+                if vocal_fund_low <= freq <= vocal_fund_high:
+                    vocal_energy_sum += energy
+                if formant_low <= freq <= formant_high:
+                    formant_energy_sum += energy
+
+            # Formant peak matching via SpectralPeaks (every 4th frame for speed)
+            formant_frames += 1
+            if formant_frames % 4 == 0:
+                peak_freqs, peak_mags = spectral_peaks_algo(spec)
+                frame_matches = 0
+                for ef in expected_formants:
+                    for pf in peak_freqs:
+                        if abs(float(pf) - ef) < formant_tolerance:
+                            frame_matches += 1
+                            break
+                formant_match_total += frame_matches
+
+        vocal_energy_ratio = vocal_energy_sum / total_energy_sum if total_energy_sum > 0 else 0.0
+
+        sampled_formant_frames = max(1, formant_frames // 4)
+        formant_strength = min(1.0, formant_match_total / sampled_formant_frames / 3.0)
+
+        # --- MFCC vocal likelihood ---
+        mfcc_algo = es.MFCC(
+            numberCoefficients=13,
+            inputSize=frame_size // 2 + 1,
+            sampleRate=sample_rate,
+        )
+        mfcc_accum = np.zeros(13, dtype=np.float64)
+        mfcc_count = 0
+        for frame in es.FrameGenerator(mono_arr, frameSize=frame_size, hopSize=hop_size * 4):
+            spec = spectrum(window(frame))
+            _, coeffs = mfcc_algo(spec)
+            coeffs_arr = np.asarray(coeffs, dtype=np.float64)
+            if coeffs_arr.size >= 13 and np.all(np.isfinite(coeffs_arr[:13])):
+                mfcc_accum += coeffs_arr[:13]
+                mfcc_count += 1
+
+        if mfcc_count > 0:
+            avg_mfcc = mfcc_accum / mfcc_count
+            low_e = float(np.sum(np.abs(avg_mfcc[1:4])))
+            mid_e = float(np.sum(np.abs(avg_mfcc[4:9])))
+            high_e = float(np.sum(np.abs(avg_mfcc[9:13])))
+            total_e = low_e + mid_e + high_e
+            if total_e > 0:
+                low_r = low_e / total_e
+                mid_r = mid_e / total_e
+                high_r = high_e / total_e
+                mfcc_likelihood = (
+                    (1.0 - abs(low_r - 0.40))
+                    + (1.0 - abs(mid_r - 0.35))
+                    + (1.0 - abs(high_r - 0.25))
+                ) / 3.0
+            else:
+                mfcc_likelihood = 0.5
+        else:
+            mfcc_likelihood = 0.5
+
+        # --- Composite score (35 / 35 / 30 weighting) ---
+        energy_score = min(1.0, max(0.0, (vocal_energy_ratio - 0.1) / 0.3))
+        confidence = energy_score * 0.35 + formant_strength * 0.35 + mfcc_likelihood * 0.30
+        has_vocals = confidence > 0.45
+
+        return {
+            "vocalDetail": {
+                "hasVocals": has_vocals,
+                "confidence": round(float(confidence), 2),
+                "vocalEnergyRatio": round(float(vocal_energy_ratio), 2),
+                "formantStrength": round(float(formant_strength), 2),
+                "mfccLikelihood": round(float(mfcc_likelihood), 2),
+            }
+        }
+    except Exception as e:
+        print(f"[warn] Vocal detection failed: {e}", file=sys.stderr)
+        return {"vocalDetail": None}
+
+
+def analyze_supersaw_detail(
+    mono: np.ndarray,
+    sample_rate: int = 44100,
+    bpm: float | None = None,
+) -> dict:
+    """Detect detuned sawtooth stacks characteristic of supersaw patches.
+
+    Ported from sonic-architect-app/services/supersawDetection.ts.
+    The JS version uses Basic Pitch pitchBend data; in Python we use Essentia
+    SpectralPeaks to find near-unison partials, measure detune spread, and
+    check for sawtooth harmonic decay patterns.
+    """
+    try:
+        mono_arr = np.asarray(mono, dtype=np.float32)
+        if mono_arr.ndim != 1 or mono_arr.size < 4096:
+            return {"supersawDetail": None}
+
+        frame_size = 4096
+        hop_size = 2048
+
+        window = es.Windowing(type="hann", size=frame_size)
+        spectrum = es.Spectrum(size=frame_size)
+        spectral_peaks = es.SpectralPeaks(
+            orderBy="magnitude",
+            magnitudeThreshold=0.00001,
+            maxPeaks=80,
+            sampleRate=sample_rate,
+        )
+
+        # Supersaw range: 200 Hz – 5 kHz
+        sup_low = 200.0
+        sup_high = 5000.0
+
+        all_voice_counts: list[int] = []
+        all_detune_cents: list[float] = []
+        frames_analyzed = 0
+
+        for frame in es.FrameGenerator(mono_arr, frameSize=frame_size, hopSize=hop_size):
+            spec = spectrum(window(frame))
+            peak_freqs, peak_mags = spectral_peaks(spec)
+
+            # Filter to supersaw range
+            in_range = [
+                (float(f), float(m))
+                for f, m in zip(peak_freqs, peak_mags)
+                if sup_low <= float(f) <= sup_high and float(m) > 0
+            ]
+            if len(in_range) < 3:
+                continue
+            frames_analyzed += 1
+
+            # Group peaks into clusters of near-unison voices
+            # Two peaks within 50 cents are considered "near-unison"
+            in_range.sort(key=lambda x: x[0])
+            clusters: list[list[float]] = []
+            current_cluster: list[float] = [in_range[0][0]]
+
+            for i in range(1, len(in_range)):
+                prev_f = current_cluster[-1]
+                cur_f = in_range[i][0]
+                if prev_f > 0:
+                    cents = 1200.0 * abs(np.log2(cur_f / prev_f))
+                else:
+                    cents = 999.0
+                if cents < 50.0:
+                    current_cluster.append(cur_f)
+                else:
+                    if len(current_cluster) >= 3:
+                        clusters.append(current_cluster)
+                    current_cluster = [cur_f]
+            if len(current_cluster) >= 3:
+                clusters.append(current_cluster)
+
+            for cluster in clusters:
+                all_voice_counts.append(len(cluster))
+                # Measure detune spread within cluster
+                for j in range(1, len(cluster)):
+                    if cluster[j - 1] > 0:
+                        d = 1200.0 * abs(np.log2(cluster[j] / cluster[j - 1]))
+                        if 5.0 < d < 50.0:
+                            all_detune_cents.append(d)
+
+        if frames_analyzed == 0 or len(all_voice_counts) == 0:
+            return {
+                "supersawDetail": {
+                    "isSupersaw": False,
+                    "confidence": 0.0,
+                    "voiceCount": 0,
+                    "avgDetuneCents": 0.0,
+                    "spectralComplexity": 0.0,
+                }
+            }
+
+        avg_voice_count = float(np.mean(all_voice_counts))
+        avg_detune = float(np.mean(all_detune_cents)) if all_detune_cents else 0.0
+
+        # Spectral complexity — number of peaks per frame in supersaw range
+        spectral_complexity = avg_voice_count
+
+        # --- Scoring ---
+        voice_count_score = min(1.0, max(0.0, (avg_voice_count - 3.0) / 4.0))
+
+        # Detune score: peak at 20 cents, falling off
+        if avg_detune < 5.0 or avg_detune > 50.0:
+            detune_score = 0.0
+        else:
+            distance = abs(avg_detune - 20.0)
+            if distance <= 10.0:
+                detune_score = 1.0 - distance * 0.05
+            else:
+                detune_score = max(0.0, 0.5 - (distance - 10.0) * 0.05)
+
+        consistency_score = min(1.0, len(all_voice_counts) / max(1, frames_analyzed) * 2.0)
+
+        confidence = voice_count_score * 0.35 + detune_score * 0.35 + consistency_score * 0.30
+        is_supersaw = confidence > 0.4 and avg_voice_count >= 3.0
+
+        return {
+            "supersawDetail": {
+                "isSupersaw": is_supersaw,
+                "confidence": round(float(min(1.0, confidence)), 2),
+                "voiceCount": round(float(avg_voice_count)),
+                "avgDetuneCents": round(float(avg_detune), 1),
+                "spectralComplexity": round(float(spectral_complexity), 1),
+            }
+        }
+    except Exception as e:
+        print(f"[warn] Supersaw detection failed: {e}", file=sys.stderr)
+        return {"supersawDetail": None}
+
+
+def analyze_bass_detail(
+    mono: np.ndarray,
+    sample_rate: int = 44100,
+    bpm: float | None = None,
+) -> dict:
+    """Analyze bass character: sub-bass decay time, transient ratio, fundamental Hz, swing.
+
+    Ported from sonic-architect-app/services/bassAnalysis.ts.
+    Uses Essentia LowPass for bass extraction, energy-based onset detection,
+    decay measurement to -6 dB, and ZCR fundamental estimation.
+    """
+    try:
+        mono_arr = np.asarray(mono, dtype=np.float32)
+        if mono_arr.ndim != 1 or mono_arr.size < sample_rate:
+            return {"bassDetail": None}
+
+        effective_bpm = bpm if (bpm is not None and np.isfinite(bpm) and bpm > 0) else 120.0
+
+        # --- 1. Extract bass band: one-pole lowpass at 150 Hz ---
+        fc = 150.0 / float(sample_rate)
+        alpha = float(np.exp(-2.0 * np.pi * fc))
+        a0 = 1.0 - alpha
+        bass = np.zeros(mono_arr.size, dtype=np.float64)
+        y1 = 0.0
+        for i in range(mono_arr.size):
+            y1 = a0 * float(mono_arr[i]) + alpha * y1
+            bass[i] = y1
+        bass = bass.astype(np.float32)
+
+        # --- 2. Find bass transients (energy-based onset detection) ---
+        hop_onset = max(1, int(sample_rate * 0.01))   # 10 ms hops
+        frame_onset = max(1, int(sample_rate * 0.04))  # 40 ms frames
+        beat_dur_s = 60.0 / effective_bpm
+        min_onset_dist = int(beat_dur_s * 0.25 * sample_rate)  # ~1/16th note
+
+        onsets: list[int] = []
+        prev_energy = 0.0
+        last_onset = -min_onset_dist
+
+        i = 0
+        while i + frame_onset < bass.size:
+            frame_slice = bass[i : i + frame_onset]
+            energy = float(np.sqrt(np.mean(frame_slice ** 2)))
+            diff = energy - prev_energy
+            rel_diff = diff / prev_energy if prev_energy > 0.001 else 0.0
+            if rel_diff > 0.5 and energy > 0.01 and (i - last_onset) >= min_onset_dist:
+                onsets.append(i)
+                last_onset = i
+            prev_energy = energy * 0.8 + prev_energy * 0.2
+            i += hop_onset
+
+        # --- 3. Fundamental estimation via ZCR on middle 50% ---
+        start_zcr = bass.size // 4
+        end_zcr = (bass.size * 3) // 4
+        crossings = 0
+        for j in range(start_zcr + 1, end_zcr):
+            if (bass[j - 1] < 0 and bass[j] >= 0) or (bass[j - 1] >= 0 and bass[j] < 0):
+                crossings += 1
+        dur_zcr = float(end_zcr - start_zcr) / float(sample_rate)
+        zcr = crossings / dur_zcr if dur_zcr > 0 else 0.0
+        fundamental_hz = max(30.0, min(120.0, zcr / 2.0))
+
+        if len(onsets) < 3:
+            return {
+                "bassDetail": {
+                    "averageDecayMs": 1000,
+                    "type": "sustained",
+                    "transientRatio": 0.2,
+                    "fundamentalHz": round(fundamental_hz),
+                    "transientCount": len(onsets),
+                    "swingPercent": 0,
+                    "grooveType": "straight",
+                }
+            }
+
+        # --- 4. Measure decay time per onset to -6 dB ---
+        DECAY_THRESHOLD_DB = -6.0
+        MAX_DECAY_MS = 2000.0
+        decay_times: list[float] = []
+
+        for idx in range(len(onsets) - 1):
+            onset_sample = onsets[idx]
+            next_onset = onsets[idx + 1]
+            max_decay_samples = min(
+                next_onset - onset_sample,
+                int((MAX_DECAY_MS / 1000.0) * sample_rate),
+            )
+            # Find peak near onset (50 ms search window)
+            search_end = min(onset_sample + int(sample_rate * 0.05), bass.size)
+            peak_val = float(np.max(np.abs(bass[onset_sample:search_end]))) if search_end > onset_sample else 0.0
+            if peak_val < 0.001:
+                continue
+            threshold_val = peak_val * (10.0 ** (DECAY_THRESHOLD_DB / 20.0))
+            found = False
+            for s in range(max_decay_samples):
+                if onset_sample + s >= bass.size:
+                    break
+                if abs(float(bass[onset_sample + s])) < threshold_val:
+                    decay_times.append((s / float(sample_rate)) * 1000.0)
+                    found = True
+                    break
+            if not found:
+                decay_times.append((max_decay_samples / float(sample_rate)) * 1000.0)
+
+        avg_decay = float(np.mean(decay_times)) if decay_times else 800.0
+
+        if avg_decay < 300:
+            bass_type = "punchy"
+        elif avg_decay < 600:
+            bass_type = "medium"
+        elif avg_decay < 1000:
+            bass_type = "rolling"
+        else:
+            bass_type = "sustained"
+
+        # --- 5. Transient ratio ---
+        transient_window_samples = int(0.1 * sample_rate)  # 100 ms
+        transient_energy = 0.0
+        marked: set[int] = set()
+        for ons in onsets:
+            for s in range(ons, min(ons + transient_window_samples, bass.size)):
+                if s not in marked:
+                    transient_energy += float(bass[s]) ** 2
+                    marked.add(s)
+        total_bass_energy = float(np.sum(bass ** 2))
+        transient_ratio = transient_energy / total_bass_energy if total_bass_energy > 0 else 0.0
+
+        # --- 6. Swing detection from onset intervals ---
+        swing_percent = 0
+        groove_type = "straight"
+        if len(onsets) >= 8:
+            intervals = [float(onsets[k + 1] - onsets[k]) / float(sample_rate)
+                         for k in range(len(onsets) - 1)]
+            if len(intervals) >= 4:
+                mean_int = float(np.mean(intervals))
+                var_int = float(np.var(intervals))
+                std_int = float(np.sqrt(var_int))
+                cv = std_int / mean_int if mean_int > 0 else 0.0
+                # Lag-1 autocorrelation for alternation detection
+                if var_int > 0:
+                    alt_sum = sum(
+                        (intervals[j] - mean_int) * (intervals[j + 1] - mean_int)
+                        for j in range(len(intervals) - 1)
+                    )
+                    alt_corr = alt_sum / (len(intervals) - 1) / var_int
+                else:
+                    alt_corr = 0.0
+                if alt_corr < -0.1 and cv > 0.05:
+                    swing_percent = int(min(50, max(0, cv * 400)))
+                if swing_percent < 10:
+                    groove_type = "straight"
+                elif swing_percent < 25:
+                    groove_type = "slight-swing"
+                elif swing_percent < 40:
+                    groove_type = "heavy-swing"
+                else:
+                    groove_type = "shuffle"
+
+        return {
+            "bassDetail": {
+                "averageDecayMs": round(avg_decay),
+                "type": bass_type,
+                "transientRatio": round(float(np.clip(transient_ratio, 0.0, 1.0)), 2),
+                "fundamentalHz": round(fundamental_hz),
+                "transientCount": len(onsets),
+                "swingPercent": swing_percent,
+                "grooveType": groove_type,
+            }
+        }
+    except Exception as e:
+        print(f"[warn] Bass analysis failed: {e}", file=sys.stderr)
+        return {"bassDetail": None}
+
+
+def analyze_kick_detail(
+    mono: np.ndarray,
+    sample_rate: int = 44100,
+    bpm: float | None = None,
+) -> dict:
+    """Analyze kick drum characteristics: onset sharpness, fundamental pitch, THD, harmonic ratio.
+
+    Ported from sonic-architect-app/services/kickAnalysis.ts.
+    Uses Essentia Spectrum + Windowing in the kick band (30-120 Hz),
+    OnsetDetection for transients, per-kick THD measurement up to 10th harmonic.
+    """
+    try:
+        mono_arr = np.asarray(mono, dtype=np.float32)
+        if mono_arr.ndim != 1 or mono_arr.size < 4096:
+            return {"kickDetail": None}
+
+        effective_bpm = bpm if (bpm is not None and np.isfinite(bpm) and bpm > 0) else 120.0
+
+        frame_size = 2048
+        hop_size = 256
+        kick_low = 30.0
+        kick_high = 120.0
+
+        window = es.Windowing(type="hann", size=frame_size)
+        spectrum_algo = es.Spectrum(size=frame_size)
+
+        freq_resolution = float(sample_rate) / float(frame_size)
+        low_bin = max(1, int(kick_low / freq_resolution))
+        high_bin = min(frame_size // 2 - 1, int(kick_high / freq_resolution))
+
+        # --- 1. Build energy envelope in kick band ---
+        envelope: list[float] = []
+        for frame in es.FrameGenerator(mono_arr, frameSize=frame_size, hopSize=hop_size):
+            spec = spectrum_algo(window(frame))
+            kick_energy = 0.0
+            for k in range(low_bin, high_bin + 1):
+                kick_energy += float(spec[k]) ** 2
+            n_bins = max(1, high_bin - low_bin + 1)
+            envelope.append(float(np.sqrt(kick_energy / n_bins)))
+
+        if len(envelope) < 5:
+            return {"kickDetail": None}
+
+        # --- 2. Detect kick transients (peaks in envelope) ---
+        beat_dur_s = 60.0 / effective_bpm
+        min_dist_samples = int(beat_dur_s * 0.25 * sample_rate)  # 16th note
+        min_dist_frames = max(1, min_dist_samples // hop_size)
+
+        transients: list[int] = []  # indices into envelope
+        last_transient = -min_dist_frames
+        for i in range(2, len(envelope) - 2):
+            if (
+                envelope[i] > envelope[i - 1]
+                and envelope[i] > envelope[i + 1]
+                and envelope[i] > 0.01
+                and i - last_transient >= min_dist_frames
+            ):
+                transients.append(i)
+                last_transient = i
+
+        if len(transients) < 2:
+            return {
+                "kickDetail": {
+                    "isDistorted": False,
+                    "thd": 0.0,
+                    "harmonicRatio": 0.0,
+                    "fundamentalHz": 50.0,
+                    "kickCount": len(transients),
+                }
+            }
+
+        # --- 3. Per-kick THD and harmonic analysis ---
+        thd_values: list[float] = []
+        harmonic_ratios: list[float] = []
+        fundamentals: list[float] = []
+
+        for t_idx in transients:
+            start_sample = t_idx * hop_size
+            kick_frame_len = min(int(0.08 * sample_rate), frame_size)  # 80 ms
+            if start_sample + frame_size > mono_arr.size:
+                continue
+            raw_frame = mono_arr[start_sample : start_sample + frame_size]
+            spec = spectrum_algo(window(raw_frame))
+
+            # Find fundamental (strongest peak in kick band)
+            max_mag = 0.0
+            fund_bin = low_bin
+            for k in range(low_bin, high_bin + 1):
+                mag = float(spec[k])
+                if mag > max_mag:
+                    max_mag = mag
+                    fund_bin = k
+            fund_hz = fund_bin * freq_resolution
+            fund_power = max_mag ** 2
+
+            # THD: sum of harmonic powers / fundamental power
+            max_harmonic = min(10, int((sample_rate / 2.0) / fund_hz)) if fund_hz > 0 else 1
+            harmonic_power = 0.0
+            for h in range(2, max_harmonic + 1):
+                h_bin = round(fund_bin * h)
+                if 0 < h_bin < spec.size:
+                    harmonic_power += float(spec[h_bin]) ** 2
+
+            thd = float(np.sqrt(harmonic_power) / np.sqrt(fund_power)) if fund_power > 0 else 0.0
+
+            # Harmonic vs inharmonic ratio in kick band
+            harmonic_energy = 0.0
+            inharmonic_energy = 0.0
+            bin_width = freq_resolution
+            for k in range(low_bin, min(high_bin + 1, spec.size)):
+                freq = k * freq_resolution
+                mag = float(spec[k])
+                is_harmonic = False
+                if fund_hz > 0:
+                    for hh in range(1, 11):
+                        if abs(freq - fund_hz * hh) < bin_width * 1.5:
+                            is_harmonic = True
+                            break
+                if is_harmonic:
+                    harmonic_energy += mag ** 2
+                else:
+                    inharmonic_energy += mag ** 2
+            total_e = harmonic_energy + inharmonic_energy
+            h_ratio = harmonic_energy / total_e if total_e > 0 else 0.0
+
+            thd_values.append(min(1.0, thd))
+            harmonic_ratios.append(h_ratio)
+            fundamentals.append(fund_hz)
+
+        if not thd_values:
+            return {
+                "kickDetail": {
+                    "isDistorted": False,
+                    "thd": 0.0,
+                    "harmonicRatio": 0.0,
+                    "fundamentalHz": 50.0,
+                    "kickCount": len(transients),
+                }
+            }
+
+        avg_thd = float(np.mean(thd_values))
+        avg_harmonic_ratio = float(np.mean(harmonic_ratios))
+        avg_fundamental = float(np.mean(fundamentals))
+        is_distorted = avg_thd > 0.15 or avg_harmonic_ratio < 0.5
+
+        return {
+            "kickDetail": {
+                "isDistorted": is_distorted,
+                "thd": round(avg_thd, 2),
+                "harmonicRatio": round(avg_harmonic_ratio, 2),
+                "fundamentalHz": round(avg_fundamental),
+                "kickCount": len(transients),
+            }
+        }
+    except Exception as e:
+        print(f"[warn] Kick analysis failed: {e}", file=sys.stderr)
+        return {"kickDetail": None}
+
+
 def analyze_arrangement_detail(mono: np.ndarray, sample_rate: int = 44100) -> dict:
     """Novelty timeline from Bark bands to expose structural events."""
     try:
@@ -3226,6 +4043,12 @@ def main():
             "transcriptionDetail": result.get("transcriptionDetail"),
             "grooveDetail": result.get("grooveDetail"),
             "sidechainDetail": result.get("sidechainDetail"),
+            "acidDetail": result.get("acidDetail"),
+            "reverbDetail": result.get("reverbDetail"),
+            "vocalDetail": result.get("vocalDetail"),
+            "supersawDetail": result.get("supersawDetail"),
+            "bassDetail": result.get("bassDetail"),
+            "kickDetail": result.get("kickDetail"),
             "effectsDetail": result.get("effectsDetail"),
             "synthesisCharacter": result.get("synthesisCharacter"),
             "danceability": result.get("danceability"),
@@ -3318,6 +4141,12 @@ def main():
     # Groove detail
     result.update(analyze_groove(mono, sample_rate, rhythm_data, beat_data))
     result.update(analyze_sidechain_detail(mono, sample_rate, rhythm_data, beat_data))
+    result.update(analyze_acid_detail(mono, sample_rate, bpm=result.get("bpm")))
+    result.update(analyze_reverb_detail(mono, sample_rate, bpm=result.get("bpm")))
+    result.update(analyze_vocal_detail(mono, sample_rate, bpm=result.get("bpm")))
+    result.update(analyze_supersaw_detail(mono, sample_rate, bpm=result.get("bpm")))
+    result.update(analyze_bass_detail(mono, sample_rate, bpm=result.get("bpm")))
+    result.update(analyze_kick_detail(mono, sample_rate, bpm=result.get("bpm")))
     result.update(
         analyze_effects_detail(
             mono,
@@ -3403,6 +4232,12 @@ def main():
         "transcriptionDetail": result.get("transcriptionDetail"),
         "grooveDetail": result.get("grooveDetail"),
         "sidechainDetail": result.get("sidechainDetail"),
+        "acidDetail": result.get("acidDetail"),
+        "reverbDetail": result.get("reverbDetail"),
+        "vocalDetail": result.get("vocalDetail"),
+        "supersawDetail": result.get("supersawDetail"),
+        "bassDetail": result.get("bassDetail"),
+        "kickDetail": result.get("kickDetail"),
         "effectsDetail": result.get("effectsDetail"),
         "synthesisCharacter": result.get("synthesisCharacter"),
         "danceability": result.get("danceability"),
