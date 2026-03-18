@@ -31,7 +31,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from analysis_runtime import AnalysisRuntime, UnsupportedSymbolicModeError
-from analyze import analyze_transcription, build_analysis_estimate, get_audio_duration_seconds, separate_stems
+from analyze import (
+    BasicPitchBackend,
+    analyze_transcription,
+    build_analysis_estimate,
+    get_audio_duration_seconds,
+    separate_stems,
+)
 
 
 app = FastAPI(title="Sonic Analyzer Local API")
@@ -99,7 +105,10 @@ def _mark_legacy_endpoint_response(response: JSONResponse, *, endpoint: str) -> 
     return response
 
 
-PHASE2_PROMPT_TEMPLATE = _load_prompt_template("phase2_system.txt")
+PRODUCER_SUMMARY_PROMPT_TEMPLATE = _load_prompt_template("phase2_system.txt")
+STEM_SUMMARY_PROMPT_TEMPLATE = _load_prompt_template("stem_summary_system.txt")
+PHASE2_PROMPT_TEMPLATE = PRODUCER_SUMMARY_PROMPT_TEMPLATE
+SUPPORTED_INTERPRETATION_PROFILES = {"producer_summary", "stem_summary"}
 
 PHASE2_RESPONSE_SCHEMA = {
     "type": "OBJECT",
@@ -215,6 +224,51 @@ PHASE2_RESPONSE_SCHEMA = {
         "confidenceNotes",
         "abletonRecommendations",
     ],
+}
+STEM_SUMMARY_RESPONSE_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "summary": {"type": "STRING"},
+        "bars": {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    "barStart": {"type": "NUMBER"},
+                    "barEnd": {"type": "NUMBER"},
+                    "startTime": {"type": "NUMBER"},
+                    "endTime": {"type": "NUMBER"},
+                    "noteHypotheses": {"type": "ARRAY", "items": {"type": "STRING"}},
+                    "scaleDegreeHypotheses": {"type": "ARRAY", "items": {"type": "STRING"}},
+                    "rhythmicPattern": {"type": "STRING"},
+                    "uncertaintyLevel": {"type": "STRING"},
+                    "uncertaintyReason": {"type": "STRING"},
+                },
+                "required": [
+                    "barStart",
+                    "barEnd",
+                    "startTime",
+                    "endTime",
+                    "noteHypotheses",
+                    "scaleDegreeHypotheses",
+                    "rhythmicPattern",
+                    "uncertaintyLevel",
+                    "uncertaintyReason",
+                ],
+            },
+        },
+        "globalPatterns": {
+            "type": "OBJECT",
+            "properties": {
+                "bassRole": {"type": "STRING"},
+                "melodicRole": {"type": "STRING"},
+                "pumpingOrModulation": {"type": "STRING"},
+            },
+            "required": ["bassRole", "melodicRole", "pumpingOrModulation"],
+        },
+        "uncertaintyFlags": {"type": "ARRAY", "items": {"type": "STRING"}},
+    },
+    "required": ["summary", "bars", "globalPatterns", "uncertaintyFlags"],
 }
 ALLOWED_ORIGINS = [
     "http://localhost:3000",
@@ -461,6 +515,8 @@ async def _create_analysis_run_record(
 ) -> tuple[AnalysisRuntime, str]:
     content = await track.read()
     runtime = get_analysis_runtime()
+    if interpretation_mode != "off":
+        _resolve_interpretation_profile_config(interpretation_profile)
     created = runtime.create_run(
         filename=track.filename or "upload.bin",
         content=content,
@@ -841,6 +897,8 @@ def _execute_reserved_measurement_job(
 def _resolve_transcription_backend(backend_id: str) -> Any:
     if backend_id in ("", "auto", "default", "transcription-backend:auto"):
         return None
+    if backend_id in ("basic-pitch", "basic-pitch-legacy", "transcription-backend:basic-pitch-legacy"):
+        return BasicPitchBackend()
     raise RuntimeError(f"Unsupported symbolic backend '{backend_id}'.")
 
 
@@ -949,6 +1007,7 @@ def _run_interpretation_request(
     source_path: str,
     filename: str,
     file_size_bytes: int,
+    profile_id: str,
     measurement_result: dict[str, Any],
     symbolic_result: dict[str, Any] | None,
     grounding_metadata: dict[str, Any],
@@ -958,6 +1017,19 @@ def _run_interpretation_request(
     request_started_at = _current_time()
     flags_used: list[str] = []
     mime_type = _get_audio_mime_type(filename)
+    descriptor_hooks = _build_descriptor_hooks(measurement_result)
+
+    try:
+        profile_config = _resolve_interpretation_profile_config(profile_id)
+    except ValueError as exc:
+        return {
+            "ok": False,
+            "statusCode": 400,
+            "errorCode": "INTERPRETATION_PROFILE_UNSUPPORTED",
+            "message": str(exc),
+            "retryable": False,
+            "diagnostics": None,
+        }
 
     if not _GENAI_AVAILABLE:
         return {
@@ -990,10 +1062,11 @@ def _run_interpretation_request(
             "diagnostics": None,
         }
 
-    prompt = _build_phase2_prompt(
+    prompt = profile_config["buildPrompt"](
         measurement_result=measurement_result,
         symbolic_result=symbolic_result,
         grounding_metadata=grounding_metadata,
+        descriptor_hooks=descriptor_hooks,
     )
     client = _genai.Client(
         api_key=api_key,
@@ -1001,7 +1074,7 @@ def _run_interpretation_request(
     )
     generate_config = _genai_types.GenerateContentConfig(
         response_mime_type="application/json",
-        response_schema=PHASE2_RESPONSE_SCHEMA,
+        response_schema=profile_config["responseSchema"],
     )
     api_started_at = _current_time()
     uploaded_gemini_file = None
@@ -1023,7 +1096,7 @@ def _run_interpretation_request(
 
             response = asyncio.run(_gemini_with_retry(_generate_inline))
             api_completed_at = _current_time()
-            message_suffix = "Phase 2 advisory complete."
+            message_suffix = profile_config["successMessage"]
         else:
             flags_used.append("files-api")
 
@@ -1058,13 +1131,13 @@ def _run_interpretation_request(
             generate_end = _current_time()
             api_completed_at = _current_time()
             message_suffix = (
-                "Phase 2 advisory complete. "
+                f"{profile_config['successMessage']} "
                 f"Upload: {int(_elapsed_ms(upload_start, upload_end))}ms, "
                 f"Generate: {int(_elapsed_ms(generate_start, generate_end))}ms"
             )
 
         response_text: str | None = getattr(response, "text", None)
-        phase2_result, skip_message = _parse_phase2_result(response_text)
+        interpretation_result, skip_message = profile_config["parseResult"](response_text)
         diagnostics = _build_diagnostics(
             request_id=request_id,
             estimate={"totalLowMs": 0, "totalHighMs": 0},
@@ -1080,13 +1153,13 @@ def _run_interpretation_request(
         if skip_message:
             return {
                 "ok": True,
-                "phase2Result": None,
+                "interpretationResult": None,
                 "message": skip_message,
                 "diagnostics": diagnostics,
             }
         return {
             "ok": True,
-            "phase2Result": phase2_result,
+            "interpretationResult": interpretation_result,
             "message": message_suffix,
             "diagnostics": diagnostics,
         }
@@ -1127,6 +1200,7 @@ def _execute_interpretation_attempt(
     attempt: dict[str, Any],
 ) -> dict[str, Any]:
     run_id = str(attempt["runId"])
+    profile_id = _coerce_string(attempt.get("profileId"), "producer_summary")
     source_artifact = runtime.get_source_artifact(run_id)
     grounding = runtime.get_interpretation_grounding(run_id)
     measurement_result = grounding["measurementResult"] or {}
@@ -1137,12 +1211,14 @@ def _execute_interpretation_attempt(
         "measurementOutputId": grounding["measurementOutputId"],
         "symbolicAttemptId": grounding["symbolicAttemptId"],
         "doNotPromoteSymbolicToMeasurement": True,
+        "profileId": profile_id,
     }
     model_name = _coerce_string(attempt.get("modelName"), "gemini-2.5-flash")
     execution = _run_interpretation_request(
         source_path=source_artifact["path"],
         filename=source_artifact["filename"],
         file_size_bytes=source_artifact["sizeBytes"],
+        profile_id=profile_id,
         measurement_result=measurement_result,
         symbolic_result=symbolic_result,
         grounding_metadata=grounding_metadata,
@@ -1151,7 +1227,7 @@ def _execute_interpretation_attempt(
     )
     provenance = {
         "schemaVersion": "interpretation.v1",
-        "profileId": attempt["profileId"],
+        "profileId": profile_id,
         "modelName": model_name,
         "groundedMeasurementRunId": run_id,
         "groundedMeasurementOutputId": grounding["measurementOutputId"],
@@ -1160,7 +1236,7 @@ def _execute_interpretation_attempt(
     if execution["ok"]:
         runtime.complete_interpretation_attempt(
             str(attempt["attemptId"]),
-            result=execution["phase2Result"],
+            result=execution["interpretationResult"],
             provenance=provenance,
             diagnostics=execution["diagnostics"],
             grounded_measurement_output_id=grounding["measurementOutputId"],
@@ -1274,6 +1350,16 @@ async def create_analysis_run(
             interpretation_model=interpretation_model,
         )
         return JSONResponse(content=runtime.get_run(run_id))
+    except ValueError as exc:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "code": "INTERPRETATION_PROFILE_UNSUPPORTED",
+                    "message": str(exc),
+                }
+            },
+        )
     except RuntimeError as exc:
         return JSONResponse(
             status_code=429,
@@ -1356,6 +1442,7 @@ async def create_interpretation_attempt(
 ) -> JSONResponse:
     runtime = get_analysis_runtime()
     try:
+        _resolve_interpretation_profile_config(interpretation_profile)
         if runtime.get_measurement_status(run_id) != "completed":
             return JSONResponse(
                 status_code=409,
@@ -1379,6 +1466,16 @@ async def create_interpretation_attempt(
             },
         )
         return JSONResponse(status_code=202, content=runtime.get_run(run_id))
+    except ValueError as exc:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "code": "INTERPRETATION_PROFILE_UNSUPPORTED",
+                    "message": str(exc),
+                }
+            },
+        )
     except KeyError:
         return JSONResponse(
             status_code=404,
@@ -1528,9 +1625,10 @@ def _build_phase2_prompt(
     measurement_result: dict[str, Any],
     symbolic_result: dict[str, Any] | None,
     grounding_metadata: dict[str, Any],
+    descriptor_hooks: dict[str, Any] | None = None,
 ) -> str:
     sections = [
-        PHASE2_PROMPT_TEMPLATE.rstrip(),
+        PRODUCER_SUMMARY_PROMPT_TEMPLATE.rstrip(),
         "\n\nAUTHORITATIVE_MEASUREMENT_RESULT_JSON:\n",
         json.dumps(measurement_result, indent=2),
         "\n\nOPTIONAL_SYMBOLIC_EXTRACTION_RESULT_JSON:\n",
@@ -1538,7 +1636,139 @@ def _build_phase2_prompt(
         "\n\nGROUNDING_METADATA:\n",
         json.dumps(grounding_metadata, indent=2),
     ]
+    if descriptor_hooks:
+        sections.extend(
+            [
+                "\n\nMEASUREMENT_DERIVED_DESCRIPTOR_HOOKS:\n",
+                json.dumps(descriptor_hooks, indent=2),
+            ]
+        )
     return "".join(sections)
+
+
+def _build_stem_summary_prompt(
+    *,
+    measurement_result: dict[str, Any],
+    symbolic_result: dict[str, Any] | None,
+    grounding_metadata: dict[str, Any],
+    descriptor_hooks: dict[str, Any],
+) -> str:
+    sections = [
+        STEM_SUMMARY_PROMPT_TEMPLATE.rstrip(),
+        "\n\nAUTHORITATIVE_MEASUREMENT_RESULT_JSON:\n",
+        json.dumps(measurement_result, indent=2),
+        "\n\nOPTIONAL_SYMBOLIC_EXTRACTION_RESULT_JSON:\n",
+        json.dumps(symbolic_result, indent=2),
+        "\n\nMEASUREMENT_DERIVED_DESCRIPTOR_HOOKS:\n",
+        json.dumps(descriptor_hooks, indent=2),
+        "\n\nGROUNDING_METADATA:\n",
+        json.dumps(grounding_metadata, indent=2),
+    ]
+    return "".join(sections)
+
+
+def _build_descriptor_hooks(measurement_result: dict[str, Any]) -> dict[str, Any]:
+    duration_seconds = _coerce_nullable_number(measurement_result.get("durationSeconds"))
+    rhythm_detail = measurement_result.get("rhythmDetail")
+    segment_loudness = measurement_result.get("segmentLoudness")
+    sidechain_detail = measurement_result.get("sidechainDetail")
+    melody_detail = measurement_result.get("melodyDetail")
+    groove_detail = measurement_result.get("grooveDetail")
+
+    downbeats: list[float] = []
+    if isinstance(rhythm_detail, dict) and isinstance(rhythm_detail.get("downbeats"), list):
+        for entry in rhythm_detail["downbeats"]:
+            if _is_finite_num(entry):
+                downbeats.append(round(float(entry), 4))
+
+    bar_grid: list[dict[str, Any]] = []
+    if downbeats:
+        for index, start_time in enumerate(downbeats):
+            end_time = (
+                downbeats[index + 1]
+                if index + 1 < len(downbeats)
+                else duration_seconds
+            )
+            if end_time is None:
+                continue
+            bar_grid.append(
+                {
+                    "barStart": index + 1,
+                    "barEnd": index + 1,
+                    "startTime": round(float(start_time), 4),
+                    "endTime": round(float(end_time), 4),
+                }
+            )
+
+    energy_curve: dict[str, Any] = {
+        "segmentLoudness": [],
+        "kickAccent16": [],
+        "hihatAccent16": [],
+    }
+    if isinstance(segment_loudness, list):
+        for entry in segment_loudness:
+            if not isinstance(entry, dict):
+                continue
+            energy_curve["segmentLoudness"].append(
+                {
+                    "segmentIndex": entry.get("segmentIndex"),
+                    "start": entry.get("start"),
+                    "end": entry.get("end"),
+                    "lufs": entry.get("lufs"),
+                    "lra": entry.get("lra"),
+                }
+            )
+    if isinstance(groove_detail, dict):
+        if isinstance(groove_detail.get("kickAccent"), list):
+            energy_curve["kickAccent16"] = groove_detail.get("kickAccent")
+        if isinstance(groove_detail.get("hihatAccent"), list):
+            energy_curve["hihatAccent16"] = groove_detail.get("hihatAccent")
+
+    pumping_descriptor = {
+        "pumpingStrength": None,
+        "pumpingRegularity": None,
+        "pumpingRate": None,
+        "pumpingConfidence": None,
+        "vibratoPresent": None,
+        "vibratoRate": None,
+        "vibratoConfidence": None,
+    }
+    if isinstance(sidechain_detail, dict):
+        pumping_descriptor["pumpingStrength"] = sidechain_detail.get("pumpingStrength")
+        pumping_descriptor["pumpingRegularity"] = sidechain_detail.get("pumpingRegularity")
+        pumping_descriptor["pumpingRate"] = sidechain_detail.get("pumpingRate")
+        pumping_descriptor["pumpingConfidence"] = sidechain_detail.get("pumpingConfidence")
+    if isinstance(melody_detail, dict):
+        pumping_descriptor["vibratoPresent"] = melody_detail.get("vibratoPresent")
+        pumping_descriptor["vibratoRate"] = melody_detail.get("vibratoRate")
+        pumping_descriptor["vibratoConfidence"] = melody_detail.get("vibratoConfidence")
+
+    return {
+        "stableBarGrid": bar_grid,
+        "beatSynchronousEnergyCurve": energy_curve,
+        "pumpingOrModulationDescriptor": pumping_descriptor,
+    }
+
+
+def _resolve_interpretation_profile_config(profile_id: str) -> dict[str, Any]:
+    if profile_id == "producer_summary":
+        return {
+            "responseSchema": PHASE2_RESPONSE_SCHEMA,
+            "buildPrompt": _build_phase2_prompt,
+            "parseResult": _parse_phase2_result,
+            "successMessage": "AI interpretation complete.",
+        }
+    if profile_id == "stem_summary":
+        return {
+            "responseSchema": STEM_SUMMARY_RESPONSE_SCHEMA,
+            "buildPrompt": _build_stem_summary_prompt,
+            "parseResult": _parse_stem_summary_result,
+            "successMessage": "Stem summary complete.",
+        }
+    raise ValueError(
+        f"interpretation_profile '{profile_id}' is unsupported. "
+        f"Supported profiles: {sorted(SUPPORTED_INTERPRETATION_PROFILES)}"
+    )
 
 
 def _is_str(v: Any) -> bool:
@@ -1697,6 +1927,70 @@ def _parse_phase2_result(
         return None, "Phase 2 advisory skipped because Gemini returned invalid JSON."
     if not _is_valid_phase2_shape(parsed):
         return None, "Phase 2 advisory skipped because Gemini returned an invalid response shape."
+    return parsed, None
+
+
+def _is_string_array(value: Any) -> bool:
+    return isinstance(value, list) and all(isinstance(item, str) for item in value)
+
+
+def _is_stem_summary_bars(value: Any) -> bool:
+    if not isinstance(value, list):
+        return False
+    for item in value:
+        record = _as_record(item)
+        if not record:
+            return False
+        if not (
+            _is_finite_num(record.get("barStart"))
+            and _is_finite_num(record.get("barEnd"))
+            and _is_finite_num(record.get("startTime"))
+            and _is_finite_num(record.get("endTime"))
+            and _is_string_array(record.get("noteHypotheses"))
+            and _is_string_array(record.get("scaleDegreeHypotheses"))
+            and _is_str(record.get("rhythmicPattern"))
+            and record.get("uncertaintyLevel") in ("LOW", "MED", "HIGH")
+            and _is_str(record.get("uncertaintyReason"))
+        ):
+            return False
+    return True
+
+
+def _is_stem_summary_global_patterns(value: Any) -> bool:
+    record = _as_record(value)
+    if not record:
+        return False
+    return (
+        _is_str(record.get("bassRole"))
+        and _is_str(record.get("melodicRole"))
+        and _is_str(record.get("pumpingOrModulation"))
+    )
+
+
+def _is_valid_stem_summary_shape(value: Any) -> bool:
+    record = _as_record(value)
+    if not record:
+        return False
+    return (
+        _is_str(record.get("summary"))
+        and _is_stem_summary_bars(record.get("bars"))
+        and _is_stem_summary_global_patterns(record.get("globalPatterns"))
+        and _is_string_array(record.get("uncertaintyFlags"))
+    )
+
+
+def _parse_stem_summary_result(
+    response_text: str | None,
+) -> tuple[dict[str, Any] | None, str | None]:
+    raw = (response_text or "").strip()
+    if not raw:
+        return None, "Stem summary skipped because Gemini returned an empty response."
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return None, "Stem summary skipped because Gemini returned invalid JSON."
+    if not _is_valid_stem_summary_shape(parsed):
+        return None, "Stem summary skipped because Gemini returned an invalid response shape."
     return parsed, None
 
 
@@ -2235,7 +2529,7 @@ async def analyze_phase2(
                 content={
                     "requestId": request_id,
                     "analysisRunId": run_id,
-                    "phase2": execution["phase2Result"],
+                    "phase2": execution["interpretationResult"],
                     "message": execution["message"],
                     "diagnostics": execution["diagnostics"],
                 }

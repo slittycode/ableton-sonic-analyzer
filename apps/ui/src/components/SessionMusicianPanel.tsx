@@ -68,6 +68,17 @@ export function deriveTranscriptionProvenance(
   };
 }
 
+function formatSymbolicMethodLabel(transcriptionMethod: string | null | undefined): string {
+  const normalized = (transcriptionMethod ?? '').trim().toLowerCase();
+  if (normalized === 'basic-pitch' || normalized === 'basic_pitch' || normalized === 'basic-pitch-legacy') {
+    return 'BASIC PITCH LEGACY';
+  }
+  if (!normalized) {
+    return 'SYMBOLIC EXTRACTION';
+  }
+  return transcriptionMethod!.replace(/[_-]+/g, ' ').toUpperCase();
+}
+
 function midiToNoteName(midi: number): string {
   const names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const;
   const clamped = Math.max(0, Math.min(127, Math.round(midi)));
@@ -315,9 +326,9 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
         : false;
   const sourceBadgeLabel =
     activeSource === 'polyphonic'
-      ? 'SOURCES: BASIC PITCH'
+      ? `SOURCE: ${formatSymbolicMethodLabel(transcriptionDetail?.transcriptionMethod)}`
       : activeSource === 'monophonic'
-        ? 'SOURCES: ESSENTIA'
+        ? 'SOURCE: ESSENTIA MELODY'
         : null;
   const { transcriptionPathLabel, stemSourcesLabel } = deriveTranscriptionProvenance(activeSource, transcriptionDetail);
   const melodyIsApproximate = !!melodyDetail && (melodyDetail.pitchConfidence ?? 1) <= 0.15;
@@ -338,7 +349,7 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
             </span>
           )}
         </h2>
-        <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">MIDI TRANSCRIPTION</span>
+        <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">SYMBOLIC NOTES</span>
       </div>
 
       <div className="bg-bg-card border border-border rounded-sm p-4 space-y-4">
@@ -350,7 +361,7 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
             <div>
               <h3 className="text-sm font-semibold uppercase tracking-wider">SESSION MUSICIAN</h3>
               <p className="text-[10px] font-mono uppercase tracking-widest text-text-secondary opacity-70">
-                Audio to MIDI transcription
+                Symbolic notes and melody guide
               </p>
             </div>
           </div>
@@ -384,7 +395,7 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
                       : 'text-text-secondary hover:text-text-primary'
                   }`}
                 >
-                  POLYPHONIC
+                  SYMBOLIC
                 </button>
                 <button
                   onClick={() => setSourceMode('monophonic')}
@@ -394,7 +405,7 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
                       : 'text-text-secondary hover:text-text-primary'
                   }`}
                 >
-                  MONOPHONIC
+                  MELODY
                 </button>
               </div>
             )}
@@ -414,10 +425,10 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
             {activeSource === 'none' && (
               <div className="border border-border rounded-sm px-3 py-2 bg-bg-panel/40 space-y-1">
                 <p className="text-[11px] font-mono text-text-secondary uppercase tracking-wide">
-                  MIDI TRANSCRIPTION UNAVAILABLE
+                  SYMBOLIC NOTES UNAVAILABLE
                 </p>
                 <p className="text-[10px] font-mono text-text-secondary/80">
-                  Run with --transcribe flag for Basic Pitch polyphonic transcription, or ensure melodyDetail is present in DSP JSON
+                  Run with symbolic extraction enabled, or ensure melodyDetail is present in the DSP payload for a melody guide
                 </p>
               </div>
             )}
@@ -528,7 +539,7 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
 
               <div
                 className="flex items-center gap-2 px-2 py-1 rounded border border-border bg-bg-card"
-                title={activeSource === 'monophonic' ? 'Per-note confidence not available in monophonic mode' : undefined}
+                title={activeSource === 'monophonic' ? 'Per-note confidence not available in melody-guide mode' : undefined}
               >
                 <span className="text-[10px] font-mono uppercase text-text-secondary">CONFIDENCE</span>
                 <input
@@ -569,10 +580,10 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
               <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
               <span title="Session musician transcription details">
                 {activeSource === 'polyphonic'
-                  ? 'Polyphonic transcription via Basic Pitch. Adjust quantize before preview/export. Adjust confidence threshold to filter noise before export.'
+                  ? `${formatSymbolicMethodLabel(transcriptionDetail?.transcriptionMethod)} symbolic notes. Adjust quantize before preview/export. Adjust confidence threshold to filter noise before export.`
                   : activeSource === 'monophonic'
-                    ? 'Monophonic pitch detection via Essentia. Adjust quantize before preview/export. Per-note confidence not available in monophonic mode.'
-                    : 'MIDI transcription unavailable until transcriptionDetail or melodyDetail is present in the DSP payload.'}
+                    ? 'Monophonic melody guide via Essentia. Adjust quantize before preview/export. Per-note confidence not available in melody-guide mode.'
+                    : 'Symbolic notes unavailable until symbolic extraction or melodyDetail is present in the DSP payload.'}
                 {isDraft ? ' Confidence is low, so treat this clip as a draft scaffold.' : ''}
               </span>
             </div>

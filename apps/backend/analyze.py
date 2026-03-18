@@ -231,9 +231,9 @@ def build_analysis_estimate(
             "transcription_stems" if run_separation else "transcription_full_mix"
         )
         transcription_label = (
-            "Basic Pitch on bass + other stems"
+            "Legacy Basic Pitch on bass + other stems"
             if run_separation
-            else "Basic Pitch on full mix"
+            else "Legacy Basic Pitch on full mix"
         )
         transcription_seconds = (
             _estimate_stage_seconds(duration_seconds, 0.22, 0.42, 60.0, 150.0)
@@ -2629,10 +2629,11 @@ from typing import Protocol, runtime_checkable
 
 @runtime_checkable
 class TranscriptionBackend(Protocol):
-    """Interface for pluggable audio-to-MIDI transcription backends.
+    """Interface for pluggable symbolic extraction backends.
 
-    Stage 3 migration: implement this Protocol to swap basic-pitch for
-    a maintained alternative without changing analyze_transcription() callers.
+    Stage 3 migration: implement this Protocol to swap the legacy
+    Basic Pitch backend for a maintained alternative without changing
+    analyze_transcription() callers.
     """
 
     name: str  # written to transcriptionDetail.transcriptionMethod in output
@@ -3000,9 +3001,9 @@ def _deduplicate_transcription_notes(notes: list[dict]) -> list[dict]:
 
 
 class BasicPitchBackend:
-    """Transcription backend wrapping the basic-pitch library."""
+    """Legacy comparison backend wrapping the basic-pitch library."""
 
-    name = "basic-pitch"
+    name = "basic-pitch-legacy"
 
     def transcribe(
         self,
@@ -3137,7 +3138,7 @@ def analyze_transcription(
     stem_paths: dict | None = None,
     backend: TranscriptionBackend | None = None,
 ) -> dict:
-    """Run transcription via the specified backend, defaulting to BasicPitchBackend.
+    """Run transcription via the specified backend, defaulting to the legacy Basic Pitch backend.
 
     Pass a custom backend implementing TranscriptionBackend to use an alternative
     transcription engine (Stage 3 migration point).

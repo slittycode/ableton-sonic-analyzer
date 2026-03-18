@@ -287,7 +287,7 @@ describe('AnalysisResults UI wiring', () => {
     expect(MIDI_DOWNLOAD_FILE_NAME).toBe('track-analysis.mid');
   });
 
-  it('renders MIDI unavailable state when melodyDetail is missing', () => {
+  it('renders symbolic-note unavailable state when melodyDetail is missing', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
         phase1: basePhase1,
@@ -296,11 +296,11 @@ describe('AnalysisResults UI wiring', () => {
       }),
     );
 
-    expect(html).toContain('MIDI TRANSCRIPTION UNAVAILABLE');
-    expect(html).toContain('Run with --transcribe flag for Basic Pitch polyphonic transcription, or ensure melodyDetail is present in DSP JSON');
+    expect(html).toContain('SYMBOLIC NOTES UNAVAILABLE');
+    expect(html).toContain('Run with symbolic extraction enabled, or ensure melodyDetail is present in the DSP payload for a melody guide');
   });
 
-  it('shows the polyphonic toggle state by default when both sources are available', () => {
+  it('shows the symbolic toggle state by default when both sources are available', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
         phase1: {
@@ -319,7 +319,7 @@ describe('AnalysisResults UI wiring', () => {
             vibratoConfidence: 0,
           },
           transcriptionDetail: {
-            transcriptionMethod: 'basic-pitch',
+            transcriptionMethod: 'basic-pitch-legacy',
             noteCount: 2,
             averageConfidence: 0.83,
             stemSeparationUsed: true,
@@ -360,9 +360,9 @@ describe('AnalysisResults UI wiring', () => {
       }),
     );
 
-    expect(html).toContain('POLYPHONIC');
-    expect(html).toContain('MONOPHONIC');
-    expect(html).toContain('Polyphonic transcription via Basic Pitch');
+    expect(html).toContain('SYMBOLIC');
+    expect(html).toContain('MELODY');
+    expect(html).toContain('BASIC PITCH LEGACY symbolic notes');
     expect(html).toContain('Range: C3 - G4');
     expect(html).toContain('Confidence: 83%');
     expect(html.match(/Range: C3 - G4/g)?.length ?? 0).toBe(1);
@@ -370,11 +370,11 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).toContain('2 / 2 NOTES');
     expect(html).toContain('CONFIDENCE');
     expect(html).toContain('20%');
-    expect(html).toContain('SOURCES: BASIC PITCH');
+    expect(html).toContain('SOURCE: BASIC PITCH LEGACY');
     expect(html).toContain('STEM-AWARE');
     expect(html).toContain('STEMS: bass, other');
     expect(html).toContain('Adjust confidence threshold to filter noise before export.');
-    expect(html).not.toContain('MIDI TRANSCRIPTION UNAVAILABLE');
+    expect(html).not.toContain('SYMBOLIC NOTES UNAVAILABLE');
   });
 
   it('shows Essentia source badges when only melodyDetail is available', () => {
@@ -405,10 +405,10 @@ describe('AnalysisResults UI wiring', () => {
       }),
     );
 
-    expect(html).not.toContain('POLYPHONIC');
-    expect(html).not.toContain('MONOPHONIC');
-    expect(html).toContain('SOURCES: ESSENTIA');
-    expect(html).toContain('Monophonic pitch detection via Essentia');
+    expect(html).not.toContain('SOURCE: BASIC PITCH LEGACY');
+    expect(html).not.toContain('BASIC PITCH LEGACY symbolic notes');
+    expect(html).toContain('SOURCE: ESSENTIA MELODY');
+    expect(html).toContain('Monophonic melody guide via Essentia');
   });
 
   it('renders full-mix provenance when transcription did not use Demucs stems', () => {
@@ -417,7 +417,7 @@ describe('AnalysisResults UI wiring', () => {
         phase1: {
           ...basePhase1,
           transcriptionDetail: {
-            transcriptionMethod: 'basic-pitch',
+            transcriptionMethod: 'basic-pitch-legacy',
             noteCount: 1,
             averageConfidence: 0.61,
             stemSeparationUsed: false,

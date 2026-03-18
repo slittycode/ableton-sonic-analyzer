@@ -2,25 +2,25 @@
 
 React and Vite frontend for the Sonic Analyzer workflow.
 
-The app uploads a track to the local DSP backend, shows the estimate and execution status for Phase 1, optionally runs a Gemini advisory pass for Phase 2, and renders the returned analysis in a browser UI.
+The app uploads a track to the local DSP backend, shows the estimate and execution status for measurement plus downstream stages, optionally runs AI interpretation, and renders the returned analysis in a browser UI.
 
 ## Current Features
 
  - file upload with drag-and-drop and file picker, audio type validation with extension fallback when browser MIME is blank, and local audio preview
 - file size warning for uploads exceeding 100 MB (non-blocking)
 - inline error messages for invalid files with dismiss and retry controls
-- automatic Phase 1 estimate request on file selection
+- automatic measurement estimate request on file selection
 - local DSP execution status with elapsed time, stage estimates, and progress bar
- - cancel button during analysis with end-to-end abort handling across Phase 1 and Phase 2
-- optional Basic Pitch transcription toggle for the backend request
-- optional Demucs stem separation toggle for the backend request, independent of MIDI transcription
-- optional Gemini Phase 2 advisory pass with a selectable model
+- cancel button during analysis with end-to-end abort handling across measurement and AI interpretation
+- optional symbolic extraction toggle for the backend request
+- optional Demucs stem separation toggle for the backend request, independent of symbolic extraction
+- optional Gemini AI interpretation pass with a selectable model
 - analysis result dashboard with arrangement, sonic, mix-chain, patch, and secret-sauce sections
 - Session Musician panel with:
-  - polyphonic Basic Pitch note view when `transcriptionDetail` exists
-  - monophonic Essentia note view when `melodyDetail` exists
+  - symbolic note view when `transcriptionDetail` exists
+  - monophonic Essentia melody guide when `melodyDetail` exists
   - source toggle when both are available
-  - confidence threshold slider (polyphonic mode only; disabled in monophonic mode with tooltip)
+  - confidence threshold slider (symbolic-note mode only; disabled in melody-guide mode with tooltip)
   - quantize grid and swing controls
   - browser preview and `.mid` download
 - JSON export and markdown report export
@@ -64,8 +64,8 @@ cp .env.example .env
 | Variable | Meaning | Current behavior |
 | --- | --- | --- |
 | `VITE_API_BASE_URL` | Base URL for the backend API. | `src/config.ts` falls back to `http://127.0.0.1:8100` when unset. The checked-in `.env.example` uses `http://127.0.0.1:8100`. If another FastAPI app is answering on your configured URL, the UI now reports that it found the wrong service and disables `Initiate Analysis`. |
-| `VITE_ENABLE_PHASE2_GEMINI` | Hard kill-switch for the optional Gemini pass. | Defaults to `"true"` when unset. Set it to `"false"` only when you want to disable Phase 2 for the whole build. |
-| `VITE_GEMINI_API_KEY` | Gemini API key. | Phase 2 is on by default in the UI, but the advisory run is blocked until this value is non-empty. |
+| `VITE_ENABLE_PHASE2_GEMINI` | Hard kill-switch for the optional Gemini interpretation pass. | Defaults to `"true"` when unset. Set it to `"false"` only when you want to disable AI interpretation for the whole build. |
+| `VITE_GEMINI_API_KEY` | Gemini API key. | AI interpretation is on by default in the UI, but the interpretation run is blocked until this value is non-empty. |
 | `RUN_GEMINI_LIVE_SMOKE` | Enables the opt-in live Playwright proof for the Gemini Files API path. | Must be `"true"` to run `npm run test:smoke:live-gemini`; default smoke coverage keeps Gemini mocked. |
 | `DISABLE_HMR` | Vite dev-server knob. | `vite.config.ts` disables HMR only when this is `"true"`. |
 
@@ -164,7 +164,7 @@ What the UI expects back:
 Current note:
 
 - the UI uses this response only for display
-- if this request fails, the app still lets the user start Phase 1
+- if this request fails, the app still lets the user start analysis
 
 ### `POST /api/analyze`
 
@@ -175,7 +175,7 @@ When it runs:
 What the UI sends today:
 
 - multipart `track`
-- multipart `transcribe=true|false` based on the MIDI transcription toggle
+- multipart `transcribe=true|false` based on the symbolic extraction toggle
 - multipart `separate=true|false` based on the stem separation toggle
 - no `separate` query parameter
 
@@ -265,17 +265,17 @@ The UI also understands the backend error envelope:
 
 This is what powers the visible backend error message and the diagnostic log entries.
 
-## Phase 2
+## AI Interpretation
 
-Phase 2 is optional and entirely frontend-owned.
+AI interpretation is optional and entirely frontend-owned.
 
 Current behavior:
 
-- Phase 2 is on by default unless `VITE_ENABLE_PHASE2_GEMINI="false"` is used as a hard kill-switch.
-- The app remembers the user's `PHASE 2 ADVISORY` toggle in browser storage.
+- AI interpretation is on by default unless `VITE_ENABLE_PHASE2_GEMINI="false"` is used as a hard kill-switch.
+- The app remembers the user's AI interpretation toggle in browser storage.
 - If the UI toggle is on but `VITE_GEMINI_API_KEY` is missing, analysis start is blocked and the app tells you to either update `apps/ui/.env`, `export VITE_GEMINI_API_KEY=...`, or run `VITE_GEMINI_API_KEY=... ./scripts/dev.sh`.
 - The user can choose from the baked-in Gemini model list in `src/App.tsx`.
-- The prompt uses the uploaded audio file plus the completed `phase1` payload.
+- The prompt uses the uploaded audio file plus the completed measurement payload and any server-owned downstream context.
 - Phase 2 results drive the arrangement narrative, sonic element cards, mix chain, patch framework, secret sauce, and recommendation sections.
 - Audio files at or below 100MB are sent to Gemini as inline base64. Audio files above 100MB are uploaded via the Gemini Files API before generation and deleted immediately after; the diagnostic log shows upload and generation durations separately.
 

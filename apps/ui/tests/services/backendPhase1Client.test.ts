@@ -60,7 +60,7 @@ const validPayload = {
       vibratoConfidence: 0.05,
     },
     transcriptionDetail: {
-      transcriptionMethod: 'basic-pitch',
+      transcriptionMethod: 'basic-pitch-legacy',
       noteCount: 2,
       averageConfidence: 0.83,
       stemSeparationUsed: true,

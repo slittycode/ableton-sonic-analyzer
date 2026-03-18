@@ -579,7 +579,7 @@ class TranscriptionBackendAbstractionTests(unittest.TestCase):
 
     def test_basic_pitch_backend_name(self) -> None:
         backend = self.analyze.BasicPitchBackend()
-        self.assertEqual(backend.name, "basic-pitch")
+        self.assertEqual(backend.name, "basic-pitch-legacy")
 
     def test_basic_pitch_backend_satisfies_protocol(self) -> None:
         backend = self.analyze.BasicPitchBackend()

@@ -26,7 +26,7 @@ test('live Gemini inline path uses inlineData without Files API traffic', async 
 
   await gotoUploadPage(page);
   await uploadAudioFile(page, fixturePath);
-  await setToggle(page, 'PHASE 2 ADVISORY', true);
+  await setToggle(page, 'AI INTERPRETATION', true);
   await selectPhase2Model(page, DEFAULT_PHASE2_MODEL);
 
   await waitForEstimate(page);

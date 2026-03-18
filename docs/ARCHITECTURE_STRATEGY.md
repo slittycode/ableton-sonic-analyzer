@@ -2,7 +2,7 @@
 
 **Last updated:** March 2026  
 **Status:** Living document — update when experiments produce results or the AI capability landscape shifts materially.  
-**Sources:** ChatGPT o3 deep research (March 2026), Codex architecture hardening audit, Perplexity ecosystem research (Demucs/separation alternatives), session analysis with Claude Sonnet.
+**Sources:** ChatGPT o3 deep research (March 2026), Codex architecture hardening audit, Perplexity ecosystem research (Demucs/separation alternatives), session analysis with Claude Sonnet, `deep-research-report.md`, `deep-research-report (1).md`, `deep-research-report (2).md`, and `docs/STAGE3_REALITY_AUDIT.md`.
 
 This document is not a specification. It is a record of *why* the architecture is shaped the way it is, so that future development decisions — by agents or humans — can be made with the reasoning visible rather than just the conclusions.
 
@@ -55,7 +55,7 @@ This means the split is correct and should be maintained: **measure locally, ext
 | Essentia 2.1b6.dev1389 | ✅ Healthy — MTG-maintained, July 2025 wheels, Python 3.9–3.13 | Stay. Irreplaceable for measurement. |
 | Demucs 4.0.1 | 🟡 Frozen — Meta archived Jan 1 2025, adefossez fork is bug-fix only | Stay. Models are excellent and stable. No better alternative at comparable quality. Monitor adefossez fork for compatibility drift. |
 | basic-pitch 0.4.0 | 🔴 Abandoned — Spotify, resampy/pkg_resources broken with setuptools>=71 | Remove. TranscriptionBackend Protocol abstracted (Stage 2 complete). |
-| torchcrepe 0.0.24 | 🔬 Under evaluation — last released May 2025, PyTorch-based, Viterbi decoding | **Zero new dependencies** — all requirements already in venv. Preferred for Experiment A. |
+| torchcrepe 0.0.24 | 🔬 Under evaluation — last released May 2025, PyTorch-based, Viterbi decoding | Preferred for Experiment A. Audit note: not currently installed in the backend venv, so the repo is not yet ready to run the experiment. |
 | PENN 1.0.0 | 🔬 Alternative candidate — research-driven, pitch + periodicity co-output | Adds 6 new packages including `huggingface_hub` (downloads models at runtime from HuggingFace). Try only if torchcrepe produces insufficient quality. |
 | librosa 0.11.0 | Ghost dep — confirmed unused in analyze.py | Remove on next venv rebuild. |
 | setuptools<71 | Temporary pin — required by resampy 0.4.2 / basic-pitch dependency chain | Remove when basic-pitch is removed. |

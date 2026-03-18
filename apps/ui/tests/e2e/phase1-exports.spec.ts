@@ -21,7 +21,7 @@ test('live phase 1 estimate, analysis, and exports succeed against the local bac
 
   await gotoUploadPage(page);
   await uploadAudioFile(page, fixturePath);
-  await setToggle(page, 'PHASE 2 ADVISORY', false);
+  await setToggle(page, 'AI INTERPRETATION', false);
 
   await waitForEstimate(page);
   await startAnalysis(page);

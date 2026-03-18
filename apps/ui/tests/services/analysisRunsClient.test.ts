@@ -8,6 +8,7 @@ import {
   getAnalysisRun,
   projectPhase1FromRun,
   projectPhase2FromRun,
+  projectStemSummaryFromRun,
 } from '../../src/services/analysisRunsClient';
 
 const baseRunSnapshot: AnalysisRunSnapshot = {
@@ -202,7 +203,7 @@ describe('analysisRunsClient', () => {
           result: {
             ...baseRunSnapshot.stages.measurement.result,
             transcriptionDetail: {
-              transcriptionMethod: 'basic-pitch',
+              transcriptionMethod: 'basic-pitch-legacy',
               noteCount: 1,
               averageConfidence: 0.5,
               stemSeparationUsed: false,
@@ -244,6 +245,67 @@ describe('analysisRunsClient', () => {
     const phase2 = projectPhase2FromRun(baseRunSnapshot);
 
     expect(phase2?.trackCharacter).toBe('Tight modern electronic mix.');
+  });
+
+  it('keeps stem summary additive and out of the producer-summary projection path', async () => {
+    const stemSummarySnapshot = {
+      ...baseRunSnapshot,
+      requestedStages: {
+        ...baseRunSnapshot.requestedStages,
+        interpretationProfile: 'stem_summary',
+      },
+      stages: {
+        ...baseRunSnapshot.stages,
+        interpretation: {
+          ...baseRunSnapshot.stages.interpretation,
+          attemptsSummary: [
+            {
+              attemptId: 'int_stem_123',
+              profileId: 'stem_summary',
+              modelName: 'gemini-2.5-flash',
+              status: 'completed',
+            },
+          ],
+          preferredAttemptId: 'int_stem_123',
+          result: {
+            summary: 'Bass pulses anchor the groove while the upper stem stays approximate.',
+            bars: [
+              {
+                barStart: 1,
+                barEnd: 2,
+                startTime: 0,
+                endTime: 3.75,
+                noteHypotheses: ['C3 pedal'],
+                scaleDegreeHypotheses: ['1'],
+                rhythmicPattern: 'Short off-beat bass pulses.',
+                uncertaintyLevel: 'LOW',
+                uncertaintyReason: 'Symbolic extraction and measured bar grid agree.',
+              },
+            ],
+            globalPatterns: {
+              bassRole: 'Anchors the groove.',
+              melodicRole: 'Sparse upper register punctuation.',
+              pumpingOrModulation: 'Measured pumping suggests compressor-driven movement.',
+            },
+            uncertaintyFlags: ['Upper melodic content is approximate.'],
+          },
+        },
+      },
+    } satisfies AnalysisRunSnapshot;
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: () => Promise.resolve(stemSummarySnapshot),
+    } as Response));
+
+    const snapshot = await getAnalysisRun('run_123', {
+      apiBaseUrl: 'http://127.0.0.1:8100',
+    });
+
+    expect(projectPhase2FromRun(snapshot)).toBeNull();
+    expect(projectStemSummaryFromRun(snapshot)?.bars[0].noteHypotheses).toEqual(['C3 pedal']);
   });
 
   it('creates symbolic retry attempts against the canonical endpoint', async () => {

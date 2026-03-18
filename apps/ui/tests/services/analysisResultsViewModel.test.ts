@@ -264,7 +264,7 @@ describe('analysisResultsViewModel helpers', () => {
     const insights = buildMelodyInsights({
       ...phase1,
       transcriptionDetail: {
-        transcriptionMethod: 'basic-pitch',
+        transcriptionMethod: 'basic-pitch-legacy',
         noteCount: 6,
         averageConfidence: 0.83,
         stemSeparationUsed: true,

@@ -119,7 +119,7 @@ test('phase1 dual-source session musician panel toggles between polyphonic and m
                 },
                 {
                   key: 'transcription_stems',
-                  label: 'Basic Pitch on bass + other stems',
+                  label: 'Legacy Basic Pitch on bass + other stems',
                   lowMs: 40000,
                   highMs: 75000,
                 },
@@ -278,7 +278,7 @@ test('phase1 dual-source session musician panel toggles between polyphonic and m
               { attemptId: 'sym_smoke_midi_001', backendId: 'auto', mode: 'stem_notes', status: 'completed' },
             ],
             result: {
-              transcriptionMethod: 'basic-pitch',
+              transcriptionMethod: 'basic-pitch-legacy',
               noteCount: 2,
               averageConfidence: 0.83,
               stemSeparationUsed: true,
@@ -363,16 +363,16 @@ test('phase1 dual-source session musician panel toggles between polyphonic and m
 
   await expect(page.getByText('Analysis Results')).toBeVisible();
   await expect(panel.getByRole('heading', { name: /SESSION MUSICIAN/i }).first()).toBeVisible();
-  await expect(panel.getByText('Audio to MIDI transcription')).toBeVisible();
-  await expect(panel.getByRole('button', { name: 'POLYPHONIC' })).toBeVisible();
-  await expect(panel.getByRole('button', { name: 'MONOPHONIC' })).toBeVisible();
-  await expect(panel.getByText('SOURCES: BASIC PITCH').first()).toBeVisible();
+  await expect(panel.getByText('Symbolic notes and melody guide')).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'SYMBOLIC' })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'MELODY' })).toBeVisible();
+  await expect(panel.getByText('SOURCE: BASIC PITCH LEGACY').first()).toBeVisible();
   await expect(panel.getByText('Range: C3 - G4')).toHaveCount(1);
   await expect(panel.getByText('Confidence: 83%')).toHaveCount(1);
   await expect(panel.getByText('2 / 2 NOTES')).toBeVisible();
   await expect(panel.getByText('STEM-AWARE')).toBeVisible();
   await expect(panel.getByText('STEMS: bass, other')).toBeVisible();
-  await expect(panel.getByText('Polyphonic transcription via Basic Pitch')).toBeVisible();
+  await expect(panel.getByText('BASIC PITCH LEGACY symbolic notes')).toBeVisible();
   const previewButton = panel.getByRole('button', { name: /Preview/i });
   const downloadButton = panel.getByRole('button', { name: /Download \.mid/i });
   await expect(previewButton).toBeVisible();
@@ -401,21 +401,21 @@ test('phase1 dual-source session musician panel toggles between polyphonic and m
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toBe('track-analysis.mid');
 
-  await panel.getByRole('button', { name: 'MONOPHONIC' }).click();
-  await expect(panel.getByText('SOURCES: ESSENTIA').first()).toBeVisible();
-  await expect(panel.getByText('Monophonic pitch detection via Essentia')).toBeVisible();
+  await panel.getByRole('button', { name: 'MELODY' }).click();
+  await expect(panel.getByText('SOURCE: ESSENTIA MELODY').first()).toBeVisible();
+  await expect(panel.getByText('Monophonic melody guide via Essentia')).toBeVisible();
   await expect(panel.getByText('STEM-AWARE')).toHaveCount(0);
   await expect(panel.getByText('STEMS: bass, other')).toHaveCount(0);
   await expect(panel.getByText('3 NOTES')).toBeVisible();
   await expect(panel.getByText('3 / 3 NOTES')).toHaveCount(0);
-  await expect(panel.getByText('Per-note confidence not available in monophonic mode')).toBeVisible();
+  await expect(panel.getByText('Per-note confidence not available in melody-guide mode')).toBeVisible();
   await expect(panel.getByText('Adjust confidence threshold to filter noise before export.')).toHaveCount(0);
   await expect(confidenceSlider).toBeDisabled();
   await expect(confidenceSlider).toHaveValue('0.8');
 
-  await panel.getByRole('button', { name: 'POLYPHONIC' }).click();
-  await expect(panel.getByText('SOURCES: BASIC PITCH').first()).toBeVisible();
-  await expect(panel.getByText('Polyphonic transcription via Basic Pitch')).toBeVisible();
+  await panel.getByRole('button', { name: 'SYMBOLIC' }).click();
+  await expect(panel.getByText('SOURCE: BASIC PITCH LEGACY').first()).toBeVisible();
+  await expect(panel.getByText('BASIC PITCH LEGACY symbolic notes')).toBeVisible();
   await expect(panel.getByText('STEM-AWARE')).toBeVisible();
   await expect(panel.getByText('STEMS: bass, other')).toBeVisible();
   await expect(panel.getByText('1 / 2 NOTES')).toBeVisible();
@@ -611,9 +611,9 @@ test('missing melodyDetail shows MIDI unavailable state', async ({ page }) => {
   await page.getByRole('button', { name: /Initiate Analysis/i }).click();
 
   const panel = page.locator('section').filter({ hasText: /SESSION MUSICIAN/i }).first();
-  await expect(panel.locator('p').filter({ hasText: 'MIDI TRANSCRIPTION UNAVAILABLE' })).toBeVisible();
+  await expect(panel.locator('p').filter({ hasText: 'SYMBOLIC NOTES UNAVAILABLE' })).toBeVisible();
   await expect(
-    panel.getByText('Run with --transcribe flag for Basic Pitch polyphonic transcription, or ensure melodyDetail is present in DSP JSON'),
+    panel.getByText('Run with symbolic extraction enabled, or ensure melodyDetail is present in the DSP payload for a melody guide'),
   ).toBeVisible();
   await expect(panel.getByRole('button', { name: /Preview/i })).toBeDisabled();
   await expect(panel.getByRole('button', { name: /Download \.mid/i })).toBeDisabled();

@@ -18,6 +18,10 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# Legacy helper module retained for older experiments.
+# The live Gemini integration and prompt routing now live in server.py,
+# including the Layer 1/2/3 grounding split and the stem_summary profile.
+
 # --- Constants & Configuration ---
 INLINE_SIZE_LIMIT = 104_857_600  # 100 MiB — confirmed by Google on 2026-01-12
 GEMINI_TIMEOUT_SECONDS = 300  # 5 minutes
@@ -71,7 +75,7 @@ FIELD GLOSSARY:
 - segmentLoudness = per-section LUFS, reveals drops and builds
 - dominantNotes = MIDI numbers, convert to note names
 - transcriptionDetail (when present):
-  - noteCount: total polyphonic notes detected
+  - noteCount: total symbolic notes detected by the legacy comparison backend
   - averageConfidence: mean note confidence 0-1
   - dominantPitches[]: top pitches with count
   - pitchRange: min/max MIDI and note names
@@ -79,7 +83,7 @@ FIELD GLOSSARY:
   - stemsTranscribed: which stems were analysed
   - notes[].stemSource: "bass"|"other"|"full_mix"
   - When stemSeparationUsed is true, bass notes and melodic notes are separated by stemSource
-  - Prefer transcriptionDetail over melodyDetail for harmonic and melodic reconstruction advice when transcriptionDetail is present
+  - Treat transcriptionDetail as best-effort symbolic guidance, not authoritative measurement
 - pumpingStrength + pumpingConfidence both above 0.35 = sidechain
 - arrangementDetail.noveltyPeaks = structural event timestamps
 - segmentSpectral.stereoWidth changes = intentional width automation

@@ -20,9 +20,8 @@ test('live transcription and separation render Session Musician and export MIDI'
 
   await gotoUploadPage(page);
   await uploadAudioFile(page, fixturePath);
-  await setToggle(page, 'MIDI TRANSCRIPTION', true);
-  await setToggle(page, 'STEM SEPARATION', true);
-  await setToggle(page, 'PHASE 2 ADVISORY', false);
+  await setToggle(page, 'SYMBOLIC EXTRACTION', true);
+  await setToggle(page, 'AI INTERPRETATION', false);
 
   await waitForEstimate(page, 60_000);
   await startAnalysis(page);
@@ -32,13 +31,13 @@ test('live transcription and separation render Session Musician and export MIDI'
   await expect(page.getByText('SESSION MUSICIAN').first()).toBeVisible({ timeout: 12 * 60 * 1_000 });
   await expect(page.getByRole('button', { name: /Download \.mid/i })).toBeEnabled();
 
-  const polyphonicToggle = page.getByRole('button', { name: 'POLYPHONIC' });
-  const monophonicToggle = page.getByRole('button', { name: 'MONOPHONIC' });
-  if (await polyphonicToggle.count()) {
-    await polyphonicToggle.click();
+  const symbolicToggle = page.getByRole('button', { name: 'SYMBOLIC' });
+  const melodyToggle = page.getByRole('button', { name: 'MELODY' });
+  if (await symbolicToggle.count()) {
+    await symbolicToggle.click();
   }
-  if (await monophonicToggle.count()) {
-    await monophonicToggle.click();
+  if (await melodyToggle.count()) {
+    await melodyToggle.click();
   }
 
   const downloadPromise = page.waitForEvent('download');

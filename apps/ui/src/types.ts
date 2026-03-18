@@ -168,6 +168,31 @@ export interface Phase2Result {
   abletonRecommendations: AbletonRecommendation[];
 }
 
+export interface StemSummaryBar {
+  barStart: number;
+  barEnd: number;
+  startTime: number;
+  endTime: number;
+  noteHypotheses: string[];
+  scaleDegreeHypotheses: string[];
+  rhythmicPattern: string;
+  uncertaintyLevel: "LOW" | "MED" | "HIGH";
+  uncertaintyReason: string;
+}
+
+export interface StemSummaryResult {
+  summary: string;
+  bars: StemSummaryBar[];
+  globalPatterns: {
+    bassRole: string;
+    melodicRole: string;
+    pumpingOrModulation: string;
+  };
+  uncertaintyFlags: string[];
+}
+
+export type InterpretationResult = Phase2Result | StemSummaryResult;
+
 export interface BackendTimingDiagnostics {
   totalMs: number;
   analysisMs: number;
@@ -270,7 +295,7 @@ export interface InterpretationStageSnapshot {
   authoritative: false;
   preferredAttemptId: string | null;
   attemptsSummary: InterpretationAttemptSummary[];
-  result: Phase2Result | null;
+  result: InterpretationResult | null;
   provenance: Record<string, unknown> | null;
   diagnostics: Record<string, unknown> | null;
   error: AnalysisStageError | null;

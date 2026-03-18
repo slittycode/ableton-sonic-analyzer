@@ -574,7 +574,7 @@ function parseOptionalTranscriptionDetail(
   const noteCount = noteCountRaw === null ? notes.length : Math.max(0, Math.round(noteCountRaw));
 
   return {
-    transcriptionMethod: toOptionalStringOrNull(raw.transcriptionMethod) ?? "basic-pitch",
+    transcriptionMethod: toOptionalStringOrNull(raw.transcriptionMethod) ?? "basic-pitch-legacy",
     noteCount,
     averageConfidence: clamp01(toNumberOrFallback(raw.averageConfidence, 0)),
     stemSeparationUsed: toBooleanOrFallback(raw.stemSeparationUsed, false),

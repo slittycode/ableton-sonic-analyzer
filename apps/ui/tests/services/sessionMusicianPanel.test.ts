@@ -118,7 +118,7 @@ describe('SessionMusicianPanel confidence helpers', () => {
 
     expect(html).toContain('3 NOTES');
     expect(html).not.toContain('3 / 3 NOTES');
-    expect(html).toContain('Per-note confidence not available in monophonic mode');
+    expect(html).toContain('Per-note confidence not available in melody-guide mode');
     expect(html).toMatch(/CONFIDENCE<\/span><input[^>]*disabled=""/);
   });
 
@@ -200,7 +200,7 @@ describe('SessionMusicianPanel confidence helpers', () => {
 
   it('derives transcription provenance only for the active polyphonic source', () => {
     const mixedSourceTranscriptionDetail: NonNullable<Phase1Result['transcriptionDetail']> = {
-      transcriptionMethod: 'basic_pitch',
+      transcriptionMethod: 'basic-pitch-legacy',
       noteCount: 4,
       averageConfidence: 0.83,
       stemSeparationUsed: true,
@@ -258,7 +258,7 @@ describe('SessionMusicianPanel confidence helpers', () => {
         phase1: {
           ...basePhase1,
           transcriptionDetail: {
-            transcriptionMethod: 'basic-pitch',
+            transcriptionMethod: 'basic-pitch-legacy',
             noteCount: 2,
             averageConfidence: 0.42,
             stemSeparationUsed: false,
@@ -341,7 +341,7 @@ describe('SessionMusicianPanel confidence helpers', () => {
             vibratoConfidence: 0.1,
           },
           transcriptionDetail: {
-            transcriptionMethod: 'basic_pitch',
+            transcriptionMethod: 'basic-pitch-legacy',
             noteCount: 4,
             averageConfidence: 0.83,
             stemSeparationUsed: true,
@@ -372,10 +372,10 @@ describe('SessionMusicianPanel confidence helpers', () => {
       }),
     );
 
-    expect(html).toContain('SOURCES: ESSENTIA');
+    expect(html).toContain('SOURCE: ESSENTIA MELODY');
     expect(html).not.toContain('STEM-AWARE');
     expect(html).not.toContain('STEMS: bass, other');
-    expect(html).toContain('Per-note confidence not available in monophonic mode');
+    expect(html).toContain('Per-note confidence not available in melody-guide mode');
     expect(html).not.toContain('Adjust confidence threshold to filter noise before export.');
   });
 });

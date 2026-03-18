@@ -18,7 +18,7 @@ Responsibilities:
 - read the input file
 - optionally run Demucs separation
 - run the Phase 1 DSP analysis functions
-- optionally run Basic Pitch transcription
+- optionally run legacy Basic Pitch transcription
 - emit the raw analyzer JSON
 
 Interface:
@@ -57,7 +57,7 @@ FastAPI-generated routes remain available at `/openapi.json`, `/docs`, and `/red
 6. If `--separate` is enabled, run Demucs and keep the temporary stem paths.
 7. Run shared rhythm extraction once and reuse it across BPM, rhythm, groove, and sidechain analyses.
 8. Run the individual feature analyzers and merge their return dictionaries into a single result object.
-9. If `--transcribe` is enabled, run Basic Pitch:
+9. If `--transcribe` is enabled, run the legacy Basic Pitch backend:
    - on `bass` and `other` stems when Demucs output is available
    - otherwise on the full mix
 10. Print the final JSON to `stdout` and logs to `stderr`.
@@ -243,7 +243,7 @@ When the analyzer never produces a valid JSON object, `timings.fileDurationSecon
 
 Flow:
 
-1. Try to import Basic Pitch.
+1. Try to import the legacy Basic Pitch backend.
 2. Choose transcription sources:
    - `bass` and `other` stems when Demucs succeeded
    - otherwise `full_mix`

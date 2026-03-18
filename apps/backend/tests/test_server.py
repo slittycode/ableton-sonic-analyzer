@@ -110,6 +110,31 @@ def _valid_phase2_result() -> dict:
     }
 
 
+def _valid_stem_summary_result() -> dict:
+    return {
+        "summary": "Bass pulses anchor the section while the upper stem stays approximate.",
+        "bars": [
+            {
+                "barStart": 1,
+                "barEnd": 2,
+                "startTime": 0.0,
+                "endTime": 3.75,
+                "noteHypotheses": ["C3 pedal"],
+                "scaleDegreeHypotheses": ["1"],
+                "rhythmicPattern": "Short off-beat bass pulses.",
+                "uncertaintyLevel": "LOW",
+                "uncertaintyReason": "Symbolic extraction and measured downbeats agree.",
+            }
+        ],
+        "globalPatterns": {
+            "bassRole": "Anchors the groove in the low register.",
+            "melodicRole": "Sparse upper-register punctuation.",
+            "pumpingOrModulation": "Measured pumping suggests compressor-led movement.",
+        },
+        "uncertaintyFlags": ["Upper melodic detail is approximate."],
+    }
+
+
 class ServerContractTests(unittest.TestCase):
     def _upload_file(self) -> UploadFile:
         return UploadFile(filename="track.mp3", file=io.BytesIO(b"fake-audio"))
@@ -191,6 +216,27 @@ class ServerContractTests(unittest.TestCase):
         self.assertEqual(payload["stages"]["symbolicExtraction"]["status"], "blocked")
         self.assertEqual(payload["stages"]["interpretation"]["status"], "blocked")
 
+    def test_analysis_runs_endpoint_accepts_stem_summary_profile(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_server_runtime_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            with patch.object(server, "get_analysis_runtime", return_value=runtime):
+                response = asyncio.run(
+                    server.create_analysis_run(
+                        track=self._upload_file(),
+                        symbolic_mode="off",
+                        symbolic_backend="auto",
+                        interpretation_mode="async",
+                        interpretation_profile="stem_summary",
+                        interpretation_model="gemini-2.5-flash",
+                    )
+                )
+
+        payload = self._decode_json_response(response)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["requestedStages"]["interpretationProfile"], "stem_summary")
+
     def test_get_analysis_run_returns_persisted_stage_snapshot(self) -> None:
         from analysis_runtime import AnalysisRuntime
 
@@ -234,7 +280,7 @@ class ServerContractTests(unittest.TestCase):
                 },
                 {
                     "key": "transcription_stems",
-                    "label": "Basic Pitch on bass + other stems",
+                    "label": "Legacy Basic Pitch on bass + other stems",
                     "seconds": {"min": 40, "max": 75},
                 },
             ],
@@ -284,7 +330,7 @@ class ServerContractTests(unittest.TestCase):
                 },
                 {
                     "key": "transcription_stems",
-                    "label": "Basic Pitch on bass + other stems",
+                    "label": "Legacy Basic Pitch on bass + other stems",
                     "seconds": {"min": 40, "max": 75},
                 },
             ],
@@ -1372,6 +1418,74 @@ class Phase2EndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         body = self._decode(response)
         self.assertEqual(body["analysisRunId"], run_id)
+
+    def test_stem_summary_profile_uses_dedicated_prompt_schema_and_hooks(self) -> None:
+        mock_client = self._mock_successful_gemini(json.dumps(_valid_stem_summary_result()))
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_phase2_runtime_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            run_id = self._make_completed_run(runtime)
+            runtime.create_symbolic_attempt(
+                run_id,
+                backend_id="basic-pitch-legacy",
+                mode="stem_notes",
+                status="completed",
+                result={
+                    "transcriptionMethod": "basic-pitch-legacy",
+                    "noteCount": 1,
+                    "averageConfidence": 0.8,
+                    "stemSeparationUsed": True,
+                    "fullMixFallback": False,
+                    "stemsTranscribed": ["bass"],
+                    "dominantPitches": [],
+                    "pitchRange": {
+                        "minMidi": 48,
+                        "maxMidi": 48,
+                        "minName": "C3",
+                        "maxName": "C3",
+                    },
+                    "notes": [],
+                },
+                provenance={"backendId": "basic-pitch-legacy"},
+            )
+            attempt_id = runtime.create_interpretation_attempt(
+                run_id,
+                profile_id="stem_summary",
+                model_name="gemini-2.5-flash",
+                status="queued",
+            )
+            runtime.reserve_interpretation_attempt(attempt_id)
+            with (
+                patch.object(server, "_GENAI_AVAILABLE", True),
+                patch.dict(server.os.environ, {"GEMINI_API_KEY": "fake-key"}),
+                patch.object(server, "_genai") as mock_genai,
+                patch.object(server, "_genai_types") as mock_genai_types,
+            ):
+                mock_genai.Client.return_value = mock_client
+                mock_genai_types.GenerateContentConfig.return_value = unittest.mock.MagicMock()
+                execution = server._execute_interpretation_attempt(
+                    runtime,
+                    {
+                        "attemptId": attempt_id,
+                        "runId": run_id,
+                        "profileId": "stem_summary",
+                        "modelName": "gemini-2.5-flash",
+                    },
+                )
+
+            self.assertTrue(execution["ok"])
+            self.assertEqual(
+                mock_genai_types.GenerateContentConfig.call_args.kwargs["response_schema"],
+                server.STEM_SUMMARY_RESPONSE_SCHEMA,
+            )
+            prompt = mock_client.models.generate_content.call_args.kwargs["contents"][0]["parts"][1]["text"]
+            self.assertIn("MEASUREMENT_DERIVED_DESCRIPTOR_HOOKS", prompt)
+            self.assertIn("stableBarGrid", prompt)
+            self.assertIn("pumpingOrModulationDescriptor", prompt)
+            snapshot = runtime.get_run(run_id)
+            self.assertEqual(snapshot["stages"]["interpretation"]["attemptsSummary"][0]["profileId"], "stem_summary")
+            self.assertEqual(snapshot["stages"]["interpretation"]["result"]["summary"], _valid_stem_summary_result()["summary"])
 
     def test_openapi_schema_exposes_phase2_route(self) -> None:
         spec = server.app.openapi()

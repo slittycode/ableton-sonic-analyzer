@@ -306,8 +306,8 @@ Implementation notes:
 
 | Field | Type | Description | Units / Scale | LLM interpretation note |
 |---|---|---|---|---|
-| `transcriptionDetail.transcriptionMethod` | `string` | Name of the transcription backend used. Currently always `'basic-pitch'` (BasicPitchBackend). Will reflect the backend name when an alternative backend is configured (Stage 3). | categorical | Currently always `basic-pitch`; useful if more transcription backends are added later. |
-| `transcriptionDetail.noteCount` | `int` | Total number of retained note events after merge, deduplication, and capping. | count | Higher counts imply denser retained musical content rather than raw Basic Pitch event volume. |
+| `transcriptionDetail.transcriptionMethod` | `string` | Name of the transcription backend used. The current legacy backend reports `'basic-pitch-legacy'`. This field should reflect the real backend identifier for Stage 3 experiments. | categorical | Useful for distinguishing legacy comparison output from newer symbolic backends such as torchcrepe or PENN. |
+| `transcriptionDetail.noteCount` | `int` | Total number of retained note events after merge, deduplication, and capping. | count | Higher counts imply denser retained musical content rather than raw backend event volume. |
 | `transcriptionDetail.averageConfidence` | `float` | Mean confidence across the retained merged note events. | 0.0-1.0 | Lower values indicate noisier or more ambiguous pitch tracking even after backend noise filtering. |
 | `transcriptionDetail.dominantPitches` | `array<object>` | Top 5 most frequent detected pitches. | list of pitch summary objects | Quick tonal summary for bassline and hook reconstruction. |
 | `transcriptionDetail.dominantPitches[].pitchMidi` | `int` | MIDI pitch number for the dominant pitch entry. | 0-127 | Directly usable for DAW note entry or tonal analysis. |

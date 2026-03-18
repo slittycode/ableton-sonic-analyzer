@@ -26,7 +26,7 @@ test('live Gemini Files API path uploads, generates, and deletes large audio', a
 
   await gotoUploadPage(page);
   await uploadAudioFile(page, fixturePath);
-  await setToggle(page, 'PHASE 2 ADVISORY', true);
+  await setToggle(page, 'AI INTERPRETATION', true);
   await selectPhase2Model(page, DEFAULT_PHASE2_MODEL);
 
   await waitForEstimate(page, 60_000);
