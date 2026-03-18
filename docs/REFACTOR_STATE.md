@@ -1,10 +1,10 @@
 # ASA Refactor — Architecture State
 
-_Last updated: March 2026_
+_Last updated: 2026-03-18_
 
 ## Current State
 
-Phase A and Phase B1 complete. Phase B2 (display-component UI type split) deferred.
+Phase A, Phase B1, and Phase B2 complete.
 
 ## What's Done
 
@@ -26,20 +26,23 @@ Phase A and Phase B1 complete. Phase B2 (display-component UI type split) deferr
 - Dead legacy clients deleted: `analyzePhase1WithBackend()`, `backendPhase2Client.ts`
 - Constants renamed: `PHASE1_LABEL → MEASUREMENT_LABEL`, `PHASE2_LABEL → INTERPRETATION_LABEL`
 
+### Phase B2 — Display component split (2026-03-18)
+
+- `App.tsx` state split: `phase1Result` → `measurementResult` + `symbolicResult` (two separate `useState` vars)
+- Destructure pattern: `const { transcriptionDetail, ...measurement } = merged` — type-safe by structural subtyping, no cast
+- `AnalysisResults.tsx` props: `phase1: Phase1Result | null` → `measurement: MeasurementResult | null; symbolic: TranscriptionDetail | null`
+- `SessionMusicianPanel.tsx` props: same split; accesses `measurement.melodyDetail` and `symbolic` directly
+- `analysisResultsViewModel.ts`: all function signatures updated to `MeasurementResult`; `buildMelodyInsights` and `buildSonicElementCards`/`buildPatchCards` accept explicit `symbolic: TranscriptionDetail | null` param
+- `backendPhase1Client.ts` legacy direct-HTTP path deferred until `/api/analyze` is fully retired (4 active callers)
+
 ## Architecture Invariants (verified by tests)
 
 1. `measurement.result` never carries `transcriptionDetail` on the canonical path
 2. Symbolic output is only available at `stages.symbolicExtraction.result`
 3. `projectPhase1FromRun()` is the only place these are merged into a flat `Phase1Result`
-4. No component receives `MeasurementResult` directly yet — display layer still consumes the compatibility projection
+4. Display components receive `MeasurementResult` directly — `transcriptionDetail` is passed as a separate explicit `symbolic` prop
 
 ## What's Left
-
-### Phase B2 — Display component split
-
-- Replace `Phase1Result` in `App.tsx` state, `AnalysisResults` props, and downstream components with `MeasurementResult` + optional symbolic as distinct props
-- `SessionMusicianPanel.tsx` and `analysisResultsViewModel.ts` are the primary consumers to update
-- `backendPhase1Client.ts` legacy direct-HTTP path is the cleanup target when `/api/analyze` is fully retired
 
 ### Other deferred
 
