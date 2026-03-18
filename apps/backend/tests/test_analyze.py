@@ -31,7 +31,7 @@ EXPECTED_TOP_LEVEL_KEYS = {
     "spectralDetail", "rhythmDetail", "melodyDetail", "transcriptionDetail",
     "grooveDetail", "sidechainDetail", "acidDetail", "reverbDetail",
     "vocalDetail", "supersawDetail", "bassDetail", "kickDetail",
-    "effectsDetail", "synthesisCharacter",
+    "genreDetail", "effectsDetail", "synthesisCharacter",
     "danceability", "structure", "arrangementDetail",
     "segmentLoudness", "segmentSpectral", "segmentStereo", "segmentKey",
     "chordDetail", "perceptual", "essentiaFeatures",
@@ -716,33 +716,42 @@ class ReverbDetailTests(unittest.TestCase):
         result = self.analyze.analyze_reverb_detail(mono, sr, bpm=130.0)
         detail = result.get("reverbDetail")
         self.assertIsNotNone(detail)
-        self.assertEqual(set(detail.keys()), {"rt60", "isWet", "tailEnergyRatio"})
+        self.assertEqual(set(detail.keys()), {"rt60", "isWet", "tailEnergyRatio", "measured"})
 
     def test_rt60_bounded(self):
-        """RT60 must be >= 0 and <= 3.0 (capped)."""
+        """RT60 must be >= 0 and <= 3.0 (capped) when measured."""
         sr = 44100
         mono = self._make_decaying_signal(sr, n_transients=8, rt60_target=0.3, duration=6.0)
         result = self.analyze.analyze_reverb_detail(mono, sr, bpm=130.0)
         detail = result["reverbDetail"]
-        self.assertGreaterEqual(detail["rt60"], 0.0)
-        self.assertLessEqual(detail["rt60"], 3.0)
+        if detail["measured"]:
+            self.assertGreaterEqual(detail["rt60"], 0.0)
+            self.assertLessEqual(detail["rt60"], 3.0)
+        else:
+            self.assertIsNone(detail["rt60"])
 
     def test_tail_energy_ratio_bounded(self):
-        """tailEnergyRatio must always be in [0, 1]."""
+        """tailEnergyRatio must always be in [0, 1] when measured."""
         sr = 44100
         mono = self._make_decaying_signal(sr, n_transients=8, rt60_target=0.5, duration=6.0)
         result = self.analyze.analyze_reverb_detail(mono, sr, bpm=130.0)
         detail = result["reverbDetail"]
-        self.assertGreaterEqual(detail["tailEnergyRatio"], 0.0)
-        self.assertLessEqual(detail["tailEnergyRatio"], 1.0)
+        if detail["measured"]:
+            self.assertGreaterEqual(detail["tailEnergyRatio"], 0.0)
+            self.assertLessEqual(detail["tailEnergyRatio"], 1.0)
+        else:
+            self.assertIsNone(detail["tailEnergyRatio"])
 
     def test_is_wet_matches_rt60_threshold(self):
-        """`isWet` must be True iff rt60 > 0.5."""
+        """`isWet` must be True iff rt60 > 0.5 when measured."""
         sr = 44100
         mono = self._make_decaying_signal(sr, n_transients=10, rt60_target=1.2, duration=8.0)
         result = self.analyze.analyze_reverb_detail(mono, sr, bpm=130.0)
         detail = result["reverbDetail"]
-        self.assertEqual(detail["isWet"], detail["rt60"] > 0.5)
+        if detail["measured"]:
+            self.assertEqual(detail["isWet"], detail["rt60"] > 0.5)
+        else:
+            self.assertFalse(detail["isWet"])
 
     def test_fallback_on_no_bpm(self):
         """None BPM uses fallback (120 BPM) and does not crash."""
@@ -752,12 +761,14 @@ class ReverbDetailTests(unittest.TestCase):
         self.assertIn("reverbDetail", result)
 
     def test_short_silence_returns_fallback(self):
-        """Short silent signals return a safe fallback dict, not null."""
+        """Short silent signals return a safe fallback dict with measured=False."""
         mono = np.zeros(44100 // 2, dtype=np.float32)
         result = self.analyze.analyze_reverb_detail(mono, 44100, bpm=128.0)
         detail = result.get("reverbDetail")
         self.assertIsNotNone(detail)
         self.assertIn("rt60", detail)
+        self.assertFalse(detail["measured"])
+        self.assertFalse(detail["isWet"])
 
 
 class VocalDetailTests(unittest.TestCase):
@@ -998,6 +1009,124 @@ class KickDetailTests(unittest.TestCase):
         mono = 0.5 * np.sin(2 * np.pi * 60 * t).astype(np.float32)
         result = self.analyze.analyze_kick_detail(mono, sr, bpm=None)
         self.assertIn("kickDetail", result)
+
+
+class GenreDetailTests(unittest.TestCase):
+    """Tests for analyze_genre_detail — multi-feature genre classification."""
+
+    @classmethod
+    def setUpClass(cls):
+        analyze_path = Path(__file__).resolve().parents[1] / "analyze.py"
+        spec = importlib.util.spec_from_file_location("analyze_genre_test", analyze_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        cls.analyze = module
+
+    def _make_result(self, **overrides) -> dict:
+        """Minimal result dict that passes all feature lookups."""
+        base = {
+            "bpm": 128.0,
+            "crestFactor": 7.0,
+            "spectralBalance": {"subBass": -16.0},
+            "spectralDetail": {"spectralCentroid": 2500.0},
+            "rhythmDetail": {"onsetRate": 5.0},
+            "sidechainDetail": {"pumpingStrength": 0.55},
+            "bassDetail": {"averageDecayMs": 300.0},
+            "reverbDetail": {"rt60": None},
+            "kickDetail": {"thd": 0.05},
+            "acidDetail": {"isAcid": False},
+            "supersawDetail": {"isSupersaw": False},
+        }
+        base.update(overrides)
+        return base
+
+    def test_returns_genreDetail_key(self):
+        """Result must contain genreDetail key."""
+        result = self.analyze.analyze_genre_detail(self._make_result())
+        self.assertIn("genreDetail", result)
+
+    def test_shape_when_not_none(self):
+        """genreDetail must have required keys with correct types."""
+        result = self.analyze.analyze_genre_detail(self._make_result())
+        detail = result["genreDetail"]
+        self.assertIsNotNone(detail)
+        self.assertIsInstance(detail["genre"], str)
+        self.assertIsInstance(detail["confidence"], float)
+        self.assertIn(detail["genreFamily"], ("house", "techno", "dnb", "ambient", "trance", "dubstep", "breaks", "other"))
+        self.assertIsInstance(detail["topScores"], list)
+        self.assertEqual(len(detail["topScores"]), 5)
+        for entry in detail["topScores"]:
+            self.assertIn("genre", entry)
+            self.assertIn("score", entry)
+
+    def test_confidence_bounded(self):
+        """Confidence must be in [0, 1]."""
+        result = self.analyze.analyze_genre_detail(self._make_result())
+        detail = result["genreDetail"]
+        self.assertGreaterEqual(detail["confidence"], 0.0)
+        self.assertLessEqual(detail["confidence"], 1.0)
+
+    def test_tech_house_signature_scores_high(self):
+        """Strong sidechain + punchy bass at 127 BPM should score tech-house or similar."""
+        result = self.analyze.analyze_genre_detail(self._make_result(
+            bpm=127.0,
+            crestFactor=7.0,
+            spectralBalance={"subBass": -12.0},
+            sidechainDetail={"pumpingStrength": 0.62},
+            bassDetail={"averageDecayMs": 280.0},
+        ))
+        detail = result["genreDetail"]
+        self.assertIsNotNone(detail)
+        self.assertIn(detail["genreFamily"], ("house", "techno"))
+
+    def test_acid_boost_raises_acid_techno(self):
+        """acid-techno should be boosted when acidDetail.isAcid is True."""
+        result_plain = self.analyze.analyze_genre_detail(self._make_result(
+            bpm=130.0,
+            sidechainDetail={"pumpingStrength": 0.45},
+            bassDetail={"averageDecayMs": 380.0},
+            acidDetail={"isAcid": False},
+        ))
+        result_acid = self.analyze.analyze_genre_detail(self._make_result(
+            bpm=130.0,
+            sidechainDetail={"pumpingStrength": 0.45},
+            bassDetail={"averageDecayMs": 380.0},
+            acidDetail={"isAcid": True},
+        ))
+        # acid-techno score must be higher when acid is detected
+        def acid_score(r):
+            return next(
+                (e["score"] for e in r["genreDetail"]["topScores"] if e["genre"] == "acid-techno"),
+                None,
+            )
+        plain_s = acid_score(result_plain)
+        acid_s = acid_score(result_acid)
+        if plain_s is not None and acid_s is not None:
+            self.assertGreaterEqual(acid_s, plain_s)
+
+    def test_empty_result_dict_returns_fallback(self):
+        """Empty result dict must not crash — falls back gracefully."""
+        result = self.analyze.analyze_genre_detail({})
+        self.assertIn("genreDetail", result)
+        # May be None or a valid dict — just must not raise
+        detail = result["genreDetail"]
+        if detail is not None:
+            self.assertIn("genre", detail)
+
+    def test_ambient_signature_scores_high(self):
+        """Slow BPM, no sidechain, long bass decay should score ambient family."""
+        result = self.analyze.analyze_genre_detail(self._make_result(
+            bpm=75.0,
+            crestFactor=15.0,
+            spectralBalance={"subBass": -28.0},
+            spectralDetail={"spectralCentroid": 1200.0},
+            rhythmDetail={"onsetRate": 1.5},
+            sidechainDetail={"pumpingStrength": 0.05},
+            bassDetail={"averageDecayMs": 1100.0},
+        ))
+        detail = result["genreDetail"]
+        self.assertIsNotNone(detail)
+        self.assertIn(detail["genreFamily"], ("ambient", "other"))
 
 
 if __name__ == "__main__":

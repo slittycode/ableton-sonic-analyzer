@@ -474,6 +474,7 @@ def _build_phase1(payload: dict[str, Any]) -> dict[str, Any]:
         "supersawDetail": payload.get("supersawDetail"),
         "bassDetail": payload.get("bassDetail"),
         "kickDetail": payload.get("kickDetail"),
+        "genreDetail": payload.get("genreDetail"),
         "effectsDetail": payload.get("effectsDetail"),
         "synthesisCharacter": payload.get("synthesisCharacter"),
         "danceability": payload.get("danceability"),

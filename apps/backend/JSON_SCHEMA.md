@@ -15,7 +15,7 @@ Conventions:
 
 Top-level keys:
 
-`bpm`, `bpmConfidence`, `bpmPercival`, `bpmAgreement`, `key`, `keyConfidence`, `timeSignature`, `durationSeconds`, `sampleRate`, `lufsIntegrated`, `lufsRange`, `truePeak`, `crestFactor`, `dynamicSpread`, `dynamicCharacter`, `stereoDetail`, `spectralBalance`, `spectralDetail`, `rhythmDetail`, `melodyDetail`, `transcriptionDetail`, `grooveDetail`, `sidechainDetail`, `acidDetail`, `reverbDetail`, `vocalDetail`, `supersawDetail`, `bassDetail`, `kickDetail`, `effectsDetail`, `synthesisCharacter`, `danceability`, `structure`, `arrangementDetail`, `segmentLoudness`, `segmentSpectral`, `segmentStereo`, `segmentKey`, `chordDetail`, `perceptual`, `essentiaFeatures`.
+`bpm`, `bpmConfidence`, `bpmPercival`, `bpmAgreement`, `key`, `keyConfidence`, `timeSignature`, `durationSeconds`, `sampleRate`, `lufsIntegrated`, `lufsRange`, `truePeak`, `crestFactor`, `dynamicSpread`, `dynamicCharacter`, `stereoDetail`, `spectralBalance`, `spectralDetail`, `rhythmDetail`, `melodyDetail`, `transcriptionDetail`, `grooveDetail`, `sidechainDetail`, `acidDetail`, `reverbDetail`, `vocalDetail`, `supersawDetail`, `bassDetail`, `kickDetail`, `genreDetail`, `effectsDetail`, `synthesisCharacter`, `danceability`, `structure`, `arrangementDetail`, `segmentLoudness`, `segmentSpectral`, `segmentStereo`, `segmentKey`, `chordDetail`, `perceptual`, `essentiaFeatures`.
 
 ## Relationship To `POST /api/analyze`
 
@@ -72,7 +72,7 @@ Compatibility note:
 - `stereoCorrelation`
 - `spectralBalance`
 
-`phase1` also forwards these 17 raw analyzer sections unchanged:
+`phase1` also forwards these 24 raw analyzer sections unchanged:
 
 - `stereoDetail`
 - `spectralDetail`
@@ -81,6 +81,13 @@ Compatibility note:
 - `transcriptionDetail`
 - `grooveDetail`
 - `sidechainDetail`
+- `acidDetail`
+- `reverbDetail`
+- `vocalDetail`
+- `supersawDetail`
+- `bassDetail`
+- `kickDetail`
+- `genreDetail`
 - `effectsDetail`
 - `synthesisCharacter`
 - `danceability`
@@ -569,5 +576,19 @@ Kick drum distortion analysis via THD measurement and harmonic ratio computation
 | `harmonicRatio` | number | Ratio of harmonic to inharmonic content in kick band |
 | `fundamentalHz` | number | Detected kick fundamental frequency |
 | `kickCount` | number | Number of detected kick transients |
+
+Returns `null` on failure.
+
+## `genreDetail`
+
+Multi-feature genre classification scoring 35 electronic subgenres. Uses sidechain strength and bass decay as primary discriminators (weights 0.95 and 0.85). Acid and supersaw detections apply genre-specific score boosts. Runs after all other detectors in the pipeline.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `genre` | string | Top-scoring genre ID (e.g. `"driving-techno"`, `"deep-house"`) |
+| `confidence` | number | 0.0–1.0; accounts for score gap between primary and secondary |
+| `secondaryGenre` | string \| null | Runner-up genre if its score > 0.5, else null |
+| `genreFamily` | string | Broad family: `"house"`, `"techno"`, `"dnb"`, `"ambient"`, `"trance"`, `"dubstep"`, `"breaks"`, `"other"` |
+| `topScores` | array | Top-5 scored genres as `{genre: string, score: number}` for transparency |
 
 Returns `null` on failure.

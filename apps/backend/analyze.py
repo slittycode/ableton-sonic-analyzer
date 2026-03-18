@@ -2803,6 +2803,193 @@ def analyze_kick_detail(
         return {"kickDetail": None}
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# GENRE CLASSIFICATION
+# Backport of genreClassifierEnhanced.ts — scores 35 electronic subgenres
+# using features already computed by the other analyzers in this pipeline.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_GENRE_SIGNATURES: list[dict] = [
+    # AMBIENT / DOWNTEMPO
+    {"id": "ambient-drone", "bpm": (40, 90), "subBassDb": (-40, -20), "crestFactor": (12, 25), "onsetDensity": (0.5, 3), "spectralCentroid": (1000, 4000), "sidechainStrength": (0, 0.15), "bassDecay": (0.8, 1.5), "rt60": (1.0, 3.0)},
+    {"id": "ambient-techno", "bpm": (90, 120), "subBassDb": (-30, -15), "crestFactor": (10, 20), "onsetDensity": (2, 5), "spectralCentroid": (1500, 4500), "sidechainStrength": (0, 0.2), "bassDecay": (0.5, 1.0), "rt60": (0.6, 1.5)},
+    {"id": "dub-techno", "bpm": (100, 125), "subBassDb": (-28, -12), "crestFactor": (8, 16), "onsetDensity": (2, 5), "spectralCentroid": (1200, 3500), "sidechainStrength": (0, 0.25), "bassDecay": (0.6, 1.2), "rt60": (0.8, 2.0)},
+    # DEEP / ORGANIC HOUSE
+    {"id": "deep-house", "bpm": (118, 126), "subBassDb": (-24, -10), "crestFactor": (7, 13), "onsetDensity": (3, 7), "spectralCentroid": (1800, 4000), "sidechainStrength": (0.35, 0.65), "bassDecay": (0.2, 0.5)},
+    {"id": "organic-house", "bpm": (115, 124), "subBassDb": (-26, -14), "crestFactor": (9, 18), "onsetDensity": (3, 6), "spectralCentroid": (2000, 4500), "sidechainStrength": (0.25, 0.5), "bassDecay": (0.3, 0.6)},
+    # HOUSE VARIANTS
+    {"id": "classic-house", "bpm": (120, 130), "subBassDb": (-22, -10), "crestFactor": (6, 12), "onsetDensity": (4, 8), "spectralCentroid": (2000, 4500), "sidechainStrength": (0.4, 0.7), "bassDecay": (0.2, 0.45)},
+    {"id": "tech-house", "bpm": (124, 130), "subBassDb": (-20, -8), "crestFactor": (5, 10), "onsetDensity": (4, 7), "spectralCentroid": (2200, 5000), "sidechainStrength": (0.45, 0.75), "bassDecay": (0.15, 0.4)},
+    {"id": "progressive-house", "bpm": (126, 132), "subBassDb": (-22, -10), "crestFactor": (6, 11), "onsetDensity": (4, 8), "spectralCentroid": (1800, 4500), "sidechainStrength": (0.35, 0.6), "bassDecay": (0.3, 0.55)},
+    {"id": "afro-house", "bpm": (118, 126), "subBassDb": (-24, -12), "crestFactor": (7, 14), "onsetDensity": (5, 10), "spectralCentroid": (2500, 5500), "sidechainStrength": (0.3, 0.55), "bassDecay": (0.25, 0.5)},
+    # TECHNO VARIANTS
+    {"id": "minimal-techno", "bpm": (125, 130), "subBassDb": (-24, -14), "crestFactor": (7, 13), "onsetDensity": (2, 5), "spectralCentroid": (1500, 4000), "sidechainStrength": (0.1, 0.35), "bassDecay": (0.4, 0.7), "rt60": (0.2, 0.6)},
+    {"id": "melodic-techno", "bpm": (122, 128), "subBassDb": (-22, -12), "crestFactor": (8, 15), "onsetDensity": (3, 6), "spectralCentroid": (2000, 5000), "sidechainStrength": (0.25, 0.5), "bassDecay": (0.4, 0.7)},
+    {"id": "driving-techno", "bpm": (127, 133), "subBassDb": (-18, -8), "crestFactor": (4, 8), "onsetDensity": (5, 9), "spectralCentroid": (1500, 4000), "sidechainStrength": (0.3, 0.6), "bassDecay": (0.5, 0.85), "rt60": (0.1, 0.5)},
+    {"id": "industrial-techno", "bpm": (130, 145), "subBassDb": (-16, -4), "crestFactor": (3, 8), "onsetDensity": (6, 12), "spectralCentroid": (1800, 5000), "sidechainStrength": (0.25, 0.55), "bassDecay": (0.4, 0.8), "kickDistortion": (0.2, 0.6)},
+    {"id": "hard-techno", "bpm": (145, 160), "subBassDb": (-14, -4), "crestFactor": (3, 8), "onsetDensity": (7, 14), "spectralCentroid": (2000, 5500), "sidechainStrength": (0.3, 0.6), "bassDecay": (0.4, 0.75), "rt60": (0.1, 0.4), "kickDistortion": (0.15, 0.5)},
+    {"id": "acid-techno", "bpm": (125, 135), "subBassDb": (-20, -8), "crestFactor": (6, 12), "onsetDensity": (5, 10), "spectralCentroid": (2200, 6000), "sidechainStrength": (0.3, 0.6), "bassDecay": (0.3, 0.6)},
+    {"id": "detroit-techno", "bpm": (125, 135), "subBassDb": (-22, -10), "crestFactor": (7, 14), "onsetDensity": (4, 8), "spectralCentroid": (1800, 4500), "sidechainStrength": (0.2, 0.45), "bassDecay": (0.4, 0.75)},
+    # TRANCE & PROGRESSIVE
+    {"id": "trance", "bpm": (136, 142), "subBassDb": (-20, -8), "crestFactor": (6, 12), "onsetDensity": (4, 8), "spectralCentroid": (2000, 5000), "sidechainStrength": (0.25, 0.55), "bassDecay": (0.35, 0.65)},
+    {"id": "psytrance", "bpm": (140, 148), "subBassDb": (-18, -6), "crestFactor": (5, 11), "onsetDensity": (7, 14), "spectralCentroid": (2200, 5500), "sidechainStrength": (0.35, 0.65), "bassDecay": (0.3, 0.6)},
+    # BASS MUSIC
+    {"id": "dubstep", "bpm": (138, 145), "subBassDb": (-18, -4), "crestFactor": (7, 14), "onsetDensity": (3, 7), "spectralCentroid": (1200, 3500), "sidechainStrength": (0.2, 0.5), "bassDecay": (0.6, 1.2)},
+    {"id": "bass-house", "bpm": (124, 130), "subBassDb": (-18, -6), "crestFactor": (5, 10), "onsetDensity": (5, 9), "spectralCentroid": (2000, 4800), "sidechainStrength": (0.4, 0.7), "bassDecay": (0.25, 0.5)},
+    # D&B & BREAKS
+    {"id": "drum-bass", "bpm": (168, 180), "subBassDb": (-18, -6), "crestFactor": (6, 13), "onsetDensity": (8, 18), "spectralCentroid": (2000, 5000), "sidechainStrength": (0.3, 0.6), "bassDecay": (0.3, 0.6)},
+    {"id": "neurofunk", "bpm": (170, 180), "subBassDb": (-16, -4), "crestFactor": (5, 11), "onsetDensity": (9, 20), "spectralCentroid": (2200, 5500), "sidechainStrength": (0.25, 0.55), "bassDecay": (0.25, 0.55)},
+    {"id": "breaks", "bpm": (125, 135), "subBassDb": (-22, -10), "crestFactor": (7, 14), "onsetDensity": (5, 10), "spectralCentroid": (2200, 5200), "sidechainStrength": (0.25, 0.55), "bassDecay": (0.3, 0.6)},
+    # UK BASS / GARAGE
+    {"id": "uk-garage", "bpm": (128, 136), "subBassDb": (-20, -8), "crestFactor": (6, 12), "onsetDensity": (5, 10), "spectralCentroid": (2200, 5000), "sidechainStrength": (0.35, 0.65), "bassDecay": (0.25, 0.5)},
+    {"id": "bassline", "bpm": (130, 138), "subBassDb": (-18, -6), "crestFactor": (5, 11), "onsetDensity": (6, 12), "spectralCentroid": (2500, 5500), "sidechainStrength": (0.4, 0.7), "bassDecay": (0.2, 0.45)},
+    # LEGACY / BROAD GENRES
+    {"id": "edm", "bpm": (120, 135), "subBassDb": (-16, -8), "crestFactor": (5, 9), "onsetDensity": (4, 10), "spectralCentroid": (1500, 4000), "sidechainStrength": (0.3, 0.6), "bassDecay": (0.25, 0.5)},
+    {"id": "hiphop", "bpm": (70, 110), "subBassDb": (-16, -4), "crestFactor": (7, 11), "onsetDensity": (2, 7), "spectralCentroid": (800, 2500), "sidechainStrength": (0.1, 0.4), "bassDecay": (0.3, 0.6)},
+    {"id": "rock", "bpm": (100, 160), "subBassDb": (-30, -15), "crestFactor": (9, 14), "onsetDensity": (4, 10), "spectralCentroid": (1500, 4500), "sidechainStrength": (0.05, 0.25), "bassDecay": (0.2, 0.5)},
+    {"id": "pop", "bpm": (95, 130), "subBassDb": (-20, -10), "crestFactor": (6, 10), "onsetDensity": (3, 8), "spectralCentroid": (1200, 3500), "sidechainStrength": (0.2, 0.5), "bassDecay": (0.25, 0.5)},
+    {"id": "acoustic", "bpm": (70, 140), "subBassDb": (-40, -22), "crestFactor": (12, 20), "onsetDensity": (1, 5), "spectralCentroid": (1000, 3000), "sidechainStrength": (0, 0.1), "bassDecay": (0.3, 0.8)},
+    {"id": "techno", "bpm": (125, 150), "subBassDb": (-18, -6), "crestFactor": (4, 9), "onsetDensity": (4, 10), "spectralCentroid": (1200, 3500), "sidechainStrength": (0.2, 0.5), "bassDecay": (0.4, 0.8)},
+    {"id": "house", "bpm": (118, 132), "subBassDb": (-20, -8), "crestFactor": (5, 10), "onsetDensity": (3, 8), "spectralCentroid": (1200, 3500), "sidechainStrength": (0.35, 0.65), "bassDecay": (0.2, 0.45)},
+    {"id": "ambient", "bpm": (60, 110), "subBassDb": (-32, -16), "crestFactor": (10, 20), "onsetDensity": (0, 3), "spectralCentroid": (500, 2500), "sidechainStrength": (0, 0.15), "bassDecay": (0.6, 1.5)},
+    {"id": "dnb", "bpm": (160, 180), "subBassDb": (-16, -5), "crestFactor": (6, 12), "onsetDensity": (6, 14), "spectralCentroid": (1500, 4000), "sidechainStrength": (0.25, 0.55), "bassDecay": (0.3, 0.6)},
+    {"id": "garage", "bpm": (128, 142), "subBassDb": (-16, -5), "crestFactor": (6, 11), "onsetDensity": (4, 9), "spectralCentroid": (1500, 3500), "sidechainStrength": (0.3, 0.6), "bassDecay": (0.25, 0.5)},
+]
+
+_GENRE_FAMILY_MAP: dict[str, str] = {
+    "house": "house", "classic-house": "house", "tech-house": "house",
+    "deep-house": "house", "organic-house": "house", "progressive-house": "house",
+    "afro-house": "house", "bass-house": "house",
+    "techno": "techno", "minimal-techno": "techno", "melodic-techno": "techno",
+    "driving-techno": "techno", "industrial-techno": "techno", "hard-techno": "techno",
+    "acid-techno": "techno", "detroit-techno": "techno", "dub-techno": "techno",
+    "ambient-techno": "techno",
+    "drum-bass": "dnb", "neurofunk": "dnb", "dnb": "dnb",
+    "ambient": "ambient", "ambient-drone": "ambient",
+    "trance": "trance", "psytrance": "trance",
+    "dubstep": "dubstep",
+    "breaks": "breaks",
+}
+
+
+def _genre_range_score(
+    value: float, range_min: float, range_max: float, steepness: float = 2.0
+) -> float:
+    """Gaussian-like score: 1.0 inside [range_min, range_max], decays outside."""
+    if range_min <= value <= range_max:
+        return 1.0
+    center = (range_min + range_max) / 2.0
+    half_range = (range_max - range_min) / 2.0
+    if half_range <= 0:
+        return 0.0
+    distance = abs(value - center)
+    normalized_dist = (distance - half_range) / half_range
+    return max(0.0, 1.0 - normalized_dist ** steepness)
+
+
+def analyze_genre_detail(result: dict) -> dict:
+    """Classify genre using all previously computed detector outputs.
+
+    Designed to run last in the pipeline so it can consume sidechainDetail,
+    bassDetail, reverbDetail, kickDetail, acidDetail, and supersawDetail
+    without re-running DSP. Feature weights mirror genreClassifierEnhanced.ts:
+    sidechain strength (0.95) and bass decay (0.85) are the primary
+    discriminators for electronic subgenres.
+    """
+    try:
+        spectral_balance = result.get("spectralBalance") or {}
+        spectral_detail = result.get("spectralDetail") or {}
+        rhythm_detail = result.get("rhythmDetail") or {}
+        sidechain = result.get("sidechainDetail") or {}
+        bass_det = result.get("bassDetail") or {}
+        reverb_det = result.get("reverbDetail") or {}
+        kick_det = result.get("kickDetail") or {}
+        acid_det = result.get("acidDetail") or {}
+        supersaw_det = result.get("supersawDetail") or {}
+
+        bpm = float(result.get("bpm") or 120.0)
+        crest_factor = float(result.get("crestFactor") or 10.0)
+        sub_bass_db = float(spectral_balance.get("subBass") or -25.0)
+        spectral_centroid = float(spectral_detail.get("spectralCentroid") or 2000.0)
+        onset_density = float(rhythm_detail.get("onsetRate") or 4.0)
+        sidechain_strength = float(sidechain.get("pumpingStrength") or 0.0)
+        bass_decay_ms = float(bass_det.get("averageDecayMs") or 400.0)
+        bass_decay_s = bass_decay_ms / 1000.0
+
+        # Optional features — only scored when both the signature and
+        # the measured value are non-None
+        rt60_raw = reverb_det.get("rt60")
+        rt60: float | None = float(rt60_raw) if rt60_raw is not None else None
+        kick_thd_raw = kick_det.get("thd")
+        kick_thd: float | None = float(kick_thd_raw) if kick_thd_raw is not None else None
+
+        is_acid = bool(acid_det.get("isAcid", False))
+        is_supersaw = bool(supersaw_det.get("isSupersaw", False))
+
+        scores: list[tuple[str, float]] = []
+
+        for sig in _GENRE_SIGNATURES:
+            raw: dict[str, float] = {
+                "bpm": _genre_range_score(bpm, *sig["bpm"]),
+                "subBassDb": _genre_range_score(sub_bass_db, *sig["subBassDb"], 1.5),
+                "crestFactor": _genre_range_score(crest_factor, *sig["crestFactor"], 1.5),
+                "onsetDensity": _genre_range_score(onset_density, *sig["onsetDensity"], 1.5),
+                "spectralCentroid": _genre_range_score(spectral_centroid, *sig["spectralCentroid"], 0.0003),
+                "sidechainStrength": _genre_range_score(sidechain_strength, *sig["sidechainStrength"]),
+                "bassDecay": _genre_range_score(bass_decay_s, *sig["bassDecay"], 1.5),
+            }
+            weights: dict[str, float] = {
+                "bpm": 1.0,
+                "subBassDb": 0.9,
+                "crestFactor": 0.7,
+                "onsetDensity": 0.6,
+                "spectralCentroid": 0.5,
+                "sidechainStrength": 0.95,
+                "bassDecay": 0.85,
+            }
+
+            if sig.get("rt60") is not None and rt60 is not None:
+                raw["rt60"] = _genre_range_score(rt60, *sig["rt60"])
+                weights["rt60"] = 0.5
+
+            if sig.get("kickDistortion") is not None and kick_thd is not None:
+                raw["kickDistortion"] = _genre_range_score(kick_thd, *sig["kickDistortion"])
+                weights["kickDistortion"] = 0.6
+
+            total_weight = sum(weights.values())
+            weighted_score = sum(raw.get(k, 0.0) * w for k, w in weights.items()) / total_weight
+
+            if sig["id"] == "acid-techno" and is_acid:
+                weighted_score = min(1.0, weighted_score * 1.3)
+            if sig["id"] in ("trance", "psytrance", "progressive-house") and is_supersaw:
+                weighted_score = min(1.0, weighted_score * 1.2)
+
+            scores.append((sig["id"], round(weighted_score, 4)))
+
+        scores.sort(key=lambda x: x[1], reverse=True)
+        primary_id, primary_score = scores[0]
+        secondary_id = scores[1][0] if len(scores) > 1 and scores[1][1] > 0.5 else None
+        secondary_score = scores[1][1] if secondary_id else 0.0
+
+        score_gap = primary_score - secondary_score
+        confidence = round(min(1.0, primary_score * (1.0 + score_gap)), 4)
+
+        return {
+            "genreDetail": {
+                "genre": primary_id,
+                "confidence": confidence,
+                "secondaryGenre": secondary_id,
+                "genreFamily": _GENRE_FAMILY_MAP.get(primary_id, "other"),
+                "topScores": [
+                    {"genre": gid, "score": s} for gid, s in scores[:5]
+                ],
+            }
+        }
+    except Exception as e:
+        print(f"[warn] Genre classification failed: {e}", file=sys.stderr)
+        return {"genreDetail": None}
+
+
 def analyze_arrangement_detail(mono: np.ndarray, sample_rate: int = 44100) -> dict:
     """Novelty timeline from Bark bands to expose structural events."""
     try:
@@ -4050,6 +4237,7 @@ def main():
             "supersawDetail": result.get("supersawDetail"),
             "bassDetail": result.get("bassDetail"),
             "kickDetail": result.get("kickDetail"),
+            "genreDetail": result.get("genreDetail"),
             "effectsDetail": result.get("effectsDetail"),
             "synthesisCharacter": result.get("synthesisCharacter"),
             "danceability": result.get("danceability"),
@@ -4148,6 +4336,7 @@ def main():
     result.update(analyze_supersaw_detail(mono, sample_rate, bpm=result.get("bpm")))
     result.update(analyze_bass_detail(mono, sample_rate, bpm=result.get("bpm")))
     result.update(analyze_kick_detail(mono, sample_rate, bpm=result.get("bpm")))
+    result.update(analyze_genre_detail(result))
     result.update(
         analyze_effects_detail(
             mono,
@@ -4239,6 +4428,7 @@ def main():
         "supersawDetail": result.get("supersawDetail"),
         "bassDetail": result.get("bassDetail"),
         "kickDetail": result.get("kickDetail"),
+        "genreDetail": result.get("genreDetail"),
         "effectsDetail": result.get("effectsDetail"),
         "synthesisCharacter": result.get("synthesisCharacter"),
         "danceability": result.get("danceability"),
