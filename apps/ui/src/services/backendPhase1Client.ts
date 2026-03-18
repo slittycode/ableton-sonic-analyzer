@@ -517,6 +517,8 @@ export function parsePhase1Result(value: unknown): Phase1Result {
     supersawDetail: parseOptionalSupersawDetail(phase1.supersawDetail),
     bassDetail: parseOptionalBassDetail(phase1.bassDetail),
     kickDetail: parseOptionalKickDetail(phase1.kickDetail),
+    genreDetail: parseOptionalGenreDetail(phase1.genreDetail),
+    dynamicCharacter: parseOptionalDynamicCharacter(phase1.dynamicCharacter),
     effectsDetail: isRecord(phase1.effectsDetail) ? phase1.effectsDetail : null,
     synthesisCharacter: isRecord(phase1.synthesisCharacter) ? phase1.synthesisCharacter : null,
     danceability: parseOptionalDanceability(phase1.danceability),
@@ -623,6 +625,40 @@ function parseOptionalKickDetail(value: unknown): Phase1Result["kickDetail"] {
     harmonicRatio: toNumberOrFallback(value.harmonicRatio, 0),
     fundamentalHz: toNumberOrFallback(value.fundamentalHz, 0),
     kickCount: toNumberOrFallback(value.kickCount, 0),
+  };
+}
+
+function parseOptionalGenreDetail(value: unknown): Phase1Result["genreDetail"] {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value)) return null;
+  const genre = value.genre;
+  if (typeof genre !== "string") return null;
+  const confidence = toNumberOrFallback(value.confidence, 0);
+  const secondaryGenre =
+    typeof value.secondaryGenre === "string" ? value.secondaryGenre : null;
+  const genreFamily = typeof value.genreFamily === "string"
+    ? (value.genreFamily as NonNullable<Phase1Result["genreDetail"]>["genreFamily"])
+    : "other";
+  const topScores = Array.isArray(value.topScores)
+    ? (value.topScores as unknown[])
+        .filter((s): s is Record<string, unknown> => isRecord(s))
+        .map((s) => ({
+          genre: typeof s.genre === "string" ? s.genre : "",
+          score: toNumberOrFallback(s.score, 0),
+        }))
+    : [];
+  return { genre, confidence, secondaryGenre, genreFamily, topScores };
+}
+
+function parseOptionalDynamicCharacter(value: unknown): Phase1Result["dynamicCharacter"] {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value)) return null;
+  return {
+    dynamicComplexity: toNumberOrFallback(value.dynamicComplexity, 0),
+    loudnessVariation: toNumberOrFallback(value.loudnessVariation, 0),
+    spectralFlatness: toNumberOrFallback(value.spectralFlatness, 0),
+    logAttackTime: toNumberOrFallback(value.logAttackTime, 0),
+    attackTimeStdDev: toNumberOrFallback(value.attackTimeStdDev, 0),
   };
 }
 

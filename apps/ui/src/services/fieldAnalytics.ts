@@ -139,6 +139,14 @@ const ALL_PHASE1_FIELDS: string[] = [
   'kickDetail.isDistorted',
   'kickDetail.thd',
   'kickDetail.fundamentalHz',
+  // Genre
+  'genreDetail.genre',
+  'genreDetail.confidence',
+  'genreDetail.genreFamily',
+  // Dynamic Character
+  'dynamicCharacter.logAttackTime',
+  'dynamicCharacter.attackTimeStdDev',
+  'dynamicCharacter.dynamicComplexity',
   // Synthesis
   'synthesisCharacter.inharmonicity',
   'synthesisCharacter.oddToEvenRatio',

@@ -1,4 +1,6 @@
-import { Phase1Result, Phase2Result } from '../types';
+import { Phase1Result, Phase2Result, type GenreProfile } from '../types';
+import { generateMixReport, type MixDoctorReport } from '../services/mixDoctor';
+import genreProfilesData from '../data/genreProfiles.json';
 
 export function downloadFile(content: string, fileName: string, contentType: string) {
   const a = document.createElement('a');
@@ -39,6 +41,34 @@ function formatMixAndMasterChainMarkdown(mixAndMasterChain: Phase2Result['mixAnd
     .join('\n');
 }
 
+function formatMixDoctorMarkdown(report: MixDoctorReport): string {
+  let md = `## Mix Doctor (${report.genreName})\n`;
+  md += `**Overall Score: ${report.overallScore}/100**\n\n`;
+
+  md += '### Spectral Balance\n';
+  for (const a of report.advice) {
+    const sign = a.diffDb > 0 ? '+' : '';
+    const status = a.issue === 'optimal' ? '✓' : a.issue === 'too-loud' ? '▲' : '▼';
+    md += `- ${status} **${a.band}**: ${sign}${a.diffDb.toFixed(1)} dB — ${a.message}\n`;
+  }
+  md += '\n';
+
+  md += `### Dynamics\n- ${report.dynamicsAdvice.message}\n`;
+  md += `- Crest Factor: ${report.dynamicsAdvice.actualCrest} dB\n\n`;
+
+  if (report.loudnessAdvice) {
+    md += `### Loudness\n- ${report.loudnessAdvice.message}\n`;
+    md += `- LUFS: ${report.loudnessAdvice.actualLufs} / True Peak: ${report.loudnessAdvice.truePeak} dBTP\n\n`;
+  }
+
+  if (report.stereoAdvice) {
+    md += `### Stereo Field\n- ${report.stereoAdvice.message}\n`;
+    md += `- Correlation: ${report.stereoAdvice.correlation.toFixed(2)} / Width: ${Math.round(report.stereoAdvice.width * 100)}%\n\n`;
+  }
+
+  return md;
+}
+
 export function generateMarkdown(
   phase1: Phase1Result,
   phase2: Phase2Result | null,
@@ -65,6 +95,18 @@ export function generateMarkdown(
   md += `- **Upper Mids**: ${phase1.spectralBalance.upperMids}\n`;
   md += `- **Highs**: ${phase1.spectralBalance.highs}\n`;
   md += `- **Brilliance**: ${phase1.spectralBalance.brilliance}\n\n`;
+
+  // Mix Doctor section (derived analysis, not measurement)
+  const profiles = genreProfilesData as GenreProfile[];
+  const gd = phase1.genreDetail;
+  const autoId = gd && gd.confidence >= 0.6 ? gd.genre : null;
+  const familyId = gd ? gd.genreFamily : null;
+  const profileId = autoId ?? familyId ?? profiles[0]?.id;
+  const profile = profiles.find(p => p.id === profileId);
+  if (profile) {
+    const report = generateMixReport(phase1, profile);
+    md += formatMixDoctorMarkdown(report);
+  }
 
   if (!phase2) {
     md += '## Phase 2\n';

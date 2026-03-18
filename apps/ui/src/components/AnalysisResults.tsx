@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { MeasurementResult, Phase1Result, Phase2Result, TranscriptionDetail } from '../types';
+import { MeasurementResult, Phase1Result, Phase2Result, TranscriptionDetail, type GenreProfile } from '../types';
+import { MixDoctorPanel } from './MixDoctorPanel';
+import genreProfilesData from '../data/genreProfiles.json';
 import {
   Activity,
   ChevronDown,
@@ -414,8 +416,8 @@ export function AnalysisResults({
       )}
 
       {(() => {
-        const { acidDetail, reverbDetail, vocalDetail, supersawDetail, bassDetail, kickDetail } = measurement;
-        const hasAny = acidDetail || reverbDetail || vocalDetail || supersawDetail || bassDetail || kickDetail;
+        const { acidDetail, reverbDetail, vocalDetail, supersawDetail, bassDetail, kickDetail, genreDetail, sidechainDetail, synthesisCharacter } = measurement;
+        const hasAny = acidDetail || reverbDetail || vocalDetail || supersawDetail || bassDetail || kickDetail || genreDetail || sidechainDetail || synthesisCharacter;
         if (!hasAny) return null;
         return (
           <div className="space-y-4">
@@ -485,8 +487,144 @@ export function AnalysisResults({
                   )}
                 </div>
               )}
+              {genreDetail && (
+                <div className="bg-bg-card border border-border rounded-sm p-4">
+                  <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mb-2">Genre Classification</p>
+                  <p className="text-xl font-display font-bold text-text-primary">
+                    {genreDetail.genre.replace(/-/g, ' ').toUpperCase()}
+                  </p>
+                  <p className="text-xs font-mono text-text-secondary mt-1">
+                    Confidence: {(genreDetail.confidence * 100).toFixed(0)}%
+                    {genreDetail.confidence < 0.5 && <span className="text-accent ml-1">(uncertain)</span>}
+                  </p>
+                  <p className="text-xs font-mono text-text-secondary">Family: {genreDetail.genreFamily}</p>
+                  {genreDetail.secondaryGenre && (
+                    <p className="text-xs font-mono text-text-secondary">
+                      Secondary: {genreDetail.secondaryGenre.replace(/-/g, ' ')}
+                    </p>
+                  )}
+                </div>
+              )}
+              {sidechainDetail && (() => {
+                const sc = sidechainDetail as Record<string, unknown>;
+                const strength = typeof sc.pumpingStrength === 'number' ? sc.pumpingStrength : null;
+                const rate = typeof sc.pumpingRate === 'string' ? sc.pumpingRate : null;
+                const confidence = typeof sc.pumpingConfidence === 'number' ? sc.pumpingConfidence : null;
+                if (strength === null) return null;
+                return (
+                  <div className="bg-bg-card border border-border rounded-sm p-4">
+                    <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mb-2">Sidechain</p>
+                    <p className="text-xl font-display font-bold text-text-primary">
+                      {(strength * 100).toFixed(0)}% PUMP
+                    </p>
+                    {rate && (
+                      <p className="text-xs font-mono text-text-secondary mt-1">Rate: {rate}</p>
+                    )}
+                    {confidence !== null && (
+                      <p className="text-xs font-mono text-text-secondary">
+                        Confidence: {(confidence * 100).toFixed(0)}%
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
+              {synthesisCharacter && (() => {
+                const sc = synthesisCharacter as Record<string, unknown>;
+                const inharmonicity = typeof sc.inharmonicity === 'number' ? sc.inharmonicity : null;
+                const oddToEven = typeof sc.oddToEvenRatio === 'number' ? sc.oddToEvenRatio : null;
+                if (inharmonicity === null && oddToEven === null) return null;
+                const synthLabel = inharmonicity !== null
+                  ? inharmonicity > 0.2 ? 'FM / NOISE' : 'CLEAN HARMONIC'
+                  : null;
+                const waveLabel = oddToEven !== null
+                  ? oddToEven < 1.0 ? 'Sine / Triangle' : 'Square / Saw'
+                  : null;
+                return (
+                  <div className="bg-bg-card border border-border rounded-sm p-4">
+                    <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mb-2">Synthesis Character</p>
+                    {synthLabel && (
+                      <p className="text-xl font-display font-bold text-text-primary">{synthLabel}</p>
+                    )}
+                    {inharmonicity !== null && (
+                      <p className="text-xs font-mono text-text-secondary mt-1">
+                        Inharmonicity: {inharmonicity.toFixed(3)}
+                      </p>
+                    )}
+                    {waveLabel && (
+                      <p className="text-xs font-mono text-text-secondary">Waveform: {waveLabel}</p>
+                    )}
+                    {oddToEven !== null && (
+                      <p className="text-xs font-mono text-text-secondary">
+                        Odd/Even Ratio: {oddToEven.toFixed(2)}
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </div>
+        );
+      })()}
+
+      {(() => {
+        const { spectralBalance } = measurement;
+        if (!spectralBalance) return null;
+        const bands = [
+          { label: 'Sub Bass', value: spectralBalance.subBass },
+          { label: 'Low Bass', value: spectralBalance.lowBass },
+          { label: 'Mids', value: spectralBalance.mids },
+          { label: 'Upper Mids', value: spectralBalance.upperMids },
+          { label: 'Highs', value: spectralBalance.highs },
+          { label: 'Brilliance', value: spectralBalance.brilliance },
+        ];
+        const maxAbs = Math.max(...bands.map(b => Math.abs(b.value)), 1);
+        return (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between border-b border-border pb-2">
+              <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
+                <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
+                Spectral Balance
+              </h2>
+              <span className="text-[10px] font-mono bg-bg-panel border border-border px-2 py-1 rounded font-bold text-text-secondary">
+                PHASE 1
+              </span>
+            </div>
+            <div className="bg-bg-card border border-border rounded-sm p-4 space-y-3">
+              {bands.map(band => {
+                const pct = (Math.abs(band.value) / maxAbs) * 100;
+                return (
+                  <div key={band.label} className="flex items-center gap-3">
+                    <span className="text-xs font-mono text-text-secondary w-20 text-right shrink-0">{band.label}</span>
+                    <div className="flex-1 h-4 bg-bg-panel rounded-sm overflow-hidden relative">
+                      <div
+                        className="h-full bg-accent/60 rounded-sm"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <span className="text-xs font-mono text-text-secondary w-16 text-right shrink-0">
+                      {band.value > 0 ? '+' : ''}{band.value.toFixed(1)} dB
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
+      {(() => {
+        const profiles = genreProfilesData as GenreProfile[];
+        if (profiles.length === 0) return null;
+        const gd = measurement.genreDetail;
+        const autoGenreId = gd && gd.confidence >= 0.6 ? gd.genre : null;
+        const autoGenreFamily = gd ? gd.genreFamily : null;
+        return (
+          <MixDoctorPanel
+            measurement={measurement}
+            profiles={profiles}
+            autoGenreId={autoGenreId}
+            autoGenreFamily={autoGenreFamily}
+          />
         );
       })()}
 

@@ -2907,13 +2907,31 @@ def analyze_genre_detail(result: dict) -> dict:
         acid_det = result.get("acidDetail") or {}
         supersaw_det = result.get("supersawDetail") or {}
 
-        bpm = float(result.get("bpm") or 120.0)
-        crest_factor = float(result.get("crestFactor") or 10.0)
-        sub_bass_db = float(spectral_balance.get("subBass") or -25.0)
-        spectral_centroid = float(spectral_detail.get("spectralCentroid") or 2000.0)
-        onset_density = float(rhythm_detail.get("onsetRate") or 4.0)
-        sidechain_strength = float(sidechain.get("pumpingStrength") or 0.0)
-        bass_decay_ms = float(bass_det.get("averageDecayMs") or 400.0)
+        # Extract core features, tracking which have real (non-fallback) values.
+        # If fewer than 3 of 7 core features are present, the classifier
+        # abstains rather than forcing a genre from default values.
+        _bpm_raw = result.get("bpm")
+        _crest_raw = result.get("crestFactor")
+        _sub_raw = spectral_balance.get("subBass")
+        _cent_raw = spectral_detail.get("spectralCentroid")
+        _onset_raw = rhythm_detail.get("onsetRate")
+        _sc_raw = sidechain.get("pumpingStrength")
+        _bd_raw = bass_det.get("averageDecayMs")
+
+        real_feature_count = sum(
+            v is not None
+            for v in (_bpm_raw, _crest_raw, _sub_raw, _cent_raw, _onset_raw, _sc_raw, _bd_raw)
+        )
+        if real_feature_count < 3:
+            return {"genreDetail": None}
+
+        bpm = float(_bpm_raw) if _bpm_raw is not None else 120.0
+        crest_factor = float(_crest_raw) if _crest_raw is not None else 10.0
+        sub_bass_db = float(_sub_raw) if _sub_raw is not None else -25.0
+        spectral_centroid = float(_cent_raw) if _cent_raw is not None else 2000.0
+        onset_density = float(_onset_raw) if _onset_raw is not None else 4.0
+        sidechain_strength = float(_sc_raw) if _sc_raw is not None else 0.0
+        bass_decay_ms = float(_bd_raw) if _bd_raw is not None else 400.0
         bass_decay_s = bass_decay_ms / 1000.0
 
         # Optional features — only scored when both the signature and
@@ -2968,11 +2986,21 @@ def analyze_genre_detail(result: dict) -> dict:
 
         scores.sort(key=lambda x: x[1], reverse=True)
         primary_id, primary_score = scores[0]
+
+        # Abstain when the best match is too weak to be meaningful
+        if primary_score < 0.25:
+            return {"genreDetail": None}
+
         secondary_id = scores[1][0] if len(scores) > 1 and scores[1][1] > 0.5 else None
         secondary_score = scores[1][1] if secondary_id else 0.0
 
         score_gap = primary_score - secondary_score
         confidence = round(min(1.0, primary_score * (1.0 + score_gap)), 4)
+
+        # When top genres are nearly tied, cap confidence to signal ambiguity
+        raw_gap = primary_score - (scores[1][1] if len(scores) > 1 else 0.0)
+        if raw_gap < 0.05:
+            confidence = min(confidence, 0.4)
 
         return {
             "genreDetail": {

@@ -69,6 +69,13 @@ export interface Phase1Result {
   lufsRange?: number | null;
   truePeak: number;
   crestFactor?: number | null;
+  dynamicCharacter?: {
+    dynamicComplexity: number;
+    loudnessVariation: number;
+    spectralFlatness: number;
+    logAttackTime: number;
+    attackTimeStdDev: number;
+  } | null;
   stereoWidth: number;
   stereoCorrelation: number;
   stereoDetail?: Record<string, unknown> | null;
@@ -149,6 +156,29 @@ export interface Phase1Result {
 }
 
 export type MeasurementResult = Omit<Phase1Result, 'transcriptionDetail'>;
+
+export interface SpectralTarget {
+  minDb: number;
+  maxDb: number;
+  optimalDb: number;
+}
+
+export interface GenreProfile {
+  id: string;
+  name: string;
+  targetCrestFactorRange: [number, number];
+  targetPlrRange: [number, number];
+  targetLufsRange: [number, number];
+  spectralTargets: {
+    subBass: SpectralTarget;
+    lowBass: SpectralTarget;
+    lowMids: SpectralTarget;
+    mids: SpectralTarget;
+    upperMids: SpectralTarget;
+    highs: SpectralTarget;
+    brilliance: SpectralTarget;
+  };
+}
 
 export type RecommendationCategory =
   | "SYNTHESIS"
