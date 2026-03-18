@@ -2123,7 +2123,7 @@ def analyze_reverb_detail(
             envelope[i] = float(np.sqrt(np.mean(seg ** 2)))
 
         if envelope.size < 20:
-            return {"reverbDetail": {"rt60": 0.3, "isWet": False, "tailEnergyRatio": 0.1}}
+            return {"reverbDetail": {"rt60": None, "isWet": False, "tailEnergyRatio": None, "measured": False}}
 
         min_dist_frames = max(1, int(np.floor((((60.0 / bpm) * 1000.0) / _HOP_MS) * 0.5)))
         transient_indices: list[int] = []
@@ -2141,7 +2141,7 @@ def analyze_reverb_detail(
                     transient_indices.append(i)
 
         if len(transient_indices) < _MIN_TRANSIENTS:
-            return {"reverbDetail": {"rt60": 0.5, "isWet": False, "tailEnergyRatio": 0.2}}
+            return {"reverbDetail": {"rt60": None, "isWet": False, "tailEnergyRatio": None, "measured": False}}
 
         max_decay_frames = int(np.floor((_ANALYSIS_WINDOW_S * 1000.0) / _HOP_MS))
         direct_end_frames = max(1, int(np.floor(_DIRECT_MS / _HOP_MS)))
@@ -2188,7 +2188,7 @@ def analyze_reverb_detail(
                 rt60_estimates.append(rt60)
 
         if not rt60_estimates:
-            return {"reverbDetail": {"rt60": 0.3, "isWet": False, "tailEnergyRatio": 0.1}}
+            return {"reverbDetail": {"rt60": None, "isWet": False, "tailEnergyRatio": None, "measured": False}}
 
         avg_rt60 = float(np.mean(rt60_estimates))
         avg_tail = float(np.mean(tail_ratios)) if tail_ratios else 0.2
@@ -2198,6 +2198,7 @@ def analyze_reverb_detail(
                 "rt60": capped_rt60,
                 "isWet": avg_rt60 > 0.5,
                 "tailEnergyRatio": round(float(np.clip(avg_tail, 0.0, 1.0)), 2),
+                "measured": True,
             }
         }
     except Exception as e:
