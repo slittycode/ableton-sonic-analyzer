@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ASA Phase 1 Flow</title>
+    <style>
+      :root {
+        --bg: #111318;
+        --panel: #181c24;
+        --line: #344050;
+        --text: #f5f2e8;
+        --muted: #97a0ab;
+        --lime: #b6ff2b;
+        --cyan: #52c8ff;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: Aptos, Inter, system-ui, sans-serif;
+        background: radial-gradient(circle at top, #1b2030 0%, var(--bg) 52%);
+        color: var(--text);
+      }
+
+      .wrap {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 32px 28px 48px;
+      }
+
+      .kicker {
+        font-size: 12px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 10px;
+      }
+
+      h1 {
+        margin: 0 0 10px;
+        font-size: 34px;
+        line-height: 1.1;
+      }
+
+      .summary {
+        max-width: 980px;
+        color: #d6d0c7;
+        margin-bottom: 20px;
+        font-size: 16px;
+      }
+
+      .actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-bottom: 18px;
+      }
+
+      .actions a,
+      .actions button {
+        appearance: none;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--panel);
+        color: var(--text);
+        padding: 10px 14px;
+        font-size: 14px;
+        text-decoration: none;
+        cursor: pointer;
+      }
+
+      .actions button.primary {
+        background: var(--lime);
+        border-color: var(--lime);
+        color: #111318;
+        font-weight: 700;
+      }
+
+      .panel {
+        background: rgba(24, 28, 36, 0.9);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 18px;
+        overflow: auto;
+      }
+
+      .notes {
+        margin-top: 18px;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 12px;
+      }
+
+      .note {
+        background: rgba(24, 28, 36, 0.9);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 14px;
+      }
+
+      .note strong {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--cyan);
+      }
+
+      .note p {
+        margin: 0;
+        color: #ddd8cf;
+        font-size: 14px;
+        line-height: 1.45;
+      }
+    </style>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({
+        startOnLoad: true,
+        theme: "dark",
+        securityLevel: "loose",
+        flowchart: { useMaxWidth: true, htmlLabels: true, curve: "basis" },
+        themeVariables: {
+          background: "#181c24",
+          primaryColor: "#1f2630",
+          primaryTextColor: "#f5f2e8",
+          primaryBorderColor: "#344050",
+          lineColor: "#526073",
+          tertiaryColor: "#202631",
+          fontFamily: "Aptos, Inter, system-ui, sans-serif",
+        },
+      });
+      window.addEventListener("DOMContentLoaded", () => {
+        const btn = document.getElementById("copy");
+        btn?.addEventListener("click", async () => {
+          const source = document.getElementById("source")?.textContent ?? "";
+          await navigator.clipboard.writeText(source);
+          btn.textContent = "Copied";
+          setTimeout(() => {
+            btn.textContent = "Copy Mermaid";
+          }, 1200);
+        });
+      });
+    </script>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="kicker">Advisory / Phase 1 audit</div>
+      <h1>Phase 1 Pipeline Diagram</h1>
+      <p class="summary">
+        This is a browser-viewable rendering of the Mermaid source for the actual Phase 1 flow:
+        canonical measurement, optional symbolic extraction, grounded interpretation, UI projection,
+        and the still-live legacy compatibility path.
+      </p>
+
+      <div class="actions">
+        <button id="copy" class="primary">Copy Mermaid</button>
+        <a href="./phase1_flow.mmd">Open raw <code>.mmd</code></a>
+        <a href="./phase1_flow_doc.md">Open Mermaid markdown doc</a>
+      </div>
+
+      <div class="panel">
+        <pre class="mermaid" id="source">flowchart LR
+  A["User uploads audio"] --> B["POST /api/analysis-runs"]
+  B --> C["AnalysisRuntime.create_run()"]
+  C --> D["measurement_outputs: queued"]
+
+  D --> E["Measurement worker reserves run"]
+  E --> F["server._execute_measurement_run()"]
+  F --> G["analyze.py or analyze_fast.py"]
+
+  G --> H["Raw analyzer payload"]
+  H --> I["complete_measurement()"]
+  I --> J["Authoritative measurement result"]
+
+  I -. "strips" .-> X["transcriptionDetail removed from canonical measurement"]
+  I --> K["_enqueue_requested_followups()"]
+
+  K --> L["Queued symbolicExtraction attempt (optional)"]
+  K --> M["Queued interpretation attempt (optional)"]
+
+  L --> N["server._execute_symbolic_attempt()"]
+  N --> O["Optional Demucs stem materialization"]
+  O --> P["analyze_transcription() via TranscriptionBackend seam"]
+  P --> Q["Best-effort symbolic result"]
+
+  M --> R["server._execute_interpretation_attempt()"]
+  J --> R
+  Q --> R
+  R --> S["Grounded interpretation result"]
+
+  J --> T["GET /api/analysis-runs/{runId}"]
+  Q --> T
+  S --> T
+
+  T --> U["parseCanonicalMeasurementResult()"]
+  U --> V["projectPhase1FromRun()"]
+  Q --> V
+  V --> W["UI display Phase 1 projection"]
+  W --> Y["App.tsx stores measurementResult + symbolicResult"]
+
+  H --> Z["POST /api/analyze legacy path"]
+  Z --> AA["_build_phase1(payload)"]
+  AA --> AB["Legacy flat phase1 blob"]
+
+  classDef auth fill:#d9f2d9,stroke:#2f6b2f,color:#111;
+  classDef compat fill:#fde7c7,stroke:#8a5a00,color:#111;
+  classDef risk fill:#f7d6d6,stroke:#8f2d2d,color:#111;
+  classDef follow fill:#dbe9ff,stroke:#285ea8,color:#111;
+
+  class J auth;
+  class X risk;
+  class L,M,N,O,P,Q,R,S follow;
+  class Z,AA,AB,V,W compat;</pre>
+      </div>
+
+      <div class="notes">
+        <div class="note">
+          <strong>Authoritative core</strong>
+          <p>Measurement is the only stage treated as truth in canonical runtime storage and downstream grounding.</p>
+        </div>
+        <div class="note">
+          <strong>Best-effort symbolic</strong>
+          <p>Symbolic notes are additive and useful, but not promoted to authoritative measurement.</p>
+        </div>
+        <div class="note">
+          <strong>Compatibility debt</strong>
+          <p>The legacy flat <code>phase1</code> path still exists and the UI still reconstructs a compatibility projection from canonical stages.</p>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
