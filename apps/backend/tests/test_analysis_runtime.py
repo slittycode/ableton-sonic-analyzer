@@ -219,6 +219,90 @@ class AnalysisRuntimeTests(unittest.TestCase):
             1,
         )
 
+    def test_measurement_pipeline_progress_updates_are_visible_in_stage_diagnostics(
+        self,
+    ) -> None:
+        runtime = self._runtime()
+        created = runtime.create_run(
+            filename="track.mp3",
+            content=b"fake-audio",
+            mime_type="audio/mpeg",
+            symbolic_mode="stem_notes",
+            symbolic_backend="auto",
+            interpretation_mode="off",
+            interpretation_profile="producer_summary",
+            interpretation_model=None,
+        )
+
+        measurement_job = runtime.reserve_next_measurement_run()
+        self.assertIsNotNone(measurement_job)
+
+        progress = runtime.update_measurement_pipeline_progress(
+            created["runId"],
+            pipeline_key="separation",
+            status="pending",
+            step_key="separation_pending",
+            message="Demucs separation is queued and waiting to start.",
+        )
+        self.assertIsNotNone(progress)
+        self.assertEqual(progress["seq"], 1)
+
+        progress = runtime.update_measurement_pipeline_progress(
+            created["runId"],
+            pipeline_key="separation",
+            status="running",
+            step_key="separation_running",
+            message="Demucs is separating stems from the source audio.",
+        )
+        self.assertIsNotNone(progress)
+        self.assertEqual(progress["seq"], 2)
+
+        progress = runtime.update_measurement_pipeline_progress(
+            created["runId"],
+            pipeline_key="transcription_stems",
+            status="pending",
+            step_key="transcription_pending",
+            message="Legacy Basic Pitch transcription is queued for bass and other stems.",
+        )
+        self.assertIsNotNone(progress)
+        self.assertEqual(progress["seq"], 1)
+
+        snapshot = runtime.get_run(created["runId"])
+        self.assertEqual(
+            snapshot["stages"]["measurement"]["diagnostics"]["pipelineProgress"][
+                "separation"
+            ]["status"],
+            "running",
+        )
+        self.assertEqual(
+            snapshot["stages"]["measurement"]["diagnostics"]["pipelineProgress"][
+                "separation"
+            ]["seq"],
+            2,
+        )
+        self.assertEqual(
+            snapshot["stages"]["measurement"]["diagnostics"]["pipelineProgress"][
+                "transcription_stems"
+            ]["status"],
+            "pending",
+        )
+
+        runtime.complete_measurement(
+            created["runId"],
+            payload={"bpm": 128, "durationSeconds": 60.0},
+            provenance={"schemaVersion": "measurement.v1"},
+            diagnostics={"backendDurationMs": 1000},
+        )
+
+        progress = runtime.update_measurement_pipeline_progress(
+            created["runId"],
+            pipeline_key="separation",
+            status="completed",
+            step_key="separation_complete",
+            message="Demucs stem separation complete.",
+        )
+        self.assertIsNone(progress)
+
     def test_reserve_next_measurement_run_returns_requested_options(self) -> None:
         runtime = self._runtime()
         created = runtime.create_run(

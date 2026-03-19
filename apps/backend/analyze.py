@@ -3844,6 +3844,7 @@ class TranscriptionBackend(Protocol):
         self,
         audio_path: str,
         stem_paths: dict | None = None,
+        emit_progress_markers: bool = False,
     ) -> dict:
         """Return a transcriptionDetail dict.
 
@@ -4211,6 +4212,7 @@ class BasicPitchBackend:
         self,
         audio_path: str,
         stem_paths: dict | None = None,
+        emit_progress_markers: bool = False,
     ) -> dict:
         try:
             from basic_pitch.inference import predict
@@ -4236,6 +4238,16 @@ class BasicPitchBackend:
             ]
 
             for stem_source, source_path in transcription_sources:
+                if emit_progress_markers:
+                    transcription_mode = (
+                        "stems"
+                        if stem_source in ("bass", "other")
+                        else "full_mix"
+                    )
+                    print(
+                        f"@@TRANSCRIPTION_SOURCE mode={transcription_mode} source={stem_source}",
+                        file=sys.stderr,
+                    )
                 source_notes, source_midi_values, source_confidence_values = (
                     _extract_basic_pitch_notes(
                         source_path,
@@ -4339,6 +4351,7 @@ def analyze_transcription(
     audio_path: str,
     stem_paths: dict | None = None,
     backend: TranscriptionBackend | None = None,
+    emit_progress_markers: bool = False,
 ) -> dict:
     """Run transcription via the specified backend, defaulting to the legacy Basic Pitch backend.
 
@@ -4347,14 +4360,29 @@ def analyze_transcription(
     """
     if backend is None:
         backend = BasicPitchBackend()
-    return backend.transcribe(audio_path, stem_paths)
+    try:
+        return backend.transcribe(
+            audio_path,
+            stem_paths,
+            emit_progress_markers=emit_progress_markers,
+        )
+    except TypeError as exc:
+        if "emit_progress_markers" not in str(exc):
+            raise
+        return backend.transcribe(audio_path, stem_paths)
 
 
 def analyze_transcription_basic_pitch(
-    audio_path: str, stem_paths: dict | None = None
+    audio_path: str,
+    stem_paths: dict | None = None,
+    emit_progress_markers: bool = False,
 ) -> dict:
     """Deprecated: use analyze_transcription() instead."""
-    return analyze_transcription(audio_path, stem_paths=stem_paths)
+    return analyze_transcription(
+        audio_path,
+        stem_paths=stem_paths,
+        emit_progress_markers=emit_progress_markers,
+    )
 
 
 # ── Main ───────────────────────────────────────────────────────────────────
@@ -4467,6 +4495,7 @@ def main():
             file=sys.stderr,
         )
         stems = separate_stems(audio_path)
+        print("@@SEPARATION_COMPLETE", file=sys.stderr)
 
     print("Analyzing...", file=sys.stderr)
 
@@ -4587,11 +4616,18 @@ def main():
                     transcription_stem_paths[stem_name] = source_path
             if len(transcription_stem_paths) == 0:
                 transcription_stem_paths = None
+        transcription_mode = (
+            "stems" if transcription_stem_paths is not None else "full_mix"
+        )
+        print(f"@@TRANSCRIPTION_START mode={transcription_mode}", file=sys.stderr)
         result.update(
             analyze_transcription(
-                audio_path, stem_paths=transcription_stem_paths
+                audio_path,
+                stem_paths=transcription_stem_paths,
+                emit_progress_markers=True,
             )
         )
+        print(f"@@TRANSCRIPTION_COMPLETE mode={transcription_mode}", file=sys.stderr)
     else:
         result["transcriptionDetail"] = None
 
