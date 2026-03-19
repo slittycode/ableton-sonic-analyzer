@@ -38,14 +38,19 @@ mpmath==1.3.0
 msgpack==1.1.2
 networkx==3.6.1
 numba==0.64.0
-numpy==2.4.3
+# basic-pitch follows different dependency trees on macOS vs Linux:
+# - Darwin uses the local CoreML path and works with the newer pins below.
+# - Linux CI pulls TensorFlow, which still requires numpy<2 and protobuf<5.
+numpy==2.4.3; platform_system == "Darwin"
+numpy==1.26.4; platform_system != "Darwin"
 omegaconf==2.3.0
 openunmix==1.3.0
 packaging==26.0
 platformdirs==4.9.4
 pooch==1.9.0
 pretty_midi==0.2.11
-protobuf==7.34.0
+protobuf==7.34.0; platform_system == "Darwin"
+protobuf==4.25.8; platform_system != "Darwin"
 pyaml==26.2.1
 pycparser==3.0
 pydantic==2.12.5
