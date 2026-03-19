@@ -22,8 +22,15 @@ import { INTERPRETATION_LABEL } from '../services/phaseLabels';
 import { SessionMusicianPanel } from './SessionMusicianPanel';
 import { PhaseSourceBadge } from './PhaseSourceBadge';
 import { StickyNav, type StickyNavSection } from './StickyNav';
+import { ChordProgressionPanel } from './ChordProgressionPanel';
+import { SpectralBalanceCurve } from './SpectralBalanceCurve';
+import { SegmentSpectralProfile } from './SegmentSpectralProfile';
+import { ChromaDisplay } from './ChromaDisplay';
+import { DetectorAnalysisGrid } from './DetectorAnalysisGrid';
+import { MelSpectrogram } from './MelSpectrogram';
 import {
   buildArrangementViewModel,
+  buildChromaViewModel,
   buildMixChainGroups,
   buildPatchCards,
   buildSonicElementCards,
@@ -39,6 +46,9 @@ interface AnalysisResultsProps {
   phase2: Phase2Result | null;
   phase2StatusMessage?: string | null;
   sourceFileName?: string | null;
+  audioFile?: File;
+  audioElementRef?: React.RefObject<HTMLAudioElement | null>;
+  onSeek?: (timeSeconds: number) => void;
 }
 
 export function toggleOpenKeySet(previous: ReadonlySet<string>, id: string): Set<string> {
@@ -162,11 +172,29 @@ function toFiniteNumber(value: unknown): number | null {
 
 function getChordStrength(phase1: MeasurementResult): number | null {
   const chordDetail = phase1.chordDetail;
-  if (!chordDetail || typeof chordDetail !== 'object' || Array.isArray(chordDetail)) {
-    return null;
-  }
+  if (!chordDetail) return null;
+  return toFiniteNumber(chordDetail.chordStrength);
+}
 
-  return toFiniteNumber((chordDetail as Record<string, unknown>).chordStrength);
+function hasRenderableChordContent(chordDetail: MeasurementResult['chordDetail']): boolean {
+  if (!chordDetail) return false;
+  if (Array.isArray(chordDetail.chordSequence) && chordDetail.chordSequence.length > 0) return true;
+  if (Array.isArray(chordDetail.progression) && chordDetail.progression.length > 0) return true;
+  return false;
+}
+
+function hasDetectorData(measurement: MeasurementResult): boolean {
+  return Boolean(
+    measurement.acidDetail ||
+    measurement.reverbDetail ||
+    measurement.vocalDetail ||
+    measurement.supersawDetail ||
+    measurement.bassDetail ||
+    measurement.kickDetail ||
+    measurement.genreDetail ||
+    measurement.sidechainDetail ||
+    measurement.synthesisCharacter,
+  );
 }
 
 export function AnalysisResults({
@@ -175,6 +203,9 @@ export function AnalysisResults({
   phase2,
   phase2StatusMessage = null,
   sourceFileName = null,
+  audioFile,
+  audioElementRef,
+  onSeek,
 }: AnalysisResultsProps) {
   const [openArrangement, setOpenArrangement] = useState<Record<string, boolean>>({});
   const [openSonic, setOpenSonic] = useState<Set<string>>(new Set());
@@ -257,6 +288,8 @@ export function AnalysisResults({
     ? phase2.detectedCharacteristics.slice(0, 4)
     : [];
   const danceability = measurement.danceability;
+  const hasChordSection = hasRenderableChordContent(measurement.chordDetail);
+  const hasDetectors = hasDetectorData(measurement);
   const keyIsApproximate = measurement.keyConfidence <= 0.6;
   const chordStrength = getChordStrength(measurement);
   const chordsAreApproximate = chordStrength !== null && chordStrength <= 0.7;
@@ -267,7 +300,13 @@ export function AnalysisResults({
     sonicCards.length > 0 ||
     mixGroups.length > 0 ||
     patchCards.length > 0;
+  const chromaViewModel = buildChromaViewModel(measurement.spectralDetail?.chroma, measurement.key);
+  const hasChroma = chromaViewModel !== null;
   const navSections: StickyNavSection[] = [
+    hasChordSection ? { id: 'section-chords', label: 'Chords' } : null,
+    hasDetectors ? { id: 'section-detectors', label: 'Detectors' } : null,
+    { id: 'section-spectral-balance', label: 'Spectral' },
+    hasChroma ? { id: 'section-spectral', label: 'Chroma' } : null,
     arrangement ? { id: 'section-arrangement', label: 'Arrangement' } : null,
     { id: 'section-session', label: 'Session' },
     sonicCards.length > 0 ? { id: 'section-sonic-elements', label: 'Sonic' } : null,
@@ -406,6 +445,17 @@ export function AnalysisResults({
         </div>
       </div>
 
+      {hasChordSection && (
+        <section id="section-chords" className="scroll-mt-24">
+          <ChordProgressionPanel
+            chordDetail={measurement.chordDetail}
+            detectedKey={measurement.key}
+            keyConfidence={measurement.keyConfidence}
+            durationSeconds={measurement.durationSeconds}
+          />
+        </section>
+      )}
+
       {danceability && (
         <div className="space-y-4">
           <div className="flex items-center justify-between border-b border-border pb-2">
@@ -435,206 +485,36 @@ export function AnalysisResults({
         </div>
       )}
 
-      {(() => {
-        const { acidDetail, reverbDetail, vocalDetail, supersawDetail, bassDetail, kickDetail, genreDetail, sidechainDetail, synthesisCharacter } = measurement;
-        const hasAny = acidDetail || reverbDetail || vocalDetail || supersawDetail || bassDetail || kickDetail || genreDetail || sidechainDetail || synthesisCharacter;
-        if (!hasAny) return null;
-        return (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between border-b border-border pb-2">
-              <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
-                <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
-                Detector Analysis
-              </h2>
-              <span className="text-[10px] font-mono bg-bg-panel border border-border px-2 py-1 rounded font-bold text-text-secondary">
-                PHASE 1
-              </span>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {acidDetail && (
-                <div className="bg-bg-card border border-border rounded-sm p-4">
-                  <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mb-2">Acid Bass</p>
-                  <p className="text-xl font-display font-bold text-text-primary">{acidDetail.isAcid ? 'DETECTED' : 'NOT DETECTED'}</p>
-                  <p className="text-xs font-mono text-text-secondary mt-1">Confidence: {(acidDetail.confidence * 100).toFixed(0)}%</p>
-                  {acidDetail.isAcid && (
-                    <p className="text-xs font-mono text-text-secondary">Resonance: {acidDetail.resonanceLevel.toFixed(2)}</p>
-                  )}
-                </div>
-              )}
-              {reverbDetail && (
-                <div className="bg-bg-card border border-border rounded-sm p-4">
-                  <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mb-2">Reverb</p>
-                  <p className="text-xl font-display font-bold text-text-primary">{reverbDetail.isWet ? 'WET' : 'DRY'}</p>
-                  {reverbDetail.measured && reverbDetail.rt60 !== null ? (
-                    <p className="text-xs font-mono text-text-secondary mt-1">RT60: {reverbDetail.rt60.toFixed(2)}s</p>
-                  ) : (
-                    <p className="text-xs font-mono text-text-secondary mt-1 opacity-50">RT60: N/A</p>
-                  )}
-                </div>
-              )}
-              {vocalDetail && (
-                <div className="bg-bg-card border border-border rounded-sm p-4">
-                  <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mb-2">Vocals</p>
-                  <p className="text-xl font-display font-bold text-text-primary">{vocalDetail.hasVocals ? 'PRESENT' : 'ABSENT'}</p>
-                  <p className="text-xs font-mono text-text-secondary mt-1">Confidence: {(vocalDetail.confidence * 100).toFixed(0)}%</p>
-                </div>
-              )}
-              {supersawDetail && (
-                <div className="bg-bg-card border border-border rounded-sm p-4">
-                  <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mb-2">Supersaw</p>
-                  <p className="text-xl font-display font-bold text-text-primary">{supersawDetail.isSupersaw ? 'DETECTED' : 'NOT DETECTED'}</p>
-                  <p className="text-xs font-mono text-text-secondary mt-1">Confidence: {(supersawDetail.confidence * 100).toFixed(0)}%</p>
-                  {supersawDetail.isSupersaw && (
-                    <p className="text-xs font-mono text-text-secondary">Voices: {supersawDetail.voiceCount}</p>
-                  )}
-                </div>
-              )}
-              {bassDetail && (
-                <div className="bg-bg-card border border-border rounded-sm p-4">
-                  <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mb-2">Bass Character</p>
-                  <p className="text-xl font-display font-bold text-text-primary uppercase">{bassDetail.type}</p>
-                  <p className="text-xs font-mono text-text-secondary mt-1">Decay: {bassDetail.averageDecayMs.toFixed(0)}ms</p>
-                  <p className="text-xs font-mono text-text-secondary">Groove: {bassDetail.grooveType}</p>
-                </div>
-              )}
-              {kickDetail && (
-                <div className="bg-bg-card border border-border rounded-sm p-4">
-                  <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mb-2">Kick</p>
-                  <p className="text-xl font-display font-bold text-text-primary">{kickDetail.kickCount} HITS</p>
-                  <p className="text-xs font-mono text-text-secondary mt-1">Fundamental: {kickDetail.fundamentalHz.toFixed(0)}Hz</p>
-                  {kickDetail.isDistorted && (
-                    <p className="text-xs font-mono text-accent mt-1">DISTORTED</p>
-                  )}
-                </div>
-              )}
-              {genreDetail && (
-                <div className="bg-bg-card border border-border rounded-sm p-4">
-                  <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mb-2">Genre Classification</p>
-                  <p className="text-xl font-display font-bold text-text-primary">
-                    {genreDetail.genre.replace(/-/g, ' ').toUpperCase()}
-                  </p>
-                  <p className="text-xs font-mono text-text-secondary mt-1">
-                    Confidence: {(genreDetail.confidence * 100).toFixed(0)}%
-                    {genreDetail.confidence < 0.5 && <span className="text-accent ml-1">(uncertain)</span>}
-                  </p>
-                  <p className="text-xs font-mono text-text-secondary">Family: {genreDetail.genreFamily}</p>
-                  {genreDetail.secondaryGenre && (
-                    <p className="text-xs font-mono text-text-secondary">
-                      Secondary: {genreDetail.secondaryGenre.replace(/-/g, ' ')}
-                    </p>
-                  )}
-                </div>
-              )}
-              {sidechainDetail && (() => {
-                const sc = sidechainDetail as Record<string, unknown>;
-                const strength = typeof sc.pumpingStrength === 'number' ? sc.pumpingStrength : null;
-                const rate = typeof sc.pumpingRate === 'string' ? sc.pumpingRate : null;
-                const confidence = typeof sc.pumpingConfidence === 'number' ? sc.pumpingConfidence : null;
-                if (strength === null) return null;
-                return (
-                  <div className="bg-bg-card border border-border rounded-sm p-4">
-                    <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mb-2">Sidechain</p>
-                    <p className="text-xl font-display font-bold text-text-primary">
-                      {(strength * 100).toFixed(0)}% PUMP
-                    </p>
-                    {rate && (
-                      <p className="text-xs font-mono text-text-secondary mt-1">Rate: {rate}</p>
-                    )}
-                    {confidence !== null && (
-                      <p className="text-xs font-mono text-text-secondary">
-                        Confidence: {(confidence * 100).toFixed(0)}%
-                      </p>
-                    )}
-                  </div>
-                );
-              })()}
-              {synthesisCharacter && (() => {
-                const sc = synthesisCharacter as Record<string, unknown>;
-                const inharmonicity = typeof sc.inharmonicity === 'number' ? sc.inharmonicity : null;
-                const oddToEven = typeof sc.oddToEvenRatio === 'number' ? sc.oddToEvenRatio : null;
-                if (inharmonicity === null && oddToEven === null) return null;
-                const synthLabel = inharmonicity !== null
-                  ? inharmonicity > 0.25 ? 'WAVETABLE / NOISE'
-                    : inharmonicity >= 0.10 ? 'FM / ACID'
-                    : 'CLEAN SUBTRACTIVE'
-                  : null;
-                const waveLabel = oddToEven !== null
-                  ? oddToEven > 1.5 ? 'Saw / Square'
-                    : oddToEven < 0.8 ? 'Sine / Triangle'
-                    : 'Mixed Harmonics'
-                  : null;
-                return (
-                  <div className="bg-bg-card border border-border rounded-sm p-4">
-                    <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mb-2">Synthesis Character</p>
-                    {synthLabel && (
-                      <p className="text-xl font-display font-bold text-text-primary">{synthLabel}</p>
-                    )}
-                    {inharmonicity !== null && (
-                      <p className="text-xs font-mono text-text-secondary mt-1">
-                        Inharmonicity: {inharmonicity.toFixed(3)}
-                      </p>
-                    )}
-                    {waveLabel && (
-                      <p className="text-xs font-mono text-text-secondary">Waveform: {waveLabel}</p>
-                    )}
-                    {oddToEven !== null && (
-                      <p className="text-xs font-mono text-text-secondary">
-                        Odd/Even Ratio: {oddToEven.toFixed(2)}
-                      </p>
-                    )}
-                  </div>
-                );
-              })()}
-            </div>
-          </div>
-        );
-      })()}
+      {hasDetectors && (
+        <section id="section-detectors" className="scroll-mt-24">
+          <DetectorAnalysisGrid measurement={measurement} />
+        </section>
+      )}
 
-      {(() => {
-        const { spectralBalance } = measurement;
-        if (!spectralBalance) return null;
-        const bands = [
-          { label: 'Sub Bass', value: spectralBalance.subBass },
-          { label: 'Low Bass', value: spectralBalance.lowBass },
-          { label: 'Mids', value: spectralBalance.mids },
-          { label: 'Upper Mids', value: spectralBalance.upperMids },
-          { label: 'Highs', value: spectralBalance.highs },
-          { label: 'Brilliance', value: spectralBalance.brilliance },
-        ];
-        const maxAbs = Math.max(...bands.map(b => Math.abs(b.value)), 1);
-        return (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between border-b border-border pb-2">
-              <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
-                <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
-                Spectral Balance
-              </h2>
-              <span className="text-[10px] font-mono bg-bg-panel border border-border px-2 py-1 rounded font-bold text-text-secondary">
-                PHASE 1
-              </span>
-            </div>
-            <div className="bg-bg-card border border-border rounded-sm p-4 space-y-3">
-              {bands.map(band => {
-                const pct = (Math.abs(band.value) / maxAbs) * 100;
-                return (
-                  <div key={band.label} className="flex items-center gap-3">
-                    <span className="text-xs font-mono text-text-secondary w-20 text-right shrink-0">{band.label}</span>
-                    <div className="flex-1 h-4 bg-bg-panel rounded-sm overflow-hidden relative">
-                      <div
-                        className="h-full bg-accent/60 rounded-sm"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                    <span className="text-xs font-mono text-text-secondary w-16 text-right shrink-0">
-                      {band.value > 0 ? '+' : ''}{band.value.toFixed(1)} dB
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })()}
+      <section id="section-spectral-balance" className="space-y-4 scroll-mt-24">
+        <SpectralBalanceCurve
+          spectralBalance={measurement.spectralBalance}
+          barkBands={measurement.spectralDetail?.barkBands}
+        />
+        {audioFile && audioElementRef && (
+          <MelSpectrogram
+            audioFile={audioFile}
+            audioElementRef={audioElementRef}
+            onSeek={onSeek}
+            durationSeconds={measurement.durationSeconds}
+          />
+        )}
+        <SegmentSpectralProfile
+          segmentSpectral={measurement.segmentSpectral}
+          segmentLoudness={measurement.segmentLoudness}
+        />
+      </section>
+
+      {hasChroma && chromaViewModel && (
+        <section id="section-spectral" className="scroll-mt-24">
+          <ChromaDisplay viewModel={chromaViewModel} />
+        </section>
+      )}
 
       {profiles.length > 0 && (
         <MixDoctorPanel

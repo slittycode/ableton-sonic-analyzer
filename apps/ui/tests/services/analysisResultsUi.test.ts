@@ -491,15 +491,89 @@ describe('AnalysisResults UI wiring', () => {
     );
 
     expect(html).toContain('Device Chain');
+    expect(html).toContain('href="#section-spectral-balance"');
     expect(html).toContain('href="#section-arrangement"');
     expect(html).toContain('href="#section-session"');
     expect(html).toContain('href="#section-sonic-elements"');
     expect(html).toContain('href="#section-mix-chain"');
     expect(html).toContain('href="#section-patches"');
+    expect(html).toContain('id="section-spectral-balance"');
     expect(html).toContain('id="section-arrangement"');
     expect(html).toContain('id="section-session"');
     expect(html).toContain('id="section-sonic-elements"');
     expect(html).toContain('id="section-mix-chain"');
     expect(html).toContain('id="section-patches"');
+  });
+
+  it('does not render an empty chord section when chord data lacks progression content', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        measurement: {
+          ...baseMeasurement,
+          chordDetail: {
+            chordStrength: 0.62,
+            chordSequence: [],
+            progression: [],
+            dominantChords: [],
+          },
+        },
+        symbolic: null,
+        phase2: basePhase2,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).not.toContain('id="section-chords"');
+    expect(html).not.toContain('href="#section-chords"');
+  });
+
+  it('adds detector nav anchors when detector analysis is present', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        measurement: {
+          ...baseMeasurement,
+          sidechainDetail: {
+            pumpingStrength: 0.31,
+            pumpingRegularity: 0.4,
+            pumpingRate: 'eighth',
+            pumpingConfidence: 0.7,
+          },
+        },
+        symbolic: null,
+        phase2: basePhase2,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).toContain('href="#section-detectors"');
+    expect(html).toContain('id="section-detectors"');
+    expect(html).toContain('Detector Analysis');
+  });
+
+  it('renders chroma section and nav link when 12-bin chroma data is present', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        measurement: {
+          ...baseMeasurement,
+          spectralDetail: {
+            spectralCentroid: 1800,
+            spectralRolloff: 5400,
+            mfcc: [],
+            chroma: [0.95, 0.2, 0.7, 0.1, 0.3, 0.6, 0.2, 0.4, 0.1, 0.2, 0.1, 0.3],
+            barkBands: Array.from({ length: 24 }, (_, i) => -22 + i * 0.3),
+            erbBands: Array.from({ length: 40 }, (_, i) => -20 + i * 0.2),
+            spectralContrast: [],
+            spectralValley: [],
+          },
+        },
+        symbolic: null,
+        phase2: basePhase2,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).toContain('href="#section-spectral"');
+    expect(html).toContain('id="section-spectral"');
+    expect(html).toContain('Strongest pitch classes are');
   });
 });

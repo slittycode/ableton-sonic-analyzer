@@ -7,6 +7,7 @@ import { isSpectrumActive, nextPeakValue } from './waveformPlayerUtils';
 interface WaveformPlayerProps {
   audioUrl: string;
   audioFile?: File;
+  onAudioElement?: (el: HTMLAudioElement) => void;
 }
 
 const BAR_COUNT = 64;
@@ -14,7 +15,7 @@ const PEAK_DROP_RATE = 2;
 const SEGMENT_HEIGHT = 4;
 const SEGMENT_GAP = 1;
 
-export function WaveformPlayer({ audioUrl, audioFile }: WaveformPlayerProps) {
+export function WaveformPlayer({ audioUrl, audioFile, onAudioElement }: WaveformPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wavesurferRef = useRef<WaveSurfer | null>(null);
@@ -171,6 +172,7 @@ export function WaveformPlayer({ audioUrl, audioFile }: WaveformPlayerProps) {
 
     wavesurferRef.current = ws;
     const mediaElement = ws.getMediaElement();
+    onAudioElement?.(mediaElement);
 
     const handleReady = () => {
       setIsReady(true);
@@ -276,7 +278,10 @@ export function WaveformPlayer({ audioUrl, audioFile }: WaveformPlayerProps) {
   };
 
   return (
-    <div className="flex flex-col space-y-4 w-full bg-bg-panel p-4 rounded-sm border border-border relative overflow-hidden group">
+    <div
+      data-testid="waveform-player"
+      className="flex flex-col space-y-4 w-full bg-bg-panel p-4 rounded-sm border border-border relative overflow-hidden group"
+    >
       <div className="flex items-center justify-between px-4 pt-1 border-b border-border/30 pb-2">
         <div className="flex items-center space-x-2">
           <Activity className="w-4 h-4 text-accent" />
@@ -292,6 +297,7 @@ export function WaveformPlayer({ audioUrl, audioFile }: WaveformPlayerProps) {
         <button
           onClick={togglePlay}
           disabled={!isReady}
+          data-testid="waveform-play-toggle"
           className={`w-12 h-12 flex items-center justify-center rounded-sm border-2 transition-all ${
             isPlaying 
               ? 'bg-accent text-bg-app border-accent' 
@@ -309,7 +315,7 @@ export function WaveformPlayer({ audioUrl, audioFile }: WaveformPlayerProps) {
         </button>
         
         <div className="flex-grow bg-bg-card rounded-sm border border-border/50 p-2 relative overflow-hidden">
-          <div ref={containerRef} className="w-full" />
+          <div ref={containerRef} data-testid="waveform-track" className="w-full" />
         </div>
       </div>
 

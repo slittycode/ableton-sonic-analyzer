@@ -161,7 +161,24 @@ const validPayload = {
       sectionCount: 5,
     },
     segmentLoudness: [{ start: 0, value: -8.2 }],
-    segmentSpectral: [{ start: 0, centroid: 1820.5 }],
+    segmentSpectral: [
+      {
+        segmentIndex: 0,
+        barkBands: Array.from({ length: 24 }, (_, i) => -20 + i * 0.5),
+        spectralCentroid: 1820.5,
+        spectralRolloff: 6120.2,
+        stereoWidth: null,
+        stereoCorrelation: null,
+      },
+      {
+        segmentIndex: 1,
+        barkBands: Array.from({ length: 24 }, (_, i) => -18 + i * 0.4),
+        spectralCentroid: 2015.4,
+        spectralRolloff: 6401.7,
+        stereoWidth: null,
+        stereoCorrelation: null,
+      },
+    ],
     segmentKey: [{ start: 0, key: 'A minor' }],
     chordDetail: {
       progression: ['Am', 'G'],
@@ -230,6 +247,7 @@ describe('parseBackendAnalyzeResponse', () => {
     expect(parsed.phase1.stereoDetail).toEqual(validPayload.phase1.stereoDetail);
     expect(parsed.phase1.structure).toEqual(validPayload.phase1.structure);
     expect(parsed.phase1.segmentLoudness).toEqual(validPayload.phase1.segmentLoudness);
+    expect(parsed.phase1.segmentSpectral).toEqual(validPayload.phase1.segmentSpectral);
     expect(parsed.phase1.perceptual).toEqual(validPayload.phase1.perceptual);
     expect(parsed.phase1.danceability).toEqual(validPayload.phase1.danceability);
 
@@ -299,6 +317,26 @@ describe('parseBackendAnalyzeResponse', () => {
     expect(parsed.phase1.supersawDetail).toBeNull();
     expect(parsed.phase1.bassDetail).toBeNull();
     expect(parsed.phase1.kickDetail).toBeNull();
+  });
+
+  it('falls back to stereoDetail when top-level stereo fields are missing', () => {
+    const payload = {
+      ...validPayload,
+      phase1: {
+        ...validPayload.phase1,
+        stereoWidth: undefined,
+        stereoCorrelation: undefined,
+        stereoDetail: {
+          ...validPayload.phase1.stereoDetail,
+          stereoWidth: 0.66,
+          stereoCorrelation: 0.79,
+        },
+      },
+    };
+
+    const parsed = parseBackendAnalyzeResponse(payload);
+    expect(parsed.phase1.stereoWidth).toBe(0.66);
+    expect(parsed.phase1.stereoCorrelation).toBe(0.79);
   });
 
   it('throws when phase1 is missing', () => {
@@ -442,6 +480,54 @@ describe('parseBackendAnalyzeResponse', () => {
     });
 
     expect(parsed.phase1.danceability).toBeNull();
+  });
+
+  it('sanitizes segmentSpectral entries and drops malformed rows', () => {
+    const parsed = parseBackendAnalyzeResponse({
+      ...validPayload,
+      phase1: {
+        ...validPayload.phase1,
+        segmentSpectral: [
+          {
+            segmentIndex: 2,
+            barkBands: [-12.4, -11.7, -9.1],
+            spectralCentroid: 1600.3,
+          },
+          {
+            segmentIndex: 1,
+            barkBands: [-10, 'bad', -8.8],
+            spectralCentroid: 'invalid',
+          },
+          {
+            segmentIndex: 'x',
+            barkBands: [-5, -4, -3],
+          },
+          {
+            segmentIndex: 4,
+            barkBands: [],
+          },
+        ],
+      },
+    });
+
+    expect(parsed.phase1.segmentSpectral).toEqual([
+      {
+        segmentIndex: 1,
+        barkBands: [-10, -8.8],
+        spectralCentroid: null,
+        spectralRolloff: null,
+        stereoWidth: null,
+        stereoCorrelation: null,
+      },
+      {
+        segmentIndex: 2,
+        barkBands: [-12.4, -11.7, -9.1],
+        spectralCentroid: 1600.3,
+        spectralRolloff: null,
+        stereoWidth: null,
+        stereoCorrelation: null,
+      },
+    ]);
   });
 });
 
