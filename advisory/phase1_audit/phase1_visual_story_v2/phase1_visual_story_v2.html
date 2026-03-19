@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Phase 1 Executive Visual Story V2</title>
+  <style>
+    :root {
+      --bg: #05070d;
+      --text: #f4f7fb;
+      --muted: #9cabc5;
+      --line: #1a2235;
+      --lime: #c9ff2f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Avenir Next", "Helvetica Neue", Arial, sans-serif;
+      background:
+        radial-gradient(circle at top, rgba(107, 216, 255, 0.08), transparent 24%),
+        linear-gradient(180deg, #09101b 0%, var(--bg) 100%);
+      color: var(--text);
+    }
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 18px 28px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(5, 7, 13, 0.88);
+      backdrop-filter: blur(18px);
+    }
+    header .left {
+      display: flex;
+      gap: 14px;
+      align-items: baseline;
+    }
+    header .kicker {
+      font-size: 12px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    header .headline {
+      font-size: 18px;
+      font-weight: 700;
+    }
+    header a {
+      color: var(--lime);
+      text-decoration: none;
+      font-weight: 700;
+    }
+    main {
+      padding: 32px 0 80px;
+      display: grid;
+      gap: 56px;
+      justify-items: center;
+    }
+    .slide-shell {
+      width: min(96vw, 1720px);
+      display: grid;
+      gap: 16px;
+    }
+    .slide-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--muted);
+      font-size: 13px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    .slide-shell img {
+      width: 100%;
+      border-radius: 28px;
+      border: 1px solid #1f2a41;
+      box-shadow: 0 28px 80px rgba(0, 0, 0, 0.45);
+      background: #0a0d14;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="left">
+      <div class="kicker">CEO Visual Story</div>
+      <div class="headline">Phase 1: what the system actually does</div>
+    </div>
+    <a href="./phase1_executive_deck_v2.pptx">Open PPTX</a>
+  </header>
+  <main>
+    <section class="slide-shell" id="slide-1">
+      <div class="slide-meta">
+        <div class="eyebrow">Phase 1 Executive Visual Story V2</div>
+        <div class="title">01 / 07</div>
+      </div>
+      <img src="./slides/slide-01-core-boundary.svg" alt="Slide 1" />
+    </section>
+  
+    <section class="slide-shell" id="slide-2">
+      <div class="slide-meta">
+        <div class="eyebrow">Phase 1 Executive Visual Story V2</div>
+        <div class="title">02 / 07</div>
+      </div>
+      <img src="./slides/slide-02-truth-vs-compatibility.svg" alt="Slide 2" />
+    </section>
+  
+    <section class="slide-shell" id="slide-3">
+      <div class="slide-meta">
+        <div class="eyebrow">Phase 1 Executive Visual Story V2</div>
+        <div class="title">03 / 07</div>
+      </div>
+      <img src="./slides/slide-03-measurement-engine.svg" alt="Slide 3" />
+    </section>
+  
+    <section class="slide-shell" id="slide-4">
+      <div class="slide-meta">
+        <div class="eyebrow">Phase 1 Executive Visual Story V2</div>
+        <div class="title">04 / 07</div>
+      </div>
+      <img src="./slides/slide-04-duplicate-work.svg" alt="Slide 4" />
+    </section>
+  
+    <section class="slide-shell" id="slide-5">
+      <div class="slide-meta">
+        <div class="eyebrow">Phase 1 Executive Visual Story V2</div>
+        <div class="title">05 / 07</div>
+      </div>
+      <img src="./slides/slide-05-value-density.svg" alt="Slide 5" />
+    </section>
+  
+    <section class="slide-shell" id="slide-6">
+      <div class="slide-meta">
+        <div class="eyebrow">Phase 1 Executive Visual Story V2</div>
+        <div class="title">06 / 07</div>
+      </div>
+      <img src="./slides/slide-06-resource-allocation.svg" alt="Slide 6" />
+    </section>
+  
+    <section class="slide-shell" id="slide-7">
+      <div class="slide-meta">
+        <div class="eyebrow">Phase 1 Executive Visual Story V2</div>
+        <div class="title">07 / 07</div>
+      </div>
+      <img src="./slides/slide-07-roadmap.svg" alt="Slide 7" />
+    </section>
+  </main>
+</body>
+</html>
