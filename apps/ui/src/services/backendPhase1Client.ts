@@ -480,8 +480,27 @@ function parseOptionalBackendTimings(value: unknown): BackendTimingDiagnostics |
 export function parsePhase1Result(value: unknown): Phase1Result {
   const phase1 = expectRecord(value, "phase1");
   const spectralBalance = expectRecord(phase1.spectralBalance, "phase1.spectralBalance");
+  const stereoDetail = isRecord(phase1.stereoDetail) ? phase1.stereoDetail : null;
   const melodyDetail = parseOptionalMelodyDetail(phase1);
   const transcriptionDetail = parseOptionalTranscriptionDetail(phase1);
+
+  // Compatibility: canonical analysis-run snapshots may only expose stereo
+  // metrics under stereoDetail, while legacy envelopes also include top-level
+  // stereoWidth/stereoCorrelation fields.
+  const stereoWidth = expectNumberWithFallback(
+    phase1,
+    "stereoWidth",
+    "stereoWidth",
+    stereoDetail,
+    "stereoWidth",
+  );
+  const stereoCorrelation = expectNumberWithFallback(
+    phase1,
+    "stereoCorrelation",
+    "stereoCorrelation",
+    stereoDetail,
+    "stereoCorrelation",
+  );
 
   return {
     bpm: expectNumber(phase1, "bpm"),
@@ -494,9 +513,9 @@ export function parsePhase1Result(value: unknown): Phase1Result {
     lufsRange: toNumber(phase1.lufsRange),
     truePeak: expectNumber(phase1, "truePeak"),
     crestFactor: toNumber(phase1.crestFactor),
-    stereoWidth: expectNumber(phase1, "stereoWidth"),
-    stereoCorrelation: expectNumber(phase1, "stereoCorrelation"),
-    stereoDetail: isRecord(phase1.stereoDetail) ? phase1.stereoDetail : null,
+    stereoWidth,
+    stereoCorrelation,
+    stereoDetail,
     spectralBalance: {
       subBass: expectNumber(spectralBalance, "subBass", "spectralBalance.subBass"),
       lowBass: expectNumber(spectralBalance, "lowBass", "spectralBalance.lowBass"),
@@ -517,6 +536,8 @@ export function parsePhase1Result(value: unknown): Phase1Result {
     supersawDetail: parseOptionalSupersawDetail(phase1.supersawDetail),
     bassDetail: parseOptionalBassDetail(phase1.bassDetail),
     kickDetail: parseOptionalKickDetail(phase1.kickDetail),
+    genreDetail: parseOptionalGenreDetail(phase1.genreDetail),
+    dynamicCharacter: parseOptionalDynamicCharacter(phase1.dynamicCharacter),
     effectsDetail: isRecord(phase1.effectsDetail) ? phase1.effectsDetail : null,
     synthesisCharacter: isRecord(phase1.synthesisCharacter) ? phase1.synthesisCharacter : null,
     danceability: parseOptionalDanceability(phase1.danceability),
@@ -623,6 +644,40 @@ function parseOptionalKickDetail(value: unknown): Phase1Result["kickDetail"] {
     harmonicRatio: toNumberOrFallback(value.harmonicRatio, 0),
     fundamentalHz: toNumberOrFallback(value.fundamentalHz, 0),
     kickCount: toNumberOrFallback(value.kickCount, 0),
+  };
+}
+
+function parseOptionalGenreDetail(value: unknown): Phase1Result["genreDetail"] {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value)) return null;
+  const genre = value.genre;
+  if (typeof genre !== "string") return null;
+  const confidence = toNumberOrFallback(value.confidence, 0);
+  const secondaryGenre =
+    typeof value.secondaryGenre === "string" ? value.secondaryGenre : null;
+  const genreFamily = typeof value.genreFamily === "string"
+    ? (value.genreFamily as NonNullable<Phase1Result["genreDetail"]>["genreFamily"])
+    : "other";
+  const topScores = Array.isArray(value.topScores)
+    ? (value.topScores as unknown[])
+        .filter((s): s is Record<string, unknown> => isRecord(s))
+        .map((s) => ({
+          genre: typeof s.genre === "string" ? s.genre : "",
+          score: toNumberOrFallback(s.score, 0),
+        }))
+    : [];
+  return { genre, confidence, secondaryGenre, genreFamily, topScores };
+}
+
+function parseOptionalDynamicCharacter(value: unknown): Phase1Result["dynamicCharacter"] {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value)) return null;
+  return {
+    dynamicComplexity: toNumberOrFallback(value.dynamicComplexity, 0),
+    loudnessVariation: toNumberOrFallback(value.loudnessVariation, 0),
+    spectralFlatness: toNumberOrFallback(value.spectralFlatness, 0),
+    logAttackTime: toNumberOrFallback(value.logAttackTime, 0),
+    attackTimeStdDev: toNumberOrFallback(value.attackTimeStdDev, 0),
   };
 }
 
@@ -932,6 +987,26 @@ function expectNumber(record: UnknownRecord, key: string, label = key): number {
     throw new Error(`Expected ${label} to be a number.`);
   }
   return value;
+}
+
+function expectNumberWithFallback(
+  primary: UnknownRecord,
+  primaryKey: string,
+  label: string,
+  fallback: UnknownRecord | null,
+  fallbackKey: string,
+): number {
+  const primaryValue = primary[primaryKey];
+  if (typeof primaryValue === "number" && !Number.isNaN(primaryValue)) {
+    return primaryValue;
+  }
+  if (fallback) {
+    const fallbackValue = fallback[fallbackKey];
+    if (typeof fallbackValue === "number" && !Number.isNaN(fallbackValue)) {
+      return fallbackValue;
+    }
+  }
+  throw new Error(`Expected ${label} to be a number.`);
 }
 
 function expectOptionalNumber(record: UnknownRecord, key: string): number | null {

@@ -1,4 +1,4 @@
-import { Phase1Result, Phase2Result } from '../types';
+import { Phase1Result, Phase2Result, type MixDoctorReport } from '../types';
 
 export function downloadFile(content: string, fileName: string, contentType: string) {
   const a = document.createElement('a');
@@ -39,10 +39,44 @@ function formatMixAndMasterChainMarkdown(mixAndMasterChain: Phase2Result['mixAnd
     .join('\n');
 }
 
+function formatMixDoctorMarkdown(report: MixDoctorReport): string {
+  let md = `## Mix Doctor (${report.genreName})\n`;
+  md += `**Overall Score: ${report.overallScore}/100**\n\n`;
+
+  md += '### Spectral Balance\n';
+  for (const a of report.advice) {
+    const sign = a.diffDb > 0 ? '+' : '';
+    const status = a.issue === 'optimal' ? '✓' : a.issue === 'too-loud' ? '▲' : '▼';
+    md += `- ${status} **${a.band}**: ${sign}${a.diffDb.toFixed(1)} dB — ${a.message}\n`;
+  }
+  md += '\n';
+
+  md += `### Dynamics\n- ${report.dynamicsAdvice.message}\n`;
+  md += `- Crest Factor: ${report.dynamicsAdvice.actualCrest} dB\n\n`;
+
+  if (report.plrAdvice) {
+    md += `### PLR (Peak-to-Loudness)\n- ${report.plrAdvice.message}\n`;
+    md += `- PLR: ${report.plrAdvice.actualPlr} dB\n\n`;
+  }
+
+  if (report.loudnessAdvice) {
+    md += `### Loudness\n- ${report.loudnessAdvice.message}\n`;
+    md += `- LUFS: ${report.loudnessAdvice.actualLufs} / True Peak: ${report.loudnessAdvice.truePeak} dBTP\n\n`;
+  }
+
+  if (report.stereoAdvice) {
+    md += `### Stereo Field\n- ${report.stereoAdvice.message}\n`;
+    md += `- Correlation: ${report.stereoAdvice.correlation.toFixed(2)} / Width: ${Math.round(report.stereoAdvice.width * 100)}%\n\n`;
+  }
+
+  return md;
+}
+
 export function generateMarkdown(
   phase1: Phase1Result,
   phase2: Phase2Result | null,
   phase2StatusMessage: string | null = null,
+  mixDoctorReport: MixDoctorReport | null = null,
 ): string {
   let md = '# Track Analysis Report\n\n';
 
@@ -65,6 +99,19 @@ export function generateMarkdown(
   md += `- **Upper Mids**: ${phase1.spectralBalance.upperMids}\n`;
   md += `- **Highs**: ${phase1.spectralBalance.highs}\n`;
   md += `- **Brilliance**: ${phase1.spectralBalance.brilliance}\n\n`;
+
+  if (phase1.dynamicCharacter) {
+    md += '### Dynamic Character\n';
+    md += `- **Dynamic Complexity**: ${phase1.dynamicCharacter.dynamicComplexity}\n`;
+    md += `- **Loudness Variation**: ${phase1.dynamicCharacter.loudnessVariation}\n`;
+    md += `- **Spectral Flatness**: ${phase1.dynamicCharacter.spectralFlatness}\n`;
+    md += `- **Log Attack Time**: ${phase1.dynamicCharacter.logAttackTime}\n`;
+    md += `- **Attack Time Std Dev**: ${phase1.dynamicCharacter.attackTimeStdDev}\n\n`;
+  }
+
+  if (mixDoctorReport) {
+    md += formatMixDoctorMarkdown(mixDoctorReport);
+  }
 
   if (!phase2) {
     md += '## Phase 2\n';

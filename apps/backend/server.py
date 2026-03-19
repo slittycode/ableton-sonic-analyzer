@@ -451,6 +451,7 @@ def _build_phase1(payload: dict[str, Any]) -> dict[str, Any]:
         "lufsRange": _coerce_nullable_number(payload.get("lufsRange")),
         "truePeak": _coerce_number(payload.get("truePeak")),
         "crestFactor": _coerce_nullable_number(payload.get("crestFactor")),
+        "dynamicCharacter": payload.get("dynamicCharacter"),
         "stereoWidth": _coerce_number(stereo_detail.get("stereoWidth")),
         "stereoCorrelation": _coerce_number(stereo_detail.get("stereoCorrelation")),
         "stereoDetail": payload.get("stereoDetail"),
