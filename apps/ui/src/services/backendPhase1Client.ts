@@ -6,6 +6,7 @@ import {
   BackendEstimateResponse,
   DanceabilityResult,
   Phase1Result,
+  SegmentSpectralEntry,
 } from "../types";
 
 const ANALYZE_TIMEOUT_FLOOR_MS = 180_000;
@@ -524,12 +525,12 @@ export function parsePhase1Result(value: unknown): Phase1Result {
       highs: expectNumber(spectralBalance, "highs", "spectralBalance.highs"),
       brilliance: expectNumber(spectralBalance, "brilliance", "spectralBalance.brilliance"),
     },
-    spectralDetail: isRecord(phase1.spectralDetail) ? phase1.spectralDetail : null,
+    spectralDetail: isRecord(phase1.spectralDetail) ? phase1.spectralDetail as unknown as Phase1Result['spectralDetail'] : null,
     rhythmDetail: isRecord(phase1.rhythmDetail) ? phase1.rhythmDetail : null,
     melodyDetail,
     transcriptionDetail,
     grooveDetail: isRecord(phase1.grooveDetail) ? phase1.grooveDetail : null,
-    sidechainDetail: isRecord(phase1.sidechainDetail) ? phase1.sidechainDetail : null,
+    sidechainDetail: isRecord(phase1.sidechainDetail) ? phase1.sidechainDetail as unknown as Phase1Result['sidechainDetail'] : null,
     acidDetail: parseOptionalAcidDetail(phase1.acidDetail),
     reverbDetail: parseOptionalReverbDetail(phase1.reverbDetail),
     vocalDetail: parseOptionalVocalDetail(phase1.vocalDetail),
@@ -539,14 +540,14 @@ export function parsePhase1Result(value: unknown): Phase1Result {
     genreDetail: parseOptionalGenreDetail(phase1.genreDetail),
     dynamicCharacter: parseOptionalDynamicCharacter(phase1.dynamicCharacter),
     effectsDetail: isRecord(phase1.effectsDetail) ? phase1.effectsDetail : null,
-    synthesisCharacter: isRecord(phase1.synthesisCharacter) ? phase1.synthesisCharacter : null,
+    synthesisCharacter: isRecord(phase1.synthesisCharacter) ? phase1.synthesisCharacter as unknown as Phase1Result['synthesisCharacter'] : null,
     danceability: parseOptionalDanceability(phase1.danceability),
     structure: isRecord(phase1.structure) ? phase1.structure : null,
     arrangementDetail: isRecord(phase1.arrangementDetail) ? phase1.arrangementDetail : null,
     segmentLoudness: Array.isArray(phase1.segmentLoudness) ? phase1.segmentLoudness : null,
-    segmentSpectral: Array.isArray(phase1.segmentSpectral) ? phase1.segmentSpectral : null,
+    segmentSpectral: parseSegmentSpectralEntries(phase1.segmentSpectral),
     segmentKey: Array.isArray(phase1.segmentKey) ? phase1.segmentKey : null,
-    chordDetail: isRecord(phase1.chordDetail) ? phase1.chordDetail : null,
+    chordDetail: isRecord(phase1.chordDetail) ? phase1.chordDetail as unknown as Phase1Result['chordDetail'] : null,
     perceptual: isRecord(phase1.perceptual) ? phase1.perceptual : null,
   };
 }
@@ -560,6 +561,38 @@ function parseOptionalDanceability(value: unknown): DanceabilityResult | null {
   if (danceability === null || dfa === null) return null;
 
   return { danceability, dfa };
+}
+
+function parseSegmentSpectralEntries(value: unknown): SegmentSpectralEntry[] | null {
+  if (!Array.isArray(value)) return null;
+
+  const parsed = value
+    .map((entry): SegmentSpectralEntry | null => {
+      if (!isRecord(entry)) return null;
+
+      const segmentIndexRaw = toNumber(entry.segmentIndex);
+      if (segmentIndexRaw === null) return null;
+      const segmentIndex = Math.max(0, Math.round(segmentIndexRaw));
+
+      if (!Array.isArray(entry.barkBands)) return null;
+      const barkBands = entry.barkBands
+        .map((band) => toNumber(band))
+        .filter((band): band is number => band !== null);
+      if (barkBands.length === 0) return null;
+
+      return {
+        segmentIndex,
+        barkBands,
+        spectralCentroid: toNumber(entry.spectralCentroid),
+        spectralRolloff: toNumber(entry.spectralRolloff),
+        stereoWidth: toNumber(entry.stereoWidth),
+        stereoCorrelation: toNumber(entry.stereoCorrelation),
+      };
+    })
+    .filter((entry): entry is SegmentSpectralEntry => entry !== null)
+    .sort((left, right) => left.segmentIndex - right.segmentIndex);
+
+  return parsed.length > 0 ? parsed : null;
 }
 
 function parseOptionalAcidDetail(value: unknown): Phase1Result["acidDetail"] {

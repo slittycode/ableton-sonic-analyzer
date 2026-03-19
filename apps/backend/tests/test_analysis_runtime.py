@@ -143,6 +143,82 @@ class AnalysisRuntimeTests(unittest.TestCase):
             created["runId"],
         )
 
+    def test_stage_progress_updates_are_visible_in_stage_diagnostics(self) -> None:
+        runtime = self._runtime()
+        created = runtime.create_run(
+            filename="track.mp3",
+            content=b"fake-audio",
+            mime_type="audio/mpeg",
+            symbolic_mode="stem_notes",
+            symbolic_backend="auto",
+            interpretation_mode="async",
+            interpretation_profile="producer_summary",
+            interpretation_model="gemini-2.5-flash",
+        )
+
+        measurement_job = runtime.reserve_next_measurement_run()
+        self.assertIsNotNone(measurement_job)
+        progress = runtime.update_measurement_progress(
+            created["runId"],
+            step_key="loading_audio",
+            message="Loading and validating uploaded audio for local analysis.",
+        )
+        self.assertIsNotNone(progress)
+        snapshot = runtime.get_run(created["runId"])
+        self.assertEqual(
+            snapshot["stages"]["measurement"]["diagnostics"]["progress"]["stepKey"],
+            "loading_audio",
+        )
+        self.assertEqual(
+            snapshot["stages"]["measurement"]["diagnostics"]["progress"]["seq"],
+            1,
+        )
+
+        runtime.complete_measurement(
+            created["runId"],
+            payload={"bpm": 128, "durationSeconds": 60.0},
+            provenance={"schemaVersion": "measurement.v1"},
+            diagnostics={"backendDurationMs": 1000},
+        )
+
+        symbolic_attempt = runtime.reserve_next_symbolic_attempt()
+        self.assertIsNotNone(symbolic_attempt)
+        symbolic_attempt_id = str(symbolic_attempt["attemptId"])
+        progress = runtime.update_symbolic_attempt_progress(
+            symbolic_attempt_id,
+            step_key="run_backend",
+            message="Running symbolic transcription backend.",
+        )
+        self.assertIsNotNone(progress)
+        snapshot = runtime.get_run(created["runId"])
+        self.assertEqual(
+            snapshot["stages"]["symbolicExtraction"]["diagnostics"]["progress"]["stepKey"],
+            "run_backend",
+        )
+        self.assertEqual(
+            snapshot["stages"]["symbolicExtraction"]["diagnostics"]["progress"]["seq"],
+            1,
+        )
+
+        interpretation_attempt = runtime.reserve_next_interpretation_attempt()
+        self.assertIsNotNone(interpretation_attempt)
+        interpretation_attempt_id = str(interpretation_attempt["attemptId"])
+        progress = runtime.update_interpretation_attempt_progress(
+            interpretation_attempt_id,
+            step_key="build_prompt",
+            message="Building grounded interpretation prompt.",
+        )
+        self.assertIsNotNone(progress)
+        snapshot = runtime.get_run(created["runId"])
+        self.assertEqual(
+            snapshot["stages"]["interpretation"]["diagnostics"]["progress"]["stepKey"],
+            "build_prompt",
+        )
+        self.assertEqual(
+            snapshot["stages"]["interpretation"]["diagnostics"]["progress"]["seq"],
+            1,
+        )
+
     def test_reserve_next_measurement_run_returns_requested_options(self) -> None:
         runtime = self._runtime()
         created = runtime.create_run(

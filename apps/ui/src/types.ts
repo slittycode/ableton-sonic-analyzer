@@ -53,9 +53,48 @@ export interface TranscriptionDetail {
   notes: TranscriptionNote[];
 }
 
+export interface ChordDetail {
+  chordSequence: string[];
+  chordStrength: number;
+  progression: string[];
+  dominantChords: string[];
+}
+
+export interface SpectralDetail {
+  spectralCentroid: number;
+  spectralRolloff: number;
+  mfcc: number[];
+  chroma: number[];
+  barkBands: number[];
+  erbBands: number[];
+  spectralContrast: number[];
+  spectralValley: number[];
+}
+
+export interface SidechainDetail {
+  pumpingStrength: number;
+  pumpingRegularity: number;
+  pumpingRate: 'quarter' | 'eighth' | 'sixteenth' | null;
+  pumpingConfidence: number;
+}
+
+export interface SynthesisCharacter {
+  inharmonicity: number;
+  oddToEvenRatio: number;
+}
+
 export interface DanceabilityResult {
   danceability: number;
   dfa: number;
+}
+
+export interface SegmentSpectralEntry {
+  segmentIndex: number;
+  barkBands: number[];
+  spectralCentroid: number | null;
+  spectralRolloff: number | null;
+  stereoWidth: number | null;
+  stereoCorrelation: number | null;
 }
 
 export interface Phase1Result {
@@ -87,12 +126,12 @@ export interface Phase1Result {
     highs: number;
     brilliance: number;
   };
-  spectralDetail?: Record<string, unknown> | null;
+  spectralDetail?: SpectralDetail | null;
   rhythmDetail?: Record<string, unknown> | null;
   melodyDetail?: MelodyDetail;
   transcriptionDetail?: TranscriptionDetail | null;
   grooveDetail?: Record<string, unknown> | null;
-  sidechainDetail?: Record<string, unknown> | null;
+  sidechainDetail?: SidechainDetail | null;
   acidDetail?: {
     isAcid: boolean;
     confidence: number;
@@ -144,14 +183,14 @@ export interface Phase1Result {
     topScores: { genre: string; score: number }[];
   } | null;
   effectsDetail?: Record<string, unknown> | null;
-  synthesisCharacter?: Record<string, unknown> | null;
+  synthesisCharacter?: SynthesisCharacter | null;
   danceability?: DanceabilityResult | null;
   structure?: Record<string, unknown> | null;
   arrangementDetail?: Record<string, unknown> | null;
   segmentLoudness?: unknown[] | null;
-  segmentSpectral?: unknown[] | null;
+  segmentSpectral?: SegmentSpectralEntry[] | null;
   segmentKey?: unknown[] | null;
-  chordDetail?: Record<string, unknown> | null;
+  chordDetail?: ChordDetail | null;
   perceptual?: Record<string, unknown> | null;
 }
 
@@ -363,6 +402,18 @@ export interface AnalysisStageError {
   phase?: string;
 }
 
+export interface AnalysisStageProgress {
+  stepKey: string;
+  message: string;
+  updatedAt: string;
+  seq: number;
+}
+
+export interface AnalysisStageDiagnostics {
+  progress?: AnalysisStageProgress;
+  [key: string]: unknown;
+}
+
 export interface AnalysisRunArtifact {
   artifactId: string;
   filename: string;
@@ -385,7 +436,7 @@ export interface MeasurementStageSnapshot {
   authoritative: true;
   result: MeasurementResult | null;
   provenance: Record<string, unknown> | null;
-  diagnostics: Record<string, unknown> | null;
+  diagnostics: AnalysisStageDiagnostics | null;
   error: AnalysisStageError | null;
 }
 
@@ -410,7 +461,7 @@ export interface SymbolicExtractionStageSnapshot {
   attemptsSummary: SymbolicExtractionAttemptSummary[];
   result: TranscriptionDetail | null;
   provenance: Record<string, unknown> | null;
-  diagnostics: Record<string, unknown> | null;
+  diagnostics: AnalysisStageDiagnostics | null;
   error: AnalysisStageError | null;
 }
 
@@ -421,7 +472,7 @@ export interface InterpretationStageSnapshot {
   attemptsSummary: InterpretationAttemptSummary[];
   result: InterpretationResult | null;
   provenance: Record<string, unknown> | null;
-  diagnostics: Record<string, unknown> | null;
+  diagnostics: AnalysisStageDiagnostics | null;
   error: AnalysisStageError | null;
 }
 

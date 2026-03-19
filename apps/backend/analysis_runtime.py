@@ -978,6 +978,51 @@ class AnalysisRuntime:
                 (now,),
             )
 
+    def update_measurement_progress(
+        self,
+        run_id: str,
+        *,
+        step_key: str,
+        message: str,
+    ) -> dict[str, Any] | None:
+        return self._update_stage_progress(
+            table="measurement_outputs",
+            identifier_column="run_id",
+            identifier=run_id,
+            step_key=step_key,
+            message=message,
+        )
+
+    def update_symbolic_attempt_progress(
+        self,
+        attempt_id: str,
+        *,
+        step_key: str,
+        message: str,
+    ) -> dict[str, Any] | None:
+        return self._update_stage_progress(
+            table="symbolic_extraction_attempts",
+            identifier_column="id",
+            identifier=attempt_id,
+            step_key=step_key,
+            message=message,
+        )
+
+    def update_interpretation_attempt_progress(
+        self,
+        attempt_id: str,
+        *,
+        step_key: str,
+        message: str,
+    ) -> dict[str, Any] | None:
+        return self._update_stage_progress(
+            table="interpretation_attempts",
+            identifier_column="id",
+            identifier=attempt_id,
+            step_key=step_key,
+            message=message,
+        )
+
     def _update_measurement_row(
         self,
         run_id: str,
@@ -1034,6 +1079,58 @@ class AnalysisRuntime:
                     attempt_id,
                 ),
             )
+
+    def _update_stage_progress(
+        self,
+        *,
+        table: str,
+        identifier_column: str,
+        identifier: str,
+        step_key: str,
+        message: str,
+    ) -> dict[str, Any] | None:
+        now = _utc_now_iso()
+        with self._connect() as conn:
+            row = conn.execute(
+                f"SELECT status, diagnostics_json FROM {table} WHERE {identifier_column} = ?",
+                (identifier,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"Unknown stage row for {identifier}")
+            if str(row["status"]) != "running":
+                return None
+
+            diagnostics = _json_loads(row["diagnostics_json"])
+            if not isinstance(diagnostics, dict):
+                diagnostics = {}
+
+            progress = diagnostics.get("progress")
+            if isinstance(progress, dict):
+                seq_raw = progress.get("seq")
+                seq = int(seq_raw) + 1 if isinstance(seq_raw, int) else 1
+            else:
+                seq = 1
+
+            progress_payload = {
+                "stepKey": step_key,
+                "message": message,
+                "updatedAt": now,
+                "seq": seq,
+            }
+            diagnostics["progress"] = progress_payload
+            conn.execute(
+                f"""
+                UPDATE {table}
+                SET diagnostics_json = ?, updated_at = ?
+                WHERE {identifier_column} = ?
+                """,
+                (
+                    _json_dumps(diagnostics),
+                    now,
+                    identifier,
+                ),
+            )
+        return progress_payload
 
     def _enqueue_requested_followups(self, run_id: str) -> None:
         with self._connect() as conn:

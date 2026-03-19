@@ -231,6 +231,7 @@ export default function App() {
   const phase2HelperCopy = getInterpretationHelperCopy(phase2ConfigEnabled, interpretationRequested);
   const phase2ModelSelectorDisabled = isAnalyzing || !phase2ConfigEnabled || !interpretationRequested;
   const cpuMeterPercent = useCpuMeter(isAnalyzing);
+  const audioElementRef = useRef<HTMLAudioElement | null>(null);
   const previousRunRef = useRef<AnalysisRunSnapshot | null>(null);
   const completionRef = useRef<{ measurement: boolean; interpretation: boolean }>({
     measurement: false,
@@ -855,6 +856,16 @@ export default function App() {
     }
   }, [activeRunId, audioFile, interpretationRequested, phase2ConfigEnabled, selectedModel, symbolicExtractionRequested]);
 
+  const handleAudioElement = useCallback((el: HTMLAudioElement) => {
+    audioElementRef.current = el;
+  }, []);
+
+  const handleSpectrogramSeek = useCallback((timeSeconds: number) => {
+    if (audioElementRef.current) {
+      audioElementRef.current.currentTime = timeSeconds;
+    }
+  }, []);
+
   const isAnalyzeDisabled = isAnalyzing || estimateWrongService;
   const hasRetryableRunStage = Boolean(
     analysisRun &&
@@ -1048,9 +1059,7 @@ export default function App() {
                 <div className="bg-bg-surface-dark border border-border border-b-0 rounded-t-sm px-3 py-1.5 flex items-center justify-between">
                   <div className="flex items-center">
                     <span className={`w-2 h-2 rounded-full mr-2 ${audioUrl ? 'bg-success' : 'bg-border'}`}></span>
-                    <h3 className="text-[10px] font-mono text-text-secondary uppercase tracking-wider">
-                      {isAnalyzing ? 'Local DSP Status' : 'Signal Monitor'}
-                    </h3>
+                    <h3 className="text-[10px] font-mono text-text-secondary uppercase tracking-wider">Signal Monitor</h3>
                   </div>
                 </div>
 
@@ -1059,52 +1068,52 @@ export default function App() {
                   className="flex-grow bg-bg-card border border-border rounded-b-sm p-4 relative flex flex-col"
                 >
                   {audioUrl && audioFile ? (
-                    shouldShowStatusPanel ? (
-                      <AnalysisStatusPanel
-                        run={analysisRun}
-                        elapsedMs={elapsedMs}
-                        estimate={analysisEstimate}
-                        isActive={isAnalyzing}
-                        onStopMonitoring={handleStopMonitoring}
-                        onRetryMeasurement={audioFile ? handleStartAnalysis : undefined}
-                        onRetrySymbolic={analysisRun && ['failed', 'interrupted'].includes(analysisRun.stages.symbolicExtraction.status) ? handleRetrySymbolicExtraction : undefined}
-                        onRetryInterpretation={analysisRun && ['failed', 'interrupted'].includes(analysisRun.stages.interpretation.status) ? handleRetryInterpretation : undefined}
-                      />
-                    ) : (
-                      <div className="h-full flex flex-col justify-between relative z-10 gap-4">
-                        <WaveformPlayer audioUrl={audioUrl} audioFile={audioFile} />
+                    <div className="h-full flex flex-col relative z-10 gap-4">
+                      <WaveformPlayer audioUrl={audioUrl} audioFile={audioFile} onAudioElement={handleAudioElement} />
 
-                        {!measurementResult && (
-                          <div className="rounded-sm border border-border bg-bg-panel p-4 space-y-3">
-                            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
-                              <div>
-                                <p className="text-[10px] font-mono text-text-secondary uppercase tracking-wider">Local DSP first</p>
-                                <p className="mt-2 text-sm font-bold uppercase tracking-wide text-text-primary">Estimated local analysis</p>
-                                <p className="mt-1 text-xs font-mono tracking-wider text-text-secondary">
-                                  {isEstimateLoading
-                                    ? 'Calculating estimate...'
-                                    : analysisEstimate
-                                      ? formatEstimateRange(analysisEstimate)
-                                      : 'Unavailable'}
-                                </p>
-                              </div>
-                              <div className="max-w-xs text-[10px] font-mono uppercase tracking-wider text-text-secondary leading-relaxed">
-                                Measurement runs locally first. Symbolic extraction and AI interpretation only start after measurement succeeds.
-                              </div>
-                            </div>
-                            {estimateError && (
-                              <p
-                                className={`text-[10px] font-mono text-warning ${
-                                  estimateWrongService ? 'leading-relaxed' : 'uppercase tracking-wider'
-                                }`}
-                              >
-                                {estimateWrongService ? estimateError : `Estimate unavailable: ${estimateError}`}
+                      {!measurementResult && (
+                        <div className="rounded-sm border border-border bg-bg-panel p-4 space-y-3">
+                          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+                            <div>
+                              <p className="text-[10px] font-mono text-text-secondary uppercase tracking-wider">Local DSP first</p>
+                              <p className="mt-2 text-sm font-bold uppercase tracking-wide text-text-primary">Estimated local analysis</p>
+                              <p className="mt-1 text-xs font-mono tracking-wider text-text-secondary">
+                                {isEstimateLoading
+                                  ? 'Calculating estimate...'
+                                  : analysisEstimate
+                                    ? formatEstimateRange(analysisEstimate)
+                                    : 'Unavailable'}
                               </p>
-                            )}
+                            </div>
+                            <div className="max-w-xs text-[10px] font-mono uppercase tracking-wider text-text-secondary leading-relaxed">
+                              Measurement runs locally first. Symbolic extraction and AI interpretation only start after measurement succeeds.
+                            </div>
                           </div>
-                        )}
-                      </div>
-                    )
+                          {estimateError && (
+                            <p
+                              className={`text-[10px] font-mono text-warning ${
+                                estimateWrongService ? 'leading-relaxed' : 'uppercase tracking-wider'
+                              }`}
+                            >
+                              {estimateWrongService ? estimateError : `Estimate unavailable: ${estimateError}`}
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {shouldShowStatusPanel && (
+                        <AnalysisStatusPanel
+                          run={analysisRun}
+                          elapsedMs={elapsedMs}
+                          estimate={analysisEstimate}
+                          isActive={isAnalyzing}
+                          onStopMonitoring={handleStopMonitoring}
+                          onRetryMeasurement={audioFile ? handleStartAnalysis : undefined}
+                          onRetrySymbolic={analysisRun && ['failed', 'interrupted'].includes(analysisRun.stages.symbolicExtraction.status) ? handleRetrySymbolicExtraction : undefined}
+                          onRetryInterpretation={analysisRun && ['failed', 'interrupted'].includes(analysisRun.stages.interpretation.status) ? handleRetryInterpretation : undefined}
+                        />
+                      )}
+                    </div>
                   ) : (
                     <div className="h-full flex flex-col items-center justify-center text-text-secondary opacity-50 font-mono text-xs border border-dashed border-border rounded-sm m-2 min-h-[150px] bg-bg-app">
                       <Activity className="w-8 h-8 mb-2" />
@@ -1166,6 +1175,9 @@ export default function App() {
                   phase2={phase2Result}
                   phase2StatusMessage={phase2StatusMessage}
                   sourceFileName={audioFile?.name ?? null}
+                  audioFile={audioFile ?? undefined}
+                  audioElementRef={audioElementRef}
+                  onSeek={handleSpectrogramSeek}
                 />
               </Suspense>
             ) : null}

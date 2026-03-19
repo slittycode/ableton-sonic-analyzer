@@ -518,6 +518,17 @@ test('stop monitoring during interpretation preserves completed measurement with
   await loadFileAndClick(page);
 
   await expect(page.getByText('Analysis Results')).toBeVisible();
+  const signalPanel = page.getByTestId('signal-panel');
+  await expect(signalPanel).toBeVisible();
+  await expect(signalPanel.getByText('Signal Monitor').first()).toBeVisible();
+  await expect(signalPanel.getByTestId('waveform-player')).toBeVisible();
+  await expect(signalPanel.getByText('Canonical Stage Monitor')).toBeVisible();
+
+  const playButton = signalPanel.getByTestId('waveform-play-toggle');
+  await expect(playButton).toBeVisible();
+  await expect(playButton).toBeEnabled({ timeout: 10000 });
+  await playButton.click();
+  await expect(playButton).toBeEnabled();
 
   const stopButton = page.getByRole('button', { name: /Stop monitoring/i });
   await expect(stopButton).toBeVisible();

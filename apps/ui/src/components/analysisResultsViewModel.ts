@@ -1126,3 +1126,299 @@ export function calculateStereoBandStyle(width: number): { left: string; width: 
     width: `${bandWidth}%`,
   };
 }
+
+// --- Chord Progression View Model ---
+
+export interface ChordBlockViewModel {
+  label: string;
+  startPercent: number;
+  widthPercent: number;
+  rootIndex: number;
+  colorHue: number;
+}
+
+export interface ChordProgressionViewModel {
+  blocks: ChordBlockViewModel[];
+  dominantChords: string[];
+  harmonicCharacter: string;
+  keyRelationship: string;
+  abletonTip: string;
+  isApproximate: boolean;
+}
+
+const PITCH_CLASS_MAP: Record<string, number> = {
+  "C": 0, "C#": 1, "Db": 1,
+  "D": 2, "D#": 3, "Eb": 3,
+  "E": 4, "Fb": 4,
+  "F": 5, "F#": 6, "Gb": 6,
+  "G": 7, "G#": 8, "Ab": 8,
+  "A": 9, "A#": 10, "Bb": 10,
+  "B": 11, "Cb": 11,
+};
+
+const PITCH_CLASS_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"] as const;
+
+function parseChordRoot(chord: string): number {
+  const trimmed = chord.trim();
+  if (!trimmed) return 0;
+
+  // Try two-character root first (e.g., "Bb", "F#", "Db")
+  if (trimmed.length >= 2) {
+    const twoChar = trimmed.slice(0, 2);
+    if (PITCH_CLASS_MAP[twoChar] !== undefined) {
+      return PITCH_CLASS_MAP[twoChar];
+    }
+  }
+
+  // Single-character root (e.g., "A", "C")
+  const oneChar = trimmed[0].toUpperCase();
+  if (PITCH_CLASS_MAP[oneChar] !== undefined) {
+    return PITCH_CLASS_MAP[oneChar];
+  }
+
+  return 0;
+}
+
+function pitchClassToHue(pitchClass: number): number {
+  // Distribute 12 hues evenly across 0-330 degrees
+  // C=30, C#=60, D=90, D#=120, E=150, F=180, F#=210, G=240, G#=270, A=300, A#=330, B=0(360)
+  const hues = [30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 0];
+  return hues[pitchClass % 12];
+}
+
+function isMinorChord(chord: string): boolean {
+  const trimmed = chord.trim();
+  // After removing the root, check for minor indicators
+  const rootLen = (trimmed.length >= 2 && PITCH_CLASS_MAP[trimmed.slice(0, 2)] !== undefined) ? 2 : 1;
+  const suffix = trimmed.slice(rootLen).toLowerCase();
+  return suffix.startsWith("m") && !suffix.startsWith("maj");
+}
+
+// Major scale intervals (semitones from root)
+const MAJOR_SCALE_INTERVALS = [0, 2, 4, 5, 7, 9, 11];
+const MINOR_SCALE_INTERVALS = [0, 2, 3, 5, 7, 8, 10];
+
+function getDiatonicPitchClasses(keyRoot: number, isMinor: boolean): Set<number> {
+  const intervals = isMinor ? MINOR_SCALE_INTERVALS : MAJOR_SCALE_INTERVALS;
+  return new Set(intervals.map(i => (keyRoot + i) % 12));
+}
+
+function parseKeyRoot(key: string): { root: number; isMinor: boolean } | null {
+  if (!key) return null;
+  const trimmed = key.trim();
+  if (!trimmed) return null;
+
+  const isMinor = /\bmin(or)?\b/i.test(trimmed) || /m$/i.test(trimmed.replace(/\d+/g, ""));
+
+  // Extract root from key name
+  let rootName: string;
+  if (trimmed.length >= 2 && PITCH_CLASS_MAP[trimmed.slice(0, 2)] !== undefined) {
+    rootName = trimmed.slice(0, 2);
+  } else {
+    rootName = trimmed[0].toUpperCase();
+  }
+
+  const root = PITCH_CLASS_MAP[rootName];
+  if (root === undefined) return null;
+
+  return { root, isMinor };
+}
+
+function chordToRomanNumeral(chord: string, keyRoot: number, isKeyMinor: boolean): string | null {
+  const chordRoot = parseChordRoot(chord);
+  const interval = (chordRoot - keyRoot + 12) % 12;
+  const chordIsMinor = isMinorChord(chord);
+
+  const majorDegrees: Record<number, string> = {
+    0: "I", 2: "II", 4: "III", 5: "IV", 7: "V", 9: "VI", 11: "VII",
+  };
+  const minorDegrees: Record<number, string> = {
+    0: "i", 2: "ii", 3: "iii", 5: "iv", 7: "v", 8: "VI", 10: "VII",
+  };
+
+  const degreeMap = isKeyMinor ? minorDegrees : majorDegrees;
+  const roman = degreeMap[interval];
+  if (!roman) return null;
+
+  // Return lowercase for minor chords, uppercase for major
+  return chordIsMinor ? roman.toLowerCase() : roman.toUpperCase();
+}
+
+function detectHarmonicCharacter(
+  chordSequence: string[],
+  keyRoot: number | null,
+  isKeyMinor: boolean,
+): string {
+  if (keyRoot === null || chordSequence.length < 3) {
+    const minorCount = chordSequence.filter(c => isMinorChord(c)).length;
+    const majorCount = chordSequence.length - minorCount;
+    return minorCount > majorCount ? "Minor harmonic palette" : "Major harmonic palette";
+  }
+
+  // Convert to roman numerals
+  const numerals = chordSequence.map(c => chordToRomanNumeral(c, keyRoot, isKeyMinor));
+
+  // Deduplicate for pattern matching (use unique consecutive run)
+  const uniqueNumerals = numerals.filter((n, i) => i === 0 || n !== numerals[i - 1]);
+  const pattern = uniqueNumerals.join("-");
+
+  // Check for common progressions
+  if (pattern.includes("I-V-vi-IV") || pattern.includes("I-V-VI-IV")) {
+    return "Pop progression (Axis progression)";
+  }
+  if (pattern.includes("vi-IV-I-V") || pattern.includes("VI-IV-I-V")) {
+    return "Emotional pop progression";
+  }
+  if (pattern.includes("i-VI-III-VII") || pattern.includes("i-vi-iii-vii")) {
+    return "Power progression common in trance/EDM";
+  }
+  if (pattern.includes("i-iv-v") || pattern.includes("i-IV-V")) {
+    return "Minor blues progression";
+  }
+  if (pattern.includes("I-IV-V")) {
+    return "Classic major progression";
+  }
+
+  const minorCount = chordSequence.filter(c => isMinorChord(c)).length;
+  const majorCount = chordSequence.length - minorCount;
+  return minorCount > majorCount ? "Minor harmonic palette" : "Major harmonic palette";
+}
+
+export function buildChordProgressionViewModel(
+  chordDetail: import('../types').ChordDetail | null | undefined,
+  key: string | null,
+  keyConfidence: number,
+  durationSeconds: number,
+): ChordProgressionViewModel | null {
+  if (!chordDetail) return null;
+  if (!Array.isArray(chordDetail.chordSequence) || chordDetail.chordSequence.length === 0) return null;
+
+  const sequence = chordDetail.chordSequence;
+  const sliceWidth = 100 / sequence.length;
+
+  // Merge adjacent identical chords
+  const blocks: ChordBlockViewModel[] = [];
+  let currentLabel = sequence[0];
+  let currentStart = 0;
+  let currentCount = 1;
+
+  for (let i = 1; i < sequence.length; i++) {
+    if (sequence[i] === currentLabel) {
+      currentCount += 1;
+    } else {
+      const rootIndex = parseChordRoot(currentLabel);
+      blocks.push({
+        label: currentLabel,
+        startPercent: currentStart * sliceWidth,
+        widthPercent: currentCount * sliceWidth,
+        rootIndex,
+        colorHue: pitchClassToHue(rootIndex),
+      });
+      currentLabel = sequence[i];
+      currentStart = i;
+      currentCount = 1;
+    }
+  }
+  // Push the last block
+  const lastRootIndex = parseChordRoot(currentLabel);
+  blocks.push({
+    label: currentLabel,
+    startPercent: currentStart * sliceWidth,
+    widthPercent: currentCount * sliceWidth,
+    rootIndex: lastRootIndex,
+    colorHue: pitchClassToHue(lastRootIndex),
+  });
+
+  const dominantChords = Array.isArray(chordDetail.dominantChords)
+    ? chordDetail.dominantChords
+    : [...new Set(sequence)].slice(0, 4);
+
+  const parsedKey = key ? parseKeyRoot(key) : null;
+  const keyRoot = parsedKey?.root ?? null;
+  const isKeyMinor = parsedKey?.isMinor ?? false;
+
+  const harmonicCharacter = detectHarmonicCharacter(sequence, keyRoot, isKeyMinor);
+
+  let keyRelationship: string;
+  if (key === null || keyRoot === null) {
+    keyRelationship = "Key not confidently detected";
+  } else {
+    const diatonicSet = getDiatonicPitchClasses(keyRoot, isKeyMinor);
+    const allDiatonic = dominantChords.every(chord => {
+      const root = parseChordRoot(chord);
+      return diatonicSet.has(root);
+    });
+    keyRelationship = allDiatonic
+      ? `All primary chords are diatonic to ${key}`
+      : `Contains chromatic chords outside ${key}`;
+  }
+
+  const abletonTip = `Program these chords as a MIDI clip in ${key ?? "the detected"} scale. Use Chord device for instant voicing, or Scaler 2 for advanced progressions.`;
+
+  const isApproximate = (chordDetail.chordStrength ?? 1) <= 0.7;
+
+  return {
+    blocks,
+    dominantChords,
+    harmonicCharacter,
+    keyRelationship,
+    abletonTip,
+    isApproximate,
+  };
+}
+
+// --- Chroma View Model ---
+
+export interface ChromaViewModel {
+  pitchClasses: Array<{ name: string; energy: number; isInScale: boolean }>;
+  topPitchClasses: string[];
+  interpretation: string;
+}
+
+export function buildChromaViewModel(
+  chroma: number[] | undefined,
+  detectedKey: string | null,
+): ChromaViewModel | null {
+  if (!Array.isArray(chroma) || chroma.length !== 12) return null;
+
+  const parsedKey = detectedKey ? parseKeyRoot(detectedKey) : null;
+  const diatonicSet = parsedKey
+    ? getDiatonicPitchClasses(parsedKey.root, parsedKey.isMinor)
+    : null;
+
+  // Normalize energy values to 0-1 range
+  const maxEnergy = Math.max(...chroma);
+  const normalizer = maxEnergy > 0 ? maxEnergy : 1;
+
+  const pitchClasses = PITCH_CLASS_NAMES.map((name, index) => ({
+    name,
+    energy: chroma[index] / normalizer,
+    isInScale: diatonicSet ? diatonicSet.has(index) : false,
+  }));
+
+  // Find top 3 by energy
+  const sorted = [...pitchClasses].sort((a, b) => b.energy - a.energy);
+  const topPitchClasses = sorted.slice(0, 3).map(pc => pc.name);
+
+  // Generate interpretation
+  const topNames = topPitchClasses.join(", ");
+  const outOfScale = diatonicSet
+    ? sorted.slice(0, 5).filter(pc => !pc.isInScale)
+    : [];
+
+  let interpretation: string;
+  if (!diatonicSet) {
+    interpretation = `Strongest pitch classes are ${topNames}.`;
+  } else if (outOfScale.length === 0) {
+    interpretation = `Strongest pitch classes are ${topNames}, all consistent with the detected key.`;
+  } else {
+    const outNames = outOfScale.map(pc => pc.name).join(", ");
+    interpretation = `Strongest pitch classes are ${topNames}. ${outNames} ${outOfScale.length === 1 ? "falls" : "fall"} outside the detected scale, suggesting chromatic movement or modulation.`;
+  }
+
+  return {
+    pitchClasses,
+    topPitchClasses,
+    interpretation,
+  };
+}

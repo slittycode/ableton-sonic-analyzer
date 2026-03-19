@@ -113,3 +113,11 @@ Phase 2 is gated by `VITE_ENABLE_PHASE2_GEMINI`. `GEMINI_API_KEY` is backend-onl
 ## Backport Candidates
 
 `BACKLOG.md` lists 12 DSP services + 2 data files from `active/sonic-architect-app` that are candidates for porting into ASA. Consult it before implementing genre detection, mix analysis, or synthesis features — implementations may already exist in that reference project.
+
+## IMPORTANT: Sound Notification
+
+After finishing responding to my request or running a command, run this command to notify me by sound:
+
+```bash
+afplay /System/Library/Sounds/Funk.aiff
+```
