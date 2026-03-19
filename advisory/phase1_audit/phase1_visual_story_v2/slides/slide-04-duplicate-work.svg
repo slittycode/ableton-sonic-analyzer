@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#070B12" />
+      <stop offset="100%" stop-color="#0E1422" />
+    </linearGradient>
+    <linearGradient id="lineGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#27324A" />
+      <stop offset="35%" stop-color="#6BD8FF" />
+      <stop offset="70%" stop-color="#27324A" />
+      <stop offset="100%" stop-color="#27324A" />
+    </linearGradient>
+    <radialGradient id="glowLime" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#C9FF2F" stop-opacity="0.24" />
+      <stop offset="100%" stop-color="#C9FF2F" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="glowCyan" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#6BD8FF" stop-opacity="0.2" />
+      <stop offset="100%" stop-color="#6BD8FF" stop-opacity="0" />
+    </radialGradient>
+    <marker id="arrowHead" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 z" fill="#6BD8FF" />
+    </marker>
+    <marker id="arrowHeadRed" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 z" fill="#FF6A62" />
+    </marker>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#bgGrad)" />
+  <rect x="0" y="0" width="1920" height="10" fill="#C9FF2F" />
+  <circle cx="1838" cy="66" r="6" fill="#7D97FF" />
+  <circle cx="1440" cy="350" r="280" fill="url(#glowCyan)" /><circle cx="360" cy="820" r="260" fill="url(#glowLime)" />
+  <g opacity="0.11">
+    <line x1="0" y1="120" x2="1920" y2="120" stroke="#27324A" stroke-width="1" /><line x1="0" y1="168" x2="1920" y2="168" stroke="#27324A" stroke-width="1" /><line x1="0" y1="216" x2="1920" y2="216" stroke="#27324A" stroke-width="1" /><line x1="0" y1="264" x2="1920" y2="264" stroke="#27324A" stroke-width="1" /><line x1="0" y1="312" x2="1920" y2="312" stroke="#27324A" stroke-width="1" /><line x1="0" y1="360" x2="1920" y2="360" stroke="#27324A" stroke-width="1" /><line x1="0" y1="408" x2="1920" y2="408" stroke="#27324A" stroke-width="1" /><line x1="0" y1="456" x2="1920" y2="456" stroke="#27324A" stroke-width="1" /><line x1="0" y1="504" x2="1920" y2="504" stroke="#27324A" stroke-width="1" /><line x1="0" y1="552" x2="1920" y2="552" stroke="#27324A" stroke-width="1" /><line x1="0" y1="600" x2="1920" y2="600" stroke="#27324A" stroke-width="1" /><line x1="0" y1="648" x2="1920" y2="648" stroke="#27324A" stroke-width="1" /><line x1="0" y1="696" x2="1920" y2="696" stroke="#27324A" stroke-width="1" /><line x1="0" y1="744" x2="1920" y2="744" stroke="#27324A" stroke-width="1" /><line x1="0" y1="792" x2="1920" y2="792" stroke="#27324A" stroke-width="1" /><line x1="0" y1="840" x2="1920" y2="840" stroke="#27324A" stroke-width="1" /><line x1="0" y1="888" x2="1920" y2="888" stroke="#27324A" stroke-width="1" /><line x1="0" y1="936" x2="1920" y2="936" stroke="#27324A" stroke-width="1" /><line x1="0" y1="984" x2="1920" y2="984" stroke="#27324A" stroke-width="1" /><line x1="0" y1="1032" x2="1920" y2="1032" stroke="#27324A" stroke-width="1" />
+    <line x1="72" y1="0" x2="72" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="176" y1="0" x2="176" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="280" y1="0" x2="280" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="384" y1="0" x2="384" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="488" y1="0" x2="488" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="592" y1="0" x2="592" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="696" y1="0" x2="696" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="800" y1="0" x2="800" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="904" y1="0" x2="904" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="1008" y1="0" x2="1008" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="1112" y1="0" x2="1112" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="1216" y1="0" x2="1216" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="1320" y1="0" x2="1320" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="1424" y1="0" x2="1424" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="1528" y1="0" x2="1528" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="1632" y1="0" x2="1632" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="1736" y1="0" x2="1736" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="1840" y1="0" x2="1840" y2="1080" stroke="#27324A" stroke-width="1" />
+  </g>
+  <text x="92" y="116" fill="#7E8AA4" font-size="18" font-weight="700" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="1.4"><tspan x="92" dy="0">CRITICAL LEAK</tspan></text>
+  <text x="92" y="180" fill="#F4F7FB" font-size="58" font-weight="550" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="92" dy="0">The pipeline cheats: symbolic work leaks into measurement, then runs again later.</tspan></text>
+  <text x="92" y="244" fill="#BBC6DB" font-size="25" font-weight="450" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="92" dy="0">This is the most expensive fake cleanliness in Phase 1. The architecture looks cleaner than the execution path actually is.</tspan></text>
+  <text x="1842" y="120" fill="#BBC6DB" font-size="22" font-weight="700" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="end" letter-spacing="0.8"><tspan x="1842" dy="0">4 / 7</tspan></text>
+  <line x1="92" y1="206" x2="1828" y2="206" stroke="url(#lineGrad)" stroke-width="2" />
+  
+    
+    <rect x="120" y="362" width="308" height="178" rx="28" ry="28" fill="#11192B" stroke="#27324A" stroke-width="2" />
+    
+    <rect x="142" y="380" width="120" height="40" rx="20" ry="20" fill="#6BD8FF" />
+    <text x="202" y="409" fill="#10222B" font-size="20" font-weight="700" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="middle" letter-spacing="0.6"><tspan x="202" dy="0">REQUEST</tspan></text>
+  
+    <text x="144" y="460" fill="#F4F7FB" font-size="42" font-weight="600" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="144" dy="0">stem_notes</tspan></text>
+    <text x="144" y="504" fill="#BBC6DB" font-size="24" font-weight="450" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="144" dy="0">User asks for symbolic</tspan><tspan x="144" dy="28">extraction.</tspan></text>
+  
+    <path d="M442 448 L598 448" fill="none" stroke="#42506C" stroke-width="12" stroke-linecap="round" markerEnd="url(#arrowHead)" />
+    
+    <rect x="630" y="330" width="338" height="242" rx="28" ry="28" fill="#1B202E" stroke="#FFB357" stroke-width="2" />
+    
+    <rect x="652" y="348" width="162.8" height="40" rx="20" ry="20" fill="#101418" />
+    <text x="733.4" y="377" fill="#7E8AA4" font-size="20" font-weight="700" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="middle" letter-spacing="0.6"><tspan x="733.4" dy="0">MEASUREMENT</tspan></text>
+  
+    <text x="654" y="428" fill="#F4F7FB" font-size="40" font-weight="600" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="654" dy="0">analyze.py measurement</tspan></text>
+    <text x="654" y="472" fill="#BBC6DB" font-size="22" font-weight="450" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="654" dy="0">Loads audio</tspan><tspan x="654" dy="30">Optional Demucs</tspan><tspan x="654" dy="30">Detector pass</tspan><tspan x="654" dy="30">Optional transcription</tspan></text>
+  
+    <path d="M986 448 L1142 448" fill="none" stroke="#42506C" stroke-width="12" stroke-linecap="round" markerEnd="url(#arrowHead)" />
+    
+    <rect x="1176" y="352" width="352" height="198" rx="28" ry="28" fill="#132412" stroke="#C9FF2F" stroke-width="2" />
+    
+    <rect x="1198" y="370" width="120" height="40" rx="20" ry="20" fill="#101418" />
+    <text x="1258" y="399" fill="#7E8AA4" font-size="20" font-weight="700" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="middle" letter-spacing="0.6"><tspan x="1258" dy="0">PERSIST</tspan></text>
+  
+    <text x="1200" y="450" fill="#F4F7FB" font-size="38" font-weight="600" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="1200" dy="0">complete_measurement()</tspan></text>
+    <text x="1200" y="494" fill="#BBC6DB" font-size="22" font-weight="450" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="1200" dy="0">Persists canonical measurement and</tspan><tspan x="1200" dy="30">strips `transcriptionDetail` late.</tspan></text>
+  
+    <path d="M1546 448 L1700 448" fill="none" stroke="#42506C" stroke-width="12" stroke-linecap="round" markerEnd="url(#arrowHead)" />
+    
+    <rect x="1718" y="344" width="168" height="214" rx="28" ry="28" fill="#141A2E" stroke="#7D97FF" stroke-width="2" />
+    
+    <rect x="1740" y="362" width="141.2" height="40" rx="20" ry="20" fill="#101418" />
+    <text x="1810.6" y="391" fill="#7E8AA4" font-size="20" font-weight="700" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="middle" letter-spacing="0.6"><tspan x="1810.6" dy="0">FOLLOW-UP</tspan></text>
+  
+    <text x="1742" y="442" fill="#F4F7FB" font-size="32" font-weight="600" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="1742" dy="0">symbolic</tspan></text>
+    <text x="1742" y="486" fill="#BBC6DB" font-size="21" font-weight="450" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="1742" dy="0">worker</tspan><tspan x="1742" dy="28">can build stems</tspan><tspan x="1742" dy="28">and run</tspan><tspan x="1742" dy="28">analysis again</tspan></text>
+  
+
+    <path d="M1710 596 C1670 700 1500 736 1420 660" fill="none" stroke="#FF6A62" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" markerEnd="url(#arrowHeadRed)" />
+    <text x="1480" y="720" fill="#FF6A62" font-size="26" font-weight="800" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="1"><tspan x="1480" dy="0">DUPLICATE COMPUTE</tspan></text>
+    <text x="124" y="748" fill="#FF6A62" font-size="112" font-weight="700" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="1.4"><tspan x="124" dy="0">YOU PAY TWICE</tspan></text>
+    
+    <rect x="120" y="806" width="540" height="164" rx="24" ry="24" fill="#191620" stroke="#FF6A62" stroke-width="2" />
+    
+    <text x="148" y="862" fill="#F4F7FB" font-size="34" font-weight="600" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="148" dy="0">Why this matters</tspan></text>
+    <text x="148" y="908" fill="#BBC6DB" font-size="23" font-weight="450" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="148" dy="0">Measurement is supposed to define truth.</tspan><tspan x="148" dy="31">Right now it still performs symbolic-capable work</tspan><tspan x="148" dy="31">and only sanitizes it at persistence time.</tspan></text>
+  
+    
+    <rect x="690" y="806" width="540" height="164" rx="24" ry="24" fill="#171B24" stroke="#FF6A62" stroke-width="2" />
+    
+    <text x="718" y="862" fill="#F4F7FB" font-size="34" font-weight="600" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="718" dy="0">Operational cost</tspan></text>
+    <text x="718" y="908" fill="#BBC6DB" font-size="23" font-weight="450" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="718" dy="0">If stems or transcription are rerun later, the system</tspan><tspan x="718" dy="31">pays extra latency and compute for a boundary it is</tspan><tspan x="718" dy="31">pretending is already clean.</tspan></text>
+  
+    
+    <rect x="1260" y="806" width="626" height="164" rx="24" ry="24" fill="#122312" stroke="#C9FF2F" stroke-width="2" />
+    
+    <text x="1288" y="862" fill="#F4F7FB" font-size="34" font-weight="600" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="1288" dy="0">Best fix</tspan></text>
+    <text x="1288" y="908" fill="#BBC6DB" font-size="23" font-weight="450" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="1288" dy="0">Keep measurement measurement-only. Let symbolic own</tspan><tspan x="1288" dy="31">symbolic. Reuse stems instead of recomputing them.</tspan></text>
+  
+  
+  <text x="88" y="1038" fill="#7E8AA4" font-size="16" font-weight="500" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0.2"><tspan x="88" dy="0">Observed in analysis_runtime.py:resolve_measurement_flags and complete_measurement, analyze.py optional transcription path, and server.py symbolic worker.</tspan></text>
+</svg>

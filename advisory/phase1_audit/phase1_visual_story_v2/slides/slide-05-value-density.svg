@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#070B12" />
+      <stop offset="100%" stop-color="#0E1422" />
+    </linearGradient>
+    <linearGradient id="lineGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#27324A" />
+      <stop offset="35%" stop-color="#6BD8FF" />
+      <stop offset="70%" stop-color="#27324A" />
+      <stop offset="100%" stop-color="#27324A" />
+    </linearGradient>
+    <radialGradient id="glowLime" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#C9FF2F" stop-opacity="0.24" />
+      <stop offset="100%" stop-color="#C9FF2F" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="glowCyan" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#6BD8FF" stop-opacity="0.2" />
+      <stop offset="100%" stop-color="#6BD8FF" stop-opacity="0" />
+    </radialGradient>
+    <marker id="arrowHead" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 z" fill="#6BD8FF" />
+    </marker>
+    <marker id="arrowHeadRed" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 z" fill="#FF6A62" />
+    </marker>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#bgGrad)" />
+  <rect x="0" y="0" width="1920" height="10" fill="#C9FF2F" />
+  <circle cx="1838" cy="66" r="6" fill="#7D97FF" />
+  <circle cx="520" cy="620" r="320" fill="url(#glowLime)" /><circle cx="1510" cy="520" r="260" fill="url(#glowCyan)" />
+  <g opacity="0.11">
+    <line x1="0" y1="120" x2="1920" y2="120" stroke="#27324A" stroke-width="1" /><line x1="0" y1="168" x2="1920" y2="168" stroke="#27324A" stroke-width="1" /><line x1="0" y1="216" x2="1920" y2="216" stroke="#27324A" stroke-width="1" /><line x1="0" y1="264" x2="1920" y2="264" stroke="#27324A" stroke-width="1" /><line x1="0" y1="312" x2="1920" y2="312" stroke="#27324A" stroke-width="1" /><line x1="0" y1="360" x2="1920" y2="360" stroke="#27324A" stroke-width="1" /><line x1="0" y1="408" x2="1920" y2="408" stroke="#27324A" stroke-width="1" /><line x1="0" y1="456" x2="1920" y2="456" stroke="#27324A" stroke-width="1" /><line x1="0" y1="504" x2="1920" y2="504" stroke="#27324A" stroke-width="1" /><line x1="0" y1="552" x2="1920" y2="552" stroke="#27324A" stroke-width="1" /><line x1="0" y1="600" x2="1920" y2="600" stroke="#27324A" stroke-width="1" /><line x1="0" y1="648" x2="1920" y2="648" stroke="#27324A" stroke-width="1" /><line x1="0" y1="696" x2="1920" y2="696" stroke="#27324A" stroke-width="1" /><line x1="0" y1="744" x2="1920" y2="744" stroke="#27324A" stroke-width="1" /><line x1="0" y1="792" x2="1920" y2="792" stroke="#27324A" stroke-width="1" /><line x1="0" y1="840" x2="1920" y2="840" stroke="#27324A" stroke-width="1" /><line x1="0" y1="888" x2="1920" y2="888" stroke="#27324A" stroke-width="1" /><line x1="0" y1="936" x2="1920" y2="936" stroke="#27324A" stroke-width="1" /><line x1="0" y1="984" x2="1920" y2="984" stroke="#27324A" stroke-width="1" /><line x1="0" y1="1032" x2="1920" y2="1032" stroke="#27324A" stroke-width="1" />
+    <line x1="72" y1="0" x2="72" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="176" y1="0" x2="176" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="280" y1="0" x2="280" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="384" y1="0" x2="384" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="488" y1="0" x2="488" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="592" y1="0" x2="592" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="696" y1="0" x2="696" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="800" y1="0" x2="800" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="904" y1="0" x2="904" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="1008" y1="0" x2="1008" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="1112" y1="0" x2="1112" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="1216" y1="0" x2="1216" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="1320" y1="0" x2="1320" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="1424" y1="0" x2="1424" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="1528" y1="0" x2="1528" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="1632" y1="0" x2="1632" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="1736" y1="0" x2="1736" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="1840" y1="0" x2="1840" y2="1080" stroke="#27324A" stroke-width="1" />
+  </g>
+  <text x="92" y="116" fill="#7E8AA4" font-size="18" font-weight="700" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="1.4"><tspan x="92" dy="0">SIGNAL VS PAYLOAD</tspan></text>
+  <text x="92" y="180" fill="#F4F7FB" font-size="58" font-weight="550" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="92" dy="0">A few measurements do most of the work.</tspan></text>
+  <text x="92" y="244" fill="#BBC6DB" font-size="25" font-weight="450" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="92" dy="0">The product emits a broad Phase 1 payload, but recommendation value is concentrated in a small set of fields.</tspan></text>
+  <text x="1842" y="120" fill="#BBC6DB" font-size="22" font-weight="700" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="end" letter-spacing="0.8"><tspan x="1842" dy="0">5 / 7</tspan></text>
+  <line x1="92" y1="206" x2="1828" y2="206" stroke="url(#lineGrad)" stroke-width="2" />
+  
+    <rect x="92" y="310" width="1016" height="648" rx="30" ry="30" fill="#0F1624" stroke="#C9FF2F" stroke-width="3" />
+    <text x="138" y="382" fill="#F4F7FB" font-size="40" font-weight="600" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="138" dy="0">The few fields that drive recommendations</tspan></text>
+    <text x="138" y="420" fill="#7E8AA4" font-size="18" font-weight="500" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="138" dy="0">Source: docs/field_utilization_report.md (24 recommendations, avg 2.3 sources each)</tspan></text>
+    
+      <text x="138" y="402" fill="#F4F7FB" font-size="26" font-weight="550" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="138" dy="0">bpm</tspan></text>
+      <rect x="542" y="378" width="878" height="28" rx="14" ry="14" fill="#202A3D" />
+      <rect x="542" y="378" width="840" height="28" rx="14" ry="14" fill="#C9FF2F" />
+      <text x="1454" y="402" fill="#F4F7FB" font-size="28" font-weight="700" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="1454" dy="0">12</tspan></text>
+    
+      <text x="138" y="494" fill="#F4F7FB" font-size="26" font-weight="550" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="138" dy="0">key</tspan></text>
+      <rect x="542" y="470" width="878" height="28" rx="14" ry="14" fill="#202A3D" />
+      <rect x="542" y="470" width="700" height="28" rx="14" ry="14" fill="#6BD8FF" />
+      <text x="1454" y="494" fill="#F4F7FB" font-size="28" font-weight="700" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="1454" dy="0">10</tspan></text>
+    
+      <text x="138" y="586" fill="#F4F7FB" font-size="26" font-weight="550" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="138" dy="0">lufsIntegrated</tspan></text>
+      <rect x="542" y="562" width="878" height="28" rx="14" ry="14" fill="#202A3D" />
+      <rect x="542" y="562" width="560" height="28" rx="14" ry="14" fill="#7D97FF" />
+      <text x="1454" y="586" fill="#F4F7FB" font-size="28" font-weight="700" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="1454" dy="0">8</tspan></text>
+    
+      <text x="138" y="678" fill="#F4F7FB" font-size="26" font-weight="550" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="138" dy="0">spectralBalance.subBass</tspan></text>
+      <rect x="542" y="654" width="878" height="28" rx="14" ry="14" fill="#202A3D" />
+      <rect x="542" y="654" width="490" height="28" rx="14" ry="14" fill="#C9FF2F" />
+      <text x="1454" y="678" fill="#F4F7FB" font-size="28" font-weight="700" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="1454" dy="0">7</tspan></text>
+    
+      <text x="138" y="770" fill="#F4F7FB" font-size="26" font-weight="550" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="138" dy="0">grooveDetail.kickAccent</tspan></text>
+      <rect x="542" y="746" width="878" height="28" rx="14" ry="14" fill="#202A3D" />
+      <rect x="542" y="746" width="420" height="28" rx="14" ry="14" fill="#6BD8FF" />
+      <text x="1454" y="770" fill="#F4F7FB" font-size="28" font-weight="700" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="1454" dy="0">6</tspan></text>
+    
+      <text x="138" y="862" fill="#F4F7FB" font-size="26" font-weight="550" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="138" dy="0">stereoWidth</tspan></text>
+      <rect x="542" y="838" width="878" height="28" rx="14" ry="14" fill="#202A3D" />
+      <rect x="542" y="838" width="350" height="28" rx="14" ry="14" fill="#7D97FF" />
+      <text x="1454" y="862" fill="#F4F7FB" font-size="28" font-weight="700" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="1454" dy="0">5</tspan></text>
+    
+    <rect x="134" y="872" width="930" height="54" rx="16" ry="16" fill="#151C2B" stroke="#2D3A54" stroke-width="2" />
+    <text x="170" y="907" fill="#BBC6DB" font-size="23" font-weight="500" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="170" dy="0">A small measurement core drives most downstream value. Everything else should justify its cost.</tspan></text>
+
+    <rect x="1140" y="310" width="688" height="648" rx="30" ry="30" fill="#15181E" stroke="#FFB357" stroke-width="3" />
+    <text x="1188" y="382" fill="#F4F7FB" font-size="40" font-weight="600" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="1188" dy="0">The bulk that looks important but is barely leveraged</tspan></text>
+    
+    <rect x="1188" y="450" width="356" height="46" rx="12" ry="12" fill="#171F31" stroke="#33405E" stroke-width="1.5" opacity="0.96" />
+    <text x="1208" y="480" fill="#AAB6CB" font-size="22" font-weight="500" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="1208" dy="0">bpmConfidence</tspan></text>
+  
+    <rect x="1188" y="514" width="356" height="46" rx="12" ry="12" fill="#171F31" stroke="#33405E" stroke-width="1.5" opacity="0.96" />
+    <text x="1208" y="544" fill="#AAB6CB" font-size="22" font-weight="500" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="1208" dy="0">keyConfidence</tspan></text>
+  
+    <rect x="1188" y="578" width="356" height="46" rx="12" ry="12" fill="#171F31" stroke="#33405E" stroke-width="1.5" opacity="0.96" />
+    <text x="1208" y="608" fill="#AAB6CB" font-size="22" font-weight="500" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="1208" dy="0">timeSignature</tspan></text>
+  
+    <rect x="1188" y="642" width="356" height="46" rx="12" ry="12" fill="#171F31" stroke="#33405E" stroke-width="1.5" opacity="0.96" />
+    <text x="1208" y="672" fill="#AAB6CB" font-size="22" font-weight="500" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="1208" dy="0">lufsRange</tspan></text>
+  
+    <rect x="1188" y="706" width="356" height="46" rx="12" ry="12" fill="#171F31" stroke="#33405E" stroke-width="1.5" opacity="0.96" />
+    <text x="1208" y="736" fill="#AAB6CB" font-size="22" font-weight="500" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="1208" dy="0">crestFactor</tspan></text>
+  
+    <rect x="1188" y="770" width="356" height="46" rx="12" ry="12" fill="#171F31" stroke="#33405E" stroke-width="1.5" opacity="0.96" />
+    <text x="1208" y="800" fill="#AAB6CB" font-size="22" font-weight="500" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="1208" dy="0">stereoCorrelation</tspan></text>
+  
+    <rect x="1188" y="834" width="356" height="46" rx="12" ry="12" fill="#171F31" stroke="#33405E" stroke-width="1.5" opacity="0.96" />
+    <text x="1208" y="864" fill="#AAB6CB" font-size="22" font-weight="500" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="1208" dy="0">transcriptionDetail.noteCount</tspan></text>
+  
+    <rect x="1188" y="898" width="356" height="46" rx="12" ry="12" fill="#171F31" stroke="#33405E" stroke-width="1.5" opacity="0.96" />
+    <text x="1208" y="928" fill="#AAB6CB" font-size="22" font-weight="500" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="1208" dy="0">niche detector outputs</tspan></text>
+  
+    <rect x="1188" y="892" width="590" height="62" rx="18" ry="18" fill="#201B15" stroke="#FFB357" stroke-width="2" />
+    <text x="1222" y="930" fill="#F6DDB4" font-size="24" font-weight="500" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="1222" dy="0">Product implication: do not confuse descriptor volume with leverage.</tspan></text>
+  
+  <text x="88" y="1038" fill="#7E8AA4" font-size="16" font-weight="500" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0.2"><tspan x="88" dy="0">Grounded in docs/field_utilization_report.md, phase2Validator.ts, and ui/components/analysisResultsViewModel.ts.</tspan></text>
+</svg>

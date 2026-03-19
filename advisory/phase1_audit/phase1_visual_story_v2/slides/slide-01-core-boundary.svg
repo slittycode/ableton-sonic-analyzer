@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#070B12" />
+      <stop offset="100%" stop-color="#0E1422" />
+    </linearGradient>
+    <linearGradient id="lineGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#27324A" />
+      <stop offset="35%" stop-color="#6BD8FF" />
+      <stop offset="70%" stop-color="#27324A" />
+      <stop offset="100%" stop-color="#27324A" />
+    </linearGradient>
+    <radialGradient id="glowLime" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#C9FF2F" stop-opacity="0.24" />
+      <stop offset="100%" stop-color="#C9FF2F" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="glowCyan" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#6BD8FF" stop-opacity="0.2" />
+      <stop offset="100%" stop-color="#6BD8FF" stop-opacity="0" />
+    </radialGradient>
+    <marker id="arrowHead" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 z" fill="#6BD8FF" />
+    </marker>
+    <marker id="arrowHeadRed" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 z" fill="#FF6A62" />
+    </marker>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#bgGrad)" />
+  <rect x="0" y="0" width="1920" height="10" fill="#C9FF2F" />
+  <circle cx="1838" cy="66" r="6" fill="#7D97FF" />
+  <circle cx="700" cy="360" r="320" fill="url(#glowLime)" /><circle cx="1240" cy="420" r="300" fill="url(#glowCyan)" />
+  <g opacity="0.11">
+    <line x1="0" y1="120" x2="1920" y2="120" stroke="#27324A" stroke-width="1" /><line x1="0" y1="168" x2="1920" y2="168" stroke="#27324A" stroke-width="1" /><line x1="0" y1="216" x2="1920" y2="216" stroke="#27324A" stroke-width="1" /><line x1="0" y1="264" x2="1920" y2="264" stroke="#27324A" stroke-width="1" /><line x1="0" y1="312" x2="1920" y2="312" stroke="#27324A" stroke-width="1" /><line x1="0" y1="360" x2="1920" y2="360" stroke="#27324A" stroke-width="1" /><line x1="0" y1="408" x2="1920" y2="408" stroke="#27324A" stroke-width="1" /><line x1="0" y1="456" x2="1920" y2="456" stroke="#27324A" stroke-width="1" /><line x1="0" y1="504" x2="1920" y2="504" stroke="#27324A" stroke-width="1" /><line x1="0" y1="552" x2="1920" y2="552" stroke="#27324A" stroke-width="1" /><line x1="0" y1="600" x2="1920" y2="600" stroke="#27324A" stroke-width="1" /><line x1="0" y1="648" x2="1920" y2="648" stroke="#27324A" stroke-width="1" /><line x1="0" y1="696" x2="1920" y2="696" stroke="#27324A" stroke-width="1" /><line x1="0" y1="744" x2="1920" y2="744" stroke="#27324A" stroke-width="1" /><line x1="0" y1="792" x2="1920" y2="792" stroke="#27324A" stroke-width="1" /><line x1="0" y1="840" x2="1920" y2="840" stroke="#27324A" stroke-width="1" /><line x1="0" y1="888" x2="1920" y2="888" stroke="#27324A" stroke-width="1" /><line x1="0" y1="936" x2="1920" y2="936" stroke="#27324A" stroke-width="1" /><line x1="0" y1="984" x2="1920" y2="984" stroke="#27324A" stroke-width="1" /><line x1="0" y1="1032" x2="1920" y2="1032" stroke="#27324A" stroke-width="1" />
+    <line x1="72" y1="0" x2="72" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="176" y1="0" x2="176" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="280" y1="0" x2="280" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="384" y1="0" x2="384" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="488" y1="0" x2="488" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="592" y1="0" x2="592" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="696" y1="0" x2="696" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="800" y1="0" x2="800" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="904" y1="0" x2="904" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="1008" y1="0" x2="1008" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="1112" y1="0" x2="1112" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="1216" y1="0" x2="1216" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="1320" y1="0" x2="1320" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="1424" y1="0" x2="1424" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="1528" y1="0" x2="1528" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="1632" y1="0" x2="1632" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="1736" y1="0" x2="1736" y2="1080" stroke="#27324A" stroke-width="1" /><line x1="1840" y1="0" x2="1840" y2="1080" stroke="#27324A" stroke-width="1" />
+  </g>
+  <text x="92" y="116" fill="#7E8AA4" font-size="18" font-weight="700" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="1.4"><tspan x="92" dy="0">EXECUTIVE READ-ONLY AUDIT</tspan></text>
+  <text x="92" y="180" fill="#F4F7FB" font-size="58" font-weight="550" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="92" dy="0">Phase 1 has a real core. It does not yet have a clean boundary.</tspan></text>
+  <text x="92" y="244" fill="#BBC6DB" font-size="25" font-weight="450" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="92" dy="0">This program measures first, interprets second. The strongest next investment is architectural cleanup, not detector sprawl.</tspan></text>
+  <text x="1842" y="120" fill="#BBC6DB" font-size="22" font-weight="700" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="end" letter-spacing="0.8"><tspan x="1842" dy="0">1 / 7</tspan></text>
+  <line x1="92" y1="206" x2="1828" y2="206" stroke="url(#lineGrad)" stroke-width="2" />
+  
+    <rect x="92" y="292" width="1736" height="284" rx="36" ry="36" fill="#101826" stroke="#1C2940" stroke-width="2" />
+    <path d="M256 434 L330 434" fill="none" stroke="#36445F" stroke-width="10" stroke-linecap="round" />
+    <path d="M626 434 L700 434" fill="none" stroke="#6BD8FF" stroke-width="10" stroke-linecap="round" />
+    <path d="M1030 434 L1104 434" fill="none" stroke="#415278" stroke-width="10" stroke-linecap="round" />
+    <path d="M1412 434 L1486 434" fill="none" stroke="#415278" stroke-width="10" stroke-linecap="round" />
+    
+    <rect x="120" y="342" width="210" height="184" rx="28" ry="28" fill="#1C2535" stroke="#27324A" stroke-width="2" />
+    
+    <rect x="142" y="360" width="120" height="40" rx="20" ry="20" fill="#182334" />
+    <text x="202" y="389" fill="#BBC6DB" font-size="20" font-weight="700" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="middle" letter-spacing="0.6"><tspan x="202" dy="0">INPUT</tspan></text>
+  
+    <text x="144" y="440" fill="#F4F7FB" font-size="40" font-weight="600" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="144" dy="0">Audio</tspan></text>
+    <text x="144" y="484" fill="#BBC6DB" font-size="20" font-weight="450" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="144" dy="0">Uploaded source track</tspan><tspan x="144" dy="28">becomes a persisted</tspan><tspan x="144" dy="28">runtime artifact.</tspan></text>
+  
+    
+    <rect x="356" y="318" width="306" height="232" rx="28" ry="28" fill="#C9FF2F" stroke="#27324A" stroke-width="2" />
+    
+    <rect x="378" y="336" width="120" height="40" rx="20" ry="20" fill="#F1EEE6" />
+    <text x="438" y="365" fill="#11151D" font-size="20" font-weight="700" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="middle" letter-spacing="0.6"><tspan x="438" dy="0">TRUTH</tspan></text>
+  
+    <text x="380" y="416" fill="#0B1405" font-size="50" font-weight="600" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="380" dy="0">Measurement</tspan></text>
+    <text x="380" y="460" fill="#18210B" font-size="23" font-weight="450" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="380" dy="0">Authoritative local DSP</tspan><tspan x="380" dy="31">descriptors: tempo, key,</tspan><tspan x="380" dy="31">loudness, stereo, structure.</tspan></text>
+  
+    
+    <rect x="694" y="342" width="294" height="184" rx="28" ry="28" fill="#7D97FF" stroke="#27324A" stroke-width="2" />
+    
+    <rect x="716" y="360" width="130.4" height="40" rx="20" ry="20" fill="#DCE3FF" />
+    <text x="781.2" y="389" fill="#18223E" font-size="20" font-weight="700" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="middle" letter-spacing="0.6"><tspan x="781.2" dy="0">OPTIONAL</tspan></text>
+  
+    <text x="718" y="440" fill="#F4F7FB" font-size="42" font-weight="600" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="718" dy="0">Symbolic</tspan></text>
+    <text x="718" y="484" fill="#BBC6DB" font-size="21" font-weight="450" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="718" dy="0">Optional stem-aware note</tspan><tspan x="718" dy="28">extraction. Useful,</tspan><tspan x="718" dy="28">not authoritative.</tspan></text>
+  
+    
+    <rect x="1122" y="332" width="292" height="204" rx="28" ry="28" fill="#6BD8FF" stroke="#27324A" stroke-width="2" />
+    
+    <rect x="1144" y="350" width="130.4" height="40" rx="20" ry="20" fill="#E7FBFF" />
+    <text x="1209.2" y="379" fill="#12222B" font-size="20" font-weight="700" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="middle" letter-spacing="0.6"><tspan x="1209.2" dy="0">GROUNDED</tspan></text>
+  
+    <text x="1146" y="430" fill="#10222A" font-size="42" font-weight="600" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="1146" dy="0">Interpretation</tspan></text>
+    <text x="1146" y="474" fill="#19343E" font-size="21" font-weight="450" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="1146" dy="0">AI advice is grounded on</tspan><tspan x="1146" dy="28">measurement. Symbolic</tspan><tspan x="1146" dy="28">only enriches it when present.</tspan></text>
+  
+    
+    <rect x="1518" y="342" width="252" height="184" rx="28" ry="28" fill="#1C2535" stroke="#27324A" stroke-width="2" />
+    
+    <rect x="1540" y="360" width="120" height="40" rx="20" ry="20" fill="#182334" />
+    <text x="1600" y="389" fill="#BBC6DB" font-size="20" font-weight="700" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="middle" letter-spacing="0.6"><tspan x="1600" dy="0">PRODUCT</tspan></text>
+  
+    <text x="1542" y="440" fill="#F4F7FB" font-size="40" font-weight="600" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="1542" dy="0">Output</tspan></text>
+    <text x="1542" y="484" fill="#BBC6DB" font-size="20" font-weight="450" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="1542" dy="0">Measurement cards,</tspan><tspan x="1542" dy="28">musician panels,</tspan><tspan x="1542" dy="28">producer guidance.</tspan></text>
+  
+    
+    <rect x="92" y="640" width="538" height="234" rx="24" ry="24" fill="#111A28" stroke="#24334C" stroke-width="2" />
+    
+    <text x="120" y="696" fill="#F4F7FB" font-size="34" font-weight="600" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="120" dy="0">What is solid</tspan></text>
+    <text x="120" y="742" fill="#BBC6DB" font-size="25" font-weight="450" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="120" dy="0">Canonical measurement is real, persisted, and</tspan><tspan x="120" dy="34">consumed downstream. Tests prove the runtime strips</tspan><tspan x="120" dy="34">leaked symbolic output before persistence.</tspan></text>
+  
+    
+    <rect x="650" y="640" width="580" height="234" rx="24" ry="24" fill="#111A28" stroke="#24334C" stroke-width="2" />
+    
+    <text x="678" y="696" fill="#F4F7FB" font-size="34" font-weight="600" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="678" dy="0">What is constrained</tspan></text>
+    <text x="678" y="742" fill="#BBC6DB" font-size="25" font-weight="450" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="678" dy="0">Product-facing Phase 1 still mixes truth, compatibility,</tspan><tspan x="678" dy="34">and optional symbolic projections into one user-visible</tspan><tspan x="678" dy="34">concept. The code is cleaner than the product story.</tspan></text>
+  
+    
+    <rect x="1250" y="640" width="578" height="234" rx="24" ry="24" fill="#111A28" stroke="#24334C" stroke-width="2" />
+    
+    <text x="1278" y="696" fill="#F4F7FB" font-size="34" font-weight="600" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="1278" dy="0">Best resource move</tspan></text>
+    <text x="1278" y="742" fill="#BBC6DB" font-size="25" font-weight="450" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="1278" dy="0">Fund contract cleanup before funding new detector work.</tspan><tspan x="1278" dy="34">The highest-value step is boundary repair, not capability</tspan><tspan x="1278" dy="34">sprawl.</tspan></text>
+  
+    
+    <rect x="92" y="928" width="374" height="56" rx="28" ry="28" fill="#FF6A62" />
+    <text x="279" y="957" fill="#FFFFFF" font-size="24" font-weight="700" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="middle" letter-spacing="0.6"><tspan x="279" dy="0">VERDICT: PARTIALLY REALIZED</tspan></text>
+  
+    <text x="494" y="964" fill="#F4F7FB" font-size="28" font-weight="500" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0"><tspan x="494" dy="0">Phase 1 works; it is not yet a clean, finished phase contract.</tspan></text>
+  
+  <text x="88" y="1038" fill="#7E8AA4" font-size="16" font-weight="500" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" text-anchor="start" letter-spacing="0.2"><tspan x="88" dy="0">Grounded in analysis_runtime.py, server.py, analyze.py, analysisRunsClient.ts, and targeted backend tests.</tspan></text>
+</svg>
