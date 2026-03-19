@@ -2,7 +2,6 @@ import {
   AnalysisRunArtifact,
   AnalysisRunRequestedStages,
   AnalysisRunSnapshot,
-  AnalysisStageDiagnostics,
   AnalysisStageError,
   AnalysisStageStatus,
   InterpretationAttemptSummary,
@@ -234,7 +233,7 @@ function parseAnalysisRunSnapshot(value: unknown): AnalysisRunSnapshot {
         authoritative: true,
         result: measurement.result == null ? null : parseCanonicalMeasurementResult(measurement.result),
         provenance: parseNullableRecord(measurement.provenance),
-        diagnostics: parseStageDiagnostics(measurement.diagnostics),
+        diagnostics: parseNullableRecord(measurement.diagnostics),
         error: parseNullableError(measurement.error),
       },
       symbolicExtraction: parseSymbolicStage(symbolicExtraction),
@@ -280,7 +279,7 @@ function parseSymbolicStage(value: Record<string, unknown>): SymbolicExtractionS
       : [],
     result: value.result == null ? null : parseSymbolicResult(value.result),
     provenance: parseNullableRecord(value.provenance),
-    diagnostics: parseStageDiagnostics(value.diagnostics),
+    diagnostics: parseNullableRecord(value.diagnostics),
     error: parseNullableError(value.error),
   };
 }
@@ -300,7 +299,7 @@ function parseInterpretationStage(value: Record<string, unknown>): Interpretatio
     attemptsSummary,
     result: value.result == null ? null : parseInterpretationResult(value.result, preferredProfileId),
     provenance: parseNullableRecord(value.provenance),
-    diagnostics: parseStageDiagnostics(value.diagnostics),
+    diagnostics: parseNullableRecord(value.diagnostics),
     error: parseNullableError(value.error),
   };
 }
@@ -397,40 +396,6 @@ function parseNullableRecord(value: unknown): Record<string, unknown> | null {
     return null;
   }
   return expectRecord(value, 'record');
-}
-
-function parseStageDiagnostics(value: unknown): AnalysisStageDiagnostics | null {
-  const diagnostics = parseNullableRecord(value);
-  if (!diagnostics) {
-    return null;
-  }
-
-  const progressRecord = parseNullableRecord(diagnostics.progress);
-  if (!progressRecord) {
-    return diagnostics as AnalysisStageDiagnostics;
-  }
-
-  const stepKey = asString(progressRecord.stepKey);
-  const message = asString(progressRecord.message);
-  const updatedAt = asString(progressRecord.updatedAt);
-  const seq = typeof progressRecord.seq === 'number' && Number.isFinite(progressRecord.seq)
-    ? progressRecord.seq
-    : null;
-
-  if (stepKey && message && updatedAt && typeof seq === 'number') {
-    return {
-      ...diagnostics,
-      progress: {
-        stepKey,
-        message,
-        updatedAt,
-        seq,
-      },
-    };
-  }
-
-  const { progress: _ignoredProgress, ...rest } = diagnostics;
-  return rest as AnalysisStageDiagnostics;
 }
 
 function parseNullableError(value: unknown): AnalysisStageError | null {

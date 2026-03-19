@@ -1,4 +1,5 @@
 .DS_Store
+.worktrees/
 .playwright-cli/
 .ruff_cache/
 .claude/worktrees/

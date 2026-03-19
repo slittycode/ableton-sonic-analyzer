@@ -76,111 +76,46 @@ function statusClass(status: AnalysisStageStatus): string {
   }
 }
 
-type StageKey = 'measurement' | 'symbolicExtraction' | 'interpretation';
-
-interface StageSummaryDescriptor {
-  message: string;
-  typewriterSeed: string | null;
-}
-
-function getStageSnapshot(
-  run: AnalysisRunSnapshot,
-  stageKey: StageKey,
-) {
-  return stageKey === 'measurement'
-    ? run.stages.measurement
-    : stageKey === 'symbolicExtraction'
-      ? run.stages.symbolicExtraction
-      : run.stages.interpretation;
-}
-
-function getRunningProgressMessage(stage: ReturnType<typeof getStageSnapshot>): string | null {
-  const progress = stage.diagnostics?.progress;
-  if (!progress || typeof progress.message !== 'string') {
-    return null;
-  }
-  const message = progress.message.trim();
-  return message.length > 0 ? message : null;
-}
-
-export function resolveStageSummary(
-  run: AnalysisRunSnapshot | null,
-  stageKey: StageKey,
-): StageSummaryDescriptor {
+function stageSummary(run: AnalysisRunSnapshot | null, stageKey: 'measurement' | 'symbolicExtraction' | 'interpretation'): string {
   if (!run) {
-    return { message: 'Awaiting run state.', typewriterSeed: null };
+    return 'Awaiting run state.';
   }
 
-  const stage = getStageSnapshot(run, stageKey);
+  const stage =
+    stageKey === 'measurement'
+      ? run.stages.measurement
+      : stageKey === 'symbolicExtraction'
+        ? run.stages.symbolicExtraction
+        : run.stages.interpretation;
 
   if (stage.error?.message) {
-    return { message: stage.error.message, typewriterSeed: null };
+    return stage.error.message;
   }
 
   switch (stage.status) {
     case 'queued':
-      return { message: 'Queued locally.', typewriterSeed: null };
-    case 'running': {
-      const progressMessage = getRunningProgressMessage(stage);
-      if (progressMessage) {
-        return {
-          message: progressMessage,
-          typewriterSeed: progressMessage,
-        };
-      }
-      return { message: 'Currently processing.', typewriterSeed: null };
-    }
+      return 'Queued locally.';
+    case 'running':
+      return 'Currently processing.';
     case 'blocked':
-      return { message: 'Waiting for measurement to finish.', typewriterSeed: null };
+      return 'Waiting for measurement to finish.';
     case 'ready':
-      return { message: 'Ready for retry.', typewriterSeed: null };
+      return 'Ready for retry.';
     case 'completed':
-      return {
-        message: stageKey === 'measurement'
-          ? 'Authoritative local measurement complete.'
-          : stageKey === 'symbolicExtraction'
-            ? 'Best-effort symbolic output available.'
-            : 'Grounded musical interpretation available.',
-        typewriterSeed: null,
-      };
+      return stageKey === 'measurement'
+        ? 'Authoritative local measurement complete.'
+        : stageKey === 'symbolicExtraction'
+          ? 'Best-effort symbolic output available.'
+          : 'Grounded musical interpretation available.';
     case 'failed':
-      return { message: 'Stage failed.', typewriterSeed: null };
+      return 'Stage failed.';
     case 'interrupted':
-      return { message: 'Stage was interrupted and can be retried.', typewriterSeed: null };
+      return 'Stage was interrupted and can be retried.';
     case 'not_requested':
-      return { message: 'Not requested for this run.', typewriterSeed: null };
+      return 'Not requested for this run.';
     default:
-      return { message: 'Awaiting stage state.', typewriterSeed: null };
+      return 'Awaiting stage state.';
   }
-}
-
-function TypewriterLine({ text }: { text: string }) {
-  const [visibleText, setVisibleText] = React.useState(text);
-
-  React.useEffect(() => {
-    if (typeof window === 'undefined') {
-      setVisibleText(text);
-      return;
-    }
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
-      setVisibleText(text);
-      return;
-    }
-
-    setVisibleText('');
-    let cursor = 0;
-    const intervalId = window.setInterval(() => {
-      cursor += 1;
-      setVisibleText(text.slice(0, cursor));
-      if (cursor >= text.length) {
-        window.clearInterval(intervalId);
-      }
-    }, 14);
-
-    return () => window.clearInterval(intervalId);
-  }, [text]);
-
-  return <span>{visibleText}</span>;
 }
 
 export function AnalysisStatusPanel({
@@ -305,17 +240,7 @@ export function AnalysisStatusPanel({
                 {stageStatusLabel(card.status)}
               </span>
             </div>
-            {(() => {
-              const summary = resolveStageSummary(run, card.key);
-              if (summary.typewriterSeed) {
-                return (
-                  <p className="text-xs text-text-primary/90">
-                    <TypewriterLine text={summary.message} />
-                  </p>
-                );
-              }
-              return <p className="text-xs text-text-primary/90">{summary.message}</p>;
-            })()}
+            <p className="text-xs text-text-primary/90">{stageSummary(run, card.key)}</p>
             {card.onRetry && (card.status === 'failed' || card.status === 'interrupted' || card.status === 'ready') && (
               <button
                 onClick={card.onRetry}

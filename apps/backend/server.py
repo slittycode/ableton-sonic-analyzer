@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from math import ceil
 from math import isfinite
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 from uuid import uuid4
 
 try:
@@ -443,14 +443,23 @@ def _build_phase1(payload: dict[str, Any]) -> dict[str, Any]:
     return {
         "bpm": _coerce_number(payload.get("bpm")),
         "bpmConfidence": _coerce_number(payload.get("bpmConfidence")),
+        "bpmPercival": _coerce_nullable_number(payload.get("bpmPercival")),
+        "bpmAgreement": payload.get("bpmAgreement"),
         "key": _coerce_nullable_string(payload.get("key")),
         "keyConfidence": _coerce_number(payload.get("keyConfidence")),
+        "keyProfile": payload.get("keyProfile"),
+        "tuningFrequency": _coerce_nullable_number(payload.get("tuningFrequency")),
+        "tuningCents": _coerce_nullable_number(payload.get("tuningCents")),
         "timeSignature": _coerce_string(payload.get("timeSignature"), "4/4"),
         "durationSeconds": _coerce_number(payload.get("durationSeconds")),
+        "sampleRate": payload.get("sampleRate"),
         "lufsIntegrated": _coerce_number(payload.get("lufsIntegrated")),
         "lufsRange": _coerce_nullable_number(payload.get("lufsRange")),
+        "lufsMomentaryMax": _coerce_nullable_number(payload.get("lufsMomentaryMax")),
+        "lufsShortTermMax": _coerce_nullable_number(payload.get("lufsShortTermMax")),
         "truePeak": _coerce_number(payload.get("truePeak")),
         "crestFactor": _coerce_nullable_number(payload.get("crestFactor")),
+        "dynamicSpread": _coerce_nullable_number(payload.get("dynamicSpread")),
         "dynamicCharacter": payload.get("dynamicCharacter"),
         "stereoWidth": _coerce_number(stereo_detail.get("stereoWidth")),
         "stereoCorrelation": _coerce_number(stereo_detail.get("stereoCorrelation")),
@@ -468,6 +477,7 @@ def _build_phase1(payload: dict[str, Any]) -> dict[str, Any]:
         "melodyDetail": payload.get("melodyDetail"),
         "transcriptionDetail": payload.get("transcriptionDetail"),
         "grooveDetail": payload.get("grooveDetail"),
+        "beatsLoudness": payload.get("beatsLoudness"),
         "sidechainDetail": payload.get("sidechainDetail"),
         "acidDetail": payload.get("acidDetail"),
         "reverbDetail": payload.get("reverbDetail"),
@@ -483,9 +493,11 @@ def _build_phase1(payload: dict[str, Any]) -> dict[str, Any]:
         "arrangementDetail": payload.get("arrangementDetail"),
         "segmentLoudness": payload.get("segmentLoudness"),
         "segmentSpectral": payload.get("segmentSpectral"),
+        "segmentStereo": payload.get("segmentStereo"),
         "segmentKey": payload.get("segmentKey"),
         "chordDetail": payload.get("chordDetail"),
         "perceptual": payload.get("perceptual"),
+        "essentiaFeatures": payload.get("essentiaFeatures"),
     }
 
 
@@ -560,56 +572,6 @@ def _resolve_symbolic_mode_for_legacy(transcribe: bool) -> str:
     return "stem_notes" if transcribe else "off"
 
 
-def _consume_subprocess_stream(
-    stream: Any,
-    sink: list[str],
-    *,
-    on_line: Callable[[str], None] | None = None,
-) -> None:
-    try:
-        while True:
-            line = stream.readline()
-            if line == "":
-                break
-            sink.append(line)
-            if on_line is not None:
-                on_line(line.rstrip("\r\n"))
-    finally:
-        stream.close()
-
-
-def _measurement_progress_from_stderr_line(line: str) -> tuple[str, str] | None:
-    stripped = line.strip()
-    if not stripped:
-        return None
-    if stripped.startswith("Loading:"):
-        return (
-            "loading_audio",
-            "Loading and validating uploaded audio for local analysis.",
-        )
-    if stripped.startswith("Running source separation"):
-        return (
-            "separating_stems",
-            "Separating stems with Demucs for downstream symbolic extraction.",
-        )
-    if stripped == "Analyzing...":
-        return (
-            "computing_measurements",
-            "Computing authoritative local DSP measurements.",
-        )
-    if stripped == "Running fast analysis...":
-        return (
-            "computing_fast_measurements",
-            "Computing fast local DSP measurements.",
-        )
-    if stripped == "Done.":
-        return (
-            "finalizing_output",
-            "Finalizing authoritative measurement output.",
-        )
-    return None
-
-
 def _run_measurement_subprocess(
     *,
     audio_path: str,
@@ -619,7 +581,6 @@ def _run_measurement_subprocess(
     run_separation: bool,
     run_transcribe: bool,
     run_fast: bool,
-    on_progress: Callable[[str, str], None] | None = None,
 ) -> dict[str, Any]:
     estimate = _build_backend_estimate(audio_path, run_separation, run_transcribe)
     command = ["./venv/bin/python", "analyze.py", audio_path, "--yes"]
@@ -637,13 +598,45 @@ def _run_measurement_subprocess(
     timeout_seconds = _compute_timeout_seconds(estimate)
     analysis_started_at = _current_time()
     try:
-        result = subprocess.Popen(
+        result = subprocess.run(
             command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
-            bufsize=1,
+            check=False,
+            timeout=timeout_seconds,
         )
+    except subprocess.TimeoutExpired as exc:
+        analysis_completed_at = _current_time()
+        diagnostics = _build_diagnostics(
+            request_id=request_id,
+            estimate=estimate,
+            timeout_seconds=timeout_seconds,
+            request_started_at=request_started_at,
+            analysis_started_at=analysis_started_at,
+            analysis_completed_at=analysis_completed_at,
+            flags_used=flags_used,
+            file_size_bytes=file_size_bytes,
+            file_duration_seconds=None,
+            engine_version=ENGINE_VERSION,
+            stdout=exc.stdout,
+            stderr=exc.stderr,
+        )
+        return {
+            "ok": False,
+            "statusCode": 504,
+            "errorCode": "ANALYZER_TIMEOUT",
+            "message": "Local DSP analysis timed out before completion.",
+            "retryable": True,
+            "estimate": estimate,
+            "timeoutSeconds": timeout_seconds,
+            "flagsUsed": flags_used,
+            "requestStartedAt": request_started_at,
+            "analysisStartedAt": analysis_started_at,
+            "analysisCompletedAt": analysis_completed_at,
+            "stdout": exc.stdout,
+            "stderr": exc.stderr,
+            "diagnostics": diagnostics,
+        }
     except Exception as exc:
         analysis_completed_at = _current_time()
         diagnostics = _build_diagnostics(
@@ -675,119 +668,7 @@ def _run_measurement_subprocess(
             "diagnostics": diagnostics,
         }
 
-    if result.stdout is None or result.stderr is None:
-        analysis_completed_at = _current_time()
-        diagnostics = _build_diagnostics(
-            request_id=request_id,
-            estimate=estimate,
-            timeout_seconds=timeout_seconds,
-            request_started_at=request_started_at,
-            analysis_started_at=analysis_started_at,
-            analysis_completed_at=analysis_completed_at,
-            flags_used=flags_used,
-            file_size_bytes=file_size_bytes,
-            file_duration_seconds=None,
-            engine_version=ENGINE_VERSION,
-            stderr="Local DSP subprocess did not expose stdout/stderr pipes.",
-        )
-        return {
-            "ok": False,
-            "statusCode": 500,
-            "errorCode": "BACKEND_INTERNAL_ERROR",
-            "message": "Local DSP backend hit an unexpected server error.",
-            "retryable": False,
-            "estimate": estimate,
-            "timeoutSeconds": timeout_seconds,
-            "flagsUsed": flags_used,
-            "requestStartedAt": request_started_at,
-            "analysisStartedAt": analysis_started_at,
-            "analysisCompletedAt": analysis_completed_at,
-            "diagnostics": diagnostics,
-        }
-
-    stderr_progress = {"stepKey": None, "message": None}
-
-    def _handle_stderr_line(line: str) -> None:
-        mapped = _measurement_progress_from_stderr_line(line)
-        if mapped is None or on_progress is None:
-            return
-        step_key, message = mapped
-        if (
-            stderr_progress["stepKey"] == step_key
-            and stderr_progress["message"] == message
-        ):
-            return
-        try:
-            on_progress(step_key, message)
-        except Exception as exc:  # pragma: no cover - defensive log path
-            logger.warning("Measurement progress callback failed: %s", exc)
-            return
-        stderr_progress["stepKey"] = step_key
-        stderr_progress["message"] = message
-
-    stdout_lines: list[str] = []
-    stderr_lines: list[str] = []
-    stdout_thread = threading.Thread(
-        target=_consume_subprocess_stream,
-        args=(result.stdout, stdout_lines),
-        daemon=True,
-    )
-    stderr_thread = threading.Thread(
-        target=_consume_subprocess_stream,
-        args=(result.stderr, stderr_lines),
-        kwargs={"on_line": _handle_stderr_line},
-        daemon=True,
-    )
-    stdout_thread.start()
-    stderr_thread.start()
-
-    timed_out = False
-    try:
-        result.wait(timeout=timeout_seconds)
-    except subprocess.TimeoutExpired:
-        timed_out = True
-        result.kill()
-    finally:
-        result.wait()
-        stdout_thread.join(timeout=2.0)
-        stderr_thread.join(timeout=2.0)
-
     analysis_completed_at = _current_time()
-    stdout = "".join(stdout_lines)
-    stderr = "".join(stderr_lines)
-
-    if timed_out:
-        diagnostics = _build_diagnostics(
-            request_id=request_id,
-            estimate=estimate,
-            timeout_seconds=timeout_seconds,
-            request_started_at=request_started_at,
-            analysis_started_at=analysis_started_at,
-            analysis_completed_at=analysis_completed_at,
-            flags_used=flags_used,
-            file_size_bytes=file_size_bytes,
-            file_duration_seconds=None,
-            engine_version=ENGINE_VERSION,
-            stdout=stdout,
-            stderr=stderr,
-        )
-        return {
-            "ok": False,
-            "statusCode": 504,
-            "errorCode": "ANALYZER_TIMEOUT",
-            "message": "Local DSP analysis timed out before completion.",
-            "retryable": True,
-            "estimate": estimate,
-            "timeoutSeconds": timeout_seconds,
-            "flagsUsed": flags_used,
-            "requestStartedAt": request_started_at,
-            "analysisStartedAt": analysis_started_at,
-            "analysisCompletedAt": analysis_completed_at,
-            "stdout": stdout,
-            "stderr": stderr,
-            "diagnostics": diagnostics,
-        }
-
     if result.returncode != 0:
         diagnostics = _build_diagnostics(
             request_id=request_id,
@@ -800,8 +681,8 @@ def _run_measurement_subprocess(
             file_size_bytes=file_size_bytes,
             file_duration_seconds=None,
             engine_version=ENGINE_VERSION,
-            stdout=stdout,
-            stderr=stderr,
+            stdout=result.stdout,
+            stderr=result.stderr,
         )
         return {
             "ok": False,
@@ -815,13 +696,13 @@ def _run_measurement_subprocess(
             "requestStartedAt": request_started_at,
             "analysisStartedAt": analysis_started_at,
             "analysisCompletedAt": analysis_completed_at,
-            "stdout": stdout,
-            "stderr": stderr,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
             "diagnostics": diagnostics,
         }
 
-    normalized_stdout = stdout.strip()
-    if not normalized_stdout:
+    stdout = result.stdout.strip()
+    if not stdout:
         diagnostics = _build_diagnostics(
             request_id=request_id,
             estimate=estimate,
@@ -833,7 +714,7 @@ def _run_measurement_subprocess(
             file_size_bytes=file_size_bytes,
             file_duration_seconds=None,
             engine_version=ENGINE_VERSION,
-            stderr=stderr,
+            stderr=result.stderr,
         )
         return {
             "ok": False,
@@ -847,12 +728,12 @@ def _run_measurement_subprocess(
             "requestStartedAt": request_started_at,
             "analysisStartedAt": analysis_started_at,
             "analysisCompletedAt": analysis_completed_at,
-            "stderr": stderr,
+            "stderr": result.stderr,
             "diagnostics": diagnostics,
         }
 
     try:
-        payload = json.loads(normalized_stdout)
+        payload = json.loads(stdout)
     except json.JSONDecodeError:
         diagnostics = _build_diagnostics(
             request_id=request_id,
@@ -865,8 +746,8 @@ def _run_measurement_subprocess(
             file_size_bytes=file_size_bytes,
             file_duration_seconds=None,
             engine_version=ENGINE_VERSION,
-            stdout=normalized_stdout,
-            stderr=stderr,
+            stdout=stdout,
+            stderr=result.stderr,
         )
         return {
             "ok": False,
@@ -880,8 +761,8 @@ def _run_measurement_subprocess(
             "requestStartedAt": request_started_at,
             "analysisStartedAt": analysis_started_at,
             "analysisCompletedAt": analysis_completed_at,
-            "stdout": normalized_stdout,
-            "stderr": stderr,
+            "stdout": stdout,
+            "stderr": result.stderr,
             "diagnostics": diagnostics,
         }
 
@@ -897,8 +778,8 @@ def _run_measurement_subprocess(
             file_size_bytes=file_size_bytes,
             file_duration_seconds=None,
             engine_version=ENGINE_VERSION,
-            stdout=normalized_stdout,
-            stderr=stderr,
+            stdout=stdout,
+            stderr=result.stderr,
         )
         return {
             "ok": False,
@@ -911,8 +792,8 @@ def _run_measurement_subprocess(
             "flagsUsed": flags_used,
             "analysisStartedAt": analysis_started_at,
             "analysisCompletedAt": analysis_completed_at,
-            "stdout": normalized_stdout,
-            "stderr": stderr,
+            "stdout": stdout,
+            "stderr": result.stderr,
             "diagnostics": diagnostics,
         }
 
@@ -959,11 +840,6 @@ def _execute_measurement_run(
         run_separation=run_separation,
         run_transcribe=run_transcribe,
         run_fast=run_fast,
-        on_progress=lambda step_key, message: runtime.update_measurement_progress(
-            run_id,
-            step_key=step_key,
-            message=message,
-        ),
     )
     provenance = _build_measurement_provenance(
         run_separation=run_separation,
@@ -1092,13 +968,7 @@ def _execute_symbolic_attempt(
     attempt: dict[str, Any],
 ) -> None:
     started_at = _current_time()
-    attempt_id = str(attempt["attemptId"])
     run_id = str(attempt["runId"])
-    runtime.update_symbolic_attempt_progress(
-        attempt_id,
-        step_key="prepare_attempt",
-        message="Preparing symbolic extraction attempt.",
-    )
     source_artifact = runtime.get_source_artifact(run_id)
     provenance = {
         "schemaVersion": "symbolic.v1",
@@ -1108,21 +978,11 @@ def _execute_symbolic_attempt(
     try:
         stem_paths = None
         if attempt["mode"] == "stem_notes":
-            runtime.update_symbolic_attempt_progress(
-                attempt_id,
-                step_key="resolve_stems",
-                message="Resolving or materializing stems for transcription.",
-            )
             stem_paths = _get_or_materialize_stem_paths(
                 runtime,
                 run_id,
                 source_artifact["path"],
             )
-        runtime.update_symbolic_attempt_progress(
-            attempt_id,
-            step_key="run_backend",
-            message="Running symbolic transcription backend.",
-        )
         backend = _resolve_transcription_backend(str(attempt["backendId"]))
         symbolic_payload = analyze_transcription(
             source_artifact["path"],
@@ -1139,20 +999,15 @@ def _execute_symbolic_attempt(
         }
         if isinstance(transcription_detail, dict):
             provenance["resolvedBackendId"] = transcription_detail.get("transcriptionMethod")
-        runtime.update_symbolic_attempt_progress(
-            attempt_id,
-            step_key="finalize_output",
-            message="Finalizing symbolic extraction output.",
-        )
         runtime.complete_symbolic_attempt(
-            attempt_id,
+            str(attempt["attemptId"]),
             result=transcription_detail if isinstance(transcription_detail, dict) else None,
             provenance=provenance,
             diagnostics=diagnostics,
         )
     except Exception as exc:
         runtime.fail_symbolic_attempt(
-            attempt_id,
+            str(attempt["attemptId"]),
             error={
                 "code": "SYMBOLIC_EXTRACTION_FAILED",
                 "message": str(exc),
@@ -1178,16 +1033,7 @@ def _run_interpretation_request(
     grounding_metadata: dict[str, Any],
     model_name: str,
     request_id: str,
-    on_progress: Callable[[str, str], None] | None = None,
 ) -> dict[str, Any]:
-    def _emit_progress(step_key: str, message: str) -> None:
-        if on_progress is None:
-            return
-        try:
-            on_progress(step_key, message)
-        except Exception as exc:  # pragma: no cover - defensive log path
-            logger.warning("Interpretation progress callback failed: %s", exc)
-
     request_started_at = _current_time()
     flags_used: list[str] = []
     mime_type = _get_audio_mime_type(filename)
@@ -1236,7 +1082,6 @@ def _run_interpretation_request(
             "diagnostics": None,
         }
 
-    _emit_progress("build_prompt", "Building grounded interpretation prompt.")
     prompt = profile_config["buildPrompt"](
         measurement_result=measurement_result,
         symbolic_result=symbolic_result,
@@ -1257,10 +1102,6 @@ def _run_interpretation_request(
     try:
         if file_size_bytes <= INLINE_SIZE_LIMIT:
             flags_used.append("inline")
-            _emit_progress(
-                "send_request",
-                "Sending grounded audio and prompt to the interpretation model.",
-            )
             with open(source_path, "rb") as input_file:
                 audio_bytes = input_file.read()
             audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
@@ -1278,7 +1119,6 @@ def _run_interpretation_request(
             message_suffix = profile_config["successMessage"]
         else:
             flags_used.append("files-api")
-            _emit_progress("upload_audio", "Uploading audio for interpretation.")
 
             def _upload_file() -> Any:
                 return client.files.upload(
@@ -1298,10 +1138,6 @@ def _run_interpretation_request(
                     "mime_type": uploaded_gemini_file.mime_type,
                 }
             }
-            _emit_progress(
-                "generate_response",
-                "Generating grounded interpretation from uploaded audio.",
-            )
 
             def _generate_files_api() -> Any:
                 return client.models.generate_content(
@@ -1321,10 +1157,6 @@ def _run_interpretation_request(
             )
 
         response_text: str | None = getattr(response, "text", None)
-        _emit_progress(
-            "parse_output",
-            "Parsing and validating interpretation output.",
-        )
         interpretation_result, skip_message = profile_config["parseResult"](response_text)
         diagnostics = _build_diagnostics(
             request_id=request_id,
@@ -1338,7 +1170,6 @@ def _run_interpretation_request(
             file_duration_seconds=None,
             engine_version=model_name,
         )
-        _emit_progress("finalize_output", "Finalizing interpretation output.")
         if skip_message:
             return {
                 "ok": True,
@@ -1388,12 +1219,6 @@ def _execute_interpretation_attempt(
     runtime: AnalysisRuntime,
     attempt: dict[str, Any],
 ) -> dict[str, Any]:
-    attempt_id = str(attempt["attemptId"])
-    runtime.update_interpretation_attempt_progress(
-        attempt_id,
-        step_key="prepare_grounding",
-        message="Preparing grounded measurement and symbolic context.",
-    )
     run_id = str(attempt["runId"])
     profile_id = _coerce_string(attempt.get("profileId"), "producer_summary")
     source_artifact = runtime.get_source_artifact(run_id)
@@ -1418,12 +1243,7 @@ def _execute_interpretation_attempt(
         symbolic_result=symbolic_result,
         grounding_metadata=grounding_metadata,
         model_name=model_name,
-        request_id=attempt_id,
-        on_progress=lambda step_key, message: runtime.update_interpretation_attempt_progress(
-            attempt_id,
-            step_key=step_key,
-            message=message,
-        ),
+        request_id=str(attempt["attemptId"]),
     )
     provenance = {
         "schemaVersion": "interpretation.v1",
@@ -1435,7 +1255,7 @@ def _execute_interpretation_attempt(
     }
     if execution["ok"]:
         runtime.complete_interpretation_attempt(
-            attempt_id,
+            str(attempt["attemptId"]),
             result=execution["interpretationResult"],
             provenance=provenance,
             diagnostics=execution["diagnostics"],
@@ -1445,7 +1265,7 @@ def _execute_interpretation_attempt(
         return execution
 
     runtime.fail_interpretation_attempt(
-        attempt_id,
+        str(attempt["attemptId"]),
         error={
             "code": execution["errorCode"],
             "message": execution["message"],

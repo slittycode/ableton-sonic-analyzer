@@ -70,7 +70,7 @@ FastAPI-generated routes remain available at `/openapi.json`, `/docs`, and `/red
 Important sections:
 
 - core metrics: tempo, key, duration, loudness, true peak
-- detail objects: `dynamicCharacter`, `stereoDetail`, `spectralDetail`, `rhythmDetail`, `melodyDetail`, `transcriptionDetail`, `effectsDetail`, `synthesisCharacter`, `danceability`, `perceptual`, `essentiaFeatures`
+- detail objects: `dynamicCharacter`, `stereoDetail`, `spectralDetail`, `rhythmDetail`, `melodyDetail`, `transcriptionDetail`, `grooveDetail`, `beatsLoudness`, `sidechainDetail`, `effectsDetail`, `synthesisCharacter`, `danceability`, `perceptual`, `essentiaFeatures`
 - arrangement and segment data: `structure`, `arrangementDetail`, `segmentLoudness`, `segmentStereo`, `segmentSpectral`, `segmentKey`
 
 ## HTTP Flow
@@ -140,27 +140,38 @@ Query parameters accepted by both routes:
 
 - `bpm`
 - `bpmConfidence`
+- `bpmPercival`
+- `bpmAgreement`
 - `key`
 - `keyConfidence`
+- `keyProfile`
+- `tuningFrequency`
+- `tuningCents`
 - `timeSignature`
 - `durationSeconds`
+- `sampleRate`
 - `lufsIntegrated`
 - `lufsRange`
+- `lufsMomentaryMax`
+- `lufsShortTermMax`
 - `truePeak`
 - `crestFactor`
+- `dynamicSpread`
 - `stereoWidth`
 - `stereoCorrelation`
 - `spectralBalance`
 
 `phase1` forwards these raw analyzer sections unchanged:
 
+- `dynamicCharacter`
 - `stereoDetail`
 - `spectralDetail`
-- `rhythmDetail`
+- `rhythmDetail` (includes `tempoStability`, `phraseGrid`)
 - `melodyDetail`
 - `transcriptionDetail`
 - `grooveDetail`
-- `sidechainDetail`
+- `beatsLoudness`
+- `sidechainDetail` (includes `envelopeShape`)
 - `effectsDetail`
 - `synthesisCharacter`
 - `danceability`
@@ -168,19 +179,13 @@ Query parameters accepted by both routes:
 - `arrangementDetail`
 - `segmentLoudness`
 - `segmentSpectral`
+- `segmentStereo`
 - `segmentKey`
 - `chordDetail`
 - `perceptual`
-
-The server does not currently expose these raw analyzer fields over HTTP:
-
-- `bpmPercival`
-- `bpmAgreement`
-- `sampleRate`
-- `dynamicSpread`
-- `dynamicCharacter`
-- `segmentStereo`
 - `essentiaFeatures`
+
+All raw `analyze.py` fields are now forwarded through the server `phase1` wrapper.
 
 `diagnostics` currently contains:
 

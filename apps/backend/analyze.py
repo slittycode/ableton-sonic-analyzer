@@ -609,29 +609,84 @@ def analyze_bpm(
 
 
 def analyze_key(mono: np.ndarray) -> dict:
-    """Extract musical key and confidence using KeyExtractor."""
+    """Extract musical key and confidence using KeyExtractor with EDMA profile."""
     try:
-        extractor = es.KeyExtractor(profileType="temperley")
+        extractor = es.KeyExtractor(profileType="edma")
         key, scale, strength = extractor(mono)
         key_str = f"{key} {scale.capitalize()}"
-        return {"key": key_str, "keyConfidence": round(float(strength), 2)}
+        result = {
+            "key": key_str,
+            "keyConfidence": round(float(strength), 2),
+            "keyProfile": "edma",
+        }
+
+        # Tuning frequency via frame-by-frame spectral peaks
+        try:
+            frame_size = 2048
+            hop_size = 1024
+            window = es.Windowing(type="hann", size=frame_size)
+            spectrum_algo = es.Spectrum(size=frame_size)
+            spectral_peaks = es.SpectralPeaks(
+                orderBy="magnitude",
+                magnitudeThreshold=0.00001,
+                maxPeaks=60,
+                sampleRate=44100,
+            )
+            tuning_algo = es.TuningFrequency()
+
+            tuning_vals = []
+            tuning_cents_vals = []
+            for frame in es.FrameGenerator(mono, frameSize=frame_size, hopSize=hop_size):
+                spec = spectrum_algo(window(frame))
+                peak_freqs, peak_mags = spectral_peaks(spec)
+                if len(peak_freqs) > 0:
+                    tf, tc = tuning_algo(peak_freqs, peak_mags)
+                    if np.isfinite(tf) and tf > 0:
+                        tuning_vals.append(float(tf))
+                        tuning_cents_vals.append(float(tc))
+
+            if tuning_vals:
+                result["tuningFrequency"] = round(float(np.median(tuning_vals)), 2)
+                result["tuningCents"] = round(float(np.median(tuning_cents_vals)), 2)
+            else:
+                result["tuningFrequency"] = None
+                result["tuningCents"] = None
+        except Exception:
+            result["tuningFrequency"] = None
+            result["tuningCents"] = None
+
+        return result
     except Exception as e:
         print(f"[warn] Key extraction failed: {e}", file=sys.stderr)
-        return {"key": None, "keyConfidence": None}
+        return {"key": None, "keyConfidence": None, "keyProfile": "edma", "tuningFrequency": None, "tuningCents": None}
 
 
 def analyze_loudness(stereo: np.ndarray) -> dict:
-    """LUFS integrated loudness and loudness range via LoudnessEBUR128."""
+    """LUFS integrated loudness, range, and max momentary/short-term via LoudnessEBUR128."""
     try:
         loudness = es.LoudnessEBUR128()
         momentary, short_term, integrated, loudness_range = loudness(stereo)
+        momentary_arr = np.asarray(momentary, dtype=np.float64)
+        short_term_arr = np.asarray(short_term, dtype=np.float64)
+        lufs_momentary_max = None
+        lufs_short_term_max = None
+        if momentary_arr.size > 0:
+            finite_momentary = momentary_arr[np.isfinite(momentary_arr)]
+            if finite_momentary.size > 0:
+                lufs_momentary_max = round(float(np.max(finite_momentary)), 1)
+        if short_term_arr.size > 0:
+            finite_short_term = short_term_arr[np.isfinite(short_term_arr)]
+            if finite_short_term.size > 0:
+                lufs_short_term_max = round(float(np.max(finite_short_term)), 1)
         return {
             "lufsIntegrated": round(float(integrated), 1),
             "lufsRange": round(float(loudness_range), 1),
+            "lufsMomentaryMax": lufs_momentary_max,
+            "lufsShortTermMax": lufs_short_term_max,
         }
     except Exception as e:
         print(f"[warn] LUFS extraction failed: {e}", file=sys.stderr)
-        return {"lufsIntegrated": None, "lufsRange": None}
+        return {"lufsIntegrated": None, "lufsRange": None, "lufsMomentaryMax": None, "lufsShortTermMax": None}
 
 
 def analyze_true_peak(stereo: np.ndarray) -> dict:
@@ -1203,6 +1258,23 @@ def analyze_rhythm_detail(rhythm_data: dict | None) -> dict:
         else:
             groove = 0.0
 
+        # Tempo stability: 1.0 = metronomic, 0.0 = arrhythmic
+        tempo_stability = round(float(np.clip(1.0 - groove, 0.0, 1.0)), 4)
+
+        # Phrase grid: group downbeats into 4-bar, 8-bar, 16-bar phrases
+        phrase_grid = None
+        if len(downbeats) >= 2:
+            phrases_4bar = [downbeats[i] for i in range(0, len(downbeats), 4)]
+            phrases_8bar = [downbeats[i] for i in range(0, len(downbeats), 8)]
+            phrases_16bar = [downbeats[i] for i in range(0, len(downbeats), 16)]
+            phrase_grid = {
+                "phrases4Bar": phrases_4bar,
+                "phrases8Bar": phrases_8bar,
+                "phrases16Bar": phrases_16bar,
+                "totalBars": len(downbeats),
+                "totalPhrases8Bar": len(phrases_8bar),
+            }
+
         return {
             "rhythmDetail": {
                 "onsetRate": round(onset_rate, 2),
@@ -1210,6 +1282,8 @@ def analyze_rhythm_detail(rhythm_data: dict | None) -> dict:
                 "downbeats": downbeats,
                 "beatPositions": beat_positions,
                 "grooveAmount": round(groove, 4),
+                "tempoStability": tempo_stability,
+                "phraseGrid": phrase_grid,
             }
         }
     except Exception as e:
@@ -1653,6 +1727,88 @@ def analyze_groove(
         return {"grooveDetail": None}
 
 
+def analyze_beats_loudness(
+    mono: np.ndarray,
+    sample_rate: int = 44100,
+    rhythm_data: dict | None = None,
+    beat_data: dict | None = None,
+) -> dict:
+    """Beat-synchronous loudness summary with band dominance and accent pattern."""
+    try:
+        if beat_data is None:
+            beat_data = _extract_beat_loudness_data(mono, sample_rate, rhythm_data)
+        if beat_data is None:
+            return {"beatsLoudness": None}
+
+        beat_loudness = np.asarray(beat_data.get("beatLoudness", []), dtype=np.float64)
+        band_loudness = np.asarray(beat_data.get("bandLoudness", []), dtype=np.float64)
+        low_band = np.asarray(beat_data.get("lowBand", []), dtype=np.float64)
+        high_band = np.asarray(beat_data.get("highBand", []), dtype=np.float64)
+
+        if beat_loudness.size < 2 or band_loudness.ndim != 2 or band_loudness.shape[0] < 2:
+            return {"beatsLoudness": None}
+
+        mean_total = float(np.mean(beat_loudness))
+        if mean_total <= 0:
+            return {"beatsLoudness": None}
+
+        # Band dominance ratios
+        mean_low = float(np.mean(low_band)) if low_band.size > 0 else 0.0
+        mean_high = float(np.mean(high_band)) if high_band.size > 0 else 0.0
+        # Mid band is column 1 of bandLoudness (200-4000 Hz)
+        mid_band = band_loudness[:, 1] if band_loudness.shape[1] > 1 else np.zeros(band_loudness.shape[0])
+        mean_mid = float(np.mean(mid_band))
+
+        kick_dominant_ratio = round(float(np.clip(mean_low / mean_total, 0.0, 1.0)), 4)
+        mid_dominant_ratio = round(float(np.clip(mean_mid / mean_total, 0.0, 1.0)), 4)
+        high_dominant_ratio = round(float(np.clip(mean_high / mean_total, 0.0, 1.0)), 4)
+
+        # Accent pattern: average beat loudness by bar position (4 beats per bar)
+        n_beats = beat_loudness.size
+        accent_pattern = [0.0, 0.0, 0.0, 0.0]
+        counts = [0, 0, 0, 0]
+        for i in range(n_beats):
+            pos = i % 4
+            accent_pattern[pos] += float(beat_loudness[i])
+            counts[pos] += 1
+        for pos in range(4):
+            if counts[pos] > 0:
+                accent_pattern[pos] /= counts[pos]
+        # Normalize so max = 1.0
+        accent_max = max(accent_pattern)
+        if accent_max > 0:
+            accent_pattern = [round(v / accent_max, 4) for v in accent_pattern]
+        else:
+            accent_pattern = [0.0, 0.0, 0.0, 0.0]
+
+        # Summary stats
+        std_total = float(np.std(beat_loudness))
+        beat_loudness_variation = round(std_total / mean_total, 4) if mean_total > 0 else 0.0
+
+        result = {
+            "beatsLoudness": {
+                "kickDominantRatio": kick_dominant_ratio,
+                "midDominantRatio": mid_dominant_ratio,
+                "highDominantRatio": high_dominant_ratio,
+                "accentPattern": accent_pattern,
+                "meanBeatLoudness": round(mean_total, 4),
+                "beatLoudnessVariation": beat_loudness_variation,
+                "beatCount": int(n_beats),
+            }
+        }
+
+        # Raw matrix behind debug env var only
+        if os.environ.get("ASA_DEBUG_BEATS_LOUDNESS") == "1":
+            result["beatsLoudness"]["rawBeatLoudness"] = [round(float(v), 4) for v in beat_loudness]
+            result["beatsLoudness"]["rawLowBand"] = [round(float(v), 4) for v in low_band]
+            result["beatsLoudness"]["rawHighBand"] = [round(float(v), 4) for v in high_band]
+
+        return result
+    except Exception as e:
+        print(f"[warn] Beat loudness analysis failed: {e}", file=sys.stderr)
+        return {"beatsLoudness": None}
+
+
 def analyze_sidechain_detail(
     mono: np.ndarray,
     sample_rate: int = 44100,
@@ -1844,6 +2000,18 @@ def analyze_sidechain_detail(
             confidence *= 0.7
         pumping_confidence = float(np.clip(confidence, 0.0, 1.0))
 
+        # Envelope shape: median RMS across bars at 16th-note resolution (16 values)
+        envelope_shape = None
+        if rms_values.size >= 16:
+            n_bars = rms_values.size // 16
+            if n_bars >= 1:
+                bars_matrix = rms_values[:n_bars * 16].reshape(n_bars, 16)
+                median_bar = np.median(bars_matrix, axis=0)
+                bar_max = float(np.max(median_bar))
+                if bar_max > 0:
+                    normalized = median_bar / bar_max
+                    envelope_shape = [round(float(v), 3) for v in normalized]
+
         return {
             "sidechainDetail": {
                 "pumpingStrength": round(pumping_strength, 4),
@@ -1852,6 +2020,7 @@ def analyze_sidechain_detail(
                 ),
                 "pumpingRate": pumping_rate,
                 "pumpingConfidence": round(pumping_confidence, 4),
+                "envelopeShape": envelope_shape,
             }
         }
     except Exception as e:
@@ -3513,7 +3682,7 @@ def analyze_segment_key(
         if segment_slices is None:
             return {"segmentKey": None}
 
-        key_extractor = es.KeyExtractor(profileType="temperley")
+        key_extractor = es.KeyExtractor(profileType="edma")
         out = []
         for segment in segment_slices:
             index = int(segment["segmentIndex"])
@@ -4357,6 +4526,7 @@ def main():
 
     # Groove detail
     result.update(analyze_groove(mono, sample_rate, rhythm_data, beat_data))
+    result.update(analyze_beats_loudness(mono, sample_rate, rhythm_data, beat_data))
     result.update(analyze_sidechain_detail(mono, sample_rate, rhythm_data, beat_data))
     result.update(analyze_acid_detail(mono, sample_rate, bpm=result.get("bpm")))
     result.update(analyze_reverb_detail(mono, sample_rate, bpm=result.get("bpm")))
@@ -4433,11 +4603,16 @@ def main():
         "bpmAgreement": result.get("bpmAgreement"),
         "key": result.get("key"),
         "keyConfidence": result.get("keyConfidence"),
+        "keyProfile": result.get("keyProfile"),
+        "tuningFrequency": result.get("tuningFrequency"),
+        "tuningCents": result.get("tuningCents"),
         "timeSignature": result.get("timeSignature"),
         "durationSeconds": result.get("durationSeconds"),
         "sampleRate": result.get("sampleRate"),
         "lufsIntegrated": result.get("lufsIntegrated"),
         "lufsRange": result.get("lufsRange"),
+        "lufsMomentaryMax": result.get("lufsMomentaryMax"),
+        "lufsShortTermMax": result.get("lufsShortTermMax"),
         "truePeak": result.get("truePeak"),
         "crestFactor": result.get("crestFactor"),
         "dynamicSpread": result.get("dynamicSpread"),
@@ -4449,6 +4624,7 @@ def main():
         "melodyDetail": result.get("melodyDetail"),
         "transcriptionDetail": result.get("transcriptionDetail"),
         "grooveDetail": result.get("grooveDetail"),
+        "beatsLoudness": result.get("beatsLoudness"),
         "sidechainDetail": result.get("sidechainDetail"),
         "acidDetail": result.get("acidDetail"),
         "reverbDetail": result.get("reverbDetail"),

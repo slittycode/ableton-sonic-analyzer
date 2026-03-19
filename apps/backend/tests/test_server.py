@@ -13,67 +13,14 @@ from fastapi import UploadFile
 import server
 
 
-class _FakeStream:
-    def __init__(self, text: str):
-        self._lines = text.splitlines(keepends=True)
-        self._index = 0
-
-    def readline(self) -> str:
-        if self._index >= len(self._lines):
-            return ""
-        line = self._lines[self._index]
-        self._index += 1
-        return line
-
-    def close(self) -> None:
-        return None
-
-
-class _FakePopen:
-    def __init__(
-        self,
-        *,
-        returncode: int,
-        stdout: str,
-        stderr: str,
-        raise_timeout_once: bool = False,
-    ) -> None:
-        self.returncode = returncode
-        self.stdout = _FakeStream(stdout)
-        self.stderr = _FakeStream(stderr)
-        self._raise_timeout_once = raise_timeout_once
-        self._timeout_raised = False
-        self._killed = False
-
-    def wait(self, timeout: int | float | None = None) -> int:
-        if self._raise_timeout_once and not self._timeout_raised and not self._killed:
-            self._timeout_raised = True
-            raise server.subprocess.TimeoutExpired(
-                cmd=["./venv/bin/python", "analyze.py", "track.mp3", "--yes"],
-                timeout=timeout if timeout is not None else 0,
-            )
-        return self.returncode
-
-    def kill(self) -> None:
-        self._killed = True
-
-
-def _fake_popen_factory(
-    *,
-    returncode: int,
-    stdout: str,
-    stderr: str,
-    raise_timeout_once: bool = False,
-):
-    def _factory(*_args, **_kwargs):
-        return _FakePopen(
-            returncode=returncode,
-            stdout=stdout,
-            stderr=stderr,
-            raise_timeout_once=raise_timeout_once,
-        )
-
-    return _factory
+def _make_timeout_expired() -> subprocess.TimeoutExpired:
+    error = subprocess.TimeoutExpired(
+        cmd=["./venv/bin/python", "analyze.py", "track.mp3", "--yes"],
+        timeout=53,
+    )
+    error.stdout = b"partial stdout"
+    error.stderr = b"partial stderr"
+    return error
 
 
 def _timing_points(
@@ -214,96 +161,6 @@ class ServerContractTests(unittest.TestCase):
     def test_resolve_server_port_uses_env_override(self) -> None:
         with patch.dict(server.os.environ, {"SONIC_ANALYZER_PORT": "8456"}, clear=True):
             self.assertEqual(server.resolve_server_port(), 8456)
-
-    def test_measurement_progress_parser_maps_known_stderr_markers(self) -> None:
-        self.assertEqual(
-            server._measurement_progress_from_stderr_line("Loading: /tmp/audio.wav"),
-            (
-                "loading_audio",
-                "Loading and validating uploaded audio for local analysis.",
-            ),
-        )
-        self.assertEqual(
-            server._measurement_progress_from_stderr_line(
-                "Running source separation (this may take 30-60 seconds)..."
-            ),
-            (
-                "separating_stems",
-                "Separating stems with Demucs for downstream symbolic extraction.",
-            ),
-        )
-        self.assertEqual(
-            server._measurement_progress_from_stderr_line("Analyzing..."),
-            (
-                "computing_measurements",
-                "Computing authoritative local DSP measurements.",
-            ),
-        )
-        self.assertEqual(
-            server._measurement_progress_from_stderr_line("Done."),
-            (
-                "finalizing_output",
-                "Finalizing authoritative measurement output.",
-            ),
-        )
-        self.assertIsNone(server._measurement_progress_from_stderr_line("[warn] ignored"))
-
-    def test_measurement_subprocess_stream_maps_stderr_to_progress_events(self) -> None:
-        events: list[tuple[str, str]] = []
-        with (
-            patch.object(
-                server,
-                "_build_backend_estimate",
-                return_value={
-                    "durationSeconds": 60.0,
-                    "totalLowMs": 10000,
-                    "totalHighMs": 20000,
-                },
-            ),
-            patch.object(
-                server.subprocess,
-                "Popen",
-                side_effect=_fake_popen_factory(
-                    returncode=0,
-                    stdout=json.dumps({"bpm": 128, "durationSeconds": 60.0}),
-                    stderr=(
-                        "Loading: /tmp/track.wav\n"
-                        "Analyzing...\n"
-                        "Done.\n"
-                    ),
-                ),
-            ),
-            patch("builtins.print"),
-        ):
-            execution = server._run_measurement_subprocess(
-                audio_path="/tmp/track.wav",
-                file_size_bytes=10,
-                request_id="req_1",
-                request_started_at=datetime(2026, 3, 8, 12, 0, 0),
-                run_separation=False,
-                run_transcribe=False,
-                run_fast=False,
-                on_progress=lambda step_key, message: events.append((step_key, message)),
-            )
-
-        self.assertTrue(execution["ok"])
-        self.assertEqual(
-            events,
-            [
-                (
-                    "loading_audio",
-                    "Loading and validating uploaded audio for local analysis.",
-                ),
-                (
-                    "computing_measurements",
-                    "Computing authoritative local DSP measurements.",
-                ),
-                (
-                    "finalizing_output",
-                    "Finalizing authoritative measurement output.",
-                ),
-            ],
-        )
 
     def test_analyze_endpoint_openapi_contract_exposes_separate_form_field(
         self,
@@ -482,8 +339,16 @@ class ServerContractTests(unittest.TestCase):
     )
     @patch.object(
         server.subprocess,
-        "Popen",
-        side_effect=_fake_popen_factory(
+        "run",
+        return_value=subprocess.CompletedProcess(
+            args=[
+                "./venv/bin/python",
+                "analyze.py",
+                "track.mp3",
+                "--yes",
+                "--separate",
+                "--transcribe",
+            ],
             returncode=0,
             stdout=json.dumps(
                 {
@@ -515,7 +380,7 @@ class ServerContractTests(unittest.TestCase):
         ),
     )
     def test_analyze_endpoint_combines_separate_and_transcribe_in_subprocess(
-        self, popen_mock, build_estimate_mock, *_mocks
+        self, run_mock, build_estimate_mock, *_mocks
     ) -> None:
         with (
             patch.object(
@@ -540,7 +405,7 @@ class ServerContractTests(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 200)
-        command = popen_mock.call_args.args[0]
+        command = run_mock.call_args.args[0]
         self.assertEqual(
             command,
             [
@@ -552,9 +417,9 @@ class ServerContractTests(unittest.TestCase):
                 "--transcribe",
             ],
         )
+        self.assertEqual(run_mock.call_args.kwargs["timeout"], 218)
         build_estimate_mock.assert_called_once_with(214.6, True, True)
         payload = self._decode_json_response(response)
-        self.assertEqual(payload["diagnostics"]["timeoutSeconds"], 218)
         self.assertEqual(payload["diagnostics"]["backendDurationMs"], 200.0)
         self.assertEqual(
             payload["diagnostics"]["timings"],
@@ -596,8 +461,9 @@ class ServerContractTests(unittest.TestCase):
     )
     @patch.object(
         server.subprocess,
-        "Popen",
-        side_effect=_fake_popen_factory(
+        "run",
+        return_value=subprocess.CompletedProcess(
+            args=["./venv/bin/python", "analyze.py", "track.mp3", "--yes", "--fast"],
             returncode=0,
             stdout=json.dumps({
                 "bpm": 128, "bpmConfidence": 0.9, "key": "C major", "keyConfidence": 0.8,
@@ -611,7 +477,7 @@ class ServerContractTests(unittest.TestCase):
         ),
     )
     def test_analyze_endpoint_passes_fast_flag_to_subprocess(
-        self, popen_mock, *_mocks
+        self, run_mock, *_mocks
     ) -> None:
         with (
             patch.object(server, "_current_time", side_effect=_timing_points(), create=True),
@@ -631,7 +497,7 @@ class ServerContractTests(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 200)
-        command = popen_mock.call_args.args[0]
+        command = run_mock.call_args.args[0]
         self.assertIn("--fast", command)
         payload = self._decode_json_response(response)
         self.assertIn("--fast", payload["diagnostics"]["timings"]["flagsUsed"])
@@ -649,8 +515,9 @@ class ServerContractTests(unittest.TestCase):
     )
     @patch.object(
         server.subprocess,
-        "Popen",
-        side_effect=_fake_popen_factory(
+        "run",
+        return_value=subprocess.CompletedProcess(
+            args=["./venv/bin/python", "analyze.py", "track.mp3", "--yes"],
             returncode=0,
             stdout=json.dumps({
                 "bpm": 128, "bpmConfidence": 0.9, "key": "C major", "keyConfidence": 0.8,
@@ -664,7 +531,7 @@ class ServerContractTests(unittest.TestCase):
         ),
     )
     def test_analyze_endpoint_does_not_pass_fast_when_false(
-        self, popen_mock, *_mocks
+        self, run_mock, *_mocks
     ) -> None:
         with (
             patch.object(server, "_current_time", side_effect=_timing_points(), create=True),
@@ -684,7 +551,7 @@ class ServerContractTests(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 200)
-        command = popen_mock.call_args.args[0]
+        command = run_mock.call_args.args[0]
         self.assertNotIn("--fast", command)
         payload = self._decode_json_response(response)
         self.assertNotIn("--fast", payload["diagnostics"]["timings"]["flagsUsed"])
@@ -745,13 +612,8 @@ class ServerContractTests(unittest.TestCase):
     )
     @patch.object(
         server.subprocess,
-        "Popen",
-        side_effect=_fake_popen_factory(
-            returncode=1,
-            stdout="partial stdout",
-            stderr="partial stderr",
-            raise_timeout_once=True,
-        ),
+        "run",
+        side_effect=_make_timeout_expired(),
     )
     def test_timeout_response_uses_structured_json_contract(self, *_mocks) -> None:
         with (
@@ -820,8 +682,9 @@ class ServerContractTests(unittest.TestCase):
     )
     @patch.object(
         server.subprocess,
-        "Popen",
-        side_effect=_fake_popen_factory(
+        "run",
+        return_value=subprocess.CompletedProcess(
+            args=["./venv/bin/python", "analyze.py", "track.mp3", "--yes"],
             returncode=0,
             stdout="{not-json",
             stderr="broken payload",
@@ -889,8 +752,9 @@ class ServerContractTests(unittest.TestCase):
     )
     @patch.object(
         server.subprocess,
-        "Popen",
-        side_effect=_fake_popen_factory(
+        "run",
+        return_value=subprocess.CompletedProcess(
+            args=["./venv/bin/python", "analyze.py", "track.mp3", "--yes"],
             returncode=0,
             stdout=json.dumps(
                 {
@@ -962,7 +826,7 @@ class ServerContractTests(unittest.TestCase):
     )
     @patch.object(
         server.subprocess,
-        "Popen",
+        "run",
         side_effect=RuntimeError("disk full"),
     )
     def test_internal_error_returns_500_with_structured_envelope(self, *_mocks) -> None:
@@ -1016,8 +880,9 @@ class ServerContractTests(unittest.TestCase):
     )
     @patch.object(
         server.subprocess,
-        "Popen",
-        side_effect=_fake_popen_factory(
+        "run",
+        return_value=subprocess.CompletedProcess(
+            args=["./venv/bin/python", "analyze.py", "track.mp3", "--yes"],
             returncode=1,
             stdout="partial output",
             stderr="segfault in essentia",
@@ -1076,8 +941,9 @@ class ServerContractTests(unittest.TestCase):
     )
     @patch.object(
         server.subprocess,
-        "Popen",
-        side_effect=_fake_popen_factory(
+        "run",
+        return_value=subprocess.CompletedProcess(
+            args=["./venv/bin/python", "analyze.py", "track.mp3", "--yes"],
             returncode=0,
             stdout="",
             stderr="analyze finished with no output",
@@ -1135,8 +1001,9 @@ class ServerContractTests(unittest.TestCase):
     )
     @patch.object(
         server.subprocess,
-        "Popen",
-        side_effect=_fake_popen_factory(
+        "run",
+        return_value=subprocess.CompletedProcess(
+            args=["./venv/bin/python", "analyze.py", "track.mp3", "--yes"],
             returncode=0,
             stdout="[1, 2, 3]",
             stderr="",
@@ -1233,6 +1100,114 @@ class BuildPhase1CoercionTests(unittest.TestCase):
     def test_crest_factor_boolean_is_coerced_to_none(self) -> None:
         phase1 = server._build_phase1(self._minimal_payload(crestFactor=True))
         self.assertIsNone(phase1["crestFactor"])
+
+    # ── New field pass-through tests ──────────────────────────────────────
+
+    def test_bpm_percival_passes_through(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(bpmPercival=127.5))
+        self.assertEqual(phase1["bpmPercival"], 127.5)
+
+    def test_bpm_percival_nan_coerced_to_none(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(bpmPercival=float("nan")))
+        self.assertIsNone(phase1["bpmPercival"])
+
+    def test_bpm_percival_missing_is_none(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload())
+        self.assertIsNone(phase1["bpmPercival"])
+
+    def test_bpm_agreement_passes_through(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(bpmAgreement=True))
+        self.assertTrue(phase1["bpmAgreement"])
+
+    def test_sample_rate_passes_through(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(sampleRate=44100))
+        self.assertEqual(phase1["sampleRate"], 44100)
+
+    def test_dynamic_spread_passes_through(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(dynamicSpread=0.42))
+        self.assertEqual(phase1["dynamicSpread"], 0.42)
+
+    def test_dynamic_spread_nan_coerced_to_none(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(dynamicSpread=float("nan")))
+        self.assertIsNone(phase1["dynamicSpread"])
+
+    def test_dynamic_character_passes_through(self) -> None:
+        dc = {"dynamicComplexity": 0.5, "loudnessVariation": 0.3}
+        phase1 = server._build_phase1(self._minimal_payload(dynamicCharacter=dc))
+        self.assertEqual(phase1["dynamicCharacter"], dc)
+
+    def test_segment_stereo_passes_through(self) -> None:
+        ss = [{"segmentIndex": 0, "stereoWidth": 0.8}]
+        phase1 = server._build_phase1(self._minimal_payload(segmentStereo=ss))
+        self.assertEqual(phase1["segmentStereo"], ss)
+
+    def test_essentia_features_passes_through(self) -> None:
+        ef = {"zeroCrossingRate": 0.12, "hfc": 0.45}
+        phase1 = server._build_phase1(self._minimal_payload(essentiaFeatures=ef))
+        self.assertEqual(phase1["essentiaFeatures"], ef)
+
+    def test_key_profile_passes_through(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(keyProfile="edma"))
+        self.assertEqual(phase1["keyProfile"], "edma")
+
+    def test_tuning_frequency_passes_through(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(tuningFrequency=440.12))
+        self.assertEqual(phase1["tuningFrequency"], 440.12)
+
+    def test_tuning_cents_nan_coerced_to_none(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(tuningCents=float("nan")))
+        self.assertIsNone(phase1["tuningCents"])
+
+    def test_lufs_momentary_max_passes_through(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(lufsMomentaryMax=-3.2))
+        self.assertEqual(phase1["lufsMomentaryMax"], -3.2)
+
+    def test_lufs_short_term_max_passes_through(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(lufsShortTermMax=-4.8))
+        self.assertEqual(phase1["lufsShortTermMax"], -4.8)
+
+    def test_beats_loudness_passes_through(self) -> None:
+        bl = {
+            "kickDominantRatio": 0.45,
+            "midDominantRatio": 0.35,
+            "highDominantRatio": 0.20,
+            "accentPattern": [1.0, 0.6, 0.8, 0.5],
+            "meanBeatLoudness": 0.32,
+            "beatLoudnessVariation": 0.18,
+            "beatCount": 256,
+        }
+        phase1 = server._build_phase1(self._minimal_payload(beatsLoudness=bl))
+        self.assertEqual(phase1["beatsLoudness"], bl)
+
+    def test_envelope_shape_inside_sidechain_detail(self) -> None:
+        sd = {
+            "pumpingStrength": 0.65,
+            "pumpingRegularity": 0.82,
+            "pumpingRate": "quarter",
+            "pumpingConfidence": 0.71,
+            "envelopeShape": [1.0, 0.9, 0.7, 0.5, 0.3, 0.2, 0.15, 0.1,
+                              0.08, 0.06, 0.05, 0.04, 0.03, 0.02, 0.01, 0.005],
+        }
+        phase1 = server._build_phase1(self._minimal_payload(sidechainDetail=sd))
+        self.assertEqual(phase1["sidechainDetail"]["envelopeShape"], sd["envelopeShape"])
+        self.assertEqual(len(phase1["sidechainDetail"]["envelopeShape"]), 16)
+
+    def test_backward_compat_without_new_fields(self) -> None:
+        """Payload without any new fields still builds without error."""
+        phase1 = server._build_phase1(self._minimal_payload())
+        self.assertIsNotNone(phase1["bpm"])
+        self.assertIsNone(phase1.get("bpmPercival"))
+        self.assertIsNone(phase1.get("bpmAgreement"))
+        self.assertIsNone(phase1.get("sampleRate"))
+        self.assertIsNone(phase1.get("dynamicSpread"))
+        self.assertIsNone(phase1.get("segmentStereo"))
+        self.assertIsNone(phase1.get("essentiaFeatures"))
+        self.assertIsNone(phase1.get("beatsLoudness"))
+        self.assertIsNone(phase1.get("keyProfile"))
+        self.assertIsNone(phase1.get("tuningFrequency"))
+        self.assertIsNone(phase1.get("tuningCents"))
+        self.assertIsNone(phase1.get("lufsMomentaryMax"))
+        self.assertIsNone(phase1.get("lufsShortTermMax"))
 
 
 class Phase2EndpointTests(unittest.TestCase):
@@ -1594,11 +1569,6 @@ class Phase2EndpointTests(unittest.TestCase):
                 patch.dict(server.os.environ, {"GEMINI_API_KEY": "fake-key"}),
                 patch.object(server, "_genai") as mock_genai,
                 patch.object(server, "_genai_types") as mock_genai_types,
-                patch.object(
-                    runtime,
-                    "update_interpretation_attempt_progress",
-                    wraps=runtime.update_interpretation_attempt_progress,
-                ) as progress_mock,
             ):
                 mock_genai.Client.return_value = mock_client
                 mock_genai_types.GenerateContentConfig.return_value = unittest.mock.MagicMock()
@@ -1621,19 +1591,6 @@ class Phase2EndpointTests(unittest.TestCase):
             self.assertIn("MEASUREMENT_DERIVED_DESCRIPTOR_HOOKS", prompt)
             self.assertIn("stableBarGrid", prompt)
             self.assertIn("pumpingOrModulationDescriptor", prompt)
-            progress_steps = [
-                call.kwargs["step_key"] for call in progress_mock.call_args_list
-            ]
-            self.assertEqual(
-                progress_steps,
-                [
-                    "prepare_grounding",
-                    "build_prompt",
-                    "send_request",
-                    "parse_output",
-                    "finalize_output",
-                ],
-            )
             snapshot = runtime.get_run(run_id)
             self.assertEqual(snapshot["stages"]["interpretation"]["attemptsSummary"][0]["profileId"], "stem_summary")
             self.assertEqual(snapshot["stages"]["interpretation"]["result"]["summary"], _valid_stem_summary_result()["summary"])
@@ -1700,8 +1657,9 @@ class AnalysisRunCompatibilityTests(unittest.TestCase):
     )
     @patch.object(
         server.subprocess,
-        "Popen",
-        side_effect=_fake_popen_factory(
+        "run",
+        return_value=subprocess.CompletedProcess(
+            args=[],
             returncode=0,
             stdout=_MINIMAL_ANALYZE_PAYLOAD,
             stderr="",
@@ -1752,8 +1710,9 @@ class AnalysisRunCompatibilityTests(unittest.TestCase):
     )
     @patch.object(
         server.subprocess,
-        "Popen",
-        side_effect=_fake_popen_factory(
+        "run",
+        return_value=subprocess.CompletedProcess(
+            args=[],
             returncode=1,
             stdout="",
             stderr="error",
@@ -1800,8 +1759,9 @@ class AnalysisRunCompatibilityTests(unittest.TestCase):
     )
     @patch.object(
         server.subprocess,
-        "Popen",
-        side_effect=_fake_popen_factory(
+        "run",
+        return_value=subprocess.CompletedProcess(
+            args=[],
             returncode=0,
             stdout=json.dumps({
                 "bpm": 128,
@@ -1990,11 +1950,6 @@ class StageWorkerTests(unittest.TestCase):
                         }
                     },
                 ) as analyze_transcription_mock,
-                patch.object(
-                    runtime,
-                    "update_symbolic_attempt_progress",
-                    wraps=runtime.update_symbolic_attempt_progress,
-                ) as progress_mock,
             ):
                 server._execute_symbolic_attempt(
                     runtime,
@@ -2010,18 +1965,6 @@ class StageWorkerTests(unittest.TestCase):
             kwargs = analyze_transcription_mock.call_args.kwargs
             self.assertIn("stem_paths", kwargs)
             self.assertEqual(set(kwargs["stem_paths"].keys()), {"bass", "other"})
-            progress_steps = [
-                call.kwargs["step_key"] for call in progress_mock.call_args_list
-            ]
-            self.assertEqual(
-                progress_steps,
-                [
-                    "prepare_attempt",
-                    "resolve_stems",
-                    "run_backend",
-                    "finalize_output",
-                ],
-            )
             snapshot = runtime.get_run(created["runId"])
             self.assertEqual(snapshot["stages"]["symbolicExtraction"]["status"], "completed")
             self.assertEqual(

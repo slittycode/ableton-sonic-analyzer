@@ -1,8 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { MeasurementResult, Phase1Result, Phase2Result, TranscriptionDetail, type GenreProfile, type MixDoctorReport } from '../types';
-import { MixDoctorPanel } from './MixDoctorPanel';
-import { generateMixReport, findProfileByIdOrFamily } from '../services/mixDoctor';
-import genreProfilesData from '../data/genreProfiles.json';
+import { Phase1Result, Phase2Result } from '../types';
 import {
   Activity,
   ChevronDown,
@@ -19,18 +16,12 @@ import {
 import { motion } from 'motion/react';
 import { downloadFile, generateMarkdown } from '../utils/exportUtils';
 import { INTERPRETATION_LABEL } from '../services/phaseLabels';
+import { MeasurementDashboard } from './MeasurementDashboard';
 import { SessionMusicianPanel } from './SessionMusicianPanel';
 import { PhaseSourceBadge } from './PhaseSourceBadge';
 import { StickyNav, type StickyNavSection } from './StickyNav';
-import { ChordProgressionPanel } from './ChordProgressionPanel';
-import { SpectralBalanceCurve } from './SpectralBalanceCurve';
-import { SegmentSpectralProfile } from './SegmentSpectralProfile';
-import { ChromaDisplay } from './ChromaDisplay';
-import { DetectorAnalysisGrid } from './DetectorAnalysisGrid';
-import { MelSpectrogram } from './MelSpectrogram';
 import {
   buildArrangementViewModel,
-  buildChromaViewModel,
   buildMixChainGroups,
   buildPatchCards,
   buildSonicElementCards,
@@ -41,14 +32,10 @@ import {
 } from './analysisResultsViewModel';
 
 interface AnalysisResultsProps {
-  measurement: MeasurementResult | null;
-  symbolic: TranscriptionDetail | null;
+  phase1: Phase1Result | null;
   phase2: Phase2Result | null;
   phase2StatusMessage?: string | null;
   sourceFileName?: string | null;
-  audioFile?: File;
-  audioElementRef?: React.RefObject<HTMLAudioElement | null>;
-  onSeek?: (timeSeconds: number) => void;
 }
 
 export function toggleOpenKeySet(previous: ReadonlySet<string>, id: string): Set<string> {
@@ -142,10 +129,6 @@ function withAlpha(hexColor: string, alphaHex: string): string {
   return `${hexColor}${alphaHex}`;
 }
 
-function formatMetricValue(value: number): string {
-  return value.toFixed(2);
-}
-
 const LOW_CONFIDENCE_TITLE = "Low confidence — treat this as approximate.";
 
 function lowConfidenceIndicator(show: boolean) {
@@ -170,89 +153,42 @@ function toFiniteNumber(value: unknown): number | null {
   return null;
 }
 
-function getChordStrength(phase1: MeasurementResult): number | null {
+function getChordStrength(phase1: Phase1Result): number | null {
   const chordDetail = phase1.chordDetail;
-  if (!chordDetail) return null;
-  return toFiniteNumber(chordDetail.chordStrength);
-}
+  if (!chordDetail || typeof chordDetail !== 'object' || Array.isArray(chordDetail)) {
+    return null;
+  }
 
-function hasRenderableChordContent(chordDetail: MeasurementResult['chordDetail']): boolean {
-  if (!chordDetail) return false;
-  if (Array.isArray(chordDetail.chordSequence) && chordDetail.chordSequence.length > 0) return true;
-  if (Array.isArray(chordDetail.progression) && chordDetail.progression.length > 0) return true;
-  return false;
-}
-
-function hasDetectorData(measurement: MeasurementResult): boolean {
-  return Boolean(
-    measurement.acidDetail ||
-    measurement.reverbDetail ||
-    measurement.vocalDetail ||
-    measurement.supersawDetail ||
-    measurement.bassDetail ||
-    measurement.kickDetail ||
-    measurement.genreDetail ||
-    measurement.sidechainDetail ||
-    measurement.synthesisCharacter,
-  );
+  return toFiniteNumber((chordDetail as Record<string, unknown>).chordStrength);
 }
 
 export function AnalysisResults({
-  measurement,
-  symbolic,
+  phase1,
   phase2,
   phase2StatusMessage = null,
   sourceFileName = null,
-  audioFile,
-  audioElementRef,
-  onSeek,
 }: AnalysisResultsProps) {
   const [openArrangement, setOpenArrangement] = useState<Record<string, boolean>>({});
   const [openSonic, setOpenSonic] = useState<Set<string>>(new Set());
   const [openMix, setOpenMix] = useState<Record<string, boolean>>({});
   const [openPatch, setOpenPatch] = useState<Record<string, boolean>>({});
   const [showSources, setShowSources] = useState<Record<string, boolean>>({});
-  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
 
   const sessionId = useMemo(() => new Date().getTime().toString(36).toUpperCase(), []);
 
-  const profiles = genreProfilesData as GenreProfile[];
-  const gd = measurement?.genreDetail;
-  const autoGenreId = gd && gd.confidence >= 0.6 ? gd.genre : null;
-  const autoGenreFamily = gd ? gd.genreFamily : null;
-  const autoProfileId = useMemo(
-    () => findProfileByIdOrFamily(profiles, autoGenreId, autoGenreFamily),
-    [profiles, autoGenreId, autoGenreFamily],
-  );
-  const activeProfileId = selectedProfileId ?? autoProfileId ?? null;
-  const activeProfile = profiles.find(p => p.id === activeProfileId) ?? null;
-  const mixDoctorReport: MixDoctorReport | null = useMemo(
-    () => (activeProfile && measurement) ? generateMixReport(measurement, activeProfile) : null,
-    [measurement, activeProfile],
-  );
-
-  if (!measurement) return null;
+  if (!phase1) return null;
 
   const handleExportJSON = () => {
-    const phase1ForExport: Phase1Result = symbolic
-      ? { ...measurement, transcriptionDetail: symbolic }
-      : measurement;
-    const data: Record<string, unknown> = {
-      phase1: phase1ForExport,
+    const data = {
+      phase1,
       phase2,
       exportedAt: new Date().toISOString(),
     };
-    if (mixDoctorReport) {
-      data.mixDoctorReport = mixDoctorReport;
-    }
     downloadFile(JSON.stringify(data, null, 2), 'track-analysis.json', 'application/json');
   };
 
   const handleExportMD = () => {
-    const phase1ForExport: Phase1Result = symbolic
-      ? { ...measurement, transcriptionDetail: symbolic }
-      : measurement;
-    const markdown = generateMarkdown(phase1ForExport, phase2, phase2StatusMessage, mixDoctorReport);
+    const markdown = generateMarkdown(phase1, phase2, phase2StatusMessage);
     downloadFile(markdown, 'track-analysis.md', 'text/markdown');
   };
 
@@ -276,22 +212,19 @@ export function AnalysisResults({
     setShowSources((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const finalBpm = Math.round(measurement.bpm);
-  const finalKey = measurement.key ?? 'Unknown';
+  const finalBpm = Math.round(phase1.bpm);
+  const finalKey = phase1.key ?? 'Unknown';
 
   const confidenceBadges = toConfidenceBadges(phase2?.confidenceNotes);
-  const arrangement = buildArrangementViewModel(measurement, phase2?.arrangementOverview);
-  const sonicCards = buildSonicElementCards(measurement, symbolic, phase2?.sonicElements);
-  const mixGroups = buildMixChainGroups(measurement, phase2?.mixAndMasterChain, phase2?.sonicElements);
-  const patchCards = buildPatchCards(measurement, symbolic, phase2);
+  const arrangement = buildArrangementViewModel(phase1, phase2?.arrangementOverview);
+  const sonicCards = buildSonicElementCards(phase1, phase2?.sonicElements);
+  const mixGroups = buildMixChainGroups(phase1, phase2?.mixAndMasterChain, phase2?.sonicElements);
+  const patchCards = buildPatchCards(phase1, phase2);
   const characteristicPills = Array.isArray(phase2?.detectedCharacteristics)
     ? phase2.detectedCharacteristics.slice(0, 4)
     : [];
-  const danceability = measurement.danceability;
-  const hasChordSection = hasRenderableChordContent(measurement.chordDetail);
-  const hasDetectors = hasDetectorData(measurement);
-  const keyIsApproximate = measurement.keyConfidence <= 0.6;
-  const chordStrength = getChordStrength(measurement);
+  const keyIsApproximate = phase1.keyConfidence <= 0.6;
+  const chordStrength = getChordStrength(phase1);
   const chordsAreApproximate = chordStrength !== null && chordStrength <= 0.7;
   const hasRenderablePhase2Content =
     confidenceBadges.length > 0 ||
@@ -300,13 +233,15 @@ export function AnalysisResults({
     sonicCards.length > 0 ||
     mixGroups.length > 0 ||
     patchCards.length > 0;
-  const chromaViewModel = buildChromaViewModel(measurement.spectralDetail?.chroma, measurement.key);
-  const hasChroma = chromaViewModel !== null;
   const navSections: StickyNavSection[] = [
-    hasChordSection ? { id: 'section-chords', label: 'Chords' } : null,
-    hasDetectors ? { id: 'section-detectors', label: 'Detectors' } : null,
-    { id: 'section-spectral-balance', label: 'Spectral' },
-    hasChroma ? { id: 'section-spectral', label: 'Chroma' } : null,
+    { id: 'section-meas-core', label: 'Core' },
+    { id: 'section-meas-loudness', label: 'Loudness' },
+    { id: 'section-meas-spectral', label: 'Spectral' },
+    { id: 'section-meas-stereo', label: 'Stereo' },
+    { id: 'section-meas-rhythm', label: 'Rhythm' },
+    { id: 'section-meas-harmony', label: 'Harmony' },
+    { id: 'section-meas-structure', label: 'Structure' },
+    { id: 'section-meas-synthesis', label: 'Synthesis' },
     arrangement ? { id: 'section-arrangement', label: 'Arrangement' } : null,
     { id: 'section-session', label: 'Session' },
     sonicCards.length > 0 ? { id: 'section-sonic-elements', label: 'Sonic' } : null,
@@ -370,12 +305,12 @@ export function AnalysisResults({
             <div className="w-full bg-bg-app h-1 mt-3 overflow-hidden border border-border/30">
               <motion.div
                 initial={{ width: 0 }}
-                animate={{ width: `${measurement.bpmConfidence * 100}%` }}
+                animate={{ width: `${phase1.bpmConfidence * 100}%` }}
                 className="h-full bg-accent shadow-[0_0_5px_var(--color-accent)]"
               />
             </div>
             <p className="text-[10px] font-mono text-text-secondary mt-1 opacity-70">
-              CONF: {Math.min(Math.round(measurement.bpmConfidence * 100), 100) + '%'}
+              CONF: {Math.min(Math.round(phase1.bpmConfidence * 100), 100) + '%'}
             </p>
           </div>
         </div>
@@ -398,12 +333,12 @@ export function AnalysisResults({
             <div className="w-full bg-bg-app h-1 mt-3 overflow-hidden border border-border/30">
               <motion.div
                 initial={{ width: 0 }}
-                animate={{ width: `${measurement.keyConfidence * 100}%` }}
+                animate={{ width: `${phase1.keyConfidence * 100}%` }}
                 className="h-full bg-accent shadow-[0_0_5px_var(--color-accent)]"
               />
             </div>
             <p className="text-[10px] font-mono text-text-secondary mt-1 opacity-70">
-              CONF: {(measurement.keyConfidence * 100).toFixed(0)}%
+              CONF: {(phase1.keyConfidence * 100).toFixed(0)}%
             </p>
           </div>
         </div>
@@ -415,7 +350,7 @@ export function AnalysisResults({
               <Clock className="w-4 h-4 text-accent" />
               <span className="text-[10px] font-mono uppercase">METER</span>
             </div>
-            <p className="text-3xl font-display font-bold text-text-primary mt-1 w-full truncate">{measurement.timeSignature}</p>
+            <p className="text-3xl font-display font-bold text-text-primary mt-1 w-full truncate">{phase1.timeSignature}</p>
             <p className="text-[10px] font-mono text-text-secondary mt-auto opacity-70">DETECTED</p>
           </div>
         </div>
@@ -445,87 +380,7 @@ export function AnalysisResults({
         </div>
       </div>
 
-      {hasChordSection && (
-        <section id="section-chords" className="scroll-mt-24">
-          <ChordProgressionPanel
-            chordDetail={measurement.chordDetail}
-            detectedKey={measurement.key}
-            keyConfidence={measurement.keyConfidence}
-            durationSeconds={measurement.durationSeconds}
-          />
-        </section>
-      )}
-
-      {danceability && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between border-b border-border pb-2">
-            <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
-              <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
-              Danceability
-            </h2>
-            <span className="text-[10px] font-mono bg-bg-panel border border-border px-2 py-1 rounded font-bold text-text-secondary">
-              PHASE 1
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-bg-card border border-border rounded-sm p-4">
-              <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">Danceability</p>
-              <p className="text-2xl font-display font-bold text-text-primary mt-2">
-                {formatMetricValue(danceability.danceability)}
-              </p>
-            </div>
-            <div className="bg-bg-card border border-border rounded-sm p-4">
-              <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">DFA</p>
-              <p className="text-2xl font-display font-bold text-text-primary mt-2">
-                {formatMetricValue(danceability.dfa)}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {hasDetectors && (
-        <section id="section-detectors" className="scroll-mt-24">
-          <DetectorAnalysisGrid measurement={measurement} />
-        </section>
-      )}
-
-      <section id="section-spectral-balance" className="space-y-4 scroll-mt-24">
-        <SpectralBalanceCurve
-          spectralBalance={measurement.spectralBalance}
-          barkBands={measurement.spectralDetail?.barkBands}
-        />
-        {audioFile && audioElementRef && (
-          <MelSpectrogram
-            audioFile={audioFile}
-            audioElementRef={audioElementRef}
-            onSeek={onSeek}
-            durationSeconds={measurement.durationSeconds}
-          />
-        )}
-        <SegmentSpectralProfile
-          segmentSpectral={measurement.segmentSpectral}
-          segmentLoudness={measurement.segmentLoudness}
-        />
-      </section>
-
-      {hasChroma && chromaViewModel && (
-        <section id="section-spectral" className="scroll-mt-24">
-          <ChromaDisplay viewModel={chromaViewModel} />
-        </section>
-      )}
-
-      {profiles.length > 0 && (
-        <MixDoctorPanel
-          report={mixDoctorReport}
-          profiles={profiles}
-          activeProfileId={activeProfileId}
-          autoProfileId={autoProfileId}
-          autoGenreId={autoGenreId}
-          onProfileChange={setSelectedProfileId}
-        />
-      )}
+      <MeasurementDashboard phase1={phase1} />
 
       <div className="space-y-2">
         <div className="flex items-center justify-between border-b border-border pb-2">
@@ -750,7 +605,7 @@ export function AnalysisResults({
       )}
 
       <div id="section-session" className="scroll-mt-24">
-        <SessionMusicianPanel measurement={measurement} symbolic={symbolic} sourceFileName={sourceFileName} />
+        <SessionMusicianPanel phase1={phase1} sourceFileName={sourceFileName} />
       </div>
 
       {sonicCards.length > 0 && (
@@ -826,11 +681,11 @@ export function AnalysisResults({
                               <div className="absolute inset-y-0 left-1/2 w-px bg-text-secondary/70" />
                               <div
                                 className="absolute inset-y-0 bg-accent/50 border border-accent/60 rounded"
-                                style={calculateStereoBandStyle(measurement.stereoWidth)}
+                                style={calculateStereoBandStyle(phase1.stereoWidth)}
                               />
                             </div>
                             <p className="text-[10px] font-mono text-text-secondary mt-1">
-                              Width band: {measurement.stereoWidth.toFixed(2)} around center
+                              Width band: {phase1.stereoWidth.toFixed(2)} around center
                             </p>
                           </div>
                         )}

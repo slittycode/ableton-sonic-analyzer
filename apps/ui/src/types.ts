@@ -53,71 +53,180 @@ export interface TranscriptionDetail {
   notes: TranscriptionNote[];
 }
 
-export interface ChordDetail {
-  chordSequence: string[];
-  chordStrength: number;
-  progression: string[];
-  dominantChords: string[];
-}
-
-export interface SpectralDetail {
-  spectralCentroid: number;
-  spectralRolloff: number;
-  mfcc: number[];
-  chroma: number[];
-  barkBands: number[];
-  erbBands: number[];
-  spectralContrast: number[];
-  spectralValley: number[];
-}
-
-export interface SidechainDetail {
-  pumpingStrength: number;
-  pumpingRegularity: number;
-  pumpingRate: 'quarter' | 'eighth' | 'sixteenth' | null;
-  pumpingConfidence: number;
-}
-
-export interface SynthesisCharacter {
-  inharmonicity: number;
-  oddToEvenRatio: number;
-}
-
 export interface DanceabilityResult {
   danceability: number;
   dfa: number;
 }
 
-export interface SegmentSpectralEntry {
-  segmentIndex: number;
-  barkBands: number[];
-  spectralCentroid: number | null;
-  spectralRolloff: number | null;
+export interface StereoDetail {
   stereoWidth: number | null;
   stereoCorrelation: number | null;
+  subBassCorrelation?: number | null;
+  subBassMono?: boolean | null;
+}
+
+export interface SpectralDetail {
+  spectralCentroidMean?: number | null;
+  spectralRolloffMean?: number | null;
+  mfcc?: number[] | null;
+  chroma?: number[] | null;
+  barkBands?: number[] | null;
+  erbBands?: number[] | null;
+  spectralContrast?: number[] | null;
+  spectralValley?: number[] | null;
+}
+
+export interface PhraseGrid {
+  phrases4Bar: number[];
+  phrases8Bar: number[];
+  phrases16Bar: number[];
+  totalBars: number;
+  totalPhrases8Bar: number;
+}
+
+export interface RhythmDetail {
+  onsetRate: number;
+  beatGrid: number[];
+  downbeats: number[];
+  beatPositions: number[];
+  grooveAmount: number;
+  tempoStability?: number | null;
+  phraseGrid?: PhraseGrid | null;
+}
+
+export interface GrooveDetail {
+  kickSwing: number;
+  hihatSwing: number;
+  kickAccent: number[];
+  hihatAccent: number[];
+}
+
+export interface SidechainDetail {
+  pumpingStrength: number;
+  pumpingRegularity: number;
+  pumpingRate: string | null;
+  pumpingConfidence: number;
+  envelopeShape?: number[] | null;
+}
+
+export interface EffectsDetail {
+  gatingDetected?: boolean | null;
+  gatingRate?: number | null;
+  gatingRegularity?: number | null;
+  gatingEventCount?: number | null;
+}
+
+export interface SynthesisCharacter {
+  inharmonicity?: number | null;
+  oddToEvenRatio?: number | null;
+  analogLike?: boolean | null;
+}
+
+export interface StructureData {
+  segments?: unknown[] | null;
+  segmentCount?: number | null;
+  sections?: number | null;
+}
+
+export interface ArrangementDetail {
+  noveltyCurve?: number[] | null;
+  noveltyPeaks?: number[] | null;
+  noveltyMean?: number | null;
+  noveltyStdDev?: number | null;
+  sectionCount?: number | null;
+}
+
+export interface SegmentLoudnessEntry {
+  segmentIndex?: number;
+  start?: number;
+  end?: number;
+  lufs?: number | null;
+  lra?: number | null;
+  value?: number | null;
+}
+
+export interface SegmentSpectralEntry {
+  segmentIndex: number;
+  barkBands?: number[] | null;
+  spectralCentroid?: number | null;
+  spectralRolloff?: number | null;
+  stereoWidth?: number | null;
+  stereoCorrelation?: number | null;
+}
+
+export interface SegmentStereoEntry {
+  segmentIndex: number;
+  stereoWidth?: number | null;
+  stereoCorrelation?: number | null;
+}
+
+export interface SegmentKeyEntry {
+  segmentIndex: number;
+  key: string | null;
+  keyConfidence?: number | null;
+}
+
+export interface ChordDetail {
+  chordSequence?: string[] | null;
+  chordStrength?: number | null;
+  progression?: string[] | null;
+  dominantChords?: string[] | null;
+}
+
+export interface PerceptualDetail {
+  sharpness: number;
+  roughness: number;
+}
+
+export interface EssentiaFeatures {
+  zeroCrossingRate?: number | null;
+  hfc?: number | null;
+  spectralComplexity?: number | null;
+  dissonance?: number | null;
+}
+
+export interface DynamicCharacter {
+  dynamicComplexity: number;
+  loudnessVariation: number;
+  spectralFlatness: number;
+  logAttackTime: number;
+  attackTimeStdDev: number;
+}
+
+export interface BeatsLoudness {
+  kickDominantRatio: number;
+  midDominantRatio: number;
+  highDominantRatio: number;
+  accentPattern: number[];
+  meanBeatLoudness: number;
+  beatLoudnessVariation: number;
+  beatCount: number;
 }
 
 export interface Phase1Result {
   bpm: number;
   bpmConfidence: number;
+  bpmPercival?: number | null;
+  bpmAgreement?: boolean | null;
   key: string | null;
   keyConfidence: number;
+  keyProfile?: string | null;
+  tuningFrequency?: number | null;
+  tuningCents?: number | null;
   timeSignature: string;
   durationSeconds: number;
+  sampleRate?: number | null;
   lufsIntegrated: number;
   lufsRange?: number | null;
+  lufsMomentaryMax?: number | null;
+  lufsShortTermMax?: number | null;
   truePeak: number;
   crestFactor?: number | null;
-  dynamicCharacter?: {
-    dynamicComplexity: number;
-    loudnessVariation: number;
-    spectralFlatness: number;
-    logAttackTime: number;
-    attackTimeStdDev: number;
-  } | null;
+  dynamicSpread?: number | null;
+  dynamicCharacter?: DynamicCharacter | null;
   stereoWidth: number;
   stereoCorrelation: number;
-  stereoDetail?: Record<string, unknown> | null;
+  stereoDetail?: StereoDetail | null;
   spectralBalance: {
     subBass: number;
     lowBass: number;
@@ -127,141 +236,27 @@ export interface Phase1Result {
     brilliance: number;
   };
   spectralDetail?: SpectralDetail | null;
-  rhythmDetail?: Record<string, unknown> | null;
+  rhythmDetail?: RhythmDetail | null;
   melodyDetail?: MelodyDetail;
   transcriptionDetail?: TranscriptionDetail | null;
-  grooveDetail?: Record<string, unknown> | null;
+  grooveDetail?: GrooveDetail | null;
+  beatsLoudness?: BeatsLoudness | null;
   sidechainDetail?: SidechainDetail | null;
-  acidDetail?: {
-    isAcid: boolean;
-    confidence: number;
-    resonanceLevel: number;
-    centroidOscillationHz: number;
-    bassRhythmDensity: number;
-  } | null;
-  reverbDetail?: {
-    rt60: number | null;
-    isWet: boolean;
-    tailEnergyRatio: number | null;
-    measured: boolean;
-  } | null;
-  vocalDetail?: {
-    hasVocals: boolean;
-    confidence: number;
-    vocalEnergyRatio: number;
-    formantStrength: number;
-    mfccLikelihood: number;
-  } | null;
-  supersawDetail?: {
-    isSupersaw: boolean;
-    confidence: number;
-    voiceCount: number;
-    avgDetuneCents: number;
-    spectralComplexity: number;
-  } | null;
-  bassDetail?: {
-    averageDecayMs: number;
-    type: 'punchy' | 'medium' | 'rolling' | 'sustained';
-    transientRatio: number;
-    fundamentalHz: number;
-    transientCount: number;
-    swingPercent: number;
-    grooveType: 'straight' | 'slight-swing' | 'heavy-swing' | 'shuffle';
-  } | null;
-  kickDetail?: {
-    isDistorted: boolean;
-    thd: number;
-    harmonicRatio: number;
-    fundamentalHz: number;
-    kickCount: number;
-  } | null;
-  genreDetail?: {
-    genre: string;
-    confidence: number;
-    secondaryGenre: string | null;
-    genreFamily: 'house' | 'techno' | 'dnb' | 'ambient' | 'trance' | 'dubstep' | 'breaks' | 'other';
-    topScores: { genre: string; score: number }[];
-  } | null;
-  effectsDetail?: Record<string, unknown> | null;
+  effectsDetail?: EffectsDetail | null;
   synthesisCharacter?: SynthesisCharacter | null;
   danceability?: DanceabilityResult | null;
-  structure?: Record<string, unknown> | null;
-  arrangementDetail?: Record<string, unknown> | null;
-  segmentLoudness?: unknown[] | null;
+  structure?: StructureData | null;
+  arrangementDetail?: ArrangementDetail | null;
+  segmentLoudness?: SegmentLoudnessEntry[] | null;
   segmentSpectral?: SegmentSpectralEntry[] | null;
-  segmentKey?: unknown[] | null;
+  segmentStereo?: SegmentStereoEntry[] | null;
+  segmentKey?: SegmentKeyEntry[] | null;
   chordDetail?: ChordDetail | null;
-  perceptual?: Record<string, unknown> | null;
+  perceptual?: PerceptualDetail | null;
+  essentiaFeatures?: EssentiaFeatures | null;
 }
 
 export type MeasurementResult = Omit<Phase1Result, 'transcriptionDetail'>;
-
-export interface SpectralTarget {
-  minDb: number;
-  maxDb: number;
-  optimalDb: number;
-}
-
-export interface GenreProfile {
-  id: string;
-  name: string;
-  targetCrestFactorRange: [number, number];
-  targetPlrRange: [number, number];
-  targetLufsRange: [number, number];
-  spectralTargets: {
-    subBass: SpectralTarget;
-    lowBass: SpectralTarget;
-    lowMids: SpectralTarget;
-    mids: SpectralTarget;
-    upperMids: SpectralTarget;
-    highs: SpectralTarget;
-    brilliance: SpectralTarget;
-  };
-}
-
-export interface MixAdvice {
-  band: string;
-  issue: 'optimal' | 'too-loud' | 'too-quiet';
-  message: string;
-  diffDb: number;
-}
-
-export interface DynamicsAdvice {
-  issue: 'too-compressed' | 'too-dynamic' | 'optimal';
-  message: string;
-  actualCrest: number;
-}
-
-export interface PlrAdvice {
-  issue: 'too-crushed' | 'too-open' | 'optimal';
-  message: string;
-  actualPlr: number;
-}
-
-export interface LoudnessAdvice {
-  issue: 'too-loud' | 'too-quiet' | 'optimal';
-  message: string;
-  actualLufs: number;
-  truePeak: number;
-}
-
-export interface StereoAdvice {
-  correlation: number;
-  width: number;
-  monoCompatible: boolean;
-  message: string;
-}
-
-export interface MixDoctorReport {
-  genreName: string;
-  profileId: string;
-  advice: MixAdvice[];
-  dynamicsAdvice: DynamicsAdvice;
-  plrAdvice?: PlrAdvice;
-  loudnessAdvice: LoudnessAdvice | undefined;
-  stereoAdvice: StereoAdvice | undefined;
-  overallScore: number;
-}
 
 export type RecommendationCategory =
   | "SYNTHESIS"
@@ -402,18 +397,6 @@ export interface AnalysisStageError {
   phase?: string;
 }
 
-export interface AnalysisStageProgress {
-  stepKey: string;
-  message: string;
-  updatedAt: string;
-  seq: number;
-}
-
-export interface AnalysisStageDiagnostics {
-  progress?: AnalysisStageProgress;
-  [key: string]: unknown;
-}
-
 export interface AnalysisRunArtifact {
   artifactId: string;
   filename: string;
@@ -436,7 +419,7 @@ export interface MeasurementStageSnapshot {
   authoritative: true;
   result: MeasurementResult | null;
   provenance: Record<string, unknown> | null;
-  diagnostics: AnalysisStageDiagnostics | null;
+  diagnostics: Record<string, unknown> | null;
   error: AnalysisStageError | null;
 }
 
@@ -461,7 +444,7 @@ export interface SymbolicExtractionStageSnapshot {
   attemptsSummary: SymbolicExtractionAttemptSummary[];
   result: TranscriptionDetail | null;
   provenance: Record<string, unknown> | null;
-  diagnostics: AnalysisStageDiagnostics | null;
+  diagnostics: Record<string, unknown> | null;
   error: AnalysisStageError | null;
 }
 
@@ -472,7 +455,7 @@ export interface InterpretationStageSnapshot {
   attemptsSummary: InterpretationAttemptSummary[];
   result: InterpretationResult | null;
   provenance: Record<string, unknown> | null;
-  diagnostics: AnalysisStageDiagnostics | null;
+  diagnostics: Record<string, unknown> | null;
   error: AnalysisStageError | null;
 }
 

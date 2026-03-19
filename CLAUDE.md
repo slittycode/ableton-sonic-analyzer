@@ -62,9 +62,9 @@ Two-phase audio analysis system with a Python backend and React UI.
 - **`analyze.py`** (~112KB): Pure DSP pipeline. Runs as a subprocess invoked by `server.py`. Extracts BPM, key, LUFS, stereo width, spectral balance, rhythm/melody detail, transcription (Basic Pitch), stem separation (Demucs). **Writes JSON to stdout, diagnostics to stderr** — this contract is load-bearing.
 - **`server.py`** (~24KB): FastAPI HTTP wrapper. Accepts multipart uploads, invokes `analyze.py` as a subprocess, normalizes raw output into the `phase1` HTTP contract, returns structured JSON.
 
-The subprocess isolation means `analyze.py` works as a standalone CLI. The HTTP contract is a deliberate subset of the raw CLI output — these raw analyzer fields are present in CLI output but **not exposed over HTTP**: `bpmPercival`, `bpmAgreement`, `sampleRate`, `dynamicSpread`, `segmentStereo`, `essentiaFeatures`. Check `apps/backend/JSON_SCHEMA.md` before expanding HTTP fields.
+The subprocess isolation means `analyze.py` works as a standalone CLI. All raw analyzer fields are now forwarded through the HTTP `phase1` contract. Check `apps/backend/JSON_SCHEMA.md` before adding new analyzer output fields.
 
-**Phase 2 (`POST /api/phase2`):** The backend uploads audio to Gemini inline if ≤100MiB, or via the Gemini Files API if larger. Phase 1 JSON is appended to the system prompt from `prompts/phase2_system.txt`.
+**Phase 2 (`POST /api/phase2`):** The backend uploads audio to Gemini inline if ≤20MiB, or via the Gemini Files API if larger. Phase 1 JSON is appended to the system prompt from `prompts/phase2_system.txt`.
 
 **Python version constraint:** Python 3.11.x required on macOS arm64. `basic-pitch` pulls `tensorflow-macos`/NumPy combinations that don't resolve on 3.12+. `requirements.txt` also pins `setuptools<71` because `resampy 0.4.2` (pinned by `basic-pitch 0.4.0`) imports `pkg_resources`, which `setuptools>=71` no longer ships.
 
@@ -113,11 +113,3 @@ Phase 2 is gated by `VITE_ENABLE_PHASE2_GEMINI`. `GEMINI_API_KEY` is backend-onl
 ## Backport Candidates
 
 `BACKLOG.md` lists 12 DSP services + 2 data files from `active/sonic-architect-app` that are candidates for porting into ASA. Consult it before implementing genre detection, mix analysis, or synthesis features — implementations may already exist in that reference project.
-
-## IMPORTANT: Sound Notification
-
-After finishing responding to my request or running a command, run this command to notify me by sound:
-
-```bash
-afplay /System/Library/Sounds/Funk.aiff
-```

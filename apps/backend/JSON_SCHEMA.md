@@ -15,7 +15,7 @@ Conventions:
 
 Top-level keys:
 
-`bpm`, `bpmConfidence`, `bpmPercival`, `bpmAgreement`, `key`, `keyConfidence`, `timeSignature`, `durationSeconds`, `sampleRate`, `lufsIntegrated`, `lufsRange`, `truePeak`, `crestFactor`, `dynamicSpread`, `dynamicCharacter`, `stereoDetail`, `spectralBalance`, `spectralDetail`, `rhythmDetail`, `melodyDetail`, `transcriptionDetail`, `grooveDetail`, `sidechainDetail`, `acidDetail`, `reverbDetail`, `vocalDetail`, `supersawDetail`, `bassDetail`, `kickDetail`, `genreDetail`, `effectsDetail`, `synthesisCharacter`, `danceability`, `structure`, `arrangementDetail`, `segmentLoudness`, `segmentSpectral`, `segmentStereo`, `segmentKey`, `chordDetail`, `perceptual`, `essentiaFeatures`.
+`bpm`, `bpmConfidence`, `bpmPercival`, `bpmAgreement`, `key`, `keyConfidence`, `keyProfile`, `tuningFrequency`, `tuningCents`, `timeSignature`, `durationSeconds`, `sampleRate`, `lufsIntegrated`, `lufsRange`, `lufsMomentaryMax`, `lufsShortTermMax`, `truePeak`, `crestFactor`, `dynamicSpread`, `dynamicCharacter`, `stereoDetail`, `spectralBalance`, `spectralDetail`, `rhythmDetail`, `melodyDetail`, `transcriptionDetail`, `grooveDetail`, `beatsLoudness`, `sidechainDetail`, `effectsDetail`, `synthesisCharacter`, `danceability`, `structure`, `arrangementDetail`, `segmentLoudness`, `segmentSpectral`, `segmentStereo`, `segmentKey`, `chordDetail`, `perceptual`, `essentiaFeatures`.
 
 ## Relationship To `POST /api/analyze`
 
@@ -72,7 +72,7 @@ Compatibility note:
 - `stereoCorrelation`
 - `spectralBalance`
 
-`phase1` also forwards these 24 raw analyzer sections unchanged:
+`phase1` also forwards these raw analyzer sections unchanged:
 
 - `stereoDetail`
 - `spectralDetail`
@@ -80,14 +80,8 @@ Compatibility note:
 - `melodyDetail`
 - `transcriptionDetail`
 - `grooveDetail`
+- `beatsLoudness`
 - `sidechainDetail`
-- `acidDetail`
-- `reverbDetail`
-- `vocalDetail`
-- `supersawDetail`
-- `bassDetail`
-- `kickDetail`
-- `genreDetail`
 - `effectsDetail`
 - `synthesisCharacter`
 - `danceability`
@@ -95,19 +89,26 @@ Compatibility note:
 - `arrangementDetail`
 - `segmentLoudness`
 - `segmentSpectral`
+- `segmentStereo`
 - `segmentKey`
 - `chordDetail`
 - `perceptual`
+- `essentiaFeatures`
+- `dynamicCharacter`
 
-Raw `analyze.py` fields that are not present in the server `phase1` wrapper today:
+`phase1` also includes these scalar fields forwarded from the raw analyzer:
 
 - `bpmPercival`
 - `bpmAgreement`
+- `keyProfile`
+- `tuningFrequency`
+- `tuningCents`
 - `sampleRate`
+- `lufsMomentaryMax`
+- `lufsShortTermMax`
 - `dynamicSpread`
-- `dynamicCharacter`
-- `segmentStereo`
-- `essentiaFeatures`
+
+All raw `analyze.py` fields are now forwarded through the server `phase1` wrapper, including fields previously excluded: `bpmPercival`, `bpmAgreement`, `sampleRate`, `dynamicSpread`, `dynamicCharacter`, `segmentStereo`, `essentiaFeatures`.
 
 Two server-only convenience fields are derived from `stereoDetail`:
 
@@ -128,11 +129,14 @@ Current server behavior that affects schema expectations:
 |---|---|---|---|---|
 | `bpm` | `float \| null` | Primary tempo estimate from `RhythmExtractor2013`. | beats per minute | Main tempo anchor for Ableton project tempo and clip warp assumptions. |
 | `bpmConfidence` | `float \| null` | Confidence output from `RhythmExtractor2013` for primary BPM. | unbounded float (RhythmExtractor2013-specific; observed values typically 1.0-4.0 on real material) | Not normalised to 0-1. Higher values indicate stronger rhythmic periodicity. Values above 2.0 generally indicate reliable tempo detection. Low values (below 1.0) suggest ambiguous pulse or half/double-time content. |
-| `key` | `string \| null` | Global key label from `KeyExtractor` (`Temperley` profile), e.g. `"A Minor"`. | categorical | Starting point for harmonic reconstruction; validate by ear against bass/chord roots. |
+| `key` | `string \| null` | Global key label from `KeyExtractor` (`edma` profile), e.g. `"A Minor"`. | categorical | Starting point for harmonic reconstruction; validate by ear against bass/chord roots. |
 | `keyConfidence` | `float \| null` | Confidence/strength of global key estimate. | 0-1 (approx) | Low values indicate ambiguous tonality or modal/atonal content. |
 | `timeSignature` | `string \| null` | Time signature estimate (currently defaults to `"4/4"` when rhythm exists). | string | Treat as prior; verify manually on odd-metre material. |
 | `durationSeconds` | `float \| null` | Track duration from sample count. | seconds | Useful for arrangement section planning and timeline mapping. |
 | `sampleRate` | `int \| null` | Effective analysis sample rate. | Hz | Ensures downstream feature interpretation uses correct temporal/frequency scaling. |
+| `keyProfile` | `string \| null` | Key profile used by `KeyExtractor` (e.g. `"edma"`). | categorical | Indicates which pitch template corpus was used for key detection. |
+| `tuningFrequency` | `float \| null` | Estimated tuning reference frequency from spectral peak analysis. | Hz | Deviation from 440 Hz helps detect detuned material or concert-pitch variants. |
+| `tuningCents` | `float \| null` | Tuning offset from A440 in cents. | cents | Positive = sharp of A440, negative = flat. Useful for pitch-correcting reconstructions. |
 
 ---
 
@@ -153,6 +157,8 @@ Current server behavior that affects schema expectations:
 | `lufsRange` | `float \| null` | Loudness range via `LoudnessEBUR128`. | LU | Indicates macro-dynamic movement across sections. |
 | `truePeak` | `float \| null` | Max true peak across stereo channels. | linear amplitude proxy (rounded) | Helps detect clipping risk and required headroom when rebuilding. |
 | `crestFactor` | `float \| null` | Peak-to-RMS ratio over mono signal. | dB | Higher crest means stronger transients/less compression; lower crest suggests denser limiting/compression. |
+| `lufsMomentaryMax` | `float \| null` | Maximum momentary loudness (400 ms window) via `LoudnessEBUR128`. | LUFS | Peak short-burst loudness; useful for detecting loud transient moments. |
+| `lufsShortTermMax` | `float \| null` | Maximum short-term loudness (3 s window) via `LoudnessEBUR128`. | LUFS | Peak sustained loudness; gap between this and integrated LUFS indicates dynamic range use. |
 | `dynamicSpread` | `float \| null` | Ratio of broad-band energy means (sub/mid/high approximation). | unitless ratio | Quick indicator of how unevenly energy is distributed across broad frequency regions. |
 
 ### `dynamicCharacter`
@@ -232,6 +238,13 @@ Type: `object \| null`
 | `rhythmDetail.downbeats` | `float[]` | Beat-1 timestamp for each detected 4-beat bar. | seconds | Useful for bar-aligned locators and section anchoring. |
 | `rhythmDetail.beatPositions` | `int[]` | Bar position for each beat in `beatGrid` (`1`, `2`, `3`, `4`). | beat index within bar | Aligns directly with `beatGrid` for bar-aware rhythm reconstruction. |
 | `rhythmDetail.grooveAmount` | `float` | Normalised beat interval variability. | unitless | Higher values imply more timing looseness/swing. |
+| `rhythmDetail.tempoStability` | `float \| null` | Tempo stability score: `1.0 - grooveAmount`, clipped to 0-1. | 0-1 | Higher values indicate more clock-like tempo; lower values suggest human or intentional drift. |
+| `rhythmDetail.phraseGrid` | `object \| null` | Phrase structure derived from downbeat grouping. | object | Provides 4/8/16-bar phrase boundaries for arrangement-level grid alignment. |
+| `rhythmDetail.phraseGrid.phrases4Bar` | `float[]` | Start times of 4-bar phrases. | seconds | Use for fine phrase alignment. |
+| `rhythmDetail.phraseGrid.phrases8Bar` | `float[]` | Start times of 8-bar phrases. | seconds | Common electronic music phrase length. |
+| `rhythmDetail.phraseGrid.phrases16Bar` | `float[]` | Start times of 16-bar phrases. | seconds | Section-level phrase boundaries. |
+| `rhythmDetail.phraseGrid.totalBars` | `int` | Total number of detected bars. | count | Track length in bars for arrangement planning. |
+| `rhythmDetail.phraseGrid.totalPhrases8Bar` | `int` | Total number of 8-bar phrases. | count | Quick structural count for electronic arrangement estimation. |
 
 Note: `rhythmDetail.beatPositions` previously referred to a truncated beat-timestamp alias. That timestamp array is now exposed as `rhythmDetail.beatGrid` for the full track.
 
@@ -246,6 +259,22 @@ Type: `object \| null`
 | `grooveDetail.kickAccent` | `float[]` | Up-to-16 sampled low-band beat loudness values. | linear loudness proxy | Shape of kick emphasis over time. |
 | `grooveDetail.hihatAccent` | `float[]` | Up-to-16 sampled high-band beat loudness values. | linear loudness proxy | Shape of high-percussion emphasis over time. |
 
+### `beatsLoudness`
+
+Type: `object \| null`
+
+Beat-synchronous loudness analysis via Essentia `BeatsLoudness`. Summary statistics are always present in the HTTP response; the raw per-beat loudness matrix is only included when `ASA_DEBUG_BEATS_LOUDNESS=1` is set.
+
+| Field | Type | Description | Units / Scale | LLM interpretation note |
+|---|---|---|---|---|
+| `beatsLoudness.kickDominantRatio` | `float` | Fraction of beats where the kick (low) band is loudest. | 0-1 | High values indicate kick-driven groove; low values suggest mid/high-frequency rhythmic emphasis. |
+| `beatsLoudness.midDominantRatio` | `float` | Fraction of beats where the mid band is loudest. | 0-1 | Elevated values suggest chord-stab or synth-driven rhythmic energy. |
+| `beatsLoudness.highDominantRatio` | `float` | Fraction of beats where the high band is loudest. | 0-1 | Elevated values suggest hi-hat or cymbal-driven groove. |
+| `beatsLoudness.accentPattern` | `float[4]` | Normalized beat accent across bar positions (4 values for 4/4). | 0-1 per position | Shows accent weight per beat within the bar; useful for groove template reconstruction. |
+| `beatsLoudness.meanBeatLoudness` | `float` | Mean loudness across all detected beats. | linear loudness | Overall rhythmic energy level baseline. |
+| `beatsLoudness.beatLoudnessVariation` | `float` | Coefficient of variation of beat loudness. | unitless ratio | Higher values indicate more dynamic variation across beats (less compressed). |
+| `beatsLoudness.beatCount` | `int` | Number of beats analysed. | count | Context for statistical reliability of the beat loudness summary. |
+
 ### `sidechainDetail`
 
 Type: `object \| null`
@@ -256,6 +285,7 @@ Type: `object \| null`
 | `sidechainDetail.pumpingRegularity` | `float` | Period consistency of detected pumping intervals. | 0.0-1.0 | High values indicate clock-like pumping, useful for genre-consistent groove reconstruction. |
 | `sidechainDetail.pumpingRate` | `"quarter" \| "eighth" \| "sixteenth" \| null` | Best-matching pumping grid rate. | categorical | Suggests compressor trigger rhythm for Ableton sidechain setup. |
 | `sidechainDetail.pumpingConfidence` | `float` | Reliability score (kick clarity + dip correlation + timing stability penalties). | 0.0-1.0 | Low confidence means avoid overcommitting to sidechain recreation without ear-checking. |
+| `sidechainDetail.envelopeShape` | `float[16] \| null` | Normalized median RMS envelope across bars at 16th-note resolution. | 0-1 per step | Rhythmic amplitude shape useful for sidechain curve recreation; peak at step 0 typically indicates kick position. |
 
 ### `effectsDetail`
 
@@ -358,7 +388,7 @@ Type: `array<object> \| null`
 | Field | Type | Description | Units / Scale | LLM interpretation note |
 |---|---|---|---|---|
 | `segmentKey[].segmentIndex` | `int` | Segment index aligned with `structure.segments`. | integer index | Use for joining harmonic data to arrangement segments. |
-| `segmentKey[].key` | `string \| null` | Per-segment key label (`Temperley`). | categorical | Detects section-level key drift or modal pivots. |
+| `segmentKey[].key` | `string \| null` | Per-segment key label (`edma` profile). | categorical | Detects section-level key drift or modal pivots. |
 | `segmentKey[].keyConfidence` | `float \| null` | Per-segment key confidence. | 0-1 (approx) | Low confidence means treat segment key as tentative. |
 
 ---
@@ -492,103 +522,3 @@ Type: `object \| null`
 - global key (`key`) with manual confirmation
 - arrangement locators (`structure.segments`)
 - low-end/stereo safety (`stereoDetail`, especially sub-bass fields)
-
----
-
-## `acidDetail`
-
-Acid synthesis detection via spectral centroid oscillation, resonance measurement, and bass rhythm density.
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `isAcid` | boolean | True when composite score ≥ 0.45 |
-| `confidence` | number | Composite score 0–1 (40% resonance + 35% centroid oscillation + 25% bass rhythm) |
-| `resonanceLevel` | number | Peak energy in 800–5000 Hz resonance band relative to total |
-| `centroidOscillationHz` | number | Standard deviation of per-frame spectral centroid |
-| `bassRhythmDensity` | number | Onset rate in sub-200 Hz band (onsets per second) |
-
-Returns `null` on failure.
-
-## `reverbDetail`
-
-Reverb tail estimation via energy decay analysis.
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `rt60` | number | Estimated RT60 decay time in seconds |
-| `isWet` | boolean | True when RT60 > 1.0s and tail energy ratio > 0.3 |
-| `tailEnergyRatio` | number | Energy in decay tail relative to total energy |
-
-Returns `null` on failure.
-
-## `vocalDetail`
-
-Vocal presence detection via MFCC analysis, formant matching, and vocal-band energy ratio.
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `hasVocals` | boolean | True when composite score ≥ 0.45 |
-| `confidence` | number | Composite score 0–1 (35% energy + 35% formant + 30% MFCC) |
-| `vocalEnergyRatio` | number | Energy in 150–1500 Hz vocal band relative to total |
-| `formantStrength` | number | Formant peak match score at 500/1500/2500 Hz |
-| `mfccLikelihood` | number | MFCC distribution match to vocal pattern |
-
-Returns `null` on failure.
-
-## `supersawDetail`
-
-Supersaw/unison detection via spectral peak clustering and detune measurement.
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `isSupersaw` | boolean | True when composite score indicates unison voices |
-| `confidence` | number | Composite score 0–1 (35% voice count + 35% detune + 30% consistency) |
-| `voiceCount` | number | Estimated number of near-unison voices |
-| `avgDetuneCents` | number | Average detune spread between cluster members in cents |
-| `spectralComplexity` | number | Spectral complexity metric from peak analysis |
-
-Returns `null` on failure.
-
-## `bassDetail`
-
-Bass character analysis via lowpass-filtered onset detection, decay measurement, and groove analysis.
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `averageDecayMs` | number | Mean decay time to −6 dB per bass onset in milliseconds |
-| `type` | string | One of `"punchy"`, `"medium"`, `"rolling"`, `"sustained"` |
-| `transientRatio` | number | Ratio of transient energy to sustained energy |
-| `fundamentalHz` | number | Estimated bass fundamental frequency (30–120 Hz) |
-| `transientCount` | number | Number of detected bass onsets |
-| `swingPercent` | number | Swing amount from lag-1 autocorrelation of onset intervals |
-| `grooveType` | string | One of `"straight"`, `"slight-swing"`, `"heavy-swing"`, `"shuffle"` |
-
-Returns `null` on failure.
-
-## `kickDetail`
-
-Kick drum distortion analysis via THD measurement and harmonic ratio computation.
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `isDistorted` | boolean | True when THD > 0.15 or harmonicRatio < 0.5 |
-| `thd` | number | Total harmonic distortion (harmonic power / fundamental power) |
-| `harmonicRatio` | number | Ratio of harmonic to inharmonic content in kick band |
-| `fundamentalHz` | number | Detected kick fundamental frequency |
-| `kickCount` | number | Number of detected kick transients |
-
-Returns `null` on failure.
-
-## `genreDetail`
-
-Multi-feature genre classification scoring 35 electronic subgenres. Uses sidechain strength and bass decay as primary discriminators (weights 0.95 and 0.85). Acid and supersaw detections apply genre-specific score boosts. Runs after all other detectors in the pipeline.
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `genre` | string | Top-scoring genre ID (e.g. `"driving-techno"`, `"deep-house"`) |
-| `confidence` | number | 0.0–1.0; accounts for score gap between primary and secondary |
-| `secondaryGenre` | string \| null | Runner-up genre if its score > 0.5, else null |
-| `genreFamily` | string | Broad family: `"house"`, `"techno"`, `"dnb"`, `"ambient"`, `"trance"`, `"dubstep"`, `"breaks"`, `"other"` |
-| `topScores` | array | Top-5 scored genres as `{genre: string, score: number}` for transparency |
-
-Returns `null` on failure.
