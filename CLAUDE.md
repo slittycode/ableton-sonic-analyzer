@@ -62,7 +62,7 @@ Two-phase audio analysis system with a Python backend and React UI.
 - **`analyze.py`** (~112KB): Pure DSP pipeline. Runs as a subprocess invoked by `server.py`. Extracts BPM, key, LUFS, stereo width, spectral balance, rhythm/melody detail, transcription (Basic Pitch), stem separation (Demucs). **Writes JSON to stdout, diagnostics to stderr** — this contract is load-bearing.
 - **`server.py`** (~24KB): FastAPI HTTP wrapper. Accepts multipart uploads, invokes `analyze.py` as a subprocess, normalizes raw output into the `phase1` HTTP contract, returns structured JSON.
 
-The subprocess isolation means `analyze.py` works as a standalone CLI. The HTTP contract is a deliberate subset of the raw CLI output — these raw analyzer fields are present in CLI output but **not exposed over HTTP**: `bpmPercival`, `bpmAgreement`, `sampleRate`, `dynamicSpread`, `dynamicCharacter`, `segmentStereo`, `essentiaFeatures`. Check `apps/backend/JSON_SCHEMA.md` before expanding HTTP fields.
+The subprocess isolation means `analyze.py` works as a standalone CLI. All raw analyzer fields are now forwarded through the HTTP `phase1` contract. Check `apps/backend/JSON_SCHEMA.md` before adding new analyzer output fields.
 
 **Phase 2 (`POST /api/phase2`):** The backend uploads audio to Gemini inline if ≤20MiB, or via the Gemini Files API if larger. Phase 1 JSON is appended to the system prompt from `prompts/phase2_system.txt`.
 

@@ -16,6 +16,7 @@ import {
 import { motion } from 'motion/react';
 import { downloadFile, generateMarkdown } from '../utils/exportUtils';
 import { INTERPRETATION_LABEL } from '../services/phaseLabels';
+import { MeasurementDashboard } from './MeasurementDashboard';
 import { SessionMusicianPanel } from './SessionMusicianPanel';
 import { PhaseSourceBadge } from './PhaseSourceBadge';
 import { StickyNav, type StickyNavSection } from './StickyNav';
@@ -128,10 +129,6 @@ function withAlpha(hexColor: string, alphaHex: string): string {
   return `${hexColor}${alphaHex}`;
 }
 
-function formatMetricValue(value: number): string {
-  return value.toFixed(2);
-}
-
 const LOW_CONFIDENCE_TITLE = "Low confidence — treat this as approximate.";
 
 function lowConfidenceIndicator(show: boolean) {
@@ -226,7 +223,6 @@ export function AnalysisResults({
   const characteristicPills = Array.isArray(phase2?.detectedCharacteristics)
     ? phase2.detectedCharacteristics.slice(0, 4)
     : [];
-  const danceability = phase1.danceability;
   const keyIsApproximate = phase1.keyConfidence <= 0.6;
   const chordStrength = getChordStrength(phase1);
   const chordsAreApproximate = chordStrength !== null && chordStrength <= 0.7;
@@ -238,6 +234,14 @@ export function AnalysisResults({
     mixGroups.length > 0 ||
     patchCards.length > 0;
   const navSections: StickyNavSection[] = [
+    { id: 'section-meas-core', label: 'Core' },
+    { id: 'section-meas-loudness', label: 'Loudness' },
+    { id: 'section-meas-spectral', label: 'Spectral' },
+    { id: 'section-meas-stereo', label: 'Stereo' },
+    { id: 'section-meas-rhythm', label: 'Rhythm' },
+    { id: 'section-meas-harmony', label: 'Harmony' },
+    { id: 'section-meas-structure', label: 'Structure' },
+    { id: 'section-meas-synthesis', label: 'Synthesis' },
     arrangement ? { id: 'section-arrangement', label: 'Arrangement' } : null,
     { id: 'section-session', label: 'Session' },
     sonicCards.length > 0 ? { id: 'section-sonic-elements', label: 'Sonic' } : null,
@@ -376,34 +380,7 @@ export function AnalysisResults({
         </div>
       </div>
 
-      {danceability && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between border-b border-border pb-2">
-            <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
-              <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
-              Danceability
-            </h2>
-            <span className="text-[10px] font-mono bg-bg-panel border border-border px-2 py-1 rounded font-bold text-text-secondary">
-              PHASE 1
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-bg-card border border-border rounded-sm p-4">
-              <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">Danceability</p>
-              <p className="text-2xl font-display font-bold text-text-primary mt-2">
-                {formatMetricValue(danceability.danceability)}
-              </p>
-            </div>
-            <div className="bg-bg-card border border-border rounded-sm p-4">
-              <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">DFA</p>
-              <p className="text-2xl font-display font-bold text-text-primary mt-2">
-                {formatMetricValue(danceability.dfa)}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
+      <MeasurementDashboard phase1={phase1} />
 
       <div className="space-y-2">
         <div className="flex items-center justify-between border-b border-border pb-2">

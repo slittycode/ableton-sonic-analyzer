@@ -21,6 +21,7 @@ jobs:
           cache: "npm"
           cache-dependency-path: apps/ui/package-lock.json
       - run: npm ci
+      - run: npx playwright install --with-deps chromium
       - run: npm run verify
 
   backend:

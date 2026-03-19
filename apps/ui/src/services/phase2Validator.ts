@@ -263,9 +263,9 @@ function validateGenreDSPConsistency(phase1: Phase1Result, phase2: Phase2Result)
   const violations: ValidationViolation[] = [];
 
   // Check if we have DSP data to validate against
-  const hasRhythmData = phase1.rhythmDetail && (
-    phase1.rhythmDetail.kickSwing !== undefined ||
-    phase1.rhythmDetail.kickAccent !== undefined
+  const hasRhythmData = phase1.grooveDetail && (
+    phase1.grooveDetail.kickSwing !== undefined ||
+    phase1.grooveDetail.kickAccent !== undefined
   );
   const hasSynthesisData = phase1.synthesisCharacter && (
     phase1.synthesisCharacter.inharmonicity !== undefined ||
@@ -317,7 +317,7 @@ function validateGenreDSPConsistency(phase1: Phase1Result, phase2: Phase2Result)
 function validateNumericBounds(phase1: Phase1Result, phase2: Phase2Result): ValidationViolation[] {
   const violations: ValidationViolation[] = [];
 
-  const spectralCentroid = phase1.spectralDetail?.spectralCentroid as number | undefined;
+  const spectralCentroid = phase1.spectralDetail?.spectralCentroidMean as number | undefined;
 
   if (!spectralCentroid) {
     return violations;

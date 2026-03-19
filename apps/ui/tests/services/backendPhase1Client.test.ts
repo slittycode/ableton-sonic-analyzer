@@ -13,14 +13,30 @@ const validPayload = {
   phase1: {
     bpm: 128,
     bpmConfidence: 0.98,
+    bpmPercival: 127.5,
+    bpmAgreement: true,
     key: 'A minor',
     keyConfidence: 0.91,
+    keyProfile: 'edma',
+    tuningFrequency: 440.12,
+    tuningCents: 0.05,
     timeSignature: '4/4',
     durationSeconds: 184.2,
+    sampleRate: 44100,
     lufsIntegrated: -8.4,
     lufsRange: 3.1,
+    lufsMomentaryMax: -3.2,
+    lufsShortTermMax: -4.8,
     truePeak: -0.5,
     crestFactor: 8.6,
+    dynamicSpread: 0.42,
+    dynamicCharacter: {
+      dynamicComplexity: 0.5,
+      loudnessVariation: 0.3,
+      spectralFlatness: 0.2,
+      logAttackTime: -0.8,
+      attackTimeStdDev: 0.15,
+    },
     stereoWidth: 0.75,
     stereoCorrelation: 0.82,
     stereoDetail: {
@@ -98,8 +114,21 @@ const validPayload = {
     grooveDetail: {
       grooveAmount: 0.42,
     },
+    beatsLoudness: {
+      kickDominantRatio: 0.45,
+      midDominantRatio: 0.35,
+      highDominantRatio: 0.20,
+      accentPattern: [1.0, 0.6, 0.8, 0.5],
+      meanBeatLoudness: 0.32,
+      beatLoudnessVariation: 0.18,
+      beatCount: 256,
+    },
     sidechainDetail: {
-      confidence: 0.31,
+      pumpingStrength: 0.65,
+      pumpingConfidence: 0.31,
+      pumpingRegularity: 0.82,
+      pumpingRate: 'quarter',
+      envelopeShape: [1.0, 0.9, 0.7, 0.5, 0.3, 0.2, 0.15, 0.1, 0.08, 0.06, 0.05, 0.04, 0.03, 0.02, 0.01, 0.005],
     },
     effectsDetail: {
       reverbLikely: true,
@@ -119,7 +148,14 @@ const validPayload = {
     },
     segmentLoudness: [{ start: 0, value: -8.2 }],
     segmentSpectral: [{ start: 0, centroid: 1820.5 }],
-    segmentKey: [{ start: 0, key: 'A minor' }],
+    segmentStereo: [{ segmentIndex: 0, stereoWidth: 0.8, stereoCorrelation: 0.9 }],
+    segmentKey: [{ segmentIndex: 0, key: 'A minor', keyConfidence: 0.85 }],
+    essentiaFeatures: {
+      zeroCrossingRate: 0.12,
+      hfc: 0.45,
+      spectralComplexity: 0.33,
+      dissonance: 0.21,
+    },
     chordDetail: {
       progression: ['Am', 'G'],
     },
@@ -189,6 +225,59 @@ describe('parseBackendAnalyzeResponse', () => {
     expect(parsed.phase1.segmentLoudness).toEqual(validPayload.phase1.segmentLoudness);
     expect(parsed.phase1.perceptual).toEqual(validPayload.phase1.perceptual);
     expect(parsed.phase1.danceability).toEqual(validPayload.phase1.danceability);
+
+    // New fields
+    expect(parsed.phase1.bpmPercival).toBe(127.5);
+    expect(parsed.phase1.bpmAgreement).toBe(true);
+    expect(parsed.phase1.keyProfile).toBe('edma');
+    expect(parsed.phase1.tuningFrequency).toBe(440.12);
+    expect(parsed.phase1.tuningCents).toBe(0.05);
+    expect(parsed.phase1.sampleRate).toBe(44100);
+    expect(parsed.phase1.lufsMomentaryMax).toBe(-3.2);
+    expect(parsed.phase1.lufsShortTermMax).toBe(-4.8);
+    expect(parsed.phase1.dynamicSpread).toBe(0.42);
+    expect(parsed.phase1.dynamicCharacter).toEqual(validPayload.phase1.dynamicCharacter);
+    expect(parsed.phase1.beatsLoudness?.kickDominantRatio).toBe(0.45);
+    expect(parsed.phase1.beatsLoudness?.accentPattern).toEqual([1.0, 0.6, 0.8, 0.5]);
+    expect(parsed.phase1.beatsLoudness?.beatCount).toBe(256);
+    expect(parsed.phase1.sidechainDetail).toEqual(validPayload.phase1.sidechainDetail);
+    expect(parsed.phase1.segmentStereo).toEqual(validPayload.phase1.segmentStereo);
+    expect(parsed.phase1.segmentKey).toEqual(validPayload.phase1.segmentKey);
+    expect(parsed.phase1.essentiaFeatures).toEqual(validPayload.phase1.essentiaFeatures);
+  });
+
+  it('parses payload without new fields (backward compat)', () => {
+    const minimalPhase1 = {
+      bpm: 128,
+      bpmConfidence: 0.98,
+      key: 'A minor',
+      keyConfidence: 0.91,
+      timeSignature: '4/4',
+      durationSeconds: 184.2,
+      lufsIntegrated: -8.4,
+      truePeak: -0.5,
+      stereoWidth: 0.75,
+      stereoCorrelation: 0.82,
+      spectralBalance: validPayload.phase1.spectralBalance,
+    };
+    const parsed = parseBackendAnalyzeResponse({
+      requestId: 'req_compat',
+      phase1: minimalPhase1,
+    });
+
+    expect(parsed.phase1.bpm).toBe(128);
+    expect(parsed.phase1.bpmPercival).toBeNull();
+    expect(parsed.phase1.bpmAgreement).toBeNull();
+    expect(parsed.phase1.keyProfile).toBeNull();
+    expect(parsed.phase1.tuningFrequency).toBeNull();
+    expect(parsed.phase1.sampleRate).toBeNull();
+    expect(parsed.phase1.lufsMomentaryMax).toBeNull();
+    expect(parsed.phase1.lufsShortTermMax).toBeNull();
+    expect(parsed.phase1.dynamicSpread).toBeNull();
+    expect(parsed.phase1.dynamicCharacter).toBeNull();
+    expect(parsed.phase1.beatsLoudness).toBeNull();
+    expect(parsed.phase1.segmentStereo).toBeNull();
+    expect(parsed.phase1.essentiaFeatures).toBeNull();
   });
 
   it('throws when phase1 is missing', () => {

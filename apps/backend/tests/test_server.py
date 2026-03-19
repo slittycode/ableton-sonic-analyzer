@@ -1101,6 +1101,114 @@ class BuildPhase1CoercionTests(unittest.TestCase):
         phase1 = server._build_phase1(self._minimal_payload(crestFactor=True))
         self.assertIsNone(phase1["crestFactor"])
 
+    # ── New field pass-through tests ──────────────────────────────────────
+
+    def test_bpm_percival_passes_through(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(bpmPercival=127.5))
+        self.assertEqual(phase1["bpmPercival"], 127.5)
+
+    def test_bpm_percival_nan_coerced_to_none(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(bpmPercival=float("nan")))
+        self.assertIsNone(phase1["bpmPercival"])
+
+    def test_bpm_percival_missing_is_none(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload())
+        self.assertIsNone(phase1["bpmPercival"])
+
+    def test_bpm_agreement_passes_through(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(bpmAgreement=True))
+        self.assertTrue(phase1["bpmAgreement"])
+
+    def test_sample_rate_passes_through(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(sampleRate=44100))
+        self.assertEqual(phase1["sampleRate"], 44100)
+
+    def test_dynamic_spread_passes_through(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(dynamicSpread=0.42))
+        self.assertEqual(phase1["dynamicSpread"], 0.42)
+
+    def test_dynamic_spread_nan_coerced_to_none(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(dynamicSpread=float("nan")))
+        self.assertIsNone(phase1["dynamicSpread"])
+
+    def test_dynamic_character_passes_through(self) -> None:
+        dc = {"dynamicComplexity": 0.5, "loudnessVariation": 0.3}
+        phase1 = server._build_phase1(self._minimal_payload(dynamicCharacter=dc))
+        self.assertEqual(phase1["dynamicCharacter"], dc)
+
+    def test_segment_stereo_passes_through(self) -> None:
+        ss = [{"segmentIndex": 0, "stereoWidth": 0.8}]
+        phase1 = server._build_phase1(self._minimal_payload(segmentStereo=ss))
+        self.assertEqual(phase1["segmentStereo"], ss)
+
+    def test_essentia_features_passes_through(self) -> None:
+        ef = {"zeroCrossingRate": 0.12, "hfc": 0.45}
+        phase1 = server._build_phase1(self._minimal_payload(essentiaFeatures=ef))
+        self.assertEqual(phase1["essentiaFeatures"], ef)
+
+    def test_key_profile_passes_through(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(keyProfile="edma"))
+        self.assertEqual(phase1["keyProfile"], "edma")
+
+    def test_tuning_frequency_passes_through(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(tuningFrequency=440.12))
+        self.assertEqual(phase1["tuningFrequency"], 440.12)
+
+    def test_tuning_cents_nan_coerced_to_none(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(tuningCents=float("nan")))
+        self.assertIsNone(phase1["tuningCents"])
+
+    def test_lufs_momentary_max_passes_through(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(lufsMomentaryMax=-3.2))
+        self.assertEqual(phase1["lufsMomentaryMax"], -3.2)
+
+    def test_lufs_short_term_max_passes_through(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(lufsShortTermMax=-4.8))
+        self.assertEqual(phase1["lufsShortTermMax"], -4.8)
+
+    def test_beats_loudness_passes_through(self) -> None:
+        bl = {
+            "kickDominantRatio": 0.45,
+            "midDominantRatio": 0.35,
+            "highDominantRatio": 0.20,
+            "accentPattern": [1.0, 0.6, 0.8, 0.5],
+            "meanBeatLoudness": 0.32,
+            "beatLoudnessVariation": 0.18,
+            "beatCount": 256,
+        }
+        phase1 = server._build_phase1(self._minimal_payload(beatsLoudness=bl))
+        self.assertEqual(phase1["beatsLoudness"], bl)
+
+    def test_envelope_shape_inside_sidechain_detail(self) -> None:
+        sd = {
+            "pumpingStrength": 0.65,
+            "pumpingRegularity": 0.82,
+            "pumpingRate": "quarter",
+            "pumpingConfidence": 0.71,
+            "envelopeShape": [1.0, 0.9, 0.7, 0.5, 0.3, 0.2, 0.15, 0.1,
+                              0.08, 0.06, 0.05, 0.04, 0.03, 0.02, 0.01, 0.005],
+        }
+        phase1 = server._build_phase1(self._minimal_payload(sidechainDetail=sd))
+        self.assertEqual(phase1["sidechainDetail"]["envelopeShape"], sd["envelopeShape"])
+        self.assertEqual(len(phase1["sidechainDetail"]["envelopeShape"]), 16)
+
+    def test_backward_compat_without_new_fields(self) -> None:
+        """Payload without any new fields still builds without error."""
+        phase1 = server._build_phase1(self._minimal_payload())
+        self.assertIsNotNone(phase1["bpm"])
+        self.assertIsNone(phase1.get("bpmPercival"))
+        self.assertIsNone(phase1.get("bpmAgreement"))
+        self.assertIsNone(phase1.get("sampleRate"))
+        self.assertIsNone(phase1.get("dynamicSpread"))
+        self.assertIsNone(phase1.get("segmentStereo"))
+        self.assertIsNone(phase1.get("essentiaFeatures"))
+        self.assertIsNone(phase1.get("beatsLoudness"))
+        self.assertIsNone(phase1.get("keyProfile"))
+        self.assertIsNone(phase1.get("tuningFrequency"))
+        self.assertIsNone(phase1.get("tuningCents"))
+        self.assertIsNone(phase1.get("lufsMomentaryMax"))
+        self.assertIsNone(phase1.get("lufsShortTermMax"))
+
 
 class Phase2EndpointTests(unittest.TestCase):
     """Tests for the /api/phase2 Gemini advisory endpoint."""

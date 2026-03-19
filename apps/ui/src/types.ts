@@ -58,20 +58,175 @@ export interface DanceabilityResult {
   dfa: number;
 }
 
+export interface StereoDetail {
+  stereoWidth: number | null;
+  stereoCorrelation: number | null;
+  subBassCorrelation?: number | null;
+  subBassMono?: boolean | null;
+}
+
+export interface SpectralDetail {
+  spectralCentroidMean?: number | null;
+  spectralRolloffMean?: number | null;
+  mfcc?: number[] | null;
+  chroma?: number[] | null;
+  barkBands?: number[] | null;
+  erbBands?: number[] | null;
+  spectralContrast?: number[] | null;
+  spectralValley?: number[] | null;
+}
+
+export interface PhraseGrid {
+  phrases4Bar: number[];
+  phrases8Bar: number[];
+  phrases16Bar: number[];
+  totalBars: number;
+  totalPhrases8Bar: number;
+}
+
+export interface RhythmDetail {
+  onsetRate: number;
+  beatGrid: number[];
+  downbeats: number[];
+  beatPositions: number[];
+  grooveAmount: number;
+  tempoStability?: number | null;
+  phraseGrid?: PhraseGrid | null;
+}
+
+export interface GrooveDetail {
+  kickSwing: number;
+  hihatSwing: number;
+  kickAccent: number[];
+  hihatAccent: number[];
+}
+
+export interface SidechainDetail {
+  pumpingStrength: number;
+  pumpingRegularity: number;
+  pumpingRate: string | null;
+  pumpingConfidence: number;
+  envelopeShape?: number[] | null;
+}
+
+export interface EffectsDetail {
+  gatingDetected?: boolean | null;
+  gatingRate?: number | null;
+  gatingRegularity?: number | null;
+  gatingEventCount?: number | null;
+}
+
+export interface SynthesisCharacter {
+  inharmonicity?: number | null;
+  oddToEvenRatio?: number | null;
+  analogLike?: boolean | null;
+}
+
+export interface StructureData {
+  segments?: unknown[] | null;
+  segmentCount?: number | null;
+  sections?: number | null;
+}
+
+export interface ArrangementDetail {
+  noveltyCurve?: number[] | null;
+  noveltyPeaks?: number[] | null;
+  noveltyMean?: number | null;
+  noveltyStdDev?: number | null;
+  sectionCount?: number | null;
+}
+
+export interface SegmentLoudnessEntry {
+  segmentIndex?: number;
+  start?: number;
+  end?: number;
+  lufs?: number | null;
+  lra?: number | null;
+  value?: number | null;
+}
+
+export interface SegmentSpectralEntry {
+  segmentIndex: number;
+  barkBands?: number[] | null;
+  spectralCentroid?: number | null;
+  spectralRolloff?: number | null;
+  stereoWidth?: number | null;
+  stereoCorrelation?: number | null;
+}
+
+export interface SegmentStereoEntry {
+  segmentIndex: number;
+  stereoWidth?: number | null;
+  stereoCorrelation?: number | null;
+}
+
+export interface SegmentKeyEntry {
+  segmentIndex: number;
+  key: string | null;
+  keyConfidence?: number | null;
+}
+
+export interface ChordDetail {
+  chordSequence?: string[] | null;
+  chordStrength?: number | null;
+  progression?: string[] | null;
+  dominantChords?: string[] | null;
+}
+
+export interface PerceptualDetail {
+  sharpness: number;
+  roughness: number;
+}
+
+export interface EssentiaFeatures {
+  zeroCrossingRate?: number | null;
+  hfc?: number | null;
+  spectralComplexity?: number | null;
+  dissonance?: number | null;
+}
+
+export interface DynamicCharacter {
+  dynamicComplexity: number;
+  loudnessVariation: number;
+  spectralFlatness: number;
+  logAttackTime: number;
+  attackTimeStdDev: number;
+}
+
+export interface BeatsLoudness {
+  kickDominantRatio: number;
+  midDominantRatio: number;
+  highDominantRatio: number;
+  accentPattern: number[];
+  meanBeatLoudness: number;
+  beatLoudnessVariation: number;
+  beatCount: number;
+}
+
 export interface Phase1Result {
   bpm: number;
   bpmConfidence: number;
+  bpmPercival?: number | null;
+  bpmAgreement?: boolean | null;
   key: string | null;
   keyConfidence: number;
+  keyProfile?: string | null;
+  tuningFrequency?: number | null;
+  tuningCents?: number | null;
   timeSignature: string;
   durationSeconds: number;
+  sampleRate?: number | null;
   lufsIntegrated: number;
   lufsRange?: number | null;
+  lufsMomentaryMax?: number | null;
+  lufsShortTermMax?: number | null;
   truePeak: number;
   crestFactor?: number | null;
+  dynamicSpread?: number | null;
+  dynamicCharacter?: DynamicCharacter | null;
   stereoWidth: number;
   stereoCorrelation: number;
-  stereoDetail?: Record<string, unknown> | null;
+  stereoDetail?: StereoDetail | null;
   spectralBalance: {
     subBass: number;
     lowBass: number;
@@ -80,22 +235,25 @@ export interface Phase1Result {
     highs: number;
     brilliance: number;
   };
-  spectralDetail?: Record<string, unknown> | null;
-  rhythmDetail?: Record<string, unknown> | null;
+  spectralDetail?: SpectralDetail | null;
+  rhythmDetail?: RhythmDetail | null;
   melodyDetail?: MelodyDetail;
   transcriptionDetail?: TranscriptionDetail | null;
-  grooveDetail?: Record<string, unknown> | null;
-  sidechainDetail?: Record<string, unknown> | null;
-  effectsDetail?: Record<string, unknown> | null;
-  synthesisCharacter?: Record<string, unknown> | null;
+  grooveDetail?: GrooveDetail | null;
+  beatsLoudness?: BeatsLoudness | null;
+  sidechainDetail?: SidechainDetail | null;
+  effectsDetail?: EffectsDetail | null;
+  synthesisCharacter?: SynthesisCharacter | null;
   danceability?: DanceabilityResult | null;
-  structure?: Record<string, unknown> | null;
-  arrangementDetail?: Record<string, unknown> | null;
-  segmentLoudness?: unknown[] | null;
-  segmentSpectral?: unknown[] | null;
-  segmentKey?: unknown[] | null;
-  chordDetail?: Record<string, unknown> | null;
-  perceptual?: Record<string, unknown> | null;
+  structure?: StructureData | null;
+  arrangementDetail?: ArrangementDetail | null;
+  segmentLoudness?: SegmentLoudnessEntry[] | null;
+  segmentSpectral?: SegmentSpectralEntry[] | null;
+  segmentStereo?: SegmentStereoEntry[] | null;
+  segmentKey?: SegmentKeyEntry[] | null;
+  chordDetail?: ChordDetail | null;
+  perceptual?: PerceptualDetail | null;
+  essentiaFeatures?: EssentiaFeatures | null;
 }
 
 export type MeasurementResult = Omit<Phase1Result, 'transcriptionDetail'>;

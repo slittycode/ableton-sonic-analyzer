@@ -4,7 +4,9 @@ import {
   BackendTimingDiagnostics,
   BackendErrorResponse,
   BackendEstimateResponse,
+  BeatsLoudness,
   DanceabilityResult,
+  DynamicCharacter,
   Phase1Result,
 } from "../types";
 
@@ -486,17 +488,27 @@ export function parsePhase1Result(value: unknown): Phase1Result {
   return {
     bpm: expectNumber(phase1, "bpm"),
     bpmConfidence: expectNumber(phase1, "bpmConfidence"),
+    bpmPercival: toNumber(phase1.bpmPercival),
+    bpmAgreement: phase1.bpmAgreement === true ? true : phase1.bpmAgreement === false ? false : null,
     key: expectNullableString(phase1, "key"),
     keyConfidence: expectNumber(phase1, "keyConfidence"),
+    keyProfile: toOptionalStringOrNull(phase1.keyProfile),
+    tuningFrequency: toNumber(phase1.tuningFrequency),
+    tuningCents: toNumber(phase1.tuningCents),
     timeSignature: expectString(phase1, "timeSignature"),
     durationSeconds: expectNumber(phase1, "durationSeconds"),
+    sampleRate: toNumber(phase1.sampleRate),
     lufsIntegrated: expectNumber(phase1, "lufsIntegrated"),
     lufsRange: toNumber(phase1.lufsRange),
+    lufsMomentaryMax: toNumber(phase1.lufsMomentaryMax),
+    lufsShortTermMax: toNumber(phase1.lufsShortTermMax),
     truePeak: expectNumber(phase1, "truePeak"),
     crestFactor: toNumber(phase1.crestFactor),
+    dynamicSpread: toNumber(phase1.dynamicSpread),
+    dynamicCharacter: parseOptionalDynamicCharacter(phase1.dynamicCharacter),
     stereoWidth: expectNumber(phase1, "stereoWidth"),
     stereoCorrelation: expectNumber(phase1, "stereoCorrelation"),
-    stereoDetail: isRecord(phase1.stereoDetail) ? phase1.stereoDetail : null,
+    stereoDetail: isRecord(phase1.stereoDetail) ? phase1.stereoDetail as unknown as Phase1Result["stereoDetail"] : null,
     spectralBalance: {
       subBass: expectNumber(spectralBalance, "subBass", "spectralBalance.subBass"),
       lowBass: expectNumber(spectralBalance, "lowBass", "spectralBalance.lowBass"),
@@ -505,22 +517,25 @@ export function parsePhase1Result(value: unknown): Phase1Result {
       highs: expectNumber(spectralBalance, "highs", "spectralBalance.highs"),
       brilliance: expectNumber(spectralBalance, "brilliance", "spectralBalance.brilliance"),
     },
-    spectralDetail: isRecord(phase1.spectralDetail) ? phase1.spectralDetail : null,
-    rhythmDetail: isRecord(phase1.rhythmDetail) ? phase1.rhythmDetail : null,
+    spectralDetail: isRecord(phase1.spectralDetail) ? phase1.spectralDetail as Phase1Result["spectralDetail"] : null,
+    rhythmDetail: isRecord(phase1.rhythmDetail) ? phase1.rhythmDetail as unknown as Phase1Result["rhythmDetail"] : null,
     melodyDetail,
     transcriptionDetail,
-    grooveDetail: isRecord(phase1.grooveDetail) ? phase1.grooveDetail : null,
-    sidechainDetail: isRecord(phase1.sidechainDetail) ? phase1.sidechainDetail : null,
-    effectsDetail: isRecord(phase1.effectsDetail) ? phase1.effectsDetail : null,
-    synthesisCharacter: isRecord(phase1.synthesisCharacter) ? phase1.synthesisCharacter : null,
+    grooveDetail: isRecord(phase1.grooveDetail) ? phase1.grooveDetail as unknown as Phase1Result["grooveDetail"] : null,
+    beatsLoudness: parseOptionalBeatsLoudness(phase1.beatsLoudness),
+    sidechainDetail: isRecord(phase1.sidechainDetail) ? phase1.sidechainDetail as unknown as Phase1Result["sidechainDetail"] : null,
+    effectsDetail: isRecord(phase1.effectsDetail) ? phase1.effectsDetail as Phase1Result["effectsDetail"] : null,
+    synthesisCharacter: isRecord(phase1.synthesisCharacter) ? phase1.synthesisCharacter as Phase1Result["synthesisCharacter"] : null,
     danceability: parseOptionalDanceability(phase1.danceability),
-    structure: isRecord(phase1.structure) ? phase1.structure : null,
-    arrangementDetail: isRecord(phase1.arrangementDetail) ? phase1.arrangementDetail : null,
-    segmentLoudness: Array.isArray(phase1.segmentLoudness) ? phase1.segmentLoudness : null,
-    segmentSpectral: Array.isArray(phase1.segmentSpectral) ? phase1.segmentSpectral : null,
-    segmentKey: Array.isArray(phase1.segmentKey) ? phase1.segmentKey : null,
-    chordDetail: isRecord(phase1.chordDetail) ? phase1.chordDetail : null,
-    perceptual: isRecord(phase1.perceptual) ? phase1.perceptual : null,
+    structure: isRecord(phase1.structure) ? phase1.structure as Phase1Result["structure"] : null,
+    arrangementDetail: isRecord(phase1.arrangementDetail) ? phase1.arrangementDetail as Phase1Result["arrangementDetail"] : null,
+    segmentLoudness: Array.isArray(phase1.segmentLoudness) ? phase1.segmentLoudness as Phase1Result["segmentLoudness"] : null,
+    segmentSpectral: Array.isArray(phase1.segmentSpectral) ? phase1.segmentSpectral as Phase1Result["segmentSpectral"] : null,
+    segmentStereo: Array.isArray(phase1.segmentStereo) ? phase1.segmentStereo as Phase1Result["segmentStereo"] : null,
+    segmentKey: Array.isArray(phase1.segmentKey) ? phase1.segmentKey as Phase1Result["segmentKey"] : null,
+    chordDetail: isRecord(phase1.chordDetail) ? phase1.chordDetail as Phase1Result["chordDetail"] : null,
+    perceptual: isRecord(phase1.perceptual) ? phase1.perceptual as unknown as Phase1Result["perceptual"] : null,
+    essentiaFeatures: isRecord(phase1.essentiaFeatures) ? phase1.essentiaFeatures as Phase1Result["essentiaFeatures"] : null,
   };
 }
 
@@ -533,6 +548,46 @@ function parseOptionalDanceability(value: unknown): DanceabilityResult | null {
   if (danceability === null || dfa === null) return null;
 
   return { danceability, dfa };
+}
+
+function parseOptionalDynamicCharacter(value: unknown): DynamicCharacter | null {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value)) return null;
+
+  const dynamicComplexity = toNumber(value.dynamicComplexity);
+  const loudnessVariation = toNumber(value.loudnessVariation);
+  const spectralFlatness = toNumber(value.spectralFlatness);
+  const logAttackTime = toNumber(value.logAttackTime);
+  const attackTimeStdDev = toNumber(value.attackTimeStdDev);
+  if (dynamicComplexity === null || loudnessVariation === null ||
+      spectralFlatness === null || logAttackTime === null || attackTimeStdDev === null) return null;
+
+  return { dynamicComplexity, loudnessVariation, spectralFlatness, logAttackTime, attackTimeStdDev };
+}
+
+function parseOptionalBeatsLoudness(value: unknown): BeatsLoudness | null {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value)) return null;
+
+  const kickDominantRatio = toNumber(value.kickDominantRatio);
+  const midDominantRatio = toNumber(value.midDominantRatio);
+  const highDominantRatio = toNumber(value.highDominantRatio);
+  const meanBeatLoudness = toNumber(value.meanBeatLoudness);
+  const beatLoudnessVariation = toNumber(value.beatLoudnessVariation);
+  const beatCount = toNumber(value.beatCount);
+
+  if (kickDominantRatio === null || midDominantRatio === null || highDominantRatio === null ||
+      meanBeatLoudness === null || beatLoudnessVariation === null || beatCount === null) return null;
+
+  const accentPattern = Array.isArray(value.accentPattern)
+    ? value.accentPattern.map((v: unknown) => toNumber(v) ?? 0).slice(0, 4) as number[]
+    : [0, 0, 0, 0];
+
+  return {
+    kickDominantRatio, midDominantRatio, highDominantRatio,
+    accentPattern, meanBeatLoudness, beatLoudnessVariation,
+    beatCount: Math.round(beatCount),
+  };
 }
 
 function parseOptionalMelodyDetail(phase1: UnknownRecord): Phase1Result["melodyDetail"] | undefined {
