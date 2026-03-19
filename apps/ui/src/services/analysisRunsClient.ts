@@ -1,5 +1,6 @@
 import {
   AnalysisRunArtifact,
+  AnalysisPipelineProgressStatus,
   AnalysisRunRequestedStages,
   AnalysisRunSnapshot,
   AnalysisStageDiagnostics,
@@ -49,6 +50,12 @@ const ANALYSIS_RUN_STATUSES = new Set<AnalysisStageStatus>([
   'failed',
   'interrupted',
   'not_requested',
+]);
+
+const PIPELINE_PROGRESS_STATUSES = new Set<AnalysisPipelineProgressStatus>([
+  'pending',
+  'running',
+  'completed',
 ]);
 
 export async function createAnalysisRun(
@@ -405,32 +412,72 @@ function parseStageDiagnostics(value: unknown): AnalysisStageDiagnostics | null 
     return null;
   }
 
+  const normalized: AnalysisStageDiagnostics = {
+    ...diagnostics,
+  };
+
   const progressRecord = parseNullableRecord(diagnostics.progress);
-  if (!progressRecord) {
-    return diagnostics as AnalysisStageDiagnostics;
-  }
+  if (progressRecord) {
+    const stepKey = asString(progressRecord.stepKey);
+    const message = asString(progressRecord.message);
+    const updatedAt = asString(progressRecord.updatedAt);
+    const seq = typeof progressRecord.seq === 'number' && Number.isFinite(progressRecord.seq)
+      ? progressRecord.seq
+      : null;
 
-  const stepKey = asString(progressRecord.stepKey);
-  const message = asString(progressRecord.message);
-  const updatedAt = asString(progressRecord.updatedAt);
-  const seq = typeof progressRecord.seq === 'number' && Number.isFinite(progressRecord.seq)
-    ? progressRecord.seq
-    : null;
-
-  if (stepKey && message && updatedAt && typeof seq === 'number') {
-    return {
-      ...diagnostics,
-      progress: {
+    if (stepKey && message && updatedAt && typeof seq === 'number') {
+      normalized.progress = {
         stepKey,
         message,
         updatedAt,
         seq,
-      },
-    };
+      };
+    } else {
+      delete normalized.progress;
+    }
+  } else {
+    delete normalized.progress;
   }
 
-  const { progress: _ignoredProgress, ...rest } = diagnostics;
-  return rest as AnalysisStageDiagnostics;
+  const pipelineProgressRecord = parseNullableRecord(diagnostics.pipelineProgress);
+  if (pipelineProgressRecord) {
+    const parsedPipelineProgress: NonNullable<AnalysisStageDiagnostics['pipelineProgress']> = {};
+    for (const [pipelineKey, pipelineProgressValue] of Object.entries(pipelineProgressRecord)) {
+      const pipelineProgress = parseNullableRecord(pipelineProgressValue);
+      if (!pipelineProgress) {
+        continue;
+      }
+      const status = asString(pipelineProgress.status);
+      const stepKey = asString(pipelineProgress.stepKey);
+      const message = asString(pipelineProgress.message);
+      const updatedAt = asString(pipelineProgress.updatedAt);
+      const seq = typeof pipelineProgress.seq === 'number' && Number.isFinite(pipelineProgress.seq)
+        ? pipelineProgress.seq
+        : null;
+      if (!status || !PIPELINE_PROGRESS_STATUSES.has(status as AnalysisPipelineProgressStatus)) {
+        continue;
+      }
+      if (!stepKey || !message || !updatedAt || typeof seq !== 'number') {
+        continue;
+      }
+      parsedPipelineProgress[pipelineKey] = {
+        status: status as AnalysisPipelineProgressStatus,
+        stepKey,
+        message,
+        updatedAt,
+        seq,
+      };
+    }
+    if (Object.keys(parsedPipelineProgress).length > 0) {
+      normalized.pipelineProgress = parsedPipelineProgress;
+    } else {
+      delete normalized.pipelineProgress;
+    }
+  } else {
+    delete normalized.pipelineProgress;
+  }
+
+  return normalized;
 }
 
 function parseNullableError(value: unknown): AnalysisStageError | null {

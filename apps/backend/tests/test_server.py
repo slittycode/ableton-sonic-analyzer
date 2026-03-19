@@ -248,6 +248,81 @@ class ServerContractTests(unittest.TestCase):
         )
         self.assertIsNone(server._measurement_progress_from_stderr_line("[warn] ignored"))
 
+    def test_measurement_pipeline_progress_parser_maps_known_stderr_markers(
+        self,
+    ) -> None:
+        self.assertEqual(
+            server._measurement_pipeline_progress_from_stderr_line(
+                "Running source separation (this may take 30-60 seconds)..."
+            ),
+            (
+                "separation",
+                "running",
+                "separation_running",
+                "Demucs is separating stems from the source audio.",
+            ),
+        )
+        self.assertEqual(
+            server._measurement_pipeline_progress_from_stderr_line(
+                "@@SEPARATION_COMPLETE"
+            ),
+            (
+                "separation",
+                "completed",
+                "separation_complete",
+                "Demucs stem separation complete.",
+            ),
+        )
+        self.assertEqual(
+            server._measurement_pipeline_progress_from_stderr_line(
+                "@@TRANSCRIPTION_START mode=stems"
+            ),
+            (
+                "transcription_stems",
+                "running",
+                "transcription_running",
+                "Legacy Basic Pitch transcription started on bass and other stems.",
+            ),
+        )
+        self.assertEqual(
+            server._measurement_pipeline_progress_from_stderr_line(
+                "@@TRANSCRIPTION_SOURCE mode=stems source=bass"
+            ),
+            (
+                "transcription_stems",
+                "running",
+                "transcription_source_bass",
+                "Legacy Basic Pitch is transcribing the bass stem.",
+            ),
+        )
+        self.assertEqual(
+            server._measurement_pipeline_progress_from_stderr_line(
+                "@@TRANSCRIPTION_COMPLETE mode=stems"
+            ),
+            (
+                "transcription_stems",
+                "completed",
+                "transcription_complete",
+                "Legacy Basic Pitch transcription complete.",
+            ),
+        )
+        self.assertEqual(
+            server._measurement_pipeline_progress_from_stderr_line(
+                "@@TRANSCRIPTION_START mode=full_mix"
+            ),
+            (
+                "transcription_full_mix",
+                "running",
+                "transcription_running",
+                "Legacy Basic Pitch transcription started on the full mix.",
+            ),
+        )
+        self.assertIsNone(
+            server._measurement_pipeline_progress_from_stderr_line(
+                "@@TRANSCRIPTION_START mode=unknown"
+            )
+        )
+
     def test_measurement_subprocess_stream_maps_stderr_to_progress_events(self) -> None:
         events: list[tuple[str, str]] = []
         with (
@@ -304,6 +379,184 @@ class ServerContractTests(unittest.TestCase):
                 ),
             ],
         )
+
+    def test_measurement_subprocess_stream_maps_pipeline_progress_events(self) -> None:
+        stage_events: list[tuple[str, str]] = []
+        pipeline_events: list[tuple[str, str, str, str]] = []
+        with (
+            patch.object(
+                server,
+                "_build_backend_estimate",
+                return_value={
+                    "durationSeconds": 60.0,
+                    "totalLowMs": 10000,
+                    "totalHighMs": 20000,
+                },
+            ),
+            patch.object(
+                server.subprocess,
+                "Popen",
+                side_effect=_fake_popen_factory(
+                    returncode=0,
+                    stdout=json.dumps({"bpm": 128, "durationSeconds": 60.0}),
+                    stderr=(
+                        "Loading: /tmp/track.wav\n"
+                        "Running source separation (this may take 30-60 seconds)...\n"
+                        "@@SEPARATION_COMPLETE\n"
+                        "Analyzing...\n"
+                        "@@TRANSCRIPTION_START mode=stems\n"
+                        "@@TRANSCRIPTION_SOURCE mode=stems source=bass\n"
+                        "@@TRANSCRIPTION_SOURCE mode=stems source=other\n"
+                        "@@TRANSCRIPTION_COMPLETE mode=stems\n"
+                        "Done.\n"
+                    ),
+                ),
+            ),
+            patch("builtins.print"),
+        ):
+            execution = server._run_measurement_subprocess(
+                audio_path="/tmp/track.wav",
+                file_size_bytes=10,
+                request_id="req_1",
+                request_started_at=datetime(2026, 3, 8, 12, 0, 0),
+                run_separation=True,
+                run_transcribe=True,
+                run_fast=False,
+                on_progress=lambda step_key, message: stage_events.append(
+                    (step_key, message)
+                ),
+                on_pipeline_progress=lambda pipeline_key, status, step_key, message: pipeline_events.append(
+                    (pipeline_key, status, step_key, message)
+                ),
+            )
+
+        self.assertTrue(execution["ok"])
+        self.assertEqual(
+            stage_events,
+            [
+                (
+                    "loading_audio",
+                    "Loading and validating uploaded audio for local analysis.",
+                ),
+                (
+                    "separating_stems",
+                    "Separating stems with Demucs for downstream symbolic extraction.",
+                ),
+                (
+                    "computing_measurements",
+                    "Computing authoritative local DSP measurements.",
+                ),
+                (
+                    "finalizing_output",
+                    "Finalizing authoritative measurement output.",
+                ),
+            ],
+        )
+        self.assertEqual(
+            pipeline_events,
+            [
+                (
+                    "separation",
+                    "running",
+                    "separation_running",
+                    "Demucs is separating stems from the source audio.",
+                ),
+                (
+                    "separation",
+                    "completed",
+                    "separation_complete",
+                    "Demucs stem separation complete.",
+                ),
+                (
+                    "transcription_stems",
+                    "running",
+                    "transcription_running",
+                    "Legacy Basic Pitch transcription started on bass and other stems.",
+                ),
+                (
+                    "transcription_stems",
+                    "running",
+                    "transcription_source_bass",
+                    "Legacy Basic Pitch is transcribing the bass stem.",
+                ),
+                (
+                    "transcription_stems",
+                    "running",
+                    "transcription_source_other",
+                    "Legacy Basic Pitch is transcribing the other stem.",
+                ),
+                (
+                    "transcription_stems",
+                    "completed",
+                    "transcription_complete",
+                    "Legacy Basic Pitch transcription complete.",
+                ),
+            ],
+        )
+
+    def test_execute_measurement_run_emits_pipeline_pending_updates_before_subprocess(
+        self,
+    ) -> None:
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_server_runtime_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            created = runtime.create_run(
+                filename="track.mp3",
+                content=b"fake-audio",
+                mime_type="audio/mpeg",
+                symbolic_mode="stem_notes",
+                symbolic_backend="auto",
+                interpretation_mode="off",
+                interpretation_profile="producer_summary",
+                interpretation_model=None,
+            )
+            job = runtime.reserve_next_measurement_run()
+            self.assertIsNotNone(job)
+
+            def _fake_run_measurement_subprocess(*_args, **_kwargs):
+                snapshot = runtime.get_run(created["runId"])
+                pipeline_progress = snapshot["stages"]["measurement"]["diagnostics"][
+                    "pipelineProgress"
+                ]
+                self.assertEqual(
+                    pipeline_progress["separation"]["status"],
+                    "pending",
+                )
+                self.assertEqual(
+                    pipeline_progress["separation"]["stepKey"],
+                    "separation_pending",
+                )
+                self.assertEqual(
+                    pipeline_progress["transcription_stems"]["status"],
+                    "pending",
+                )
+                self.assertEqual(
+                    pipeline_progress["transcription_stems"]["stepKey"],
+                    "transcription_pending",
+                )
+                return {
+                    "ok": False,
+                    "statusCode": 500,
+                    "errorCode": "BACKEND_INTERNAL_ERROR",
+                    "message": "failed",
+                    "retryable": False,
+                    "diagnostics": {"backendDurationMs": 10.0},
+                }
+
+            with patch.object(
+                server,
+                "_run_measurement_subprocess",
+                side_effect=_fake_run_measurement_subprocess,
+            ):
+                server._execute_measurement_run(
+                    runtime,
+                    created["runId"],
+                    request_id=created["runId"],
+                    run_separation=True,
+                    run_transcribe=True,
+                    run_fast=False,
+                )
 
     def test_analyze_endpoint_openapi_contract_exposes_separate_form_field(
         self,

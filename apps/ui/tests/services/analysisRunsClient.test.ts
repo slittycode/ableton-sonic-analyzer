@@ -186,6 +186,51 @@ describe('analysisRunsClient', () => {
     expect(snapshot.stages.symbolicExtraction.preferredAttemptId).toBe('sym_123');
   });
 
+  it('parses measurement pipeline progress diagnostics when present', async () => {
+    const payloadWithPipelineProgress = {
+      ...baseRunSnapshot,
+      stages: {
+        ...baseRunSnapshot.stages,
+        measurement: {
+          ...baseRunSnapshot.stages.measurement,
+          status: 'running',
+          diagnostics: {
+            pipelineProgress: {
+              separation: {
+                status: 'running',
+                stepKey: 'separation_running',
+                message: 'Demucs is separating stems from the source audio.',
+                updatedAt: '2026-03-19T00:00:00Z',
+                seq: 2,
+              },
+              invalidRow: {
+                status: 'unknown',
+                stepKey: 'bad',
+                message: 'ignored',
+                updatedAt: '2026-03-19T00:00:00Z',
+                seq: 1,
+              },
+            },
+          },
+        },
+      },
+    };
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: () => Promise.resolve(payloadWithPipelineProgress),
+    } as Response));
+
+    const snapshot = await getAnalysisRun('run_123', {
+      apiBaseUrl: 'http://127.0.0.1:8100',
+    });
+
+    expect(snapshot.stages.measurement.diagnostics?.pipelineProgress?.separation?.status).toBe('running');
+    expect(snapshot.stages.measurement.diagnostics?.pipelineProgress?.invalidRow).toBeUndefined();
+  });
+
   it('projects phase 1 from the canonical run and injects symbolic transcription detail', () => {
     const phase1 = projectPhase1FromRun(baseRunSnapshot);
 

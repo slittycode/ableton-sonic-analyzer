@@ -610,6 +610,125 @@ def _measurement_progress_from_stderr_line(line: str) -> tuple[str, str] | None:
     return None
 
 
+def _parse_measurement_progress_fields(
+    line: str,
+    *,
+    marker: str,
+) -> dict[str, str] | None:
+    if not line.startswith(marker):
+        return None
+    suffix = line[len(marker):].strip()
+    if not suffix:
+        return {}
+    fields: dict[str, str] = {}
+    for token in suffix.split():
+        if "=" not in token:
+            continue
+        key, value = token.split("=", 1)
+        if key and value:
+            fields[key] = value
+    return fields
+
+
+def _transcription_pipeline_key_for_mode(mode: str) -> str | None:
+    if mode == "stems":
+        return "transcription_stems"
+    if mode == "full_mix":
+        return "transcription_full_mix"
+    return None
+
+
+def _measurement_pipeline_progress_from_stderr_line(
+    line: str,
+) -> tuple[str, str, str, str] | None:
+    stripped = line.strip()
+    if not stripped:
+        return None
+    if stripped.startswith("Running source separation"):
+        return (
+            "separation",
+            "running",
+            "separation_running",
+            "Demucs is separating stems from the source audio.",
+        )
+    if stripped == "@@SEPARATION_COMPLETE":
+        return (
+            "separation",
+            "completed",
+            "separation_complete",
+            "Demucs stem separation complete.",
+        )
+
+    start_fields = _parse_measurement_progress_fields(
+        stripped,
+        marker="@@TRANSCRIPTION_START",
+    )
+    if start_fields is not None:
+        mode = _coerce_string(start_fields.get("mode"), "")
+        pipeline_key = _transcription_pipeline_key_for_mode(mode)
+        if pipeline_key is None:
+            return None
+        if mode == "stems":
+            message = (
+                "Legacy Basic Pitch transcription started on bass and other stems."
+            )
+        else:
+            message = "Legacy Basic Pitch transcription started on the full mix."
+        return (
+            pipeline_key,
+            "running",
+            "transcription_running",
+            message,
+        )
+
+    source_fields = _parse_measurement_progress_fields(
+        stripped,
+        marker="@@TRANSCRIPTION_SOURCE",
+    )
+    if source_fields is not None:
+        mode = _coerce_string(source_fields.get("mode"), "")
+        source = _coerce_string(source_fields.get("source"), "")
+        pipeline_key = _transcription_pipeline_key_for_mode(mode)
+        if pipeline_key is None or not source:
+            return None
+        source_label = {
+            "bass": "bass stem",
+            "other": "other stem",
+            "full_mix": "full mix",
+        }.get(source, source.replace("_", " "))
+        return (
+            pipeline_key,
+            "running",
+            f"transcription_source_{source}",
+            f"Legacy Basic Pitch is transcribing the {source_label}.",
+        )
+
+    complete_fields = _parse_measurement_progress_fields(
+        stripped,
+        marker="@@TRANSCRIPTION_COMPLETE",
+    )
+    if complete_fields is not None:
+        mode = _coerce_string(complete_fields.get("mode"), "")
+        pipeline_key = _transcription_pipeline_key_for_mode(mode)
+        if pipeline_key is None:
+            return None
+        return (
+            pipeline_key,
+            "completed",
+            "transcription_complete",
+            "Legacy Basic Pitch transcription complete.",
+        )
+
+    return None
+
+
+def _transcription_pipeline_key_for_measurement(
+    *,
+    run_separation: bool,
+) -> str:
+    return "transcription_stems" if run_separation else "transcription_full_mix"
+
+
 def _run_measurement_subprocess(
     *,
     audio_path: str,
@@ -620,6 +739,7 @@ def _run_measurement_subprocess(
     run_transcribe: bool,
     run_fast: bool,
     on_progress: Callable[[str, str], None] | None = None,
+    on_pipeline_progress: Callable[[str, str, str, str], None] | None = None,
 ) -> dict[str, Any]:
     estimate = _build_backend_estimate(audio_path, run_separation, run_transcribe)
     command = ["./venv/bin/python", "analyze.py", audio_path, "--yes"]
@@ -706,8 +826,41 @@ def _run_measurement_subprocess(
         }
 
     stderr_progress = {"stepKey": None, "message": None}
+    stderr_pipeline_progress: dict[str, dict[str, str]] = {}
+
+    def _emit_pipeline_progress(
+        pipeline_key: str,
+        status: str,
+        step_key: str,
+        message: str,
+    ) -> None:
+        if on_pipeline_progress is None:
+            return
+        existing = stderr_pipeline_progress.get(pipeline_key)
+        if (
+            isinstance(existing, dict)
+            and existing.get("status") == status
+            and existing.get("stepKey") == step_key
+            and existing.get("message") == message
+        ):
+            return
+        try:
+            on_pipeline_progress(pipeline_key, status, step_key, message)
+        except Exception as exc:  # pragma: no cover - defensive log path
+            logger.warning("Measurement pipeline progress callback failed: %s", exc)
+            return
+        stderr_pipeline_progress[pipeline_key] = {
+            "status": status,
+            "stepKey": step_key,
+            "message": message,
+        }
 
     def _handle_stderr_line(line: str) -> None:
+        pipeline_mapped = _measurement_pipeline_progress_from_stderr_line(line)
+        if pipeline_mapped is not None:
+            pipeline_key, status, step_key, message = pipeline_mapped
+            _emit_pipeline_progress(pipeline_key, status, step_key, message)
+
         mapped = _measurement_progress_from_stderr_line(line)
         if mapped is None or on_progress is None:
             return
@@ -951,6 +1104,30 @@ def _execute_measurement_run(
     run_fast: bool,
 ) -> dict[str, Any]:
     source_artifact = runtime.get_source_artifact(run_id)
+    if run_separation:
+        runtime.update_measurement_pipeline_progress(
+            run_id,
+            pipeline_key="separation",
+            status="pending",
+            step_key="separation_pending",
+            message="Demucs separation is queued and waiting to start.",
+        )
+    if run_transcribe:
+        transcription_pipeline_key = _transcription_pipeline_key_for_measurement(
+            run_separation=run_separation,
+        )
+        pending_message = (
+            "Legacy Basic Pitch transcription is queued for bass and other stems."
+            if transcription_pipeline_key == "transcription_stems"
+            else "Legacy Basic Pitch transcription is queued for full mix fallback."
+        )
+        runtime.update_measurement_pipeline_progress(
+            run_id,
+            pipeline_key=transcription_pipeline_key,
+            status="pending",
+            step_key="transcription_pending",
+            message=pending_message,
+        )
     execution = _run_measurement_subprocess(
         audio_path=source_artifact["path"],
         file_size_bytes=source_artifact["sizeBytes"],
@@ -963,6 +1140,15 @@ def _execute_measurement_run(
             run_id,
             step_key=step_key,
             message=message,
+        ),
+        on_pipeline_progress=(
+            lambda pipeline_key, status, step_key, message: runtime.update_measurement_pipeline_progress(
+                run_id,
+                pipeline_key=pipeline_key,
+                status=status,
+                step_key=step_key,
+                message=message,
+            )
         ),
     )
     provenance = _build_measurement_provenance(

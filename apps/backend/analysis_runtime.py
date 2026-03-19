@@ -9,6 +9,7 @@ from typing import Any
 from uuid import uuid4
 
 SQLITE_BUSY_TIMEOUT_MS = 5_000
+MEASUREMENT_PIPELINE_PROGRESS_STATUSES = {"pending", "running", "completed"}
 
 
 def _utc_now_iso() -> str:
@@ -992,6 +993,69 @@ class AnalysisRuntime:
             step_key=step_key,
             message=message,
         )
+
+    def update_measurement_pipeline_progress(
+        self,
+        run_id: str,
+        *,
+        pipeline_key: str,
+        status: str,
+        step_key: str,
+        message: str,
+    ) -> dict[str, Any] | None:
+        if status not in MEASUREMENT_PIPELINE_PROGRESS_STATUSES:
+            raise ValueError(f"Unsupported measurement pipeline status '{status}'.")
+
+        now = _utc_now_iso()
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT status, diagnostics_json FROM measurement_outputs WHERE run_id = ?",
+                (run_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"Unknown measurement run '{run_id}'")
+            if str(row["status"]) != "running":
+                return None
+
+            diagnostics = _json_loads(row["diagnostics_json"])
+            if not isinstance(diagnostics, dict):
+                diagnostics = {}
+
+            pipeline_progress_raw = diagnostics.get("pipelineProgress")
+            pipeline_progress = (
+                dict(pipeline_progress_raw)
+                if isinstance(pipeline_progress_raw, dict)
+                else {}
+            )
+            existing_progress = pipeline_progress.get(pipeline_key)
+            if isinstance(existing_progress, dict):
+                seq_raw = existing_progress.get("seq")
+                seq = int(seq_raw) + 1 if isinstance(seq_raw, int) else 1
+            else:
+                seq = 1
+
+            progress_payload = {
+                "status": status,
+                "stepKey": step_key,
+                "message": message,
+                "updatedAt": now,
+                "seq": seq,
+            }
+            pipeline_progress[pipeline_key] = progress_payload
+            diagnostics["pipelineProgress"] = pipeline_progress
+            conn.execute(
+                """
+                UPDATE measurement_outputs
+                SET diagnostics_json = ?, updated_at = ?
+                WHERE run_id = ?
+                """,
+                (
+                    _json_dumps(diagnostics),
+                    now,
+                    run_id,
+                ),
+            )
+        return progress_payload
 
     def update_symbolic_attempt_progress(
         self,

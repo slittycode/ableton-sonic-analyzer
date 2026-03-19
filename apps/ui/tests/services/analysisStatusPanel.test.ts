@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { resolveStageSummary } from '../../src/components/AnalysisStatusPanel';
+import { resolveEstimateStageSummary, resolveStageSummary } from '../../src/components/AnalysisStatusPanel';
 import { AnalysisRunSnapshot } from '../../src/types';
 
 function createRunSnapshot(overrides?: Partial<AnalysisRunSnapshot>): AnalysisRunSnapshot {
@@ -164,5 +164,91 @@ describe('resolveStageSummary', () => {
 
     expect(firstSeed).toBe(secondSeed);
     expect(thirdSeed).not.toBe(firstSeed);
+  });
+});
+
+describe('resolveEstimateStageSummary', () => {
+  it('uses backend pipeline progress message for running demucs row with typewriter seed', () => {
+    const run = createRunSnapshot({
+      stages: {
+        ...createRunSnapshot().stages,
+        measurement: {
+          ...createRunSnapshot().stages.measurement,
+          diagnostics: {
+            pipelineProgress: {
+              separation: {
+                status: 'running',
+                stepKey: 'separation_running',
+                message: 'Demucs is separating stems from the source audio.',
+                updatedAt: '2026-03-19T00:00:00Z',
+                seq: 2,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const summary = resolveEstimateStageSummary(run, 'demucs_separation');
+    expect(summary).not.toBeNull();
+    expect(summary?.message).toBe('Demucs is separating stems from the source audio.');
+    expect(summary?.typewriterSeed).toBe('Demucs is separating stems from the source audio.');
+  });
+
+  it('renders pending/completed pipeline row text without typewriter seed', () => {
+    const run = createRunSnapshot({
+      stages: {
+        ...createRunSnapshot().stages,
+        measurement: {
+          ...createRunSnapshot().stages.measurement,
+          diagnostics: {
+            pipelineProgress: {
+              transcription_stems: {
+                status: 'pending',
+                stepKey: 'transcription_pending',
+                message: 'Legacy Basic Pitch transcription is queued for bass and other stems.',
+                updatedAt: '2026-03-19T00:00:00Z',
+                seq: 1,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const summary = resolveEstimateStageSummary(run, 'transcription_stems');
+    expect(summary).not.toBeNull();
+    expect(summary?.message).toBe('Legacy Basic Pitch transcription is queued for bass and other stems.');
+    expect(summary?.typewriterSeed).toBeNull();
+  });
+
+  it('returns null when no backend pipeline progress is present', () => {
+    const run = createRunSnapshot();
+    const summary = resolveEstimateStageSummary(run, 'demucs_separation');
+    expect(summary).toBeNull();
+  });
+
+  it('returns null for estimate rows outside demucs/transcription scope', () => {
+    const run = createRunSnapshot({
+      stages: {
+        ...createRunSnapshot().stages,
+        measurement: {
+          ...createRunSnapshot().stages.measurement,
+          diagnostics: {
+            pipelineProgress: {
+              separation: {
+                status: 'running',
+                stepKey: 'separation_running',
+                message: 'Demucs is separating stems from the source audio.',
+                updatedAt: '2026-03-19T00:00:00Z',
+                seq: 2,
+              },
+            },
+          },
+        },
+      },
+    });
+    const summary = resolveEstimateStageSummary(run, 'local_dsp');
+    expect(summary).toBeNull();
   });
 });

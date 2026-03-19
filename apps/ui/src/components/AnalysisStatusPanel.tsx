@@ -83,6 +83,12 @@ interface StageSummaryDescriptor {
   typewriterSeed: string | null;
 }
 
+const ESTIMATE_STAGE_PIPELINE_PROGRESS_KEYS: Record<string, string> = {
+  demucs_separation: 'separation',
+  transcription_stems: 'transcription_stems',
+  transcription_full_mix: 'transcription_full_mix',
+};
+
 function getStageSnapshot(
   run: AnalysisRunSnapshot,
   stageKey: StageKey,
@@ -152,6 +158,31 @@ export function resolveStageSummary(
     default:
       return { message: 'Awaiting stage state.', typewriterSeed: null };
   }
+}
+
+export function resolveEstimateStageSummary(
+  run: AnalysisRunSnapshot | null,
+  estimateStageKey: string,
+): StageSummaryDescriptor | null {
+  if (!run) {
+    return null;
+  }
+  const pipelineKey = ESTIMATE_STAGE_PIPELINE_PROGRESS_KEYS[estimateStageKey];
+  if (!pipelineKey) {
+    return null;
+  }
+  const pipelineProgress = run.stages.measurement.diagnostics?.pipelineProgress?.[pipelineKey];
+  if (!pipelineProgress || typeof pipelineProgress.message !== 'string') {
+    return null;
+  }
+  const message = pipelineProgress.message.trim();
+  if (message.length === 0) {
+    return null;
+  }
+  return {
+    message,
+    typewriterSeed: pipelineProgress.status === 'running' ? message : null,
+  };
 }
 
 function TypewriterLine({ text }: { text: string }) {
@@ -337,6 +368,20 @@ export function AnalysisStatusPanel({
                   {formatSecondsLabel(stage.lowMs / 1000)}-{formatSecondsLabel(stage.highMs / 1000)}
                 </span>
               </div>
+              {(() => {
+                const summary = resolveEstimateStageSummary(run, stage.key);
+                if (!summary) {
+                  return null;
+                }
+                if (summary.typewriterSeed) {
+                  return (
+                    <p className="mt-2 text-xs text-text-primary/90">
+                      <TypewriterLine text={summary.message} />
+                    </p>
+                  );
+                }
+                return <p className="mt-2 text-xs text-text-primary/90">{summary.message}</p>;
+              })()}
             </div>
           ))
         ) : (

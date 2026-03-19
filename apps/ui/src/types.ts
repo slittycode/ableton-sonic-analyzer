@@ -409,8 +409,19 @@ export interface AnalysisStageProgress {
   seq: number;
 }
 
+export type AnalysisPipelineProgressStatus = 'pending' | 'running' | 'completed';
+
+export interface AnalysisPipelineProgressEntry {
+  status: AnalysisPipelineProgressStatus;
+  stepKey: string;
+  message: string;
+  updatedAt: string;
+  seq: number;
+}
+
 export interface AnalysisStageDiagnostics {
   progress?: AnalysisStageProgress;
+  pipelineProgress?: Record<string, AnalysisPipelineProgressEntry>;
   [key: string]: unknown;
 }
 
