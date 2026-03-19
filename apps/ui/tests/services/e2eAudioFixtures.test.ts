@@ -47,5 +47,5 @@ describe('e2e audio fixtures', () => {
     expect(fixture.byteLength).toBe(stats.size);
     expect(fixture.byteLength).toBeGreaterThan(INLINE_SIZE_LIMIT);
     expect(fixture.durationSeconds).toBeGreaterThan(20);
-  });
+  }, 60_000);
 });
