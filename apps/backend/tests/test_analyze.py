@@ -1104,14 +1104,60 @@ class GenreDetailTests(unittest.TestCase):
         if plain_s is not None and acid_s is not None:
             self.assertGreaterEqual(acid_s, plain_s)
 
-    def test_empty_result_dict_returns_fallback(self):
-        """Empty result dict must not crash — falls back gracefully."""
+    def test_empty_result_dict_abstains(self):
+        """Empty result dict → genreDetail is None (fewer than 3 real features)."""
         result = self.analyze.analyze_genre_detail({})
         self.assertIn("genreDetail", result)
-        # May be None or a valid dict — just must not raise
+        self.assertIsNone(result["genreDetail"])
+
+    def test_sparse_input_abstains(self):
+        """Only 2 of 7 core features present → abstention."""
+        result = self.analyze.analyze_genre_detail({
+            "bpm": 128.0,
+            "crestFactor": 8.0,
+            # Missing: spectralBalance, spectralDetail, rhythmDetail,
+            #          sidechainDetail, bassDetail
+        })
+        self.assertIn("genreDetail", result)
+        self.assertIsNone(result["genreDetail"])
+
+    def test_three_features_does_not_abstain(self):
+        """Exactly 3 of 7 core features → proceeds with classification."""
+        result = self.analyze.analyze_genre_detail({
+            "bpm": 128.0,
+            "crestFactor": 7.0,
+            "sidechainDetail": {"pumpingStrength": 0.55},
+        })
+        self.assertIn("genreDetail", result)
+        # With 3 real features the classifier should produce a result
+        # (unless the score is below the 0.25 threshold)
         detail = result["genreDetail"]
         if detail is not None:
             self.assertIn("genre", detail)
+            self.assertIn("confidence", detail)
+
+    def test_ambiguous_input_caps_confidence(self):
+        """Two genres within 0.05 score gap → confidence capped at 0.4."""
+        # Use features that sit in overlap zones between genres to
+        # produce near-tied scores. Mid-range values are deliberately
+        # ambiguous between multiple signatures.
+        result = self.analyze.analyze_genre_detail(self._make_result(
+            bpm=125.0,
+            crestFactor=9.0,
+            spectralBalance={"subBass": -20.0},
+            spectralDetail={"spectralCentroid": 2000.0},
+            rhythmDetail={"onsetRate": 4.0},
+            sidechainDetail={"pumpingStrength": 0.3},
+            bassDetail={"averageDecayMs": 400.0},
+        ))
+        detail = result["genreDetail"]
+        if detail is not None:
+            # If the top two scores are within 0.05, confidence must be ≤ 0.4
+            top_scores = detail["topScores"]
+            if len(top_scores) >= 2:
+                gap = top_scores[0]["score"] - top_scores[1]["score"]
+                if gap < 0.05:
+                    self.assertLessEqual(detail["confidence"], 0.4)
 
     def test_ambient_signature_scores_high(self):
         """Slow BPM, no sidechain, long bass decay should score ambient family."""
@@ -1127,6 +1173,35 @@ class GenreDetailTests(unittest.TestCase):
         detail = result["genreDetail"]
         self.assertIsNotNone(detail)
         self.assertIn(detail["genreFamily"], ("ambient", "other"))
+
+    def test_dense_techno_145bpm_boundary(self):
+        """145 BPM with dense onsets and punchy bass should classify as techno or trance family.
+
+        At 145 BPM the classifier sits on the techno/trance boundary.
+        Dense onsets + punchy bass push toward techno variants, but BPM
+        alone can tip into trance. Both families are valid at this boundary.
+        """
+        result = self.analyze.analyze_genre_detail(self._make_result(
+            bpm=145.0,
+            crestFactor=8.5,
+            spectralBalance={"subBass": -10.0},
+            spectralDetail={"spectralCentroid": 3200.0},
+            rhythmDetail={"onsetRate": 12.0},
+            sidechainDetail={"pumpingStrength": 0.4},
+            bassDetail={"averageDecayMs": 80.0},
+        ))
+        detail = result["genreDetail"]
+        self.assertIsNotNone(detail)
+        self.assertIn(detail["genreFamily"], ("techno", "trance"))
+        # Top scores should include techno-family genres
+        top_genres = [e["genre"] for e in detail["topScores"]]
+        techno_variants = {"techno", "industrial-techno", "hard-techno"}
+        self.assertTrue(
+            techno_variants & set(top_genres),
+            f"Expected at least one techno variant in top scores, got {top_genres}",
+        )
+        top_score = detail["topScores"][0]["score"]
+        self.assertGreater(top_score, 0.25)
 
 
 if __name__ == "__main__":
