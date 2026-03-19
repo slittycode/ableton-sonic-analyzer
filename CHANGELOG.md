@@ -2,6 +2,30 @@
 
 All notable changes to `asa` are documented here.
 
+## Unreleased
+
+### Added
+- **Genre classification** card in Phase 1 detector grid (genreDetail with family, confidence, topScores)
+- **Sidechain detection** card showing pump depth and timing
+- **Synthesis character** card with three-tier inharmonicity + harmonic shape labels
+- **Spectral balance** six-band visualization in Phase 1
+- **MixDoctor** scoring engine: spectral balance, dynamics (crest factor), PLR, loudness, and stereo field vs genre-specific targets
+- **MixDoctor panel** with profile selector, delta chart, diagnostic cards, and band-issue details
+- **Genre profiles** data (35 genres) with spectral, dynamics, PLR, and loudness targets
+- **MixDoctor** in both markdown and JSON exports
+- `dynamicCharacter` in markdown export
+- `genreDetail` strong parsing and typing in frontend client
+- Dense techno boundary regression test (145 BPM)
+
+### Changed
+- Synthesis character labels aligned to phase2 prompt thresholds (three-tier: clean subtractive / FM-acid / wavetable-noise)
+- Removed citation instructions from Phase 2 system prompt (citations added noise, not value)
+- `dynamicCharacter` forwarded through `_build_phase1()` to Gemini Phase 2
+
+### Fixed
+- MixDoctor null-genre fallback: prompts for manual selection instead of silently using first profile
+- Genre abstention logic with tests for empty, sparse, ambiguous, and fast-mode inputs
+
 ## v2.1.0
 
 - Hardened `transcriptionDetail` in `apps/backend/analyze.py` for bass + hook extraction:

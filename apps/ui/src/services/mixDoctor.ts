@@ -1,40 +1,22 @@
-import type { Phase1Result, GenreProfile, SpectralTarget } from '../types';
+import type { Phase1Result, GenreProfile, SpectralTarget, PlrAdvice, MixAdvice, DynamicsAdvice, LoudnessAdvice, StereoAdvice, MixDoctorReport } from '../types';
+export type { MixAdvice, MixDoctorReport } from '../types';
 
-export interface MixAdvice {
-  band: string;
-  issue: 'optimal' | 'too-loud' | 'too-quiet';
-  message: string;
-  diffDb: number;
-}
-
-export interface DynamicsAdvice {
-  issue: 'too-compressed' | 'too-dynamic' | 'optimal';
-  message: string;
-  actualCrest: number;
-}
-
-export interface LoudnessAdvice {
-  issue: 'too-loud' | 'too-quiet' | 'optimal';
-  message: string;
-  actualLufs: number;
-  truePeak: number;
-}
-
-export interface StereoAdvice {
-  correlation: number;
-  width: number;
-  monoCompatible: boolean;
-  message: string;
-}
-
-export interface MixDoctorReport {
-  genreName: string;
-  profileId: string;
-  advice: MixAdvice[];
-  dynamicsAdvice: DynamicsAdvice;
-  loudnessAdvice: LoudnessAdvice | undefined;
-  stereoAdvice: StereoAdvice | undefined;
-  overallScore: number;
+export function findProfileByIdOrFamily(
+  profiles: GenreProfile[],
+  genreId: string | null,
+  genreFamily: string | null,
+): string | null {
+  if (genreId) {
+    const exact = profiles.find(p => p.id === genreId);
+    if (exact) return exact.id;
+  }
+  if (genreFamily) {
+    const familyMatch = profiles.find(p =>
+      p.id === genreFamily || p.name.toLowerCase().includes(genreFamily),
+    );
+    if (familyMatch) return familyMatch.id;
+  }
+  return null;
 }
 
 function median(values: number[]): number {
@@ -157,7 +139,7 @@ export function generateMixReport(
     advice.push({ band: label, issue, message, diffDb: Math.round(diffToOptimal * 10) / 10 });
   }
 
-  // Evaluate dynamics (crest factor — ASA doesn't expose PLR)
+  // Evaluate dynamics (crest factor)
   let dynamicsIssue: DynamicsAdvice['issue'] = 'optimal';
   let dynamicsMsg = 'Solid dynamic range. Fits the genre well.';
   let dynamicsPenalty = 0;
@@ -172,6 +154,34 @@ export function generateMixReport(
     dynamicsIssue = 'too-dynamic';
     dynamicsMsg = `Crest factor ${crest.toFixed(1)} dB exceeds the ${minCrest}–${maxCrest} dB target for ${profile.name}. Wide dynamic range — add bus compression or saturation to glue the mix.`;
     dynamicsPenalty = Math.min(15, (crest - maxCrest) * 2.5);
+  }
+
+  // Evaluate PLR (Peak-to-Loudness Ratio)
+  let plrAdvice: PlrAdvice | undefined;
+  let plrPenalty = 0;
+  const plr = phase1.truePeak - phase1.lufsIntegrated;
+  const [minPlr, maxPlr] = profile.targetPlrRange;
+
+  if (plr < minPlr) {
+    plrAdvice = {
+      issue: 'too-crushed',
+      message: `PLR ${plr.toFixed(1)} dB is below ${minPlr}–${maxPlr} dB target for ${profile.name}. Peak headroom is too tight — reduce limiting to restore transient definition.`,
+      actualPlr: Math.round(plr * 10) / 10,
+    };
+    plrPenalty = Math.min(10, (minPlr - plr) * 2);
+  } else if (plr > maxPlr) {
+    plrAdvice = {
+      issue: 'too-open',
+      message: `PLR ${plr.toFixed(1)} dB exceeds ${minPlr}–${maxPlr} dB target for ${profile.name}. Plenty of headroom — you could push the limiter harder if needed.`,
+      actualPlr: Math.round(plr * 10) / 10,
+    };
+    plrPenalty = Math.min(10, (plr - maxPlr) * 2);
+  } else {
+    plrAdvice = {
+      issue: 'optimal',
+      message: `PLR ${plr.toFixed(1)} dB is within the ${minPlr}–${maxPlr} dB target. Good transient-to-loudness balance.`,
+      actualPlr: Math.round(plr * 10) / 10,
+    };
   }
 
   // Evaluate LUFS loudness
@@ -236,6 +246,7 @@ export function generateMixReport(
   // Final score
   let overallScore = bandsEvaluated > 0 ? scoreAccumulator / bandsEvaluated : 0;
   overallScore -= dynamicsPenalty;
+  overallScore -= plrPenalty;
   overallScore -= loudnessPenalty;
   overallScore -= stereoPenalty;
   overallScore = Math.round(Math.max(0, Math.min(100, overallScore)));
@@ -249,6 +260,7 @@ export function generateMixReport(
       message: dynamicsMsg,
       actualCrest: Math.round(crest * 10) / 10,
     },
+    plrAdvice,
     loudnessAdvice,
     stereoAdvice,
     overallScore,

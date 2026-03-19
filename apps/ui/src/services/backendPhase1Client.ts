@@ -480,8 +480,27 @@ function parseOptionalBackendTimings(value: unknown): BackendTimingDiagnostics |
 export function parsePhase1Result(value: unknown): Phase1Result {
   const phase1 = expectRecord(value, "phase1");
   const spectralBalance = expectRecord(phase1.spectralBalance, "phase1.spectralBalance");
+  const stereoDetail = isRecord(phase1.stereoDetail) ? phase1.stereoDetail : null;
   const melodyDetail = parseOptionalMelodyDetail(phase1);
   const transcriptionDetail = parseOptionalTranscriptionDetail(phase1);
+
+  // Compatibility: canonical analysis-run snapshots may only expose stereo
+  // metrics under stereoDetail, while legacy envelopes also include top-level
+  // stereoWidth/stereoCorrelation fields.
+  const stereoWidth = expectNumberWithFallback(
+    phase1,
+    "stereoWidth",
+    "stereoWidth",
+    stereoDetail,
+    "stereoWidth",
+  );
+  const stereoCorrelation = expectNumberWithFallback(
+    phase1,
+    "stereoCorrelation",
+    "stereoCorrelation",
+    stereoDetail,
+    "stereoCorrelation",
+  );
 
   return {
     bpm: expectNumber(phase1, "bpm"),
@@ -494,9 +513,9 @@ export function parsePhase1Result(value: unknown): Phase1Result {
     lufsRange: toNumber(phase1.lufsRange),
     truePeak: expectNumber(phase1, "truePeak"),
     crestFactor: toNumber(phase1.crestFactor),
-    stereoWidth: expectNumber(phase1, "stereoWidth"),
-    stereoCorrelation: expectNumber(phase1, "stereoCorrelation"),
-    stereoDetail: isRecord(phase1.stereoDetail) ? phase1.stereoDetail : null,
+    stereoWidth,
+    stereoCorrelation,
+    stereoDetail,
     spectralBalance: {
       subBass: expectNumber(spectralBalance, "subBass", "spectralBalance.subBass"),
       lowBass: expectNumber(spectralBalance, "lowBass", "spectralBalance.lowBass"),
@@ -968,6 +987,26 @@ function expectNumber(record: UnknownRecord, key: string, label = key): number {
     throw new Error(`Expected ${label} to be a number.`);
   }
   return value;
+}
+
+function expectNumberWithFallback(
+  primary: UnknownRecord,
+  primaryKey: string,
+  label: string,
+  fallback: UnknownRecord | null,
+  fallbackKey: string,
+): number {
+  const primaryValue = primary[primaryKey];
+  if (typeof primaryValue === "number" && !Number.isNaN(primaryValue)) {
+    return primaryValue;
+  }
+  if (fallback) {
+    const fallbackValue = fallback[fallbackKey];
+    if (typeof fallbackValue === "number" && !Number.isNaN(fallbackValue)) {
+      return fallbackValue;
+    }
+  }
+  throw new Error(`Expected ${label} to be a number.`);
 }
 
 function expectOptionalNumber(record: UnknownRecord, key: string): number | null {

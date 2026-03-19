@@ -180,6 +180,50 @@ export interface GenreProfile {
   };
 }
 
+export interface MixAdvice {
+  band: string;
+  issue: 'optimal' | 'too-loud' | 'too-quiet';
+  message: string;
+  diffDb: number;
+}
+
+export interface DynamicsAdvice {
+  issue: 'too-compressed' | 'too-dynamic' | 'optimal';
+  message: string;
+  actualCrest: number;
+}
+
+export interface PlrAdvice {
+  issue: 'too-crushed' | 'too-open' | 'optimal';
+  message: string;
+  actualPlr: number;
+}
+
+export interface LoudnessAdvice {
+  issue: 'too-loud' | 'too-quiet' | 'optimal';
+  message: string;
+  actualLufs: number;
+  truePeak: number;
+}
+
+export interface StereoAdvice {
+  correlation: number;
+  width: number;
+  monoCompatible: boolean;
+  message: string;
+}
+
+export interface MixDoctorReport {
+  genreName: string;
+  profileId: string;
+  advice: MixAdvice[];
+  dynamicsAdvice: DynamicsAdvice;
+  plrAdvice?: PlrAdvice;
+  loudnessAdvice: LoudnessAdvice | undefined;
+  stereoAdvice: StereoAdvice | undefined;
+  overallScore: number;
+}
+
 export type RecommendationCategory =
   | "SYNTHESIS"
   | "DYNAMICS"

@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { MeasurementResult, Phase1Result, Phase2Result, TranscriptionDetail, type GenreProfile } from '../types';
+import { MeasurementResult, Phase1Result, Phase2Result, TranscriptionDetail, type GenreProfile, type MixDoctorReport } from '../types';
 import { MixDoctorPanel } from './MixDoctorPanel';
+import { generateMixReport, findProfileByIdOrFamily } from '../services/mixDoctor';
 import genreProfilesData from '../data/genreProfiles.json';
 import {
   Activity,
@@ -180,8 +181,24 @@ export function AnalysisResults({
   const [openMix, setOpenMix] = useState<Record<string, boolean>>({});
   const [openPatch, setOpenPatch] = useState<Record<string, boolean>>({});
   const [showSources, setShowSources] = useState<Record<string, boolean>>({});
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
 
   const sessionId = useMemo(() => new Date().getTime().toString(36).toUpperCase(), []);
+
+  const profiles = genreProfilesData as GenreProfile[];
+  const gd = measurement?.genreDetail;
+  const autoGenreId = gd && gd.confidence >= 0.6 ? gd.genre : null;
+  const autoGenreFamily = gd ? gd.genreFamily : null;
+  const autoProfileId = useMemo(
+    () => findProfileByIdOrFamily(profiles, autoGenreId, autoGenreFamily),
+    [profiles, autoGenreId, autoGenreFamily],
+  );
+  const activeProfileId = selectedProfileId ?? autoProfileId ?? null;
+  const activeProfile = profiles.find(p => p.id === activeProfileId) ?? null;
+  const mixDoctorReport: MixDoctorReport | null = useMemo(
+    () => (activeProfile && measurement) ? generateMixReport(measurement, activeProfile) : null,
+    [measurement, activeProfile],
+  );
 
   if (!measurement) return null;
 
@@ -189,11 +206,14 @@ export function AnalysisResults({
     const phase1ForExport: Phase1Result = symbolic
       ? { ...measurement, transcriptionDetail: symbolic }
       : measurement;
-    const data = {
+    const data: Record<string, unknown> = {
       phase1: phase1ForExport,
       phase2,
       exportedAt: new Date().toISOString(),
     };
+    if (mixDoctorReport) {
+      data.mixDoctorReport = mixDoctorReport;
+    }
     downloadFile(JSON.stringify(data, null, 2), 'track-analysis.json', 'application/json');
   };
 
@@ -201,7 +221,7 @@ export function AnalysisResults({
     const phase1ForExport: Phase1Result = symbolic
       ? { ...measurement, transcriptionDetail: symbolic }
       : measurement;
-    const markdown = generateMarkdown(phase1ForExport, phase2, phase2StatusMessage);
+    const markdown = generateMarkdown(phase1ForExport, phase2, phase2StatusMessage, mixDoctorReport);
     downloadFile(markdown, 'track-analysis.md', 'text/markdown');
   };
 
@@ -534,10 +554,14 @@ export function AnalysisResults({
                 const oddToEven = typeof sc.oddToEvenRatio === 'number' ? sc.oddToEvenRatio : null;
                 if (inharmonicity === null && oddToEven === null) return null;
                 const synthLabel = inharmonicity !== null
-                  ? inharmonicity > 0.2 ? 'FM / NOISE' : 'CLEAN HARMONIC'
+                  ? inharmonicity > 0.25 ? 'WAVETABLE / NOISE'
+                    : inharmonicity >= 0.10 ? 'FM / ACID'
+                    : 'CLEAN SUBTRACTIVE'
                   : null;
                 const waveLabel = oddToEven !== null
-                  ? oddToEven < 1.0 ? 'Sine / Triangle' : 'Square / Saw'
+                  ? oddToEven > 1.5 ? 'Saw / Square'
+                    : oddToEven < 0.8 ? 'Sine / Triangle'
+                    : 'Mixed Harmonics'
                   : null;
                 return (
                   <div className="bg-bg-card border border-border rounded-sm p-4">
@@ -612,21 +636,16 @@ export function AnalysisResults({
         );
       })()}
 
-      {(() => {
-        const profiles = genreProfilesData as GenreProfile[];
-        if (profiles.length === 0) return null;
-        const gd = measurement.genreDetail;
-        const autoGenreId = gd && gd.confidence >= 0.6 ? gd.genre : null;
-        const autoGenreFamily = gd ? gd.genreFamily : null;
-        return (
-          <MixDoctorPanel
-            measurement={measurement}
-            profiles={profiles}
-            autoGenreId={autoGenreId}
-            autoGenreFamily={autoGenreFamily}
-          />
-        );
-      })()}
+      {profiles.length > 0 && (
+        <MixDoctorPanel
+          report={mixDoctorReport}
+          profiles={profiles}
+          activeProfileId={activeProfileId}
+          autoProfileId={autoProfileId}
+          autoGenreId={autoGenreId}
+          onProfileChange={setSelectedProfileId}
+        />
+      )}
 
       <div className="space-y-2">
         <div className="flex items-center justify-between border-b border-border pb-2">

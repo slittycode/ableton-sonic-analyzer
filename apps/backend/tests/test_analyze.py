@@ -1174,6 +1174,35 @@ class GenreDetailTests(unittest.TestCase):
         self.assertIsNotNone(detail)
         self.assertIn(detail["genreFamily"], ("ambient", "other"))
 
+    def test_dense_techno_145bpm_boundary(self):
+        """145 BPM with dense onsets and punchy bass should classify as techno or trance family.
+
+        At 145 BPM the classifier sits on the techno/trance boundary.
+        Dense onsets + punchy bass push toward techno variants, but BPM
+        alone can tip into trance. Both families are valid at this boundary.
+        """
+        result = self.analyze.analyze_genre_detail(self._make_result(
+            bpm=145.0,
+            crestFactor=8.5,
+            spectralBalance={"subBass": -10.0},
+            spectralDetail={"spectralCentroid": 3200.0},
+            rhythmDetail={"onsetRate": 12.0},
+            sidechainDetail={"pumpingStrength": 0.4},
+            bassDetail={"averageDecayMs": 80.0},
+        ))
+        detail = result["genreDetail"]
+        self.assertIsNotNone(detail)
+        self.assertIn(detail["genreFamily"], ("techno", "trance"))
+        # Top scores should include techno-family genres
+        top_genres = [e["genre"] for e in detail["topScores"]]
+        techno_variants = {"techno", "industrial-techno", "hard-techno"}
+        self.assertTrue(
+            techno_variants & set(top_genres),
+            f"Expected at least one techno variant in top scores, got {top_genres}",
+        )
+        top_score = detail["topScores"][0]["score"]
+        self.assertGreater(top_score, 0.25)
+
 
 if __name__ == "__main__":
     unittest.main()

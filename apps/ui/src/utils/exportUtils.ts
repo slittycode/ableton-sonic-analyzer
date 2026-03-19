@@ -1,6 +1,4 @@
-import { Phase1Result, Phase2Result, type GenreProfile } from '../types';
-import { generateMixReport, type MixDoctorReport } from '../services/mixDoctor';
-import genreProfilesData from '../data/genreProfiles.json';
+import { Phase1Result, Phase2Result, type MixDoctorReport } from '../types';
 
 export function downloadFile(content: string, fileName: string, contentType: string) {
   const a = document.createElement('a');
@@ -56,6 +54,11 @@ function formatMixDoctorMarkdown(report: MixDoctorReport): string {
   md += `### Dynamics\n- ${report.dynamicsAdvice.message}\n`;
   md += `- Crest Factor: ${report.dynamicsAdvice.actualCrest} dB\n\n`;
 
+  if (report.plrAdvice) {
+    md += `### PLR (Peak-to-Loudness)\n- ${report.plrAdvice.message}\n`;
+    md += `- PLR: ${report.plrAdvice.actualPlr} dB\n\n`;
+  }
+
   if (report.loudnessAdvice) {
     md += `### Loudness\n- ${report.loudnessAdvice.message}\n`;
     md += `- LUFS: ${report.loudnessAdvice.actualLufs} / True Peak: ${report.loudnessAdvice.truePeak} dBTP\n\n`;
@@ -73,6 +76,7 @@ export function generateMarkdown(
   phase1: Phase1Result,
   phase2: Phase2Result | null,
   phase2StatusMessage: string | null = null,
+  mixDoctorReport: MixDoctorReport | null = null,
 ): string {
   let md = '# Track Analysis Report\n\n';
 
@@ -96,16 +100,17 @@ export function generateMarkdown(
   md += `- **Highs**: ${phase1.spectralBalance.highs}\n`;
   md += `- **Brilliance**: ${phase1.spectralBalance.brilliance}\n\n`;
 
-  // Mix Doctor section (derived analysis, not measurement)
-  const profiles = genreProfilesData as GenreProfile[];
-  const gd = phase1.genreDetail;
-  const autoId = gd && gd.confidence >= 0.6 ? gd.genre : null;
-  const familyId = gd ? gd.genreFamily : null;
-  const profileId = autoId ?? familyId ?? profiles[0]?.id;
-  const profile = profiles.find(p => p.id === profileId);
-  if (profile) {
-    const report = generateMixReport(phase1, profile);
-    md += formatMixDoctorMarkdown(report);
+  if (phase1.dynamicCharacter) {
+    md += '### Dynamic Character\n';
+    md += `- **Dynamic Complexity**: ${phase1.dynamicCharacter.dynamicComplexity}\n`;
+    md += `- **Loudness Variation**: ${phase1.dynamicCharacter.loudnessVariation}\n`;
+    md += `- **Spectral Flatness**: ${phase1.dynamicCharacter.spectralFlatness}\n`;
+    md += `- **Log Attack Time**: ${phase1.dynamicCharacter.logAttackTime}\n`;
+    md += `- **Attack Time Std Dev**: ${phase1.dynamicCharacter.attackTimeStdDev}\n\n`;
+  }
+
+  if (mixDoctorReport) {
+    md += formatMixDoctorMarkdown(mixDoctorReport);
   }
 
   if (!phase2) {

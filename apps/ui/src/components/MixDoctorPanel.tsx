@@ -1,30 +1,12 @@
-import { useState, useMemo } from 'react';
-import type { Phase1Result, GenreProfile } from '../types';
-import { generateMixReport, type MixDoctorReport } from '../services/mixDoctor';
+import type { GenreProfile, MixDoctorReport } from '../types';
 
 interface MixDoctorPanelProps {
-  measurement: Phase1Result;
+  report: MixDoctorReport | null;
   profiles: GenreProfile[];
+  activeProfileId: string | null;
+  autoProfileId: string | null;
   autoGenreId: string | null;
-  autoGenreFamily: string | null;
-}
-
-function findProfileByIdOrFamily(
-  profiles: GenreProfile[],
-  genreId: string | null,
-  genreFamily: string | null,
-): string | null {
-  if (genreId) {
-    const exact = profiles.find(p => p.id === genreId);
-    if (exact) return exact.id;
-  }
-  if (genreFamily) {
-    const familyMatch = profiles.find(p =>
-      p.id === genreFamily || p.name.toLowerCase().includes(genreFamily),
-    );
-    if (familyMatch) return familyMatch.id;
-  }
-  return null;
+  onProfileChange: (id: string | null) => void;
 }
 
 function scoreColor(score: number): string {
@@ -51,32 +33,14 @@ function issueBarColor(issue: string): string {
   return 'bg-amber-400/40';
 }
 
-export function MixDoctorPanel({ measurement, profiles, autoGenreId, autoGenreFamily }: MixDoctorPanelProps) {
-  const autoProfileId = useMemo(
-    () => findProfileByIdOrFamily(profiles, autoGenreId, autoGenreFamily),
-    [profiles, autoGenreId, autoGenreFamily],
-  );
-
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const activeId = selectedId ?? autoProfileId ?? profiles[0]?.id ?? null;
-  const profile = profiles.find(p => p.id === activeId);
-
-  const report: MixDoctorReport | null = useMemo(() => {
-    if (!profile) return null;
-    return generateMixReport(measurement, profile);
-  }, [measurement, profile]);
-
-  if (!report || !profile) return null;
-
-  const maxAbsDiff = Math.max(...report.advice.map(a => Math.abs(a.diffDb)), 1);
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between border-b border-border pb-2">
-        <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
-          <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
-          Mix Doctor
-        </h2>
+export function MixDoctorPanel({ report, profiles, activeProfileId, autoProfileId, autoGenreId, onProfileChange }: MixDoctorPanelProps) {
+  const header = (
+    <div className="flex items-center justify-between border-b border-border pb-2">
+      <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
+        <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
+        Mix Doctor
+      </h2>
+      {report && (
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-mono bg-bg-panel border border-border px-2 py-1 rounded font-bold text-text-secondary">
             PHASE 1
@@ -86,32 +50,57 @@ export function MixDoctorPanel({ measurement, profiles, autoGenreId, autoGenreFa
             <span className="text-text-secondary text-[10px] ml-1">/100</span>
           </div>
         </div>
-      </div>
+      )}
+    </div>
+  );
 
-      {/* Profile selector */}
-      <div className="flex items-center gap-3">
-        <label className="text-xs font-mono text-text-secondary shrink-0">Profile:</label>
-        <select
-          value={activeId ?? ''}
-          onChange={e => setSelectedId(e.target.value || null)}
-          className="flex-1 text-xs font-mono bg-bg-panel border border-border rounded px-2 py-1.5 text-text-primary"
-        >
-          {profiles.map(p => (
-            <option key={p.id} value={p.id}>
-              {p.name}{p.id === autoProfileId ? ' (auto-detected)' : ''}
-            </option>
-          ))}
-        </select>
-        {autoProfileId && (
-          <span className="text-[10px] font-mono text-text-secondary">
-            {autoGenreId ? 'Genre-matched' : 'Family fallback'}
-          </span>
+  const selector = (
+    <div className="flex items-center gap-3">
+      <label className="text-xs font-mono text-text-secondary shrink-0">Profile:</label>
+      <select
+        value={activeProfileId ?? ''}
+        onChange={e => onProfileChange(e.target.value || null)}
+        className="flex-1 text-xs font-mono bg-bg-panel border border-border rounded px-2 py-1.5 text-text-primary"
+      >
+        {!activeProfileId && (
+          <option value="">Select a genre profile...</option>
         )}
+        {profiles.map(p => (
+          <option key={p.id} value={p.id}>
+            {p.name}{p.id === autoProfileId ? ' (auto-detected)' : ''}
+          </option>
+        ))}
+      </select>
+      {autoProfileId && (
+        <span className="text-[10px] font-mono text-text-secondary">
+          {autoGenreId ? 'Genre-matched' : 'Family fallback'}
+        </span>
+      )}
+    </div>
+  );
+
+  if (!report || !activeProfileId) {
+    return (
+      <div className="space-y-4">
+        {header}
+        {selector}
+        <p className="text-xs font-mono text-text-secondary text-center py-4">
+          Select a genre profile above to see mix analysis
+        </p>
       </div>
+    );
+  }
+
+  const maxAbsDiff = Math.max(...report.advice.map(a => Math.abs(a.diffDb)), 1);
+
+  return (
+    <div className="space-y-4">
+      {header}
+      {selector}
 
       {/* Spectral comparison */}
       <div className="bg-bg-card border border-border rounded-sm p-4 space-y-2">
-        <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mb-3">Spectral Balance vs {profile.name}</p>
+        <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mb-3">Spectral Balance vs {report.genreName}</p>
         {report.advice.map(a => {
           const pct = (Math.abs(a.diffDb) / maxAbsDiff) * 100;
           const isRight = a.diffDb >= 0;
@@ -166,6 +155,23 @@ export function MixDoctorPanel({ measurement, profiles, autoGenreId, autoGenreFa
             Crest: {report.dynamicsAdvice.actualCrest} dB
           </p>
         </div>
+
+        {/* PLR */}
+        {report.plrAdvice && (
+          <div className="bg-bg-card border border-border rounded-sm p-3">
+            <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mb-1">PLR</p>
+            <p className={`text-sm font-mono font-bold ${
+              report.plrAdvice.issue === 'optimal' ? 'text-green-400' :
+              report.plrAdvice.issue === 'too-crushed' ? 'text-red-400' : 'text-amber-400'
+            }`}>
+              {report.plrAdvice.issue === 'optimal' ? 'ON TARGET' :
+               report.plrAdvice.issue === 'too-crushed' ? 'CRUSHED' : 'VERY OPEN'}
+            </p>
+            <p className="text-xs font-mono text-text-secondary mt-1">
+              PLR: {report.plrAdvice.actualPlr} dB
+            </p>
+          </div>
+        )}
 
         {/* Loudness */}
         {report.loudnessAdvice && (
