@@ -485,6 +485,15 @@ export function parsePhase1Result(value: unknown): Phase1Result {
   const melodyDetail = parseOptionalMelodyDetail(phase1);
   const transcriptionDetail = parseOptionalTranscriptionDetail(phase1);
 
+  // stereoWidth/stereoCorrelation may be top-level (normalized by server) or only
+  // inside stereoDetail (raw DB rows stored before the normalization fix).
+  const stereoFallback = isRecord(phase1.stereoDetail) ? phase1.stereoDetail : {};
+  const stereoWidth = toNumber(phase1.stereoWidth) ?? toNumber(stereoFallback.stereoWidth);
+  const stereoCorrelation = toNumber(phase1.stereoCorrelation) ?? toNumber(stereoFallback.stereoCorrelation);
+  if (stereoWidth === null || stereoCorrelation === null) {
+    throw new BackendClientError("BACKEND_BAD_RESPONSE", "Expected stereoWidth and stereoCorrelation to be numbers");
+  }
+
   return {
     bpm: expectNumber(phase1, "bpm"),
     bpmConfidence: expectNumber(phase1, "bpmConfidence"),
@@ -506,8 +515,8 @@ export function parsePhase1Result(value: unknown): Phase1Result {
     crestFactor: toNumber(phase1.crestFactor),
     dynamicSpread: toNumber(phase1.dynamicSpread),
     dynamicCharacter: parseOptionalDynamicCharacter(phase1.dynamicCharacter),
-    stereoWidth: expectNumber(phase1, "stereoWidth"),
-    stereoCorrelation: expectNumber(phase1, "stereoCorrelation"),
+    stereoWidth,
+    stereoCorrelation,
     stereoDetail: isRecord(phase1.stereoDetail) ? phase1.stereoDetail as unknown as Phase1Result["stereoDetail"] : null,
     spectralBalance: {
       subBass: expectNumber(spectralBalance, "subBass", "spectralBalance.subBass"),

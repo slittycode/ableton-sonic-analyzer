@@ -136,7 +136,7 @@ describe('analysisResultsViewModel helpers', () => {
   });
 
   it('caps width & stereo card content at six sentences', () => {
-    const sonicCards = buildSonicElementCards(measurement, null, {
+    const sonicCards = buildSonicElementCards(measurement, {
       kick: 'Kick sentence.',
       bass: 'Bass sentence.',
       melodicArp: 'Arp sentence.',
@@ -288,7 +288,13 @@ describe('analysisResultsViewModel helpers', () => {
       ],
     } as Phase2Result;
 
-    const cards = buildPatchCards(measurement, null, phase2);
+    const cards = buildPatchCards(
+      {
+        ...measurement,
+        transcriptionDetail: symbolic,
+      },
+      phase2,
+    );
 
     expect(cards.length).toBeGreaterThan(0);
     expect(cards[0].parameters.length).toBeGreaterThanOrEqual(3);
@@ -298,7 +304,10 @@ describe('analysisResultsViewModel helpers', () => {
   });
 
   it('builds melody insights from phase1 transcription payload', () => {
-    const insights = buildMelodyInsights(measurement, symbolic);
+    const insights = buildMelodyInsights({
+      ...measurement,
+      transcriptionDetail: symbolic,
+    });
 
     expect(insights).not.toBeNull();
     expect(insights?.noteCount).toBe(6);

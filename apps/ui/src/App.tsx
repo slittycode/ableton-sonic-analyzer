@@ -27,9 +27,11 @@ import {
   BackendAnalysisEstimate,
   DiagnosticLogEntry,
   MeasurementResult,
+  Phase1Result,
   Phase2Result,
   TranscriptionDetail,
 } from './types';
+import type { AnalysisResultsProps } from './components/AnalysisResults';
 import {
   loadPhase2RequestedPreference,
   savePhase2RequestedPreference,
@@ -45,7 +47,7 @@ const MODELS = [
   { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
 ];
 
-const AnalysisResults = lazy(() =>
+const AnalysisResults = lazy<React.ComponentType<AnalysisResultsProps>>(() =>
   import('./components/AnalysisResults').then((module) => ({
     default: module.AnalysisResults,
   })),
@@ -876,6 +878,12 @@ export default function App() {
       ),
   );
   const shouldShowStatusPanel = Boolean(audioUrl && audioFile && analysisRun && (isAnalyzing || hasRetryableRunStage));
+  const phase1ForRender: Phase1Result | null = measurementResult
+    ? {
+        ...measurementResult,
+        transcriptionDetail: symbolicResult ?? null,
+      }
+    : null;
 
   return (
     <div className="min-h-screen bg-bg-app px-3 py-3 md:px-6 md:py-5 font-sans flex items-center justify-center">
@@ -1155,7 +1163,7 @@ export default function App() {
               </div>
             )}
 
-            {measurementResult ? (
+            {phase1ForRender ? (
               <Suspense
                 fallback={
                   <div className="space-y-6">
@@ -1170,14 +1178,10 @@ export default function App() {
                 }
               >
                 <AnalysisResults
-                  measurement={measurementResult}
-                  symbolic={symbolicResult}
+                  phase1={phase1ForRender}
                   phase2={phase2Result}
                   phase2StatusMessage={phase2StatusMessage}
                   sourceFileName={audioFile?.name ?? null}
-                  audioFile={audioFile ?? undefined}
-                  audioElementRef={audioElementRef}
-                  onSeek={handleSpectrogramSeek}
                 />
               </Suspense>
             ) : null}

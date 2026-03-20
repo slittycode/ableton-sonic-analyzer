@@ -417,7 +417,7 @@ class ServerContractTests(unittest.TestCase):
                 "--transcribe",
             ],
         )
-        self.assertEqual(run_mock.call_args.kwargs["timeout"], 218)
+        self.assertEqual(run_mock.call_args.kwargs["timeout"], 526)
         build_estimate_mock.assert_called_once_with(214.6, True, True)
         payload = self._decode_json_response(response)
         self.assertEqual(payload["diagnostics"]["backendDurationMs"], 200.0)

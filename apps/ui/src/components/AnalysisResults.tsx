@@ -31,7 +31,7 @@ import {
   truncateBySentenceCount,
 } from './analysisResultsViewModel';
 
-interface AnalysisResultsProps {
+export interface AnalysisResultsProps {
   phase1: Phase1Result | null;
   phase2: Phase2Result | null;
   phase2StatusMessage?: string | null;

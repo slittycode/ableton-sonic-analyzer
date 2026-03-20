@@ -42,7 +42,10 @@ from analyze import (
 
 app = FastAPI(title="Sonic Analyzer Local API")
 
-ANALYZE_TIMEOUT_BUFFER_SECONDS = 15
+ANALYZE_TIMEOUT_BUFFER_SECONDS = 120
+ANALYZE_TIMEOUT_FLOOR_SECONDS = 300
+ANALYZE_TIMEOUT_FALLBACK_SECONDS = 900
+ANALYZE_TIMEOUT_ESTIMATE_MULTIPLIER = 2.0
 ERROR_PHASE_LOCAL_DSP = "phase1_local_dsp"
 ERROR_PHASE_GEMINI = "phase2_gemini"
 ENGINE_VERSION = "analyze.py"
@@ -429,6 +432,30 @@ def _elapsed_ms(started_at: datetime | None, ended_at: datetime | None) -> float
     if started_at is None or ended_at is None:
         return 0.0
     return max((ended_at - started_at).total_seconds() * 1000, 0.0)
+
+
+def _normalize_run_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Apply _build_phase1 normalization to a run snapshot's measurement result.
+
+    The analysis-run pathway stores raw analyze.py output in the DB, but the
+    frontend parser (parsePhase1Result) expects the same normalized shape that
+    _build_phase1 produces for the legacy /api/analyze endpoint — notably,
+    top-level stereoWidth/stereoCorrelation extracted from stereoDetail.
+    """
+    stages = snapshot.get("stages")
+    if not isinstance(stages, dict):
+        return snapshot
+    measurement = stages.get("measurement")
+    if not isinstance(measurement, dict):
+        return snapshot
+    raw_result = measurement.get("result")
+    if not isinstance(raw_result, dict):
+        return snapshot
+    snapshot = dict(snapshot)
+    snapshot["stages"] = dict(stages)
+    snapshot["stages"]["measurement"] = dict(measurement)
+    snapshot["stages"]["measurement"]["result"] = _build_phase1(raw_result)
+    return snapshot
 
 
 def _build_phase1(payload: dict[str, Any]) -> dict[str, Any]:
@@ -1369,7 +1396,7 @@ async def create_analysis_run(
             interpretation_profile=interpretation_profile,
             interpretation_model=interpretation_model,
         )
-        return JSONResponse(content=runtime.get_run(run_id))
+        return JSONResponse(content=_normalize_run_snapshot(runtime.get_run(run_id)))
     except ValueError as exc:
         return JSONResponse(
             status_code=400,
@@ -1398,7 +1425,7 @@ async def create_analysis_run(
 async def get_analysis_run(run_id: str) -> JSONResponse:
     runtime = get_analysis_runtime()
     try:
-        return JSONResponse(content=runtime.get_run(run_id))
+        return JSONResponse(content=_normalize_run_snapshot(runtime.get_run(run_id)))
     except KeyError:
         return JSONResponse(
             status_code=404,
@@ -1441,7 +1468,7 @@ async def create_symbolic_extraction_attempt(
                 "requestedViaApi": True,
             },
         )
-        return JSONResponse(status_code=202, content=runtime.get_run(run_id))
+        return JSONResponse(status_code=202, content=_normalize_run_snapshot(runtime.get_run(run_id)))
     except KeyError:
         return JSONResponse(
             status_code=404,
@@ -1485,7 +1512,7 @@ async def create_interpretation_attempt(
                 "requestedViaApi": True,
             },
         )
-        return JSONResponse(status_code=202, content=runtime.get_run(run_id))
+        return JSONResponse(status_code=202, content=_normalize_run_snapshot(runtime.get_run(run_id)))
     except ValueError as exc:
         return JSONResponse(
             status_code=400,
@@ -2102,10 +2129,17 @@ def _build_phase2_error_response(
 
 def _compute_timeout_seconds(estimate: dict[str, Any]) -> int:
     estimated_high_ms = _coerce_positive_int(estimate.get("totalHighMs"))
-    estimated_high_seconds = (
-        ceil(estimated_high_ms / 1000) if estimated_high_ms > 0 else 45
-    )
-    return estimated_high_seconds + ANALYZE_TIMEOUT_BUFFER_SECONDS
+    if estimated_high_ms > 0:
+        estimated_high_seconds = ceil(estimated_high_ms / 1000)
+        estimated_budget_seconds = (
+            ceil(estimated_high_seconds * ANALYZE_TIMEOUT_ESTIMATE_MULTIPLIER)
+            + ANALYZE_TIMEOUT_BUFFER_SECONDS
+        )
+        return max(
+            estimated_budget_seconds,
+            ANALYZE_TIMEOUT_FLOOR_SECONDS,
+        )
+    return ANALYZE_TIMEOUT_FALLBACK_SECONDS
 
 
 def _compact_dict(payload: dict[str, Any]) -> dict[str, Any]:

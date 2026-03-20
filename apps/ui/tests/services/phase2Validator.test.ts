@@ -29,7 +29,7 @@ const createBasePhase1 = (overrides: Partial<Phase1Result> = {}): Phase1Result =
     brilliance: 0.8,
   },
   spectralDetail: {
-    spectralCentroid: 3500,
+    spectralCentroidMean: 3500,
   },
   rhythmDetail: {
     kickSwing: 0.08,
@@ -257,7 +257,7 @@ describe('validatePhase2Consistency', () => {
 
   describe('Numeric bounds validation', () => {
     it('should report WARNING when EQ cutoffs exceed spectral centroid', () => {
-      const phase1 = createBasePhase1({ spectralDetail: { spectralCentroid: 2000 } });
+      const phase1 = createBasePhase1({ spectralDetail: { spectralCentroidMean: 2000 } });
       const phase2 = createBasePhase2({
         abletonRecommendations: [
           { device: 'EQ Eight', category: 'EQ', parameter: 'High Cut', value: '8000 Hz', reason: 'Roll off highs' },
@@ -273,7 +273,7 @@ describe('validatePhase2Consistency', () => {
     });
 
     it('should pass when EQ cutoffs are within spectral bounds', () => {
-      const phase1 = createBasePhase1({ spectralDetail: { spectralCentroid: 5000 } });
+      const phase1 = createBasePhase1({ spectralDetail: { spectralCentroidMean: 5000 } });
       const phase2 = createBasePhase2({
         abletonRecommendations: [
           { device: 'EQ Eight', category: 'EQ', parameter: 'High Cut', value: '4000 Hz', reason: 'Roll off highs' },

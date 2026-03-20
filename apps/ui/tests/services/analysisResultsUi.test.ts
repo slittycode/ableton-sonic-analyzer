@@ -157,8 +157,7 @@ describe('AnalysisResults UI wiring', () => {
   it('renders mix and patch cards using strict grid layout', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
-        measurement: baseMeasurement,
-        symbolic: null,
+        phase1: baseMeasurement,
         phase2: basePhase2,
         sourceFileName: 'example.wav',
       }),
@@ -188,8 +187,7 @@ describe('AnalysisResults UI wiring', () => {
 
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
-        measurement: baseMeasurement,
-        symbolic: null,
+        phase1: baseMeasurement,
         phase2: phase2WithTags,
         sourceFileName: 'example.wav',
       }),
@@ -208,8 +206,7 @@ describe('AnalysisResults UI wiring', () => {
   it('renders character scanning fallback when phase2 is unavailable', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
-        measurement: baseMeasurement,
-        symbolic: null,
+        phase1: baseMeasurement,
         phase2: null,
         sourceFileName: 'example.wav',
       }),
@@ -223,8 +220,7 @@ describe('AnalysisResults UI wiring', () => {
   it('renders exactly two DSP badges for the current Phase 1 headings and one AI advisory badge', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
-        measurement: baseMeasurement,
-        symbolic: null,
+        phase1: baseMeasurement,
         phase2: basePhase2,
         sourceFileName: 'example.wav',
       }),
@@ -238,11 +234,10 @@ describe('AnalysisResults UI wiring', () => {
   it('shows the key low-confidence warning at the inclusive 0.60 threshold', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
-        measurement: {
+        phase1: {
           ...baseMeasurement,
           keyConfidence: 0.6,
         },
-        symbolic: null,
         phase2: null,
         sourceFileName: 'example.wav',
       }),
@@ -256,11 +251,10 @@ describe('AnalysisResults UI wiring', () => {
   it('does not show the key low-confidence warning above the threshold', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
-        measurement: {
+        phase1: {
           ...baseMeasurement,
           keyConfidence: 0.61,
         },
-        symbolic: null,
         phase2: null,
         sourceFileName: 'example.wav',
       }),
@@ -272,13 +266,12 @@ describe('AnalysisResults UI wiring', () => {
   it('shows the chord low-confidence warning at the inclusive 0.70 threshold', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
-        measurement: {
+        phase1: {
           ...baseMeasurement,
           chordDetail: {
             chordStrength: 0.7,
           },
         },
-        symbolic: null,
         phase2: basePhase2,
         sourceFileName: 'example.wav',
       }),
@@ -292,13 +285,12 @@ describe('AnalysisResults UI wiring', () => {
   it('does not show the chord low-confidence warning above the threshold', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
-        measurement: {
+        phase1: {
           ...baseMeasurement,
           chordDetail: {
             chordStrength: 0.71,
           },
         },
-        symbolic: null,
         phase2: basePhase2,
         sourceFileName: 'example.wav',
       }),
@@ -310,14 +302,13 @@ describe('AnalysisResults UI wiring', () => {
   it('renders a danceability section when backend danceability data is present', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
-        measurement: {
+        phase1: {
           ...baseMeasurement,
           danceability: {
             danceability: 1.24,
             dfa: 0.87,
           },
         },
-        symbolic: null,
         phase2: basePhase2,
         sourceFileName: 'example.wav',
       }),
@@ -336,8 +327,7 @@ describe('AnalysisResults UI wiring', () => {
   it('renders symbolic-note unavailable state when melodyDetail is missing', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
-        measurement: baseMeasurement,
-        symbolic: null,
+        phase1: baseMeasurement,
         phase2: basePhase2,
         sourceFileName: 'example.wav',
       }),
@@ -350,8 +340,9 @@ describe('AnalysisResults UI wiring', () => {
   it('shows the symbolic toggle state by default when both sources are available', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
-        measurement: {
+        phase1: {
           ...baseMeasurement,
+          transcriptionDetail: baseSymbolic,
           melodyDetail: {
             noteCount: 1,
             notes: [{ midi: 72, onset: 0.1, duration: 0.2 }],
@@ -366,7 +357,6 @@ describe('AnalysisResults UI wiring', () => {
             vibratoConfidence: 0,
           },
         },
-        symbolic: baseSymbolic,
         phase2: basePhase2,
         sourceFileName: 'example.wav',
       }),
@@ -392,7 +382,7 @@ describe('AnalysisResults UI wiring', () => {
   it('shows Essentia source badges when only melodyDetail is available', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
-        measurement: {
+        phase1: {
           ...baseMeasurement,
           melodyDetail: {
             noteCount: 3,
@@ -412,7 +402,6 @@ describe('AnalysisResults UI wiring', () => {
             vibratoConfidence: 0.1,
           },
         },
-        symbolic: null,
         phase2: basePhase2,
         sourceFileName: 'example.wav',
       }),
@@ -427,8 +416,9 @@ describe('AnalysisResults UI wiring', () => {
   it('renders full-mix provenance when transcription did not use Demucs stems', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
-        measurement: baseMeasurement,
-        symbolic: {
+        phase1: {
+          ...baseMeasurement,
+          transcriptionDetail: {
           transcriptionMethod: 'basic-pitch-legacy',
           noteCount: 1,
           averageConfidence: 0.61,
@@ -452,6 +442,7 @@ describe('AnalysisResults UI wiring', () => {
               stemSource: 'full_mix',
             },
           ],
+          },
         },
         phase2: basePhase2,
         sourceFileName: 'example.wav',
@@ -465,8 +456,7 @@ describe('AnalysisResults UI wiring', () => {
   it('renders arrangement novelty and spectral note labels with fixed segment palette colors', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
-        measurement: baseMeasurement,
-        symbolic: null,
+        phase1: baseMeasurement,
         phase2: basePhase2,
         sourceFileName: 'example.wav',
       }),
@@ -483,21 +473,20 @@ describe('AnalysisResults UI wiring', () => {
   it('renders a sticky device navigator with section anchors', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
-        measurement: baseMeasurement,
-        symbolic: null,
+        phase1: baseMeasurement,
         phase2: basePhase2,
         sourceFileName: 'example.wav',
       }),
     );
 
     expect(html).toContain('Device Chain');
-    expect(html).toContain('href="#section-spectral-balance"');
+    expect(html).toContain('href="#section-meas-spectral"');
     expect(html).toContain('href="#section-arrangement"');
     expect(html).toContain('href="#section-session"');
     expect(html).toContain('href="#section-sonic-elements"');
     expect(html).toContain('href="#section-mix-chain"');
     expect(html).toContain('href="#section-patches"');
-    expect(html).toContain('id="section-spectral-balance"');
+    expect(html).toContain('id="section-meas-spectral"');
     expect(html).toContain('id="section-arrangement"');
     expect(html).toContain('id="section-session"');
     expect(html).toContain('id="section-sonic-elements"');
@@ -508,7 +497,7 @@ describe('AnalysisResults UI wiring', () => {
   it('does not render an empty chord section when chord data lacks progression content', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
-        measurement: {
+        phase1: {
           ...baseMeasurement,
           chordDetail: {
             chordStrength: 0.62,
@@ -517,7 +506,6 @@ describe('AnalysisResults UI wiring', () => {
             dominantChords: [],
           },
         },
-        symbolic: null,
         phase2: basePhase2,
         sourceFileName: 'example.wav',
       }),
@@ -527,10 +515,10 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).not.toContain('href="#section-chords"');
   });
 
-  it('adds detector nav anchors when detector analysis is present', () => {
+  it('renders sidechain detector metrics inside synthesis measurement section', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
-        measurement: {
+        phase1: {
           ...baseMeasurement,
           sidechainDetail: {
             pumpingStrength: 0.31,
@@ -539,25 +527,25 @@ describe('AnalysisResults UI wiring', () => {
             pumpingConfidence: 0.7,
           },
         },
-        symbolic: null,
         phase2: basePhase2,
         sourceFileName: 'example.wav',
       }),
     );
 
-    expect(html).toContain('href="#section-detectors"');
-    expect(html).toContain('id="section-detectors"');
-    expect(html).toContain('Detector Analysis');
+    expect(html).toContain('href="#section-meas-synthesis"');
+    expect(html).toContain('id="section-meas-synthesis"');
+    expect(html).toContain('Sidechain / Pumping');
+    expect(html).toContain('Pumping Strength');
   });
 
   it('renders chroma section and nav link when 12-bin chroma data is present', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
-        measurement: {
+        phase1: {
           ...baseMeasurement,
           spectralDetail: {
-            spectralCentroid: 1800,
-            spectralRolloff: 5400,
+            spectralCentroidMean: 1800,
+            spectralRolloffMean: 5400,
             mfcc: [],
             chroma: [0.95, 0.2, 0.7, 0.1, 0.3, 0.6, 0.2, 0.4, 0.1, 0.2, 0.1, 0.3],
             barkBands: Array.from({ length: 24 }, (_, i) => -22 + i * 0.3),
@@ -566,14 +554,13 @@ describe('AnalysisResults UI wiring', () => {
             spectralValley: [],
           },
         },
-        symbolic: null,
         phase2: basePhase2,
         sourceFileName: 'example.wav',
       }),
     );
 
-    expect(html).toContain('href="#section-spectral"');
-    expect(html).toContain('id="section-spectral"');
-    expect(html).toContain('Strongest pitch classes are');
+    expect(html).toContain('href="#section-meas-spectral"');
+    expect(html).toContain('id="section-meas-spectral"');
+    expect(html).toContain('Chroma (12 pitches)');
   });
 });
