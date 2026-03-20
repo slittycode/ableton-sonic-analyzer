@@ -162,6 +162,66 @@ const validPayload = {
     perceptual: {
       energy: 0.77,
     },
+
+    // BPM correction metadata
+    bpmDoubletime: false,
+    bpmSource: 'rhythm_extractor_confirmed',
+    bpmRawOriginal: 128.0,
+
+    // Detectors
+    acidDetail: {
+      isAcid: false,
+      confidence: 0.12,
+      resonanceLevel: 0.08,
+      centroidOscillationHz: 120.5,
+      bassRhythmDensity: 0.45,
+    },
+    reverbDetail: {
+      rt60: 1.2,
+      isWet: true,
+      tailEnergyRatio: 0.35,
+      measured: true,
+    },
+    vocalDetail: {
+      hasVocals: false,
+      confidence: 0.85,
+      vocalEnergyRatio: 0.02,
+      formantStrength: 0.05,
+      mfccLikelihood: 0.1,
+    },
+    supersawDetail: {
+      isSupersaw: false,
+      confidence: 0.08,
+      voiceCount: 1,
+      avgDetuneCents: 2.5,
+      spectralComplexity: 0.15,
+    },
+    bassDetail: {
+      averageDecayMs: 45,
+      type: 'punchy',
+      transientRatio: 0.72,
+      fundamentalHz: 55.0,
+      transientCount: 128,
+      swingPercent: 3.2,
+      grooveType: 'straight',
+    },
+    kickDetail: {
+      isDistorted: false,
+      thd: 0.08,
+      harmonicRatio: 0.35,
+      fundamentalHz: 52.0,
+      kickCount: 256,
+    },
+    genreDetail: {
+      genre: 'techno',
+      confidence: 0.82,
+      secondaryGenre: 'tech house',
+      genreFamily: 'techno',
+      topScores: [
+        { genre: 'techno', score: 0.82 },
+        { genre: 'tech house', score: 0.65 },
+      ],
+    },
   },
   diagnostics: {
     backendDurationMs: 1420,
@@ -244,6 +304,23 @@ describe('parseBackendAnalyzeResponse', () => {
     expect(parsed.phase1.segmentStereo).toEqual(validPayload.phase1.segmentStereo);
     expect(parsed.phase1.segmentKey).toEqual(validPayload.phase1.segmentKey);
     expect(parsed.phase1.essentiaFeatures).toEqual(validPayload.phase1.essentiaFeatures);
+
+    // BPM correction metadata
+    expect(parsed.phase1.bpmDoubletime).toBe(false);
+    expect(parsed.phase1.bpmSource).toBe('rhythm_extractor_confirmed');
+    expect(parsed.phase1.bpmRawOriginal).toBe(128.0);
+
+    // Detector results
+    expect(parsed.phase1.acidDetail?.isAcid).toBe(false);
+    expect(parsed.phase1.acidDetail?.confidence).toBe(0.12);
+    expect(parsed.phase1.reverbDetail?.isWet).toBe(true);
+    expect(parsed.phase1.reverbDetail?.rt60).toBe(1.2);
+    expect(parsed.phase1.vocalDetail?.hasVocals).toBe(false);
+    expect(parsed.phase1.supersawDetail?.isSupersaw).toBe(false);
+    expect(parsed.phase1.bassDetail?.type).toBe('punchy');
+    expect(parsed.phase1.kickDetail?.kickCount).toBe(256);
+    expect(parsed.phase1.genreDetail?.genre).toBe('techno');
+    expect(parsed.phase1.genreDetail?.genreFamily).toBe('techno');
   });
 
   it('parses payload without new fields (backward compat)', () => {
@@ -278,6 +355,11 @@ describe('parseBackendAnalyzeResponse', () => {
     expect(parsed.phase1.beatsLoudness).toBeNull();
     expect(parsed.phase1.segmentStereo).toBeNull();
     expect(parsed.phase1.essentiaFeatures).toBeNull();
+    expect(parsed.phase1.bpmDoubletime).toBeNull();
+    expect(parsed.phase1.bpmSource).toBeNull();
+    expect(parsed.phase1.bpmRawOriginal).toBeNull();
+    expect(parsed.phase1.acidDetail).toBeNull();
+    expect(parsed.phase1.genreDetail).toBeNull();
   });
 
   it('throws when phase1 is missing', () => {
@@ -421,6 +503,22 @@ describe('parseBackendAnalyzeResponse', () => {
     });
 
     expect(parsed.phase1.danceability).toBeNull();
+  });
+
+  it('handles malformed detector payloads gracefully', () => {
+    const malformedPayload = {
+      ...validPayload,
+      phase1: {
+        ...validPayload.phase1,
+        acidDetail: { isAcid: true }, // missing required numeric fields
+        genreDetail: 'not an object',
+        kickDetail: null,
+      },
+    };
+    const parsed = parseBackendAnalyzeResponse(malformedPayload);
+    expect(parsed.phase1.acidDetail).toBeNull();
+    expect(parsed.phase1.genreDetail).toBeNull();
+    expect(parsed.phase1.kickDetail).toBeNull();
   });
 });
 

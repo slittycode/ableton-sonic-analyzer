@@ -562,6 +562,53 @@ def extract_rhythm(mono: np.ndarray) -> dict | None:
         return None
 
 
+def apply_bpm_correction(
+    bpm_raw: float | None, bpm_percival: float | None, bpm_agreement: bool | None
+) -> dict:
+    """Apply ratio-based BPM correction.
+
+    Returns dict with keys: bpm, bpmDoubletime, bpmSource, bpmRawOriginal.
+    """
+    bpm_raw_original = bpm_raw
+
+    if bpm_raw is not None and bpm_percival is not None and bpm_raw > 0:
+        ratio = bpm_percival / bpm_raw
+
+        # Ratio windows: 2x (1.92-2.08), 1.5x (1.44-1.56),
+        # 0.5x (0.48-0.52), 2/3 (0.641-0.694)
+        if (1.92 <= ratio <= 2.08
+                or 1.44 <= ratio <= 1.56
+                or 0.48 <= ratio <= 0.52
+                or 0.641 <= ratio <= 0.694):
+            return {
+                "bpm": round(bpm_percival, 1),
+                "bpmDoubletime": True,
+                "bpmSource": "percival_ratio_corrected",
+                "bpmRawOriginal": bpm_raw_original,
+            }
+        elif bpm_agreement is True:
+            return {
+                "bpm": bpm_raw,
+                "bpmDoubletime": False,
+                "bpmSource": "rhythm_extractor_confirmed",
+                "bpmRawOriginal": bpm_raw_original,
+            }
+        else:
+            return {
+                "bpm": bpm_raw,
+                "bpmDoubletime": False,
+                "bpmSource": "rhythm_extractor",
+                "bpmRawOriginal": bpm_raw_original,
+            }
+
+    return {
+        "bpm": bpm_raw,
+        "bpmDoubletime": False,
+        "bpmSource": "rhythm_extractor",
+        "bpmRawOriginal": bpm_raw_original,
+    }
+
+
 # ── Individual analysis functions ──────────────────────────────────────────
 
 
@@ -592,11 +639,16 @@ def analyze_bpm(
         if bpm is not None and bpm_percival is not None:
             bpm_agreement = abs(float(bpm) - float(bpm_percival)) < 2.0
 
+        correction = apply_bpm_correction(bpm, bpm_percival, bpm_agreement)
+
         return {
-            "bpm": bpm,
+            "bpm": correction["bpm"],
             "bpmConfidence": bpm_confidence,
             "bpmPercival": bpm_percival,
             "bpmAgreement": bpm_agreement,
+            "bpmDoubletime": correction["bpmDoubletime"],
+            "bpmSource": correction["bpmSource"],
+            "bpmRawOriginal": correction["bpmRawOriginal"],
         }
     except Exception as e:
         print(f"[warn] BPM extraction failed: {e}", file=sys.stderr)
@@ -605,6 +657,9 @@ def analyze_bpm(
             "bpmConfidence": None,
             "bpmPercival": None,
             "bpmAgreement": None,
+            "bpmDoubletime": None,
+            "bpmSource": None,
+            "bpmRawOriginal": None,
         }
 
 
@@ -4437,6 +4492,9 @@ def main():
             "bpmConfidence": result.get("bpmConfidence"),
             "bpmPercival": result.get("bpmPercival"),
             "bpmAgreement": result.get("bpmAgreement"),
+            "bpmDoubletime": result.get("bpmDoubletime"),
+            "bpmSource": result.get("bpmSource"),
+            "bpmRawOriginal": result.get("bpmRawOriginal"),
             "key": result.get("key"),
             "keyConfidence": result.get("keyConfidence"),
             "timeSignature": result.get("timeSignature"),
@@ -4637,6 +4695,9 @@ def main():
         "bpmConfidence": result.get("bpmConfidence"),
         "bpmPercival": result.get("bpmPercival"),
         "bpmAgreement": result.get("bpmAgreement"),
+        "bpmDoubletime": result.get("bpmDoubletime"),
+        "bpmSource": result.get("bpmSource"),
+        "bpmRawOriginal": result.get("bpmRawOriginal"),
         "key": result.get("key"),
         "keyConfidence": result.get("keyConfidence"),
         "keyProfile": result.get("keyProfile"),

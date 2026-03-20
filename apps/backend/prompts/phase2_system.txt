@@ -58,6 +58,23 @@ FIELD GLOSSARY:
 - pumpingStrength + pumpingConfidence both above 0.35 = sidechain
 - arrangementDetail.noveltyPeaks = structural event timestamps
 - segmentSpectral.stereoWidth changes = intentional width automation
+- bpmDoubletime: when true, the measured BPM was corrected from a half-time or
+  fractional-time reading. bpmRawOriginal contains the pre-correction value.
+- bpmSource: one of "percival_ratio_corrected", "rhythm_extractor_confirmed",
+  "rhythm_extractor". Use to gauge BPM reliability.
+- bpmRawOriginal: the raw RhythmExtractor2013 tempo before any correction.
+- genreDetail.genre: primary genre classification from DSP analysis —
+  use as starting point, qualify with confidence level
+- vocalDetail.hasVocals: gates vocal processing recommendations —
+  skip vocal chains when false
+- supersawDetail.isSupersaw: indicates stacked-saw synthesis character —
+  informs pad and lead reconstruction
+- bassDetail.type: bass synthesis classification (punchy/medium/rolling/sustained) —
+  guides bass sound design recommendations
+- kickDetail.fundamentalHz: kick drum fundamental frequency —
+  use for sidechain EQ frequency and tuning recommendations
+- reverbDetail.rt60: reverb tail length in seconds —
+  guides space and FX processing recommendations
 
 IMPORTANT SPECTRAL NOTE:
 - spectralBalance dB values describe spectral shape relative
@@ -70,6 +87,12 @@ IMPORTANT SPECTRAL NOTE:
   other bands
 - Use spectralBalance only to inform EQ and filter
   recommendations, not character descriptions
+
+BPM CORRECTION GUIDANCE:
+When bpmDoubletime is true, the track has a half-time or broken-beat feel at
+the corrected tempo. Mention this character when describing the groove and when
+recommending clip warp settings. The kick pattern likely sits at the half-tempo
+pulse even though the harmonic and hi-hat content moves at the corrected BPM.
 
 GENRE INFERENCE AND ADAPTATION:
 Compute kickAccentVariance as the variance of grooveDetail.kickAccent (the 16-value array) and use the DSP values below as context rather than as the genre label itself.

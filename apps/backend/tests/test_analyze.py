@@ -25,6 +25,7 @@ EXPECTED_SPECTRAL_BANDS = {
 # Top-level keys emitted by both full and fast modes — the shared output contract.
 EXPECTED_TOP_LEVEL_KEYS = {
     "bpm", "bpmConfidence", "bpmPercival", "bpmAgreement",
+    "bpmDoubletime", "bpmSource", "bpmRawOriginal",
     "key", "keyConfidence", "timeSignature", "durationSeconds", "sampleRate",
     "lufsIntegrated", "lufsRange", "truePeak", "crestFactor",
     "dynamicSpread", "dynamicCharacter", "stereoDetail", "spectralBalance",
@@ -40,6 +41,7 @@ EXPECTED_TOP_LEVEL_KEYS = {
 # Fields fast mode populates with real values.
 FAST_MODE_POPULATED_FIELDS = {
     "bpm", "bpmConfidence", "bpmPercival", "bpmAgreement",
+    "bpmDoubletime", "bpmSource", "bpmRawOriginal",
     "key", "keyConfidence", "timeSignature", "durationSeconds", "sampleRate",
     "lufsIntegrated", "lufsRange", "truePeak", "crestFactor",
 }
@@ -1202,6 +1204,86 @@ class GenreDetailTests(unittest.TestCase):
         )
         top_score = detail["topScores"][0]["score"]
         self.assertGreater(top_score, 0.25)
+
+
+class ApplyBpmCorrectionTests(unittest.TestCase):
+    """Unit tests for the apply_bpm_correction helper."""
+
+    def test_2x_ratio_correction(self) -> None:
+        """Ratio ~2.0 → percival wins."""
+        from analyze import apply_bpm_correction
+        result = apply_bpm_correction(66.0, 132.0, False)
+        self.assertEqual(result["bpm"], 132.0)
+        self.assertTrue(result["bpmDoubletime"])
+        self.assertEqual(result["bpmSource"], "percival_ratio_corrected")
+        self.assertEqual(result["bpmRawOriginal"], 66.0)
+
+    def test_half_ratio_correction(self) -> None:
+        """Ratio ~0.5 → percival wins."""
+        from analyze import apply_bpm_correction
+        result = apply_bpm_correction(264.0, 132.0, False)
+        self.assertEqual(result["bpm"], 132.0)
+        self.assertTrue(result["bpmDoubletime"])
+        self.assertEqual(result["bpmSource"], "percival_ratio_corrected")
+
+    def test_1_5x_ratio_correction(self) -> None:
+        """Ratio ~1.5 → percival wins."""
+        from analyze import apply_bpm_correction
+        result = apply_bpm_correction(88.0, 132.0, False)
+        self.assertEqual(result["bpm"], 132.0)
+        self.assertTrue(result["bpmDoubletime"])
+        self.assertEqual(result["bpmSource"], "percival_ratio_corrected")
+
+    def test_two_thirds_ratio_correction(self) -> None:
+        """Ratio ~0.667 → percival wins."""
+        from analyze import apply_bpm_correction
+        result = apply_bpm_correction(198.0, 132.0, False)
+        self.assertEqual(result["bpm"], 132.0)
+        self.assertTrue(result["bpmDoubletime"])
+        self.assertEqual(result["bpmSource"], "percival_ratio_corrected")
+
+    def test_disagreement_outside_windows(self) -> None:
+        """Ratio outside correction windows → no correction."""
+        from analyze import apply_bpm_correction
+        result = apply_bpm_correction(128.0, 140.0, False)
+        self.assertEqual(result["bpm"], 128.0)
+        self.assertFalse(result["bpmDoubletime"])
+        self.assertEqual(result["bpmSource"], "rhythm_extractor")
+
+    def test_agreement_path(self) -> None:
+        """When bpm_agreement is True and no ratio match → confirmed."""
+        from analyze import apply_bpm_correction
+        result = apply_bpm_correction(128.0, 127.5, True)
+        self.assertEqual(result["bpm"], 128.0)
+        self.assertFalse(result["bpmDoubletime"])
+        self.assertEqual(result["bpmSource"], "rhythm_extractor_confirmed")
+
+    def test_raw_none(self) -> None:
+        """When bpm_raw is None → safe defaults."""
+        from analyze import apply_bpm_correction
+        result = apply_bpm_correction(None, 132.0, None)
+        self.assertIsNone(result["bpm"])
+        self.assertFalse(result["bpmDoubletime"])
+        self.assertEqual(result["bpmSource"], "rhythm_extractor")
+        self.assertIsNone(result["bpmRawOriginal"])
+
+    def test_percival_none(self) -> None:
+        """When bpm_percival is None → no correction."""
+        from analyze import apply_bpm_correction
+        result = apply_bpm_correction(128.0, None, None)
+        self.assertEqual(result["bpm"], 128.0)
+        self.assertFalse(result["bpmDoubletime"])
+        self.assertEqual(result["bpmRawOriginal"], 128.0)
+
+    def test_bpm_raw_original_always_set(self) -> None:
+        """bpmRawOriginal is always populated when RhythmExtractor succeeds."""
+        from analyze import apply_bpm_correction
+        # No correction case
+        result = apply_bpm_correction(128.0, 127.5, True)
+        self.assertEqual(result["bpmRawOriginal"], 128.0)
+        # Correction case
+        result = apply_bpm_correction(66.0, 132.0, False)
+        self.assertEqual(result["bpmRawOriginal"], 66.0)
 
 
 if __name__ == "__main__":

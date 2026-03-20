@@ -15,7 +15,7 @@ Conventions:
 
 Top-level keys:
 
-`bpm`, `bpmConfidence`, `bpmPercival`, `bpmAgreement`, `key`, `keyConfidence`, `keyProfile`, `tuningFrequency`, `tuningCents`, `timeSignature`, `durationSeconds`, `sampleRate`, `lufsIntegrated`, `lufsRange`, `lufsMomentaryMax`, `lufsShortTermMax`, `truePeak`, `crestFactor`, `dynamicSpread`, `dynamicCharacter`, `stereoDetail`, `spectralBalance`, `spectralDetail`, `rhythmDetail`, `melodyDetail`, `transcriptionDetail`, `grooveDetail`, `beatsLoudness`, `sidechainDetail`, `effectsDetail`, `synthesisCharacter`, `danceability`, `structure`, `arrangementDetail`, `segmentLoudness`, `segmentSpectral`, `segmentStereo`, `segmentKey`, `chordDetail`, `perceptual`, `essentiaFeatures`.
+`bpm`, `bpmConfidence`, `bpmPercival`, `bpmAgreement`, `bpmDoubletime`, `bpmSource`, `bpmRawOriginal`, `key`, `keyConfidence`, `keyProfile`, `tuningFrequency`, `tuningCents`, `timeSignature`, `durationSeconds`, `sampleRate`, `lufsIntegrated`, `lufsRange`, `lufsMomentaryMax`, `lufsShortTermMax`, `truePeak`, `crestFactor`, `dynamicSpread`, `dynamicCharacter`, `stereoDetail`, `spectralBalance`, `spectralDetail`, `rhythmDetail`, `melodyDetail`, `transcriptionDetail`, `grooveDetail`, `beatsLoudness`, `sidechainDetail`, `effectsDetail`, `synthesisCharacter`, `danceability`, `structure`, `arrangementDetail`, `segmentLoudness`, `segmentSpectral`, `segmentStereo`, `segmentKey`, `chordDetail`, `perceptual`, `essentiaFeatures`.
 
 ## Relationship To `POST /api/analyze`
 
@@ -95,6 +95,13 @@ Compatibility note:
 - `perceptual`
 - `essentiaFeatures`
 - `dynamicCharacter`
+- `acidDetail`
+- `reverbDetail`
+- `vocalDetail`
+- `supersawDetail`
+- `bassDetail`
+- `kickDetail`
+- `genreDetail`
 
 `phase1` also includes these scalar fields forwarded from the raw analyzer:
 
@@ -107,6 +114,9 @@ Compatibility note:
 - `lufsMomentaryMax`
 - `lufsShortTermMax`
 - `dynamicSpread`
+- `bpmDoubletime`
+- `bpmSource`
+- `bpmRawOriginal`
 
 All raw `analyze.py` fields are now forwarded through the server `phase1` wrapper, including fields previously excluded: `bpmPercival`, `bpmAgreement`, `sampleRate`, `dynamicSpread`, `dynamicCharacter`, `segmentStereo`, `essentiaFeatures`.
 
@@ -146,6 +156,9 @@ Current server behavior that affects schema expectations:
 |---|---|---|---|---|
 | `bpmPercival` | `float \| null` | Secondary BPM estimate via `PercivalBpmEstimator`. | beats per minute | Cross-check for tempo stability; disagreement suggests ambiguous pulse or half/double-time confusion. |
 | `bpmAgreement` | `bool \| null` | `true` when `abs(bpm - bpmPercival) < 2.0`. | boolean | Fast confidence signal for tempo reliability before committing global project BPM. |
+| `bpmDoubletime` | `bool` | `true` when the BPM value was corrected from a half-time or fractional-time reading via ratio matching against the Percival estimator. | boolean | When `true`, the kick pattern sits at the half-tempo pulse even though harmonic/hi-hat content moves at the corrected BPM. |
+| `bpmSource` | `string \| null` | One of: `"percival_ratio_corrected"` (ratio match fired, Percival wins), `"rhythm_extractor_confirmed"` (both estimators agree within 2 BPM), `"rhythm_extractor"` (default, no correction applied). | categorical | Indicates confidence level of the BPM measurement. `percival_ratio_corrected` means a harmonic relationship was detected and corrected. |
+| `bpmRawOriginal` | `float \| null` | The raw RhythmExtractor2013 tempo before any correction. Always populated when RhythmExtractor succeeds, even without correction (in which case `bpm == bpmRawOriginal`). | beats per minute | Compare with `bpm` to see if correction was applied. Useful for verifying the correction logic against audio perception. |
 
 ---
 

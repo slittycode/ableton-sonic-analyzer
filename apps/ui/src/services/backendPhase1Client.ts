@@ -1,13 +1,20 @@
 import {
+  AcidDetail,
   BackendAnalyzeResponse,
   BackendDiagnostics,
   BackendTimingDiagnostics,
   BackendErrorResponse,
   BackendEstimateResponse,
+  BassDetail,
   BeatsLoudness,
   DanceabilityResult,
   DynamicCharacter,
+  GenreDetail,
+  KickDetail,
   Phase1Result,
+  ReverbDetail,
+  SupersawDetail,
+  VocalDetail,
 } from "../types";
 
 const ANALYZE_TIMEOUT_FLOOR_MS = 180_000;
@@ -499,6 +506,9 @@ export function parsePhase1Result(value: unknown): Phase1Result {
     bpmConfidence: expectNumber(phase1, "bpmConfidence"),
     bpmPercival: toNumber(phase1.bpmPercival),
     bpmAgreement: phase1.bpmAgreement === true ? true : phase1.bpmAgreement === false ? false : null,
+    bpmDoubletime: phase1.bpmDoubletime === true ? true : phase1.bpmDoubletime === false ? false : null,
+    bpmSource: typeof phase1.bpmSource === "string" ? phase1.bpmSource : null,
+    bpmRawOriginal: toNumber(phase1.bpmRawOriginal),
     key: expectNullableString(phase1, "key"),
     keyConfidence: expectNumber(phase1, "keyConfidence"),
     keyProfile: toOptionalStringOrNull(phase1.keyProfile),
@@ -545,6 +555,13 @@ export function parsePhase1Result(value: unknown): Phase1Result {
     chordDetail: isRecord(phase1.chordDetail) ? phase1.chordDetail as Phase1Result["chordDetail"] : null,
     perceptual: isRecord(phase1.perceptual) ? phase1.perceptual as unknown as Phase1Result["perceptual"] : null,
     essentiaFeatures: isRecord(phase1.essentiaFeatures) ? phase1.essentiaFeatures as Phase1Result["essentiaFeatures"] : null,
+    acidDetail: parseOptionalAcidDetail(phase1.acidDetail),
+    reverbDetail: parseOptionalReverbDetail(phase1.reverbDetail),
+    vocalDetail: parseOptionalVocalDetail(phase1.vocalDetail),
+    supersawDetail: parseOptionalSupersawDetail(phase1.supersawDetail),
+    bassDetail: parseOptionalBassDetail(phase1.bassDetail),
+    kickDetail: parseOptionalKickDetail(phase1.kickDetail),
+    genreDetail: parseOptionalGenreDetail(phase1.genreDetail),
   };
 }
 
@@ -596,6 +613,130 @@ function parseOptionalBeatsLoudness(value: unknown): BeatsLoudness | null {
     kickDominantRatio, midDominantRatio, highDominantRatio,
     accentPattern, meanBeatLoudness, beatLoudnessVariation,
     beatCount: Math.round(beatCount),
+  };
+}
+
+function parseOptionalAcidDetail(value: unknown): AcidDetail | null {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value)) return null;
+  const confidence = toNumber(value.confidence);
+  const resonanceLevel = toNumber(value.resonanceLevel);
+  const centroidOscillationHz = toNumber(value.centroidOscillationHz);
+  const bassRhythmDensity = toNumber(value.bassRhythmDensity);
+  if (confidence === null || resonanceLevel === null || centroidOscillationHz === null || bassRhythmDensity === null) return null;
+  return {
+    isAcid: value.isAcid === true,
+    confidence,
+    resonanceLevel,
+    centroidOscillationHz,
+    bassRhythmDensity,
+  };
+}
+
+function parseOptionalReverbDetail(value: unknown): ReverbDetail | null {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value)) return null;
+  return {
+    rt60: toNumber(value.rt60),
+    isWet: value.isWet === true,
+    tailEnergyRatio: toNumber(value.tailEnergyRatio),
+    measured: value.measured === true,
+  };
+}
+
+function parseOptionalVocalDetail(value: unknown): VocalDetail | null {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value)) return null;
+  const confidence = toNumber(value.confidence);
+  const vocalEnergyRatio = toNumber(value.vocalEnergyRatio);
+  const formantStrength = toNumber(value.formantStrength);
+  const mfccLikelihood = toNumber(value.mfccLikelihood);
+  if (confidence === null || vocalEnergyRatio === null || formantStrength === null || mfccLikelihood === null) return null;
+  return {
+    hasVocals: value.hasVocals === true,
+    confidence,
+    vocalEnergyRatio,
+    formantStrength,
+    mfccLikelihood,
+  };
+}
+
+function parseOptionalSupersawDetail(value: unknown): SupersawDetail | null {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value)) return null;
+  const confidence = toNumber(value.confidence);
+  const voiceCount = toNumber(value.voiceCount);
+  const avgDetuneCents = toNumber(value.avgDetuneCents);
+  const spectralComplexity = toNumber(value.spectralComplexity);
+  if (confidence === null || voiceCount === null || avgDetuneCents === null || spectralComplexity === null) return null;
+  return {
+    isSupersaw: value.isSupersaw === true,
+    confidence,
+    voiceCount,
+    avgDetuneCents,
+    spectralComplexity,
+  };
+}
+
+function parseOptionalBassDetail(value: unknown): BassDetail | null {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value)) return null;
+  const averageDecayMs = toNumber(value.averageDecayMs);
+  const transientRatio = toNumber(value.transientRatio);
+  const transientCount = toNumber(value.transientCount);
+  const swingPercent = toNumber(value.swingPercent);
+  if (averageDecayMs === null || transientRatio === null || transientCount === null || swingPercent === null) return null;
+  const validTypes = ["punchy", "medium", "rolling", "sustained"] as const;
+  const type = validTypes.includes(value.type as typeof validTypes[number])
+    ? (value.type as typeof validTypes[number])
+    : "medium";
+  return {
+    averageDecayMs,
+    type,
+    transientRatio,
+    fundamentalHz: toNumber(value.fundamentalHz),
+    transientCount,
+    swingPercent,
+    grooveType: typeof value.grooveType === "string" ? value.grooveType : "unknown",
+  };
+}
+
+function parseOptionalKickDetail(value: unknown): KickDetail | null {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value)) return null;
+  const thd = toNumber(value.thd);
+  const harmonicRatio = toNumber(value.harmonicRatio);
+  const kickCount = toNumber(value.kickCount);
+  if (thd === null || harmonicRatio === null || kickCount === null) return null;
+  return {
+    isDistorted: value.isDistorted === true,
+    thd,
+    harmonicRatio,
+    fundamentalHz: toNumber(value.fundamentalHz),
+    kickCount,
+  };
+}
+
+function parseOptionalGenreDetail(value: unknown): GenreDetail | null {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value)) return null;
+  const confidence = toNumber(value.confidence);
+  if (confidence === null || typeof value.genre !== "string") return null;
+  const validFamilies = ["house", "techno", "dnb", "ambient", "trance", "dubstep", "breaks", "other"] as const;
+  const genreFamily = validFamilies.includes(value.genreFamily as typeof validFamilies[number])
+    ? (value.genreFamily as typeof validFamilies[number])
+    : "other";
+  const topScores = Array.isArray(value.topScores)
+    ? value.topScores
+        .filter((s: unknown) => isRecord(s) && typeof s.genre === "string" && toNumber(s.score) !== null)
+        .map((s: Record<string, unknown>) => ({ genre: s.genre as string, score: toNumber(s.score)! }))
+    : [];
+  return {
+    genre: value.genre,
+    confidence,
+    secondaryGenre: typeof value.secondaryGenre === "string" ? value.secondaryGenre : null,
+    genreFamily,
+    topScores,
   };
 }
 

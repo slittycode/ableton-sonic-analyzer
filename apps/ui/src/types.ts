@@ -203,11 +203,71 @@ export interface BeatsLoudness {
   beatCount: number;
 }
 
+export interface AcidDetail {
+  isAcid: boolean;
+  confidence: number;
+  resonanceLevel: number;
+  centroidOscillationHz: number;
+  bassRhythmDensity: number;
+}
+
+export interface ReverbDetail {
+  rt60: number | null;
+  isWet: boolean;
+  tailEnergyRatio: number | null;
+  measured: boolean;
+}
+
+export interface VocalDetail {
+  hasVocals: boolean;
+  confidence: number;
+  vocalEnergyRatio: number;
+  formantStrength: number;
+  mfccLikelihood: number;
+}
+
+export interface SupersawDetail {
+  isSupersaw: boolean;
+  confidence: number;
+  voiceCount: number;
+  avgDetuneCents: number;
+  spectralComplexity: number;
+}
+
+export interface BassDetail {
+  averageDecayMs: number;
+  type: "punchy" | "medium" | "rolling" | "sustained";
+  transientRatio: number;
+  fundamentalHz: number | null;
+  transientCount: number;
+  swingPercent: number;
+  grooveType: string;
+}
+
+export interface KickDetail {
+  isDistorted: boolean;
+  thd: number;
+  harmonicRatio: number;
+  fundamentalHz: number | null;
+  kickCount: number;
+}
+
+export interface GenreDetail {
+  genre: string;
+  confidence: number;
+  secondaryGenre: string | null;
+  genreFamily: "house" | "techno" | "dnb" | "ambient" | "trance" | "dubstep" | "breaks" | "other";
+  topScores: Array<{ genre: string; score: number }>;
+}
+
 export interface Phase1Result {
   bpm: number;
   bpmConfidence: number;
   bpmPercival?: number | null;
   bpmAgreement?: boolean | null;
+  bpmDoubletime?: boolean | null;
+  bpmSource?: string | null;
+  bpmRawOriginal?: number | null;
   key: string | null;
   keyConfidence: number;
   keyProfile?: string | null;
@@ -254,6 +314,13 @@ export interface Phase1Result {
   chordDetail?: ChordDetail | null;
   perceptual?: PerceptualDetail | null;
   essentiaFeatures?: EssentiaFeatures | null;
+  acidDetail?: AcidDetail | null;
+  reverbDetail?: ReverbDetail | null;
+  vocalDetail?: VocalDetail | null;
+  supersawDetail?: SupersawDetail | null;
+  bassDetail?: BassDetail | null;
+  kickDetail?: KickDetail | null;
+  genreDetail?: GenreDetail | null;
 }
 
 export type MeasurementResult = Omit<Phase1Result, 'transcriptionDetail'>;

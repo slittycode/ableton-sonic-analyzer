@@ -12,6 +12,8 @@ import sys
 import numpy as np
 import essentia.standard as es
 
+from analyze import apply_bpm_correction
+
 
 def analyze_fast(mono: np.ndarray, sample_rate: int = 44100) -> dict:
     """Run fast analysis on mono audio.
@@ -61,6 +63,10 @@ def analyze_fast(mono: np.ndarray, sample_rate: int = 44100) -> dict:
         result["bpmAgreement"] = abs(result["bpm"] - result["bpmPercival"]) < 2.0
     else:
         result["bpmAgreement"] = None
+
+    # BPM correction (shared helper)
+    correction = apply_bpm_correction(result["bpm"], result["bpmPercival"], result["bpmAgreement"])
+    result.update(correction)
 
     # Key extraction
     try:

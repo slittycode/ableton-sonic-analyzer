@@ -220,7 +220,14 @@ export function MeasurementDashboard({
     <div className="space-y-4">
       {/* 1. Core Metrics */}
       <Section id="section-meas-core" number={1} title="Core Metrics">
-        <MetricRow label="BPM" value={formatNumber(phase1.bpm, 1)} />
+        <MetricRow
+          label="BPM"
+          value={
+            phase1.bpmDoubletime === true && phase1.bpmRawOriginal != null
+              ? `${formatNumber(phase1.bpm, 1)} (corrected from ${formatNumber(phase1.bpmRawOriginal, 1)})`
+              : formatNumber(phase1.bpm, 1)
+          }
+        />
         <MetricRow
           label="BPM Confidence"
           value={formatNumber(phase1.bpmConfidence, 2)}
@@ -233,6 +240,9 @@ export function MeasurementDashboard({
             label="BPM Agreement"
             value={phase1.bpmAgreement ? '✓' : '✗'}
           />
+        )}
+        {phase1.bpmSource != null && phase1.bpmSource !== "rhythm_extractor" && (
+          <MetricRow label="BPM Source" value={phase1.bpmSource.replace(/_/g, ' ')} />
         )}
         <MetricRow label="Key" value={phase1.key || '—'} />
         <MetricRow
@@ -264,6 +274,24 @@ export function MeasurementDashboard({
             label="Sample Rate"
             value={`${(phase1.sampleRate / 1000).toFixed(1)} kHz`}
           />
+        )}
+        {phase1.genreDetail && (
+          <>
+            <div className="border-t border-border pt-3">
+              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+                Genre
+              </span>
+            </div>
+            <MetricRow label="Genre" value={phase1.genreDetail.genre} />
+            <MetricRow
+              label="Genre Confidence"
+              value={formatNumber(phase1.genreDetail.confidence, 2)}
+            />
+            {phase1.genreDetail.secondaryGenre && (
+              <MetricRow label="Secondary Genre" value={phase1.genreDetail.secondaryGenre} />
+            )}
+            <MetricRow label="Genre Family" value={phase1.genreDetail.genreFamily} />
+          </>
         )}
       </Section>
 
@@ -905,6 +933,154 @@ export function MeasurementDashboard({
                   value={formatNumber(phase1.effectsDetail.gatingEventCount, 0)}
                 />
               )}
+          </>
+        )}
+
+        {phase1.vocalDetail && (
+          <>
+            <div className="border-t border-border pt-3">
+              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+                Vocals
+              </span>
+            </div>
+            <MetricRow
+              label="Vocals Detected"
+              value={phase1.vocalDetail.hasVocals ? 'Yes' : 'No'}
+            />
+            <MetricRow
+              label="Vocal Confidence"
+              value={formatNumber(phase1.vocalDetail.confidence, 2)}
+            />
+            <MetricRow
+              label="Vocal Energy Ratio"
+              value={formatNumber(phase1.vocalDetail.vocalEnergyRatio, 3)}
+            />
+          </>
+        )}
+
+        {phase1.acidDetail && (
+          <>
+            <div className="border-t border-border pt-3">
+              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+                Acid
+              </span>
+            </div>
+            <MetricRow
+              label="Acid Detected"
+              value={phase1.acidDetail.isAcid ? 'Yes' : 'No'}
+            />
+            <MetricRow
+              label="Acid Confidence"
+              value={formatNumber(phase1.acidDetail.confidence, 2)}
+            />
+            <MetricRow
+              label="Resonance Level"
+              value={formatNumber(phase1.acidDetail.resonanceLevel, 3)}
+            />
+          </>
+        )}
+
+        {phase1.supersawDetail && (
+          <>
+            <div className="border-t border-border pt-3">
+              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+                Supersaw
+              </span>
+            </div>
+            <MetricRow
+              label="Supersaw Detected"
+              value={phase1.supersawDetail.isSupersaw ? 'Yes' : 'No'}
+            />
+            <MetricRow
+              label="Supersaw Confidence"
+              value={formatNumber(phase1.supersawDetail.confidence, 2)}
+            />
+            <MetricRow
+              label="Voice Count"
+              value={formatNumber(phase1.supersawDetail.voiceCount, 0)}
+            />
+            <MetricRow
+              label="Avg Detune"
+              value={`${formatNumber(phase1.supersawDetail.avgDetuneCents, 1)} cents`}
+            />
+          </>
+        )}
+
+        {phase1.bassDetail && (
+          <>
+            <div className="border-t border-border pt-3">
+              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+                Bass Character
+              </span>
+            </div>
+            <MetricRow label="Bass Type" value={phase1.bassDetail.type} />
+            <MetricRow
+              label="Avg Decay"
+              value={`${formatNumber(phase1.bassDetail.averageDecayMs, 0)} ms`}
+            />
+            <MetricRow
+              label="Swing"
+              value={`${formatNumber(phase1.bassDetail.swingPercent, 1)}%`}
+            />
+            <MetricRow label="Groove Type" value={phase1.bassDetail.grooveType} />
+            {phase1.bassDetail.fundamentalHz != null && (
+              <MetricRow
+                label="Fundamental"
+                value={`${formatNumber(phase1.bassDetail.fundamentalHz, 1)} Hz`}
+              />
+            )}
+          </>
+        )}
+
+        {phase1.kickDetail && (
+          <>
+            <div className="border-t border-border pt-3">
+              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+                Kick
+              </span>
+            </div>
+            <MetricRow
+              label="Distorted"
+              value={phase1.kickDetail.isDistorted ? 'Yes' : 'No'}
+            />
+            <MetricRow
+              label="THD"
+              value={formatNumber(phase1.kickDetail.thd, 3)}
+            />
+            <MetricRow
+              label="Kick Count"
+              value={formatNumber(phase1.kickDetail.kickCount, 0)}
+            />
+            {phase1.kickDetail.fundamentalHz != null && (
+              <MetricRow
+                label="Fundamental"
+                value={`${formatNumber(phase1.kickDetail.fundamentalHz, 1)} Hz`}
+              />
+            )}
+          </>
+        )}
+
+        {phase1.reverbDetail && (
+          <>
+            <div className="border-t border-border pt-3">
+              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+                Reverb
+              </span>
+            </div>
+            <MetricRow
+              label="Wet"
+              value={phase1.reverbDetail.isWet ? 'Yes' : 'No'}
+            />
+            {phase1.reverbDetail.rt60 != null && (
+              <MetricRow
+                label="RT60"
+                value={`${formatNumber(phase1.reverbDetail.rt60, 2)} s`}
+              />
+            )}
+            <MetricRow
+              label="Measured"
+              value={phase1.reverbDetail.measured ? 'Yes' : 'No'}
+            />
           </>
         )}
       </Section>

@@ -1209,6 +1209,30 @@ class BuildPhase1CoercionTests(unittest.TestCase):
         self.assertIsNone(phase1.get("lufsMomentaryMax"))
         self.assertIsNone(phase1.get("lufsShortTermMax"))
 
+    def test_bpm_doubletime_passes_through(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(bpmDoubletime=True))
+        self.assertTrue(phase1["bpmDoubletime"])
+
+    def test_bpm_source_passes_through(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(bpmSource="percival_ratio_corrected"))
+        self.assertEqual(phase1["bpmSource"], "percival_ratio_corrected")
+
+    def test_bpm_raw_original_passes_through(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(bpmRawOriginal=66.0))
+        self.assertEqual(phase1["bpmRawOriginal"], 66.0)
+
+    def test_bpm_raw_original_nan_coerced_to_none(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(bpmRawOriginal=float("nan")))
+        self.assertIsNone(phase1["bpmRawOriginal"])
+
+    def test_bpm_doubletime_missing_is_none(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload())
+        self.assertIsNone(phase1["bpmDoubletime"])
+
+    def test_bpm_source_missing_is_none(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload())
+        self.assertIsNone(phase1["bpmSource"])
+
 
 class Phase2EndpointTests(unittest.TestCase):
     """Tests for the /api/phase2 Gemini advisory endpoint."""
