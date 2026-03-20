@@ -27,3 +27,9 @@ apps/backend/.venv
 apps/backend/.venv/
 apps/backend/.venv*
 apps/backend/.env
+
+# Backend runtime state (artifacts, sqlite, reports)
+apps/backend/.runtime/
+
+# UI prototypes
+apps/ui/redesign-concept.html
