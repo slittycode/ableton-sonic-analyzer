@@ -24,6 +24,7 @@ const baseMeasurement: MeasurementResult = {
   spectralBalance: {
     subBass: -1.2,
     lowBass: 0.8,
+    lowMids: 0.0,
     mids: -0.4,
     upperMids: 0.2,
     highs: 1.1,

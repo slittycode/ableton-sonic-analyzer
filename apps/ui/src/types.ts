@@ -281,15 +281,18 @@ export interface Phase1Result {
   lufsMomentaryMax?: number | null;
   lufsShortTermMax?: number | null;
   truePeak: number;
+  plr?: number | null;
   crestFactor?: number | null;
   dynamicSpread?: number | null;
   dynamicCharacter?: DynamicCharacter | null;
   stereoWidth: number;
   stereoCorrelation: number;
   stereoDetail?: StereoDetail | null;
+  monoCompatible?: boolean | null;
   spectralBalance: {
     subBass: number;
     lowBass: number;
+    lowMids: number;
     mids: number;
     upperMids: number;
     highs: number;

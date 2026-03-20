@@ -33,6 +33,7 @@ from fastapi.responses import JSONResponse
 from analysis_runtime import AnalysisRuntime, UnsupportedSymbolicModeError
 from analyze import (
     BasicPitchBackend,
+    TorchcrepeBackend,
     analyze_transcription,
     build_analysis_estimate,
     get_audio_duration_seconds,
@@ -467,6 +468,18 @@ def _build_phase1(payload: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(spectral_balance, dict):
         spectral_balance = {}
 
+    plr = _coerce_nullable_number(payload.get("plr"))
+    if plr is None:
+        lufs_integrated = _coerce_nullable_number(payload.get("lufsIntegrated"))
+        true_peak = _coerce_nullable_number(payload.get("truePeak"))
+        if lufs_integrated is not None and true_peak is not None:
+            plr = round(true_peak - lufs_integrated, 2)
+
+    mono_compatible = payload.get("monoCompatible")
+    if not isinstance(mono_compatible, bool):
+        sub_bass_mono = stereo_detail.get("subBassMono")
+        mono_compatible = sub_bass_mono if isinstance(sub_bass_mono, bool) else None
+
     return {
         "bpm": _coerce_number(payload.get("bpm")),
         "bpmConfidence": _coerce_number(payload.get("bpmConfidence")),
@@ -488,15 +501,18 @@ def _build_phase1(payload: dict[str, Any]) -> dict[str, Any]:
         "lufsMomentaryMax": _coerce_nullable_number(payload.get("lufsMomentaryMax")),
         "lufsShortTermMax": _coerce_nullable_number(payload.get("lufsShortTermMax")),
         "truePeak": _coerce_number(payload.get("truePeak")),
+        "plr": plr,
         "crestFactor": _coerce_nullable_number(payload.get("crestFactor")),
         "dynamicSpread": _coerce_nullable_number(payload.get("dynamicSpread")),
         "dynamicCharacter": payload.get("dynamicCharacter"),
         "stereoWidth": _coerce_number(stereo_detail.get("stereoWidth")),
         "stereoCorrelation": _coerce_number(stereo_detail.get("stereoCorrelation")),
         "stereoDetail": payload.get("stereoDetail"),
+        "monoCompatible": mono_compatible,
         "spectralBalance": {
             "subBass": _coerce_number(spectral_balance.get("subBass")),
             "lowBass": _coerce_number(spectral_balance.get("lowBass")),
+            "lowMids": _coerce_number(spectral_balance.get("lowMids")),
             "mids": _coerce_number(spectral_balance.get("mids")),
             "upperMids": _coerce_number(spectral_balance.get("upperMids")),
             "highs": _coerce_number(spectral_balance.get("highs")),
@@ -947,6 +963,8 @@ def _execute_reserved_measurement_job(
 def _resolve_transcription_backend(backend_id: str) -> Any:
     if backend_id in ("", "auto", "default", "transcription-backend:auto"):
         return None
+    if backend_id in ("torchcrepe", "torchcrepe-viterbi", "transcription-backend:torchcrepe-viterbi"):
+        return TorchcrepeBackend()
     if backend_id in ("basic-pitch", "basic-pitch-legacy", "transcription-backend:basic-pitch-legacy"):
         return BasicPitchBackend()
     raise RuntimeError(f"Unsupported symbolic backend '{backend_id}'.")

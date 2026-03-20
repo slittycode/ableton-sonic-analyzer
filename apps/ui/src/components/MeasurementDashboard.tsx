@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Phase1Result } from '../types';
+import { generateMixDoctorReport } from '../services/mixDoctor';
 
 interface MeasurementDashboardProps {
   phase1: Phase1Result;
@@ -216,6 +217,8 @@ const SimpleTable = <T extends object>({
 export function MeasurementDashboard({
   phase1,
 }: MeasurementDashboardProps) {
+  const mixDoctorReport = useMemo(() => generateMixDoctorReport(phase1), [phase1]);
+
   return (
     <div className="space-y-4">
       {/* 1. Core Metrics */}
@@ -308,6 +311,9 @@ export function MeasurementDashboard({
           <MetricRow label="LUFS Short-Term Max" value={formatNumber(phase1.lufsShortTermMax, 1)} />
         )}
         <MetricRow label="True Peak" value={formatNumber(phase1.truePeak, 2)} />
+        {phase1.plr !== undefined && phase1.plr !== null && (
+          <MetricRow label="PLR" value={formatNumber(phase1.plr, 2)} />
+        )}
         {phase1.crestFactor !== undefined && phase1.crestFactor !== null && (
           <MetricRow label="Crest Factor" value={formatNumber(phase1.crestFactor, 2)} />
         )}
@@ -345,8 +351,80 @@ export function MeasurementDashboard({
         )}
       </Section>
 
-      {/* 3. Spectral */}
-      <Section id="section-meas-spectral" number={3} title="Spectral">
+      {/* 3. MixDoctor */}
+      <Section id="section-meas-mixdoctor" number={3} title="MixDoctor">
+        <MetricRow
+          label="Target Genre"
+          value={`${mixDoctorReport.genreName} (${mixDoctorReport.genreId})`}
+        />
+        <MetricRow
+          label="Health Score"
+          value={`${mixDoctorReport.overallScore}/100`}
+        />
+        <MetricRow
+          label="Loudness Offset"
+          value={formatNumber(mixDoctorReport.loudnessOffset, 2)}
+        />
+
+        <div className="border-t border-border pt-3">
+          <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+            Advisory Summary
+          </span>
+          <div className="mt-2 space-y-2 text-sm text-text-primary">
+            <div>
+              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mr-2">
+                Dynamics
+              </span>
+              {mixDoctorReport.dynamicsAdvice.message}
+            </div>
+            <div>
+              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mr-2">
+                Loudness
+              </span>
+              {mixDoctorReport.loudnessAdvice.message}
+            </div>
+            <div>
+              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mr-2">
+                Stereo
+              </span>
+              {mixDoctorReport.stereoAdvice.message}
+            </div>
+          </div>
+        </div>
+
+        <div className="border-t border-border pt-3">
+          <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+            Band Diagnostics
+          </span>
+          <div className="mt-2">
+            <SimpleTable
+              data={mixDoctorReport.advice}
+              columns={[
+                { key: 'band', label: 'Band', format: (v) => String(v ?? '—') },
+                {
+                  key: 'normalizedDb',
+                  label: 'Norm dB',
+                  format: (v) => formatNumber(v as number, 1),
+                },
+                {
+                  key: 'targetOptimalDb',
+                  label: 'Target dB',
+                  format: (v) => formatNumber(v as number, 1),
+                },
+                {
+                  key: 'diffDb',
+                  label: 'Delta dB',
+                  format: (v) => formatNumber(v as number, 1),
+                },
+                { key: 'issue', label: 'Issue', format: (v) => String(v ?? '—') },
+              ]}
+            />
+          </div>
+        </div>
+      </Section>
+
+      {/* 4. Spectral */}
+      <Section id="section-meas-spectral" number={4} title="Spectral">
         <div className="space-y-3">
           <div>
             <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
@@ -360,6 +438,10 @@ export function MeasurementDashboard({
               <MetricRow
                 label="Low Bass"
                 value={formatNumber(phase1.spectralBalance.lowBass, 2)}
+              />
+              <MetricRow
+                label="Low Mids"
+                value={formatNumber(phase1.spectralBalance.lowMids, 2)}
               />
               <MetricRow label="Mids" value={formatNumber(phase1.spectralBalance.mids, 2)} />
               <MetricRow
@@ -481,13 +563,19 @@ export function MeasurementDashboard({
         )}
       </Section>
 
-      {/* 4. Stereo Field */}
-      <Section id="section-meas-stereo" number={4} title="Stereo Field">
+      {/* 5. Stereo Field */}
+      <Section id="section-meas-stereo" number={5} title="Stereo Field">
         <MetricRow label="Stereo Width" value={formatNumber(phase1.stereoWidth, 2)} />
         <MetricRow
           label="Stereo Correlation"
           value={formatNumber(phase1.stereoCorrelation, 2)}
         />
+        {phase1.monoCompatible !== undefined && phase1.monoCompatible !== null && (
+          <MetricRow
+            label="Mono Compatible"
+            value={phase1.monoCompatible ? 'Yes' : 'No'}
+          />
+        )}
         {phase1.stereoDetail && (
           <>
             {phase1.stereoDetail.subBassCorrelation !== undefined &&
@@ -537,8 +625,8 @@ export function MeasurementDashboard({
         )}
       </Section>
 
-      {/* 5. Rhythm & Groove */}
-      <Section id="section-meas-rhythm" number={5} title="Rhythm & Groove">
+      {/* 6. Rhythm & Groove */}
+      <Section id="section-meas-rhythm" number={6} title="Rhythm & Groove">
         {phase1.rhythmDetail && (
           <>
             <MetricRow
@@ -668,8 +756,8 @@ export function MeasurementDashboard({
         )}
       </Section>
 
-      {/* 6. Harmony */}
-      <Section id="section-meas-harmony" number={6} title="Harmony">
+      {/* 7. Harmony */}
+      <Section id="section-meas-harmony" number={7} title="Harmony">
         {phase1.chordDetail && (
           <>
             {phase1.chordDetail.progression && phase1.chordDetail.progression.length > 0 && (
@@ -744,8 +832,8 @@ export function MeasurementDashboard({
         )}
       </Section>
 
-      {/* 7. Structure & Arrangement */}
-      <Section id="section-meas-structure" number={7} title="Structure & Arrangement">
+      {/* 8. Structure & Arrangement */}
+      <Section id="section-meas-structure" number={8} title="Structure & Arrangement">
         {phase1.structure && (
           <>
             {phase1.structure.segmentCount !== undefined &&
@@ -816,10 +904,49 @@ export function MeasurementDashboard({
             />
           </>
         )}
+        {phase1.segmentSpectral && phase1.segmentSpectral.length > 0 && (
+          <>
+            <div className="border-t border-border pt-3 mt-3">
+              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+                Segment Spectral
+              </span>
+            </div>
+            <SimpleTable
+              data={phase1.segmentSpectral}
+              columns={[
+                {
+                  key: 'segmentIndex',
+                  label: 'Segment',
+                  format: (v) => String(v !== undefined ? v : '—'),
+                },
+                {
+                  key: 'spectralCentroid',
+                  label: 'Centroid (Hz)',
+                  format: (v) => formatNumber(v as number, 1),
+                },
+                {
+                  key: 'spectralRolloff',
+                  label: 'Rolloff (Hz)',
+                  format: (v) => formatNumber(v as number, 1),
+                },
+                {
+                  key: 'stereoWidth',
+                  label: 'Width',
+                  format: (v) => formatNumber(v as number, 2),
+                },
+                {
+                  key: 'stereoCorrelation',
+                  label: 'Corr',
+                  format: (v) => formatNumber(v as number, 2),
+                },
+              ]}
+            />
+          </>
+        )}
       </Section>
 
-      {/* 8. Synthesis & Timbre */}
-      <Section id="section-meas-synthesis" number={8} title="Synthesis & Timbre">
+      {/* 9. Synthesis & Timbre */}
+      <Section id="section-meas-synthesis" number={9} title="Synthesis & Timbre">
         {phase1.synthesisCharacter && (
           <>
             {phase1.synthesisCharacter.inharmonicity !== undefined &&

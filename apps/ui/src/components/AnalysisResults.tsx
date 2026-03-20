@@ -236,6 +236,7 @@ export function AnalysisResults({
   const navSections: StickyNavSection[] = [
     { id: 'section-meas-core', label: 'Core' },
     { id: 'section-meas-loudness', label: 'Loudness' },
+    { id: 'section-meas-mixdoctor', label: 'MixDoctor' },
     { id: 'section-meas-spectral', label: 'Spectral' },
     { id: 'section-meas-stereo', label: 'Stereo' },
     { id: 'section-meas-rhythm', label: 'Rhythm' },

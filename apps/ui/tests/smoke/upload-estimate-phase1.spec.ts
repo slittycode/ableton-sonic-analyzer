@@ -214,6 +214,7 @@ test('upload shows estimate and local DSP processing copy before phase1 complete
                   spectralBalance: {
                     subBass: -0.7,
                     lowBass: 1.2,
+                    lowMids: 0.0,
                     mids: -0.3,
                     upperMids: 0.4,
                     highs: 1.0,

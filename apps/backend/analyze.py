@@ -964,15 +964,16 @@ def analyze_dynamic_character(mono: np.ndarray, sample_rate: int = 44100) -> dic
 
 
 def analyze_spectral_balance(mono: np.ndarray, sample_rate: int = 44100) -> dict:
-    """Spectral balance across 6 frequency bands using EnergyBand + spectrum."""
+    """Spectral balance across 7 frequency bands using EnergyBand + spectrum."""
     try:
         bands = {
-            "subBass": (20, 60),
-            "lowBass": (60, 200),
-            "mids": (200, 2000),
-            "upperMids": (2000, 6000),
-            "highs": (6000, 12000),
-            "brilliance": (12000, 20000),
+            "subBass": (20, 80),
+            "lowBass": (80, 250),
+            "lowMids": (250, 500),
+            "mids": (500, 2000),
+            "upperMids": (2000, 5000),
+            "highs": (5000, 10000),
+            "brilliance": (10000, 20000),
         }
 
         frame_size = 2048
@@ -1003,6 +1004,20 @@ def analyze_spectral_balance(mono: np.ndarray, sample_rate: int = 44100) -> dict
     except Exception as e:
         print(f"[warn] Spectral balance analysis failed: {e}", file=sys.stderr)
         return {"spectralBalance": None}
+
+
+def analyze_plr(lufs_integrated: float | None, true_peak: float | None) -> dict:
+    """Peak-to-loudness ratio (PLR): truePeak - LUFS integrated."""
+    try:
+        if lufs_integrated is None or true_peak is None:
+            return {"plr": None}
+        lufs_value = float(lufs_integrated)
+        true_peak_value = float(true_peak)
+        if not np.isfinite(lufs_value) or not np.isfinite(true_peak_value):
+            return {"plr": None}
+        return {"plr": round(true_peak_value - lufs_value, 2)}
+    except Exception:
+        return {"plr": None}
 
 
 def analyze_spectral_detail(mono: np.ndarray, sample_rate: int = 44100) -> dict:
@@ -4402,6 +4417,296 @@ class BasicPitchBackend:
             return {"transcriptionDetail": None}
 
 
+TORCHCREPE_SAMPLE_RATE = 16000
+TORCHCREPE_HOP_LENGTH = 160
+TORCHCREPE_FMIN = 50.0
+TORCHCREPE_FMAX = 1000.0
+TORCHCREPE_PERIODICITY_THRESHOLD = 0.21
+TORCHCREPE_MODEL = "tiny"
+TORCHCREPE_MIN_NOTE_SECONDS = 0.06
+TORCHCREPE_PITCH_JUMP_SPLIT_SEMITONES = 2.0
+TRANSCRIPTION_BACKEND_ENV = "ASA_TRANSCRIPTION_BACKEND"
+
+
+def _extract_torchcrepe_notes(
+    source_path: str,
+    stem_source: str,
+    *,
+    torch_module,
+    torchcrepe_module,
+    device: str,
+) -> tuple[list[dict], list[int], list[float]]:
+    mono = np.asarray(
+        load_mono(source_path, sample_rate=TORCHCREPE_SAMPLE_RATE), dtype=np.float32
+    )
+    if mono.size == 0:
+        return [], [], []
+
+    with torch_module.no_grad():
+        audio = torch_module.as_tensor(mono, dtype=torch_module.float32, device=device)
+        if audio.ndim == 1:
+            audio = audio.unsqueeze(0)
+
+        pitch_hz, periodicity = torchcrepe_module.predict(
+            audio,
+            TORCHCREPE_SAMPLE_RATE,
+            hop_length=TORCHCREPE_HOP_LENGTH,
+            fmin=TORCHCREPE_FMIN,
+            fmax=TORCHCREPE_FMAX,
+            model=TORCHCREPE_MODEL,
+            return_periodicity=True,
+            device=device,
+            pad=False,
+        )
+
+    pitch = np.asarray(pitch_hz.squeeze(0).detach().cpu().numpy(), dtype=np.float64)
+    periodicity_values = np.asarray(
+        periodicity.squeeze(0).detach().cpu().numpy(), dtype=np.float64
+    )
+    pitch = np.nan_to_num(pitch, nan=0.0, posinf=0.0, neginf=0.0)
+    periodicity_values = np.nan_to_num(
+        periodicity_values, nan=0.0, posinf=0.0, neginf=0.0
+    )
+
+    voiced = (pitch > 0.0) & (periodicity_values >= TORCHCREPE_PERIODICITY_THRESHOLD)
+    frame_duration = TORCHCREPE_HOP_LENGTH / float(TORCHCREPE_SAMPLE_RATE)
+    notes: list[dict] = []
+    midi_values: list[int] = []
+    confidence_values: list[float] = []
+
+    start_idx: int | None = None
+    midi_track: list[float] = []
+    confidence_track: list[float] = []
+    last_midi: float | None = None
+
+    def flush(end_idx: int) -> None:
+        nonlocal start_idx, midi_track, confidence_track, last_midi
+        if start_idx is None or len(midi_track) == 0:
+            start_idx = None
+            midi_track = []
+            confidence_track = []
+            last_midi = None
+            return
+
+        onset_seconds = start_idx * frame_duration
+        duration_seconds = max(0.0, (end_idx - start_idx) * frame_duration)
+        if duration_seconds < TORCHCREPE_MIN_NOTE_SECONDS:
+            start_idx = None
+            midi_track = []
+            confidence_track = []
+            last_midi = None
+            return
+
+        pitch_midi = int(np.clip(int(round(float(np.median(midi_track)))), 0, 127))
+        confidence = _normalize_confidence(
+            float(np.mean(np.asarray(confidence_track, dtype=np.float64)))
+        )
+        if confidence < TRANSCRIPTION_CONFIDENCE_FLOOR:
+            start_idx = None
+            midi_track = []
+            confidence_track = []
+            last_midi = None
+            return
+
+        note_obj = {
+            "pitchMidi": pitch_midi,
+            "pitchName": midi_to_note_name(pitch_midi),
+            "onsetSeconds": round(float(onset_seconds), 4),
+            "durationSeconds": round(float(duration_seconds), 4),
+            "confidence": confidence,
+            "stemSource": stem_source,
+        }
+        notes.append(note_obj)
+        midi_values.append(pitch_midi)
+        confidence_values.append(confidence)
+
+        start_idx = None
+        midi_track = []
+        confidence_track = []
+        last_midi = None
+
+    for idx in range(len(pitch)):
+        if not voiced[idx]:
+            flush(idx)
+            continue
+
+        current_midi = float(69.0 + 12.0 * np.log2(max(pitch[idx], 1e-9) / 440.0))
+
+        if start_idx is None:
+            start_idx = idx
+            midi_track = [current_midi]
+            confidence_track = [float(periodicity_values[idx])]
+            last_midi = current_midi
+            continue
+
+        if (
+            last_midi is not None
+            and abs(current_midi - last_midi) > TORCHCREPE_PITCH_JUMP_SPLIT_SEMITONES
+        ):
+            flush(idx)
+            start_idx = idx
+            midi_track = [current_midi]
+            confidence_track = [float(periodicity_values[idx])]
+            last_midi = current_midi
+            continue
+
+        midi_track.append(current_midi)
+        confidence_track.append(float(periodicity_values[idx]))
+        last_midi = current_midi
+
+    flush(len(pitch))
+    return notes, midi_values, confidence_values
+
+
+class TorchcrepeBackend:
+    """Maintained transcription backend using torchcrepe F0 tracking + segmentation."""
+
+    name = "torchcrepe-viterbi"
+
+    def transcribe(
+        self,
+        audio_path: str,
+        stem_paths: dict | None = None,
+        emit_progress_markers: bool = False,
+    ) -> dict:
+        try:
+            import torch
+            import torchcrepe
+        except Exception as e:
+            print(f"[warn] Torchcrepe import failed: {e}", file=sys.stderr)
+            return {"transcriptionDetail": None}
+
+        try:
+            transcription_sources = _transcription_source_paths(audio_path, stem_paths)
+            full_mix_fallback = (
+                len(transcription_sources) == 1
+                and transcription_sources[0][0] == "full_mix"
+            )
+            if full_mix_fallback:
+                print(
+                    "[warn] transcriptionDetail: running on full mix — quality may be low for dense material",
+                    file=sys.stderr,
+                )
+
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            notes: list[dict] = []
+            stems_transcribed = [
+                stem_source for stem_source, _source_path in transcription_sources
+            ]
+
+            for stem_source, source_path in transcription_sources:
+                if emit_progress_markers:
+                    transcription_mode = (
+                        "stems"
+                        if stem_source in ("bass", "other")
+                        else "full_mix"
+                    )
+                    print(
+                        f"@@TRANSCRIPTION_SOURCE mode={transcription_mode} source={stem_source}",
+                        file=sys.stderr,
+                    )
+
+                source_notes, _source_midi_values, _source_confidence_values = (
+                    _extract_torchcrepe_notes(
+                        source_path,
+                        stem_source,
+                        torch_module=torch,
+                        torchcrepe_module=torchcrepe,
+                        device=device,
+                    )
+                )
+                notes.extend(source_notes)
+
+            notes.sort(key=lambda note: note["onsetSeconds"])
+            notes = _deduplicate_transcription_notes(notes)
+
+            stem_separation_used = any(
+                stem_source in ("bass", "other") for stem_source in stems_transcribed
+            )
+            note_cap = (
+                FULL_MIX_TRANSCRIPTION_NOTE_CAP
+                if full_mix_fallback
+                else TRANSCRIPTION_NOTE_CAP
+            )
+            if len(notes) > note_cap:
+                original_count = len(notes)
+                ranked_notes = sorted(
+                    notes,
+                    key=lambda note: (
+                        -float(note.get("confidence", 0.0)),
+                        -float(note.get("durationSeconds", 0.0)),
+                        float(note.get("onsetSeconds", 0.0)),
+                    ),
+                )
+                notes = sorted(
+                    ranked_notes[:note_cap],
+                    key=lambda note: note["onsetSeconds"],
+                )
+                print(
+                    f"[warn] transcriptionDetail: truncated to {note_cap} notes (was {original_count})",
+                    file=sys.stderr,
+                )
+
+            if len(notes) == 0:
+                return {
+                    "transcriptionDetail": {
+                        "transcriptionMethod": self.name,
+                        "noteCount": 0,
+                        "averageConfidence": 0.0,
+                        "dominantPitches": [],
+                        "pitchRange": {
+                            "minMidi": None,
+                            "maxMidi": None,
+                            "minName": None,
+                            "maxName": None,
+                        },
+                        "stemSeparationUsed": stem_separation_used,
+                        "fullMixFallback": full_mix_fallback,
+                        "stemsTranscribed": stems_transcribed,
+                        "notes": [],
+                    }
+                }
+
+            midi_values = [int(note["pitchMidi"]) for note in notes]
+            confidence_values = [float(note["confidence"]) for note in notes]
+            dominant_pitches = [
+                {
+                    "pitchMidi": int(pitch_midi),
+                    "pitchName": midi_to_note_name(int(pitch_midi)),
+                    "count": int(count),
+                }
+                for pitch_midi, count in Counter(midi_values).most_common(5)
+            ]
+
+            min_midi = int(min(midi_values))
+            max_midi = int(max(midi_values))
+            average_confidence = round(
+                float(np.mean(np.asarray(confidence_values, dtype=np.float64))), 4
+            )
+
+            return {
+                "transcriptionDetail": {
+                    "transcriptionMethod": self.name,
+                    "noteCount": int(len(notes)),
+                    "averageConfidence": average_confidence,
+                    "dominantPitches": dominant_pitches,
+                    "pitchRange": {
+                        "minMidi": min_midi,
+                        "maxMidi": max_midi,
+                        "minName": midi_to_note_name(min_midi),
+                        "maxName": midi_to_note_name(max_midi),
+                    },
+                    "stemSeparationUsed": stem_separation_used,
+                    "fullMixFallback": full_mix_fallback,
+                    "stemsTranscribed": stems_transcribed,
+                    "notes": notes,
+                }
+            }
+        except Exception as e:
+            print(f"[warn] Torchcrepe transcription failed: {e}", file=sys.stderr)
+            return {"transcriptionDetail": None}
+
+
 def analyze_transcription(
     audio_path: str,
     stem_paths: dict | None = None,
@@ -4413,18 +4718,44 @@ def analyze_transcription(
     Pass a custom backend implementing TranscriptionBackend to use an alternative
     transcription engine (Stage 3 migration point).
     """
+    def _invoke_backend(candidate: TranscriptionBackend) -> dict:
+        try:
+            return candidate.transcribe(
+                audio_path,
+                stem_paths,
+                emit_progress_markers=emit_progress_markers,
+            )
+        except TypeError as exc:
+            if "emit_progress_markers" not in str(exc):
+                raise
+            return candidate.transcribe(audio_path, stem_paths)
+
     if backend is None:
-        backend = BasicPitchBackend()
-    try:
-        return backend.transcribe(
-            audio_path,
-            stem_paths,
-            emit_progress_markers=emit_progress_markers,
+        requested_backend = str(
+            os.getenv(TRANSCRIPTION_BACKEND_ENV, "auto")
+        ).strip().lower()
+        if requested_backend in ("basic-pitch", "basic-pitch-legacy"):
+            backend = BasicPitchBackend()
+        elif requested_backend in ("torchcrepe", "torchcrepe-viterbi", "auto", "", "default"):
+            backend = TorchcrepeBackend()
+        else:
+            print(
+                f"[warn] Unknown {TRANSCRIPTION_BACKEND_ENV}='{requested_backend}', defaulting to torchcrepe-viterbi",
+                file=sys.stderr,
+            )
+            backend = TorchcrepeBackend()
+
+    result = _invoke_backend(backend)
+    transcription_detail = result.get("transcriptionDetail") if isinstance(result, dict) else None
+
+    if getattr(backend, "name", "") == "torchcrepe-viterbi" and transcription_detail is None:
+        print(
+            "[warn] Torchcrepe backend unavailable/failed, falling back to basic-pitch-legacy",
+            file=sys.stderr,
         )
-    except TypeError as exc:
-        if "emit_progress_markers" not in str(exc):
-            raise
-        return backend.transcribe(audio_path, stem_paths)
+        return _invoke_backend(BasicPitchBackend())
+
+    return result
 
 
 def analyze_transcription_basic_pitch(
@@ -4436,6 +4767,7 @@ def analyze_transcription_basic_pitch(
     return analyze_transcription(
         audio_path,
         stem_paths=stem_paths,
+        backend=BasicPitchBackend(),
         emit_progress_markers=emit_progress_markers,
     )
 
@@ -4487,6 +4819,13 @@ def main():
             sys.exit(1)
         print("Running fast analysis...", file=sys.stderr)
         result = analyze_fast(mono, sample_rate)
+        fast_stereo_detail = result.get("stereoDetail")
+        fast_mono_compatible = (
+            fast_stereo_detail.get("subBassMono")
+            if isinstance(fast_stereo_detail, dict)
+            else None
+        )
+        fast_plr = analyze_plr(result.get("lufsIntegrated"), result.get("truePeak")).get("plr")
         output = {
             "bpm": result.get("bpm"),
             "bpmConfidence": result.get("bpmConfidence"),
@@ -4503,10 +4842,12 @@ def main():
             "lufsIntegrated": result.get("lufsIntegrated"),
             "lufsRange": result.get("lufsRange"),
             "truePeak": result.get("truePeak"),
+            "plr": fast_plr,
             "crestFactor": result.get("crestFactor"),
             "dynamicSpread": result.get("dynamicSpread"),
             "dynamicCharacter": result.get("dynamicCharacter"),
             "stereoDetail": result.get("stereoDetail"),
+            "monoCompatible": fast_mono_compatible,
             "spectralBalance": result.get("spectralBalance"),
             "spectralDetail": result.get("spectralDetail"),
             "rhythmDetail": result.get("rhythmDetail"),
@@ -4595,9 +4936,14 @@ def main():
             "subBassCorrelation": None,
             "subBassMono": None,
         }
+    stereo_detail = result.get("stereoDetail")
+    result["monoCompatible"] = (
+        stereo_detail.get("subBassMono") if isinstance(stereo_detail, dict) else None
+    )
 
     # Spectral balance
     result.update(analyze_spectral_balance(mono, sample_rate))
+    result.update(analyze_plr(result.get("lufsIntegrated"), result.get("truePeak")))
 
     # Spectral detail
     result.update(analyze_spectral_detail(mono, sample_rate))
@@ -4711,10 +5057,12 @@ def main():
         "lufsMomentaryMax": result.get("lufsMomentaryMax"),
         "lufsShortTermMax": result.get("lufsShortTermMax"),
         "truePeak": result.get("truePeak"),
+        "plr": result.get("plr"),
         "crestFactor": result.get("crestFactor"),
         "dynamicSpread": result.get("dynamicSpread"),
         "dynamicCharacter": result.get("dynamicCharacter"),
         "stereoDetail": result.get("stereoDetail"),
+        "monoCompatible": result.get("monoCompatible"),
         "spectralBalance": result.get("spectralBalance"),
         "spectralDetail": result.get("spectralDetail"),
         "rhythmDetail": result.get("rhythmDetail"),

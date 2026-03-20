@@ -28,6 +28,7 @@ const validPayload = {
     lufsMomentaryMax: -3.2,
     lufsShortTermMax: -4.8,
     truePeak: -0.5,
+    plr: 7.9,
     crestFactor: 8.6,
     dynamicSpread: 0.42,
     dynamicCharacter: {
@@ -44,9 +45,11 @@ const validPayload = {
       stereoCorrelation: 0.82,
       subBassMono: true,
     },
+    monoCompatible: true,
     spectralBalance: {
       subBass: -1.2,
       lowBass: 0.8,
+      lowMids: 0.0,
       mids: -0.4,
       upperMids: 0.2,
       highs: 1.1,
@@ -279,8 +282,11 @@ describe('parseBackendAnalyzeResponse', () => {
     expect(parsed.phase1.transcriptionDetail?.fullMixFallback).toBe(false);
     expect(parsed.phase1.transcriptionDetail?.notes[0].stemSource).toBe('bass');
     expect(parsed.phase1.lufsRange).toBe(3.1);
+    expect(parsed.phase1.plr).toBe(7.9);
     expect(parsed.phase1.crestFactor).toBe(8.6);
     expect(parsed.phase1.stereoDetail).toEqual(validPayload.phase1.stereoDetail);
+    expect(parsed.phase1.monoCompatible).toBe(true);
+    expect(parsed.phase1.spectralBalance.lowMids).toBe(0.0);
     expect(parsed.phase1.structure).toEqual(validPayload.phase1.structure);
     expect(parsed.phase1.segmentLoudness).toEqual(validPayload.phase1.segmentLoudness);
     expect(parsed.phase1.perceptual).toEqual(validPayload.phase1.perceptual);
@@ -350,6 +356,7 @@ describe('parseBackendAnalyzeResponse', () => {
     expect(parsed.phase1.sampleRate).toBeNull();
     expect(parsed.phase1.lufsMomentaryMax).toBeNull();
     expect(parsed.phase1.lufsShortTermMax).toBeNull();
+    expect(parsed.phase1.plr).toBe(7.9);
     expect(parsed.phase1.dynamicSpread).toBeNull();
     expect(parsed.phase1.dynamicCharacter).toBeNull();
     expect(parsed.phase1.beatsLoudness).toBeNull();
@@ -358,6 +365,7 @@ describe('parseBackendAnalyzeResponse', () => {
     expect(parsed.phase1.bpmDoubletime).toBeNull();
     expect(parsed.phase1.bpmSource).toBeNull();
     expect(parsed.phase1.bpmRawOriginal).toBeNull();
+    expect(parsed.phase1.monoCompatible).toBeNull();
     expect(parsed.phase1.acidDetail).toBeNull();
     expect(parsed.phase1.genreDetail).toBeNull();
   });
@@ -368,6 +376,19 @@ describe('parseBackendAnalyzeResponse', () => {
         requestId: 'req_123',
       }),
     ).toThrow(/phase1/i);
+  });
+
+  it('falls back lowMids to mids when lowMids is absent', () => {
+    const { lowMids: _ignoredLowMids, ...legacyBalance } = validPayload.phase1.spectralBalance;
+    const parsed = parseBackendAnalyzeResponse({
+      ...validPayload,
+      phase1: {
+        ...validPayload.phase1,
+        spectralBalance: legacyBalance,
+      },
+    });
+
+    expect(parsed.phase1.spectralBalance.lowMids).toBe(parsed.phase1.spectralBalance.mids);
   });
 
   it('throws when spectralBalance contains non-numeric values', () => {

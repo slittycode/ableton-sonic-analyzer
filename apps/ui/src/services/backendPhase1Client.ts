@@ -501,6 +501,23 @@ export function parsePhase1Result(value: unknown): Phase1Result {
     throw new BackendClientError("BACKEND_BAD_RESPONSE", "Expected stereoWidth and stereoCorrelation to be numbers");
   }
 
+  const lufsIntegrated = expectNumber(phase1, "lufsIntegrated");
+  const truePeak = expectNumber(phase1, "truePeak");
+  const explicitPlr = toNumber(phase1.plr);
+  const normalizedPlr = explicitPlr ?? roundToTwoDecimals(truePeak - lufsIntegrated);
+  const monoCompatible = phase1.monoCompatible === true
+    ? true
+    : phase1.monoCompatible === false
+      ? false
+      : (stereoFallback.subBassMono === true
+          ? true
+          : stereoFallback.subBassMono === false
+            ? false
+            : null);
+  const lowMids =
+    toNumber(spectralBalance.lowMids) ??
+    expectNumber(spectralBalance, "mids", "spectralBalance.mids");
+
   return {
     bpm: expectNumber(phase1, "bpm"),
     bpmConfidence: expectNumber(phase1, "bpmConfidence"),
@@ -517,20 +534,23 @@ export function parsePhase1Result(value: unknown): Phase1Result {
     timeSignature: expectString(phase1, "timeSignature"),
     durationSeconds: expectNumber(phase1, "durationSeconds"),
     sampleRate: toNumber(phase1.sampleRate),
-    lufsIntegrated: expectNumber(phase1, "lufsIntegrated"),
+    lufsIntegrated,
     lufsRange: toNumber(phase1.lufsRange),
     lufsMomentaryMax: toNumber(phase1.lufsMomentaryMax),
     lufsShortTermMax: toNumber(phase1.lufsShortTermMax),
-    truePeak: expectNumber(phase1, "truePeak"),
+    truePeak,
+    plr: normalizedPlr,
     crestFactor: toNumber(phase1.crestFactor),
     dynamicSpread: toNumber(phase1.dynamicSpread),
     dynamicCharacter: parseOptionalDynamicCharacter(phase1.dynamicCharacter),
     stereoWidth,
     stereoCorrelation,
     stereoDetail: isRecord(phase1.stereoDetail) ? phase1.stereoDetail as unknown as Phase1Result["stereoDetail"] : null,
+    monoCompatible,
     spectralBalance: {
       subBass: expectNumber(spectralBalance, "subBass", "spectralBalance.subBass"),
       lowBass: expectNumber(spectralBalance, "lowBass", "spectralBalance.lowBass"),
+      lowMids,
       mids: expectNumber(spectralBalance, "mids", "spectralBalance.mids"),
       upperMids: expectNumber(spectralBalance, "upperMids", "spectralBalance.upperMids"),
       highs: expectNumber(spectralBalance, "highs", "spectralBalance.highs"),
@@ -563,6 +583,11 @@ export function parsePhase1Result(value: unknown): Phase1Result {
     kickDetail: parseOptionalKickDetail(phase1.kickDetail),
     genreDetail: parseOptionalGenreDetail(phase1.genreDetail),
   };
+}
+
+function roundToTwoDecimals(value: number): number {
+  if (!Number.isFinite(value)) return value;
+  return Math.round(value * 100) / 100;
 }
 
 function parseOptionalDanceability(value: unknown): DanceabilityResult | null {

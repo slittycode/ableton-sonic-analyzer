@@ -16,6 +16,7 @@ import numpy as np
 EXPECTED_SPECTRAL_BANDS = {
     "subBass",
     "lowBass",
+    "lowMids",
     "mids",
     "upperMids",
     "highs",
@@ -27,8 +28,8 @@ EXPECTED_TOP_LEVEL_KEYS = {
     "bpm", "bpmConfidence", "bpmPercival", "bpmAgreement",
     "bpmDoubletime", "bpmSource", "bpmRawOriginal",
     "key", "keyConfidence", "timeSignature", "durationSeconds", "sampleRate",
-    "lufsIntegrated", "lufsRange", "truePeak", "crestFactor",
-    "dynamicSpread", "dynamicCharacter", "stereoDetail", "spectralBalance",
+    "lufsIntegrated", "lufsRange", "truePeak", "plr", "crestFactor",
+    "dynamicSpread", "dynamicCharacter", "stereoDetail", "monoCompatible", "spectralBalance",
     "spectralDetail", "rhythmDetail", "melodyDetail", "transcriptionDetail",
     "grooveDetail", "sidechainDetail", "acidDetail", "reverbDetail",
     "vocalDetail", "supersawDetail", "bassDetail", "kickDetail",
@@ -43,7 +44,7 @@ FAST_MODE_POPULATED_FIELDS = {
     "bpm", "bpmConfidence", "bpmPercival", "bpmAgreement",
     "bpmDoubletime", "bpmSource", "bpmRawOriginal",
     "key", "keyConfidence", "timeSignature", "durationSeconds", "sampleRate",
-    "lufsIntegrated", "lufsRange", "truePeak", "crestFactor",
+    "lufsIntegrated", "lufsRange", "truePeak", "plr", "crestFactor",
 }
 
 # Fields fast mode intentionally skips — must be None in fast output.
@@ -182,7 +183,7 @@ class AnalyzeStructuralSnapshotTests(unittest.TestCase):
         self.assertGreaterEqual(stereo_detail["stereoCorrelation"], -1.0)
         self.assertLessEqual(stereo_detail["stereoCorrelation"], 1.0)
 
-    def test_spectral_balance_has_six_numeric_bands(self) -> None:
+    def test_spectral_balance_has_seven_numeric_bands(self) -> None:
         spectral_balance = self.payload["spectralBalance"]
         self.assertIsInstance(spectral_balance, dict)
         self.assertEqual(set(spectral_balance.keys()), EXPECTED_SPECTRAL_BANDS)

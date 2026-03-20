@@ -367,6 +367,7 @@ class ServerContractTests(unittest.TestCase):
                     "spectralBalance": {
                         "subBass": -0.6,
                         "lowBass": 1.0,
+                        "lowMids": 0.0,
                         "mids": -0.2,
                         "upperMids": 0.3,
                         "highs": 0.9,
@@ -470,7 +471,7 @@ class ServerContractTests(unittest.TestCase):
                 "timeSignature": "4/4", "durationSeconds": 60.0,
                 "lufsIntegrated": -8.0, "truePeak": -0.5,
                 "stereoDetail": {"stereoWidth": 0.5, "stereoCorrelation": 0.9},
-                "spectralBalance": {"subBass": 0.0, "lowBass": 0.0, "mids": 0.0, "upperMids": 0.0, "highs": 0.0, "brilliance": 0.0},
+                "spectralBalance": {"subBass": 0.0, "lowBass": 0.0, "lowMids": 0.0, "mids": 0.0, "upperMids": 0.0, "highs": 0.0, "brilliance": 0.0},
                 "melodyDetail": None, "transcriptionDetail": None,
             }),
             stderr="",
@@ -524,7 +525,7 @@ class ServerContractTests(unittest.TestCase):
                 "timeSignature": "4/4", "durationSeconds": 60.0,
                 "lufsIntegrated": -8.0, "truePeak": -0.5,
                 "stereoDetail": {"stereoWidth": 0.5, "stereoCorrelation": 0.9},
-                "spectralBalance": {"subBass": 0.0, "lowBass": 0.0, "mids": 0.0, "upperMids": 0.0, "highs": 0.0, "brilliance": 0.0},
+                "spectralBalance": {"subBass": 0.0, "lowBass": 0.0, "lowMids": 0.0, "mids": 0.0, "upperMids": 0.0, "highs": 0.0, "brilliance": 0.0},
                 "melodyDetail": None, "transcriptionDetail": None,
             }),
             stderr="",
@@ -773,6 +774,7 @@ class ServerContractTests(unittest.TestCase):
                     "spectralBalance": {
                         "subBass": -0.6,
                         "lowBass": 1.0,
+                        "lowMids": 0.0,
                         "mids": -0.2,
                         "upperMids": 0.3,
                         "highs": 0.9,
@@ -1060,6 +1062,7 @@ class BuildPhase1CoercionTests(unittest.TestCase):
             "spectralBalance": {
                 "subBass": -0.6,
                 "lowBass": 1.0,
+                "lowMids": 0.0,
                 "mids": -0.2,
                 "upperMids": 0.3,
                 "highs": 0.9,
@@ -1166,6 +1169,27 @@ class BuildPhase1CoercionTests(unittest.TestCase):
         phase1 = server._build_phase1(self._minimal_payload(lufsShortTermMax=-4.8))
         self.assertEqual(phase1["lufsShortTermMax"], -4.8)
 
+    def test_plr_passes_through(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(plr=7.9))
+        self.assertEqual(phase1["plr"], 7.9)
+
+    def test_plr_falls_back_to_true_peak_minus_lufs(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(plr=None, truePeak=-0.1, lufsIntegrated=-8.2))
+        self.assertEqual(phase1["plr"], 8.1)
+
+    def test_mono_compatible_passes_through(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(monoCompatible=False))
+        self.assertFalse(phase1["monoCompatible"])
+
+    def test_mono_compatible_falls_back_to_sub_bass_mono(self) -> None:
+        phase1 = server._build_phase1(
+            self._minimal_payload(
+                monoCompatible=None,
+                stereoDetail={"stereoWidth": 0.74, "stereoCorrelation": 0.82, "subBassMono": True},
+            )
+        )
+        self.assertTrue(phase1["monoCompatible"])
+
     def test_beats_loudness_passes_through(self) -> None:
         bl = {
             "kickDominantRatio": 0.45,
@@ -1208,6 +1232,8 @@ class BuildPhase1CoercionTests(unittest.TestCase):
         self.assertIsNone(phase1.get("tuningCents"))
         self.assertIsNone(phase1.get("lufsMomentaryMax"))
         self.assertIsNone(phase1.get("lufsShortTermMax"))
+        self.assertIsNotNone(phase1.get("plr"))
+        self.assertIsNone(phase1.get("monoCompatible"))
 
     def test_bpm_doubletime_passes_through(self) -> None:
         phase1 = server._build_phase1(self._minimal_payload(bpmDoubletime=True))
@@ -1657,7 +1683,7 @@ class AnalysisRunCompatibilityTests(unittest.TestCase):
         "timeSignature": "4/4", "durationSeconds": 60.0,
         "lufsIntegrated": -8.0, "truePeak": -0.5,
         "stereoDetail": {"stereoWidth": 0.5, "stereoCorrelation": 0.9},
-        "spectralBalance": {"subBass": 0.0, "lowBass": 0.0, "mids": 0.0,
+        "spectralBalance": {"subBass": 0.0, "lowBass": 0.0, "lowMids": 0.0, "mids": 0.0,
                             "upperMids": 0.0, "highs": 0.0, "brilliance": 0.0},
         "melodyDetail": None, "transcriptionDetail": None,
     })
@@ -1797,7 +1823,7 @@ class AnalysisRunCompatibilityTests(unittest.TestCase):
                 "lufsIntegrated": -8.0,
                 "truePeak": -0.5,
                 "stereoDetail": {"stereoWidth": 0.5, "stereoCorrelation": 0.9},
-                "spectralBalance": {"subBass": 0.0, "lowBass": 0.0, "mids": 0.0, "upperMids": 0.0, "highs": 0.0, "brilliance": 0.0},
+                "spectralBalance": {"subBass": 0.0, "lowBass": 0.0, "lowMids": 0.0, "mids": 0.0, "upperMids": 0.0, "highs": 0.0, "brilliance": 0.0},
                 "melodyDetail": None,
                 "transcriptionDetail": {
                     "transcriptionMethod": "stub-backend",

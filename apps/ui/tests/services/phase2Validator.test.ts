@@ -23,6 +23,7 @@ const createBasePhase1 = (overrides: Partial<Phase1Result> = {}): Phase1Result =
   spectralBalance: {
     subBass: -0.7,
     lowBass: 1.2,
+    lowMids: 0.0,
     mids: -0.3,
     upperMids: 0.4,
     highs: 1.0,

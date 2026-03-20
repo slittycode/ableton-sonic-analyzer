@@ -18,6 +18,7 @@ const baseMeasurement: MeasurementResult = {
   spectralBalance: {
     subBass: -0.7,
     lowBass: 1.2,
+    lowMids: 0.0,
     mids: -0.3,
     upperMids: 0.4,
     highs: 1.0,
@@ -480,12 +481,14 @@ describe('AnalysisResults UI wiring', () => {
     );
 
     expect(html).toContain('Device Chain');
+    expect(html).toContain('href="#section-meas-mixdoctor"');
     expect(html).toContain('href="#section-meas-spectral"');
     expect(html).toContain('href="#section-arrangement"');
     expect(html).toContain('href="#section-session"');
     expect(html).toContain('href="#section-sonic-elements"');
     expect(html).toContain('href="#section-mix-chain"');
     expect(html).toContain('href="#section-patches"');
+    expect(html).toContain('id="section-meas-mixdoctor"');
     expect(html).toContain('id="section-meas-spectral"');
     expect(html).toContain('id="section-arrangement"');
     expect(html).toContain('id="section-session"');

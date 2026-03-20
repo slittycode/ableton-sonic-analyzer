@@ -1,0 +1,2663 @@
+{
+  "generatedAt": "2026-03-20T14:59:01.108808+00:00",
+  "manifestPath": "/Users/christiansmith/code/projects/asa/apps/backend/tests/fixtures/phase1_eval_manifest.json",
+  "runsPerFixture": 2,
+  "fixtures": [
+    {
+      "id": "click_120",
+      "audioPath": "/var/folders/3b/6fzyrl1d4yl7y6ddwl10fbhw0000gn/T/asa_phase1_eval_8akx_045/click_120.wav",
+      "runs": [
+        {
+          "bpm": 120.1,
+          "bpmConfidence": 3.78,
+          "bpmPercival": 120.2,
+          "bpmAgreement": true,
+          "bpmDoubletime": false,
+          "bpmSource": "rhythm_extractor_confirmed",
+          "bpmRawOriginal": 120.1,
+          "key": "F Major",
+          "keyConfidence": 0.61,
+          "keyProfile": "edma",
+          "tuningFrequency": 431.69,
+          "tuningCents": -33.0,
+          "timeSignature": "4/4",
+          "durationSeconds": 12.0,
+          "sampleRate": 44100,
+          "lufsIntegrated": -23.9,
+          "lufsRange": 0.0,
+          "lufsMomentaryMax": -23.9,
+          "lufsShortTermMax": -24.9,
+          "truePeak": 0.9,
+          "plr": 24.8,
+          "crestFactor": 21.3,
+          "dynamicSpread": 2736561574.39,
+          "dynamicCharacter": {
+            "dynamicComplexity": 22.1095,
+            "loudnessVariation": -38.4391,
+            "spectralFlatness": 0.0002,
+            "logAttackTime": -2.3001,
+            "attackTimeStdDev": 0.0033
+          },
+          "stereoDetail": {
+            "stereoWidth": 0.0,
+            "stereoCorrelation": 1.0,
+            "subBassCorrelation": 1.0,
+            "subBassMono": true
+          },
+          "monoCompatible": true,
+          "spectralBalance": {
+            "subBass": -18.6,
+            "lowBass": -24.3,
+            "lowMids": -53.9,
+            "mids": -70.6,
+            "upperMids": -101.2,
+            "highs": -117.3,
+            "brilliance": -117.3
+          },
+          "spectralDetail": {
+            "spectralCentroid": 23.2,
+            "spectralRolloff": 17.3,
+            "mfcc": [
+              -1247.849,
+              21.3675,
+              14.8558,
+              8.3288,
+              4.3516,
+              2.8696,
+              2.3699,
+              1.7928,
+              1.1279,
+              0.7016,
+              0.5191,
+              0.3666,
+              0.1723
+            ],
+            "chroma": [
+              0.1165,
+              0.2299,
+              0.2877,
+              0.0712,
+              0.4851,
+              0.0206,
+              0.0732,
+              0.1505,
+              0.2383,
+              0.2194,
+              0.0207,
+              0.0693
+            ],
+            "barkBands": [
+              -20.0592,
+              -20.4877,
+              -28.0463,
+              -36.5814,
+              -48.6662,
+              -60.3355,
+              -67.611,
+              -73.1242,
+              -76.5663,
+              -82.8304,
+              -86.2768,
+              -90.02,
+              -93.6379,
+              -97.5802,
+              -100.0722,
+              -104.4137,
+              -106.5625,
+              -110.5776,
+              -112.9905,
+              -115.8861,
+              -119.6323,
+              -121.4292,
+              -122.899,
+              -124.6721
+            ],
+            "erbBands": [
+              -1.6451,
+              2.6363,
+              2.9649,
+              -0.7068,
+              -9.3235,
+              -13.2999,
+              -19.1448,
+              -21.193,
+              -24.7432,
+              -28.3453,
+              -31.1347,
+              -33.7587,
+              -36.3387,
+              -38.7781,
+              -41.097,
+              -43.3815,
+              -45.5032,
+              -47.34,
+              -49.0108,
+              -50.5645,
+              -52.0368,
+              -53.3211,
+              -54.9096,
+              -56.831,
+              -59.8162,
+              -61.8762,
+              -58.0531,
+              -55.7032,
+              -54.0596,
+              -52.8336,
+              -51.8623,
+              -51.1178,
+              -50.5823,
+              -50.2943,
+              -50.3489,
+              -50.9879,
+              -53.0322,
+              -63.1571,
+              -50.3801,
+              -46.5151
+            ],
+            "spectralContrast": [
+              -0.9378,
+              -0.9821,
+              -0.9878,
+              -0.9893,
+              -0.9898,
+              -0.9906
+            ],
+            "spectralValley": [
+              -62.204,
+              -62.4963,
+              -62.7039,
+              -62.9029,
+              -63.1276,
+              -63.3569
+            ]
+          },
+          "rhythmDetail": {
+            "onsetRate": 2.09,
+            "beatGrid": [
+              0.534,
+              1.033,
+              1.533,
+              2.032,
+              2.531,
+              3.03,
+              3.529,
+              4.029,
+              4.528,
+              5.027,
+              5.526,
+              6.026,
+              6.525,
+              7.024,
+              7.535,
+              8.034,
+              8.533,
+              9.033,
+              9.532,
+              10.031,
+              10.53,
+              11.029,
+              11.529
+            ],
+            "downbeats": [
+              0.534,
+              2.531,
+              4.528,
+              6.525,
+              8.533,
+              10.53
+            ],
+            "beatPositions": [
+              1,
+              2,
+              3,
+              4,
+              1,
+              2,
+              3,
+              4,
+              1,
+              2,
+              3,
+              4,
+              1,
+              2,
+              3,
+              4,
+              1,
+              2,
+              3,
+              4,
+              1,
+              2,
+              3
+            ],
+            "grooveAmount": 0.0048,
+            "tempoStability": 0.9952,
+            "phraseGrid": {
+              "phrases4Bar": [
+                0.534,
+                8.533
+              ],
+              "phrases8Bar": [
+                0.534
+              ],
+              "phrases16Bar": [
+                0.534
+              ],
+              "totalBars": 6,
+              "totalPhrases8Bar": 1
+            }
+          },
+          "melodyDetail": {
+            "noteCount": 0,
+            "notes": [],
+            "dominantNotes": [],
+            "pitchRange": {
+              "min": null,
+              "max": null
+            },
+            "pitchConfidence": 0.0,
+            "midiFile": null,
+            "sourceSeparated": false,
+            "vibratoPresent": false,
+            "vibratoExtent": 0.0,
+            "vibratoRate": 0.0,
+            "vibratoConfidence": 0.0
+          },
+          "transcriptionDetail": null,
+          "grooveDetail": {
+            "kickSwing": 0.0,
+            "hihatSwing": 0.0,
+            "kickAccent": [
+              0.0001,
+              0.0001,
+              0.0001,
+              0.0001,
+              0.0001,
+              0.0001,
+              0.0001,
+              0.0001,
+              0.0001,
+              0.0001,
+              0.0001,
+              0.0001,
+              0.0001,
+              0.0001,
+              0.0001,
+              0.0001
+            ],
+            "hihatAccent": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "beatsLoudness": {
+            "kickDominantRatio": 0.7958,
+            "midDominantRatio": 0.0125,
+            "highDominantRatio": 0.003,
+            "accentPattern": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "meanBeatLoudness": 0.0001,
+            "beatLoudnessVariation": 0.0,
+            "beatCount": 23
+          },
+          "sidechainDetail": {
+            "pumpingStrength": 0.4,
+            "pumpingRegularity": 0.6465,
+            "pumpingRate": "sixteenth",
+            "pumpingConfidence": 0.1194,
+            "envelopeShape": [
+              0.0,
+              0.0,
+              0.0,
+              1.0,
+              0.0,
+              0.0,
+              0.0,
+              1.0,
+              0.0,
+              0.0,
+              0.0,
+              1.0,
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          },
+          "acidDetail": {
+            "isAcid": true,
+            "confidence": 0.82,
+            "resonanceLevel": 1.0,
+            "centroidOscillationHz": 56,
+            "bassRhythmDensity": 4.3
+          },
+          "reverbDetail": {
+            "rt60": null,
+            "isWet": false,
+            "tailEnergyRatio": null,
+            "measured": false
+          },
+          "vocalDetail": {
+            "hasVocals": false,
+            "confidence": 0.24,
+            "vocalEnergyRatio": 0.01,
+            "formantStrength": 0.05,
+            "mfccLikelihood": 0.76
+          },
+          "supersawDetail": {
+            "isSupersaw": false,
+            "confidence": 0.0,
+            "voiceCount": 0,
+            "avgDetuneCents": 0.0,
+            "spectralComplexity": 0.0
+          },
+          "bassDetail": {
+            "averageDecayMs": 1000,
+            "type": "sustained",
+            "transientRatio": 0.2,
+            "fundamentalHz": 30,
+            "transientCount": 0,
+            "swingPercent": 0,
+            "grooveType": "straight"
+          },
+          "kickDetail": {
+            "isDistorted": true,
+            "thd": 1.0,
+            "harmonicRatio": 1.0,
+            "fundamentalHz": 22,
+            "kickCount": 23
+          },
+          "genreDetail": {
+            "genre": "ambient-techno",
+            "confidence": 0.4,
+            "secondaryGenre": "ambient",
+            "genreFamily": "techno",
+            "topScores": [
+              {
+                "genre": "ambient-techno",
+                "score": 0.7195
+              },
+              {
+                "genre": "ambient",
+                "score": 0.6898
+              },
+              {
+                "genre": "organic-house",
+                "score": 0.6231
+              },
+              {
+                "genre": "dub-techno",
+                "score": 0.6091
+              },
+              {
+                "genre": "pop",
+                "score": 0.6033
+              }
+            ]
+          },
+          "effectsDetail": {
+            "gatingDetected": true,
+            "gatingRate": "quarter",
+            "gatingRegularity": 0.9952,
+            "gatingEventCount": 23
+          },
+          "synthesisCharacter": {
+            "inharmonicity": 0.0529,
+            "oddToEvenRatio": 0.1711
+          },
+          "danceability": {
+            "danceability": 8.2034,
+            "dfa": 0.1219
+          },
+          "structure": {
+            "segments": [
+              {
+                "start": 0.0,
+                "end": 12.0,
+                "index": 0
+              }
+            ],
+            "segmentCount": 1
+          },
+          "arrangementDetail": {
+            "noveltyCurve": [
+              0.0,
+              0.0,
+              0.0,
+              0.2863,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.2205,
+              0.0,
+              0.0,
+              0.1504,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.1759,
+              0.0,
+              0.0,
+              0.474,
+              0.0,
+              0.0268,
+              0.0,
+              0.0,
+              1.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.4895,
+              0.0,
+              0.0,
+              0.0504,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.1042,
+              0.0,
+              0.0,
+              0.3009,
+              0.0,
+              0.0601,
+              0.0,
+              0.0,
+              0.4127,
+              0.0,
+              0.0,
+              0.1089,
+              0.0,
+              0.1518,
+              0.0,
+              0.0,
+              0.5662,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.7094,
+              0.0,
+              0.0,
+              0.0272,
+              0.0,
+              0.0
+            ],
+            "noveltyPeaks": [
+              {
+                "time": 0.557,
+                "strength": 0.2863
+              },
+              {
+                "time": 2.554,
+                "strength": 0.7585
+              },
+              {
+                "time": 4.551,
+                "strength": 1.0
+              },
+              {
+                "time": 6.548,
+                "strength": 0.8445
+              },
+              {
+                "time": 9.056,
+                "strength": 0.4355
+              },
+              {
+                "time": 11.053,
+                "strength": 0.9458
+              }
+            ],
+            "noveltyMean": 0.08,
+            "noveltyStdDev": 0.1772
+          },
+          "segmentLoudness": [
+            {
+              "segmentIndex": 0,
+              "start": 0.0,
+              "end": 12.0,
+              "lufs": -23.9,
+              "lra": 0.0
+            }
+          ],
+          "segmentSpectral": [
+            {
+              "segmentIndex": 0,
+              "barkBands": [
+                -20.0592,
+                -20.4877,
+                -28.0463,
+                -36.5814,
+                -48.6662,
+                -60.3355,
+                -67.611,
+                -73.1242,
+                -76.5663,
+                -82.8304,
+                -86.2768,
+                -90.02,
+                -93.6379,
+                -97.5802,
+                -100.0722,
+                -104.4137,
+                -106.5625,
+                -110.5776,
+                -112.9905,
+                -115.8861,
+                -119.6323,
+                -121.4292,
+                -122.899,
+                -124.6721
+              ],
+              "spectralCentroid": 23.2,
+              "spectralRolloff": 17.3,
+              "stereoWidth": 0.0,
+              "stereoCorrelation": 1.0
+            }
+          ],
+          "segmentStereo": [
+            {
+              "segmentIndex": 0,
+              "stereoWidth": 0.0,
+              "stereoCorrelation": 1.0
+            }
+          ],
+          "segmentKey": [
+            {
+              "segmentIndex": 0,
+              "key": "F Major",
+              "keyConfidence": 0.61
+            }
+          ],
+          "chordDetail": {
+            "chordSequence": [
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#"
+            ],
+            "chordStrength": 0.4133,
+            "progression": [
+              "F#"
+            ],
+            "dominantChords": [
+              "F#"
+            ]
+          },
+          "perceptual": {
+            "sharpness": 0.0,
+            "roughness": 0.0142
+          },
+          "essentiaFeatures": {
+            "zeroCrossingRate": 0.0001,
+            "hfc": 0.8526,
+            "spectralComplexity": 0.1371,
+            "dissonance": 0.0142
+          }
+        },
+        {
+          "bpm": 120.1,
+          "bpmConfidence": 3.78,
+          "bpmPercival": 120.2,
+          "bpmAgreement": true,
+          "bpmDoubletime": false,
+          "bpmSource": "rhythm_extractor_confirmed",
+          "bpmRawOriginal": 120.1,
+          "key": "F Major",
+          "keyConfidence": 0.61,
+          "keyProfile": "edma",
+          "tuningFrequency": 431.69,
+          "tuningCents": -33.0,
+          "timeSignature": "4/4",
+          "durationSeconds": 12.0,
+          "sampleRate": 44100,
+          "lufsIntegrated": -23.9,
+          "lufsRange": 0.0,
+          "lufsMomentaryMax": -23.9,
+          "lufsShortTermMax": -24.9,
+          "truePeak": 0.9,
+          "plr": 24.8,
+          "crestFactor": 21.3,
+          "dynamicSpread": 2736561574.39,
+          "dynamicCharacter": {
+            "dynamicComplexity": 22.1095,
+            "loudnessVariation": -38.4391,
+            "spectralFlatness": 0.0002,
+            "logAttackTime": -2.3001,
+            "attackTimeStdDev": 0.0033
+          },
+          "stereoDetail": {
+            "stereoWidth": 0.0,
+            "stereoCorrelation": 1.0,
+            "subBassCorrelation": 1.0,
+            "subBassMono": true
+          },
+          "monoCompatible": true,
+          "spectralBalance": {
+            "subBass": -18.6,
+            "lowBass": -24.3,
+            "lowMids": -53.9,
+            "mids": -70.6,
+            "upperMids": -101.2,
+            "highs": -117.3,
+            "brilliance": -117.3
+          },
+          "spectralDetail": {
+            "spectralCentroid": 23.2,
+            "spectralRolloff": 17.3,
+            "mfcc": [
+              -1247.849,
+              21.3675,
+              14.8558,
+              8.3288,
+              4.3516,
+              2.8696,
+              2.3699,
+              1.7928,
+              1.1279,
+              0.7016,
+              0.5191,
+              0.3666,
+              0.1723
+            ],
+            "chroma": [
+              0.1165,
+              0.2299,
+              0.2877,
+              0.0712,
+              0.4851,
+              0.0206,
+              0.0732,
+              0.1505,
+              0.2383,
+              0.2194,
+              0.0207,
+              0.0693
+            ],
+            "barkBands": [
+              -20.0592,
+              -20.4877,
+              -28.0463,
+              -36.5814,
+              -48.6662,
+              -60.3355,
+              -67.611,
+              -73.1242,
+              -76.5663,
+              -82.8304,
+              -86.2768,
+              -90.02,
+              -93.6379,
+              -97.5802,
+              -100.0722,
+              -104.4137,
+              -106.5625,
+              -110.5776,
+              -112.9905,
+              -115.8861,
+              -119.6323,
+              -121.4292,
+              -122.899,
+              -124.6721
+            ],
+            "erbBands": [
+              -1.6451,
+              2.6363,
+              2.9649,
+              -0.7068,
+              -9.3235,
+              -13.2999,
+              -19.1448,
+              -21.193,
+              -24.7432,
+              -28.3453,
+              -31.1347,
+              -33.7587,
+              -36.3387,
+              -38.7781,
+              -41.097,
+              -43.3815,
+              -45.5032,
+              -47.34,
+              -49.0108,
+              -50.5645,
+              -52.0368,
+              -53.3211,
+              -54.9096,
+              -56.831,
+              -59.8162,
+              -61.8762,
+              -58.0531,
+              -55.7032,
+              -54.0596,
+              -52.8336,
+              -51.8623,
+              -51.1178,
+              -50.5823,
+              -50.2943,
+              -50.3489,
+              -50.9879,
+              -53.0322,
+              -63.1571,
+              -50.3801,
+              -46.5151
+            ],
+            "spectralContrast": [
+              -0.9378,
+              -0.9821,
+              -0.9878,
+              -0.9893,
+              -0.9898,
+              -0.9906
+            ],
+            "spectralValley": [
+              -62.204,
+              -62.4963,
+              -62.7039,
+              -62.9029,
+              -63.1276,
+              -63.3569
+            ]
+          },
+          "rhythmDetail": {
+            "onsetRate": 2.09,
+            "beatGrid": [
+              0.534,
+              1.033,
+              1.533,
+              2.032,
+              2.531,
+              3.03,
+              3.529,
+              4.029,
+              4.528,
+              5.027,
+              5.526,
+              6.026,
+              6.525,
+              7.024,
+              7.535,
+              8.034,
+              8.533,
+              9.033,
+              9.532,
+              10.031,
+              10.53,
+              11.029,
+              11.529
+            ],
+            "downbeats": [
+              0.534,
+              2.531,
+              4.528,
+              6.525,
+              8.533,
+              10.53
+            ],
+            "beatPositions": [
+              1,
+              2,
+              3,
+              4,
+              1,
+              2,
+              3,
+              4,
+              1,
+              2,
+              3,
+              4,
+              1,
+              2,
+              3,
+              4,
+              1,
+              2,
+              3,
+              4,
+              1,
+              2,
+              3
+            ],
+            "grooveAmount": 0.0048,
+            "tempoStability": 0.9952,
+            "phraseGrid": {
+              "phrases4Bar": [
+                0.534,
+                8.533
+              ],
+              "phrases8Bar": [
+                0.534
+              ],
+              "phrases16Bar": [
+                0.534
+              ],
+              "totalBars": 6,
+              "totalPhrases8Bar": 1
+            }
+          },
+          "melodyDetail": {
+            "noteCount": 0,
+            "notes": [],
+            "dominantNotes": [],
+            "pitchRange": {
+              "min": null,
+              "max": null
+            },
+            "pitchConfidence": 0.0,
+            "midiFile": null,
+            "sourceSeparated": false,
+            "vibratoPresent": false,
+            "vibratoExtent": 0.0,
+            "vibratoRate": 0.0,
+            "vibratoConfidence": 0.0
+          },
+          "transcriptionDetail": null,
+          "grooveDetail": {
+            "kickSwing": 0.0,
+            "hihatSwing": 0.0,
+            "kickAccent": [
+              0.0001,
+              0.0001,
+              0.0001,
+              0.0001,
+              0.0001,
+              0.0001,
+              0.0001,
+              0.0001,
+              0.0001,
+              0.0001,
+              0.0001,
+              0.0001,
+              0.0001,
+              0.0001,
+              0.0001,
+              0.0001
+            ],
+            "hihatAccent": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "beatsLoudness": {
+            "kickDominantRatio": 0.7958,
+            "midDominantRatio": 0.0125,
+            "highDominantRatio": 0.003,
+            "accentPattern": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "meanBeatLoudness": 0.0001,
+            "beatLoudnessVariation": 0.0,
+            "beatCount": 23
+          },
+          "sidechainDetail": {
+            "pumpingStrength": 0.4,
+            "pumpingRegularity": 0.6465,
+            "pumpingRate": "sixteenth",
+            "pumpingConfidence": 0.1194,
+            "envelopeShape": [
+              0.0,
+              0.0,
+              0.0,
+              1.0,
+              0.0,
+              0.0,
+              0.0,
+              1.0,
+              0.0,
+              0.0,
+              0.0,
+              1.0,
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          },
+          "acidDetail": {
+            "isAcid": true,
+            "confidence": 0.82,
+            "resonanceLevel": 1.0,
+            "centroidOscillationHz": 56,
+            "bassRhythmDensity": 4.3
+          },
+          "reverbDetail": {
+            "rt60": null,
+            "isWet": false,
+            "tailEnergyRatio": null,
+            "measured": false
+          },
+          "vocalDetail": {
+            "hasVocals": false,
+            "confidence": 0.24,
+            "vocalEnergyRatio": 0.01,
+            "formantStrength": 0.05,
+            "mfccLikelihood": 0.76
+          },
+          "supersawDetail": {
+            "isSupersaw": false,
+            "confidence": 0.0,
+            "voiceCount": 0,
+            "avgDetuneCents": 0.0,
+            "spectralComplexity": 0.0
+          },
+          "bassDetail": {
+            "averageDecayMs": 1000,
+            "type": "sustained",
+            "transientRatio": 0.2,
+            "fundamentalHz": 30,
+            "transientCount": 0,
+            "swingPercent": 0,
+            "grooveType": "straight"
+          },
+          "kickDetail": {
+            "isDistorted": true,
+            "thd": 1.0,
+            "harmonicRatio": 1.0,
+            "fundamentalHz": 22,
+            "kickCount": 23
+          },
+          "genreDetail": {
+            "genre": "ambient-techno",
+            "confidence": 0.4,
+            "secondaryGenre": "ambient",
+            "genreFamily": "techno",
+            "topScores": [
+              {
+                "genre": "ambient-techno",
+                "score": 0.7195
+              },
+              {
+                "genre": "ambient",
+                "score": 0.6898
+              },
+              {
+                "genre": "organic-house",
+                "score": 0.6231
+              },
+              {
+                "genre": "dub-techno",
+                "score": 0.6091
+              },
+              {
+                "genre": "pop",
+                "score": 0.6033
+              }
+            ]
+          },
+          "effectsDetail": {
+            "gatingDetected": true,
+            "gatingRate": "quarter",
+            "gatingRegularity": 0.9952,
+            "gatingEventCount": 23
+          },
+          "synthesisCharacter": {
+            "inharmonicity": 0.0529,
+            "oddToEvenRatio": 0.1711
+          },
+          "danceability": {
+            "danceability": 8.2034,
+            "dfa": 0.1219
+          },
+          "structure": {
+            "segments": [
+              {
+                "start": 0.0,
+                "end": 12.0,
+                "index": 0
+              }
+            ],
+            "segmentCount": 1
+          },
+          "arrangementDetail": {
+            "noveltyCurve": [
+              0.0,
+              0.0,
+              0.0,
+              0.2863,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.2205,
+              0.0,
+              0.0,
+              0.1504,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.1759,
+              0.0,
+              0.0,
+              0.474,
+              0.0,
+              0.0268,
+              0.0,
+              0.0,
+              1.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.4895,
+              0.0,
+              0.0,
+              0.0504,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.1042,
+              0.0,
+              0.0,
+              0.3009,
+              0.0,
+              0.0601,
+              0.0,
+              0.0,
+              0.4127,
+              0.0,
+              0.0,
+              0.1089,
+              0.0,
+              0.1518,
+              0.0,
+              0.0,
+              0.5662,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.7094,
+              0.0,
+              0.0,
+              0.0272,
+              0.0,
+              0.0
+            ],
+            "noveltyPeaks": [
+              {
+                "time": 0.557,
+                "strength": 0.2863
+              },
+              {
+                "time": 2.554,
+                "strength": 0.7585
+              },
+              {
+                "time": 4.551,
+                "strength": 1.0
+              },
+              {
+                "time": 6.548,
+                "strength": 0.8445
+              },
+              {
+                "time": 9.056,
+                "strength": 0.4355
+              },
+              {
+                "time": 11.053,
+                "strength": 0.9458
+              }
+            ],
+            "noveltyMean": 0.08,
+            "noveltyStdDev": 0.1772
+          },
+          "segmentLoudness": [
+            {
+              "segmentIndex": 0,
+              "start": 0.0,
+              "end": 12.0,
+              "lufs": -23.9,
+              "lra": 0.0
+            }
+          ],
+          "segmentSpectral": [
+            {
+              "segmentIndex": 0,
+              "barkBands": [
+                -20.0592,
+                -20.4877,
+                -28.0463,
+                -36.5814,
+                -48.6662,
+                -60.3355,
+                -67.611,
+                -73.1242,
+                -76.5663,
+                -82.8304,
+                -86.2768,
+                -90.02,
+                -93.6379,
+                -97.5802,
+                -100.0722,
+                -104.4137,
+                -106.5625,
+                -110.5776,
+                -112.9905,
+                -115.8861,
+                -119.6323,
+                -121.4292,
+                -122.899,
+                -124.6721
+              ],
+              "spectralCentroid": 23.2,
+              "spectralRolloff": 17.3,
+              "stereoWidth": 0.0,
+              "stereoCorrelation": 1.0
+            }
+          ],
+          "segmentStereo": [
+            {
+              "segmentIndex": 0,
+              "stereoWidth": 0.0,
+              "stereoCorrelation": 1.0
+            }
+          ],
+          "segmentKey": [
+            {
+              "segmentIndex": 0,
+              "key": "F Major",
+              "keyConfidence": 0.61
+            }
+          ],
+          "chordDetail": {
+            "chordSequence": [
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#",
+              "F#"
+            ],
+            "chordStrength": 0.4133,
+            "progression": [
+              "F#"
+            ],
+            "dominantChords": [
+              "F#"
+            ]
+          },
+          "perceptual": {
+            "sharpness": 0.0,
+            "roughness": 0.0142
+          },
+          "essentiaFeatures": {
+            "zeroCrossingRate": 0.0001,
+            "hfc": 0.8526,
+            "spectralComplexity": 0.1371,
+            "dissonance": 0.0142
+          }
+        }
+      ],
+      "checks": [
+        {
+          "name": "threshold:bpm",
+          "passed": true,
+          "message": "target=120.1 tolerance=0.2 actual=120.1 delta=0.0"
+        },
+        {
+          "name": "threshold:lufsIntegrated",
+          "passed": true,
+          "message": "target=-23.9 tolerance=0.5 actual=-23.9 delta=0.0"
+        },
+        {
+          "name": "threshold:truePeak",
+          "passed": true,
+          "message": "target=0.9 tolerance=0.2 actual=0.9 delta=0.0"
+        },
+        {
+          "name": "threshold:plr",
+          "passed": true,
+          "message": "target=24.8 tolerance=0.7 actual=24.8 delta=0.0"
+        },
+        {
+          "name": "threshold:monoCompatible",
+          "passed": true,
+          "message": "expected=True actual=True"
+        },
+        {
+          "name": "spectral:presence",
+          "passed": true,
+          "message": "all spectral bands present and finite"
+        },
+        {
+          "name": "plr:consistency",
+          "passed": true,
+          "message": "plr=24.8 expected=24.8 delta=0.0"
+        },
+        {
+          "name": "stability:acidDetail.confidence",
+          "passed": true,
+          "message": "values=[0.82, 0.82] drift=0.0 maxDelta=0.0"
+        },
+        {
+          "name": "stability:reverbDetail.isWet",
+          "passed": true,
+          "message": "values=[False, False]"
+        },
+        {
+          "name": "stability:vocalDetail.hasVocals",
+          "passed": true,
+          "message": "values=[False, False]"
+        },
+        {
+          "name": "stability:supersawDetail.isSupersaw",
+          "passed": true,
+          "message": "values=[False, False]"
+        },
+        {
+          "name": "stability:kickDetail.kickCount",
+          "passed": true,
+          "message": "values=[23.0, 23.0] drift=0.0 maxDelta=0.0"
+        }
+      ],
+      "allPassed": true
+    },
+    {
+      "id": "sine_220",
+      "audioPath": "/var/folders/3b/6fzyrl1d4yl7y6ddwl10fbhw0000gn/T/asa_phase1_eval_8akx_045/sine_220.wav",
+      "runs": [
+        {
+          "bpm": 112.2,
+          "bpmConfidence": 2.39,
+          "bpmPercival": 102.3,
+          "bpmAgreement": false,
+          "bpmDoubletime": false,
+          "bpmSource": "rhythm_extractor",
+          "bpmRawOriginal": 112.2,
+          "key": "A Minor",
+          "keyConfidence": 0.75,
+          "keyProfile": "edma",
+          "tuningFrequency": 437.97,
+          "tuningCents": -8.0,
+          "timeSignature": "4/4",
+          "durationSeconds": 8.0,
+          "sampleRate": 44100,
+          "lufsIntegrated": -6.9,
+          "lufsRange": 0.0,
+          "lufsMomentaryMax": -6.9,
+          "lufsShortTermMax": -6.9,
+          "truePeak": 0.5,
+          "plr": 7.4,
+          "crestFactor": 3.0,
+          "dynamicSpread": 20709011.44,
+          "dynamicCharacter": {
+            "dynamicComplexity": 0.0007,
+            "loudnessVariation": -11.6932,
+            "spectralFlatness": 0.0014,
+            "logAttackTime": -1.2934,
+            "attackTimeStdDev": 0.0
+          },
+          "stereoDetail": {
+            "stereoWidth": 0.0,
+            "stereoCorrelation": 1.0,
+            "subBassCorrelation": 1.0,
+            "subBassMono": true
+          },
+          "monoCompatible": true,
+          "spectralBalance": {
+            "subBass": -46.9,
+            "lowBass": -4.3,
+            "lowMids": -31.1,
+            "mids": -57.5,
+            "upperMids": -76.6,
+            "highs": -83.8,
+            "brilliance": -79.6
+          },
+          "spectralDetail": {
+            "spectralCentroid": 220.0,
+            "spectralRolloff": 236.9,
+            "mfcc": [
+              -1135.64,
+              170.9699,
+              143.6183,
+              106.4805,
+              63.1256,
+              21.7115,
+              -13.2522,
+              -39.0156,
+              -53.8692,
+              -59.7475,
+              -59.2252,
+              -53.7879,
+              -46.4321
+            ],
+            "chroma": [
+              0.9971,
+              0.001,
+              0.2838,
+              0.0025,
+              0.1638,
+              0.0918,
+              0.0567,
+              0.245,
+              0.1795,
+              0.068,
+              0.0034,
+              0.0079
+            ],
+            "barkBands": [
+              -50.643,
+              -47.9514,
+              -46.8716,
+              -37.1084,
+              -4.2798,
+              -47.0776,
+              -56.4213,
+              -61.2738,
+              -63.9379,
+              -67.7864,
+              -70.8731,
+              -72.6699,
+              -75.1266,
+              -77.4328,
+              -79.3435,
+              -81.3723,
+              -83.3884,
+              -85.0706,
+              -85.976,
+              -86.2288,
+              -85.3706,
+              -91.7209,
+              -92.9351,
+              -88.1298
+            ],
+            "erbBands": [
+              -24.087,
+              -14.0895,
+              -1.0104,
+              16.4196,
+              31.5041,
+              29.3257,
+              15.0598,
+              3.1672,
+              -4.9953,
+              -10.6126,
+              -14.581,
+              -17.5383,
+              -19.8997,
+              -21.9051,
+              -23.69,
+              -25.3398,
+              -26.8932,
+              -28.3778,
+              -29.8175,
+              -31.2223,
+              -32.6164,
+              -34.0164,
+              -35.4349,
+              -36.8003,
+              -37.4585,
+              -37.6203,
+              -37.3903,
+              -38.24,
+              -39.2558,
+              -38.7755,
+              -37.9342,
+              -37.0011,
+              -37.0068,
+              -36.9274,
+              -37.1781,
+              -37.8785,
+              -40.0309,
+              -48.027,
+              -37.6447,
+              -33.8556
+            ],
+            "spectralContrast": [
+              -0.1118,
+              -0.7598,
+              -0.8943,
+              -0.9042,
+              -0.8548,
+              -0.8692
+            ],
+            "spectralValley": [
+              -7.6705,
+              -10.931,
+              -13.3041,
+              -14.5704,
+              -14.4793,
+              -14.6247
+            ]
+          },
+          "rhythmDetail": {
+            "onsetRate": 2.02,
+            "beatGrid": [
+              0.534,
+              1.08,
+              1.625,
+              2.159,
+              2.694,
+              3.228,
+              3.762,
+              4.307,
+              4.83,
+              5.364,
+              5.898,
+              6.432,
+              6.954,
+              7.454,
+              7.964
+            ],
+            "downbeats": [
+              0.534,
+              2.694,
+              4.83,
+              6.954
+            ],
+            "beatPositions": [
+              1,
+              2,
+              3,
+              4,
+              1,
+              2,
+              3,
+              4,
+              1,
+              2,
+              3,
+              4,
+              1,
+              2,
+              3
+            ],
+            "grooveAmount": 0.024,
+            "tempoStability": 0.976,
+            "phraseGrid": {
+              "phrases4Bar": [
+                0.534
+              ],
+              "phrases8Bar": [
+                0.534
+              ],
+              "phrases16Bar": [
+                0.534
+              ],
+              "totalBars": 4,
+              "totalPhrases8Bar": 1
+            }
+          },
+          "melodyDetail": {
+            "noteCount": 1,
+            "notes": [
+              {
+                "midi": 57,
+                "onset": 0.017,
+                "duration": 7.964
+              }
+            ],
+            "dominantNotes": [
+              57
+            ],
+            "pitchRange": {
+              "min": 57,
+              "max": 57
+            },
+            "pitchConfidence": 0.1912,
+            "midiFile": "/var/folders/3b/6fzyrl1d4yl7y6ddwl10fbhw0000gn/T/asa_phase1_eval_8akx_045/sine_220_melody.mid",
+            "sourceSeparated": false,
+            "vibratoPresent": false,
+            "vibratoExtent": 0.0,
+            "vibratoRate": 0.0,
+            "vibratoConfidence": 0.0
+          },
+          "transcriptionDetail": null,
+          "grooveDetail": {
+            "kickSwing": 0.1358,
+            "hihatSwing": 0.0118,
+            "kickAccent": [
+              0.0755,
+              0.0755,
+              0.0755,
+              0.0755,
+              0.0755,
+              0.0755,
+              0.0755,
+              0.0755,
+              0.0754,
+              0.0755,
+              0.0755,
+              0.0754,
+              0.0754,
+              0.0754
+            ],
+            "hihatAccent": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "beatsLoudness": {
+            "kickDominantRatio": 0.1873,
+            "midDominantRatio": 0.1849,
+            "highDominantRatio": 0.0,
+            "accentPattern": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "meanBeatLoudness": 0.4028,
+            "beatLoudnessVariation": 0.0,
+            "beatCount": 14
+          },
+          "sidechainDetail": {
+            "pumpingStrength": 0.0192,
+            "pumpingRegularity": 0.0297,
+            "pumpingRate": null,
+            "pumpingConfidence": 0.1253,
+            "envelopeShape": [
+              1.0,
+              0.998,
+              0.996,
+              0.998,
+              1.0,
+              0.998,
+              0.996,
+              0.998,
+              1.0,
+              0.998,
+              0.996,
+              0.998,
+              1.0,
+              0.998,
+              0.998,
+              0.998
+            ]
+          },
+          "acidDetail": {
+            "isAcid": false,
+            "confidence": 0.02,
+            "resonanceLevel": 0.0,
+            "centroidOscillationHz": 2,
+            "bassRhythmDensity": 0.1
+          },
+          "reverbDetail": {
+            "rt60": null,
+            "isWet": false,
+            "tailEnergyRatio": null,
+            "measured": false
+          },
+          "vocalDetail": {
+            "hasVocals": true,
+            "confidence": 0.73,
+            "vocalEnergyRatio": 1.0,
+            "formantStrength": 0.29,
+            "mfccLikelihood": 0.92
+          },
+          "supersawDetail": {
+            "isSupersaw": true,
+            "confidence": 0.47,
+            "voiceCount": 4,
+            "avgDetuneCents": 27.9,
+            "spectralComplexity": 4.0
+          },
+          "bassDetail": {
+            "averageDecayMs": 1000,
+            "type": "sustained",
+            "transientRatio": 0.2,
+            "fundamentalHz": 120,
+            "transientCount": 0,
+            "swingPercent": 0,
+            "grooveType": "straight"
+          },
+          "kickDetail": {
+            "isDistorted": false,
+            "thd": 0.0,
+            "harmonicRatio": 0.0,
+            "fundamentalHz": 50.0,
+            "kickCount": 0
+          },
+          "genreDetail": {
+            "genre": "ambient-techno",
+            "confidence": 0.4,
+            "secondaryGenre": "dub-techno",
+            "genreFamily": "techno",
+            "topScores": [
+              {
+                "genre": "ambient-techno",
+                "score": 0.6182
+              },
+              {
+                "genre": "dub-techno",
+                "score": 0.6182
+              },
+              {
+                "genre": "ambient",
+                "score": 0.6168
+              },
+              {
+                "genre": "acoustic",
+                "score": 0.5614
+              },
+              {
+                "genre": "ambient-drone",
+                "score": 0.5447
+              }
+            ]
+          },
+          "effectsDetail": {
+            "gatingDetected": false,
+            "gatingRate": null,
+            "gatingRegularity": 0.0,
+            "gatingEventCount": 1
+          },
+          "synthesisCharacter": {
+            "inharmonicity": 0.0,
+            "oddToEvenRatio": 0.0
+          },
+          "danceability": {
+            "danceability": 12.6324,
+            "dfa": 0.0769
+          },
+          "structure": {
+            "segments": [
+              {
+                "start": 0.0,
+                "end": 8.0,
+                "index": 0
+              }
+            ],
+            "segmentCount": 1
+          },
+          "arrangementDetail": {
+            "noveltyCurve": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "noveltyPeaks": [],
+            "noveltyMean": 0.0037,
+            "noveltyStdDev": 0.0557
+          },
+          "segmentLoudness": [
+            {
+              "segmentIndex": 0,
+              "start": 0.0,
+              "end": 8.0,
+              "lufs": -6.9,
+              "lra": 0.0
+            }
+          ],
+          "segmentSpectral": [
+            {
+              "segmentIndex": 0,
+              "barkBands": [
+                -50.643,
+                -47.9514,
+                -46.8716,
+                -37.1084,
+                -4.2798,
+                -47.0776,
+                -56.4213,
+                -61.2738,
+                -63.9379,
+                -67.7864,
+                -70.8731,
+                -72.6699,
+                -75.1266,
+                -77.4328,
+                -79.3435,
+                -81.3723,
+                -83.3884,
+                -85.0706,
+                -85.976,
+                -86.2288,
+                -85.3706,
+                -91.7209,
+                -92.9351,
+                -88.1298
+              ],
+              "spectralCentroid": 220.0,
+              "spectralRolloff": 236.9,
+              "stereoWidth": 0.0,
+              "stereoCorrelation": 1.0
+            }
+          ],
+          "segmentStereo": [
+            {
+              "segmentIndex": 0,
+              "stereoWidth": 0.0,
+              "stereoCorrelation": 1.0
+            }
+          ],
+          "segmentKey": [
+            {
+              "segmentIndex": 0,
+              "key": "A Minor",
+              "keyConfidence": 0.75
+            }
+          ],
+          "chordDetail": {
+            "chordSequence": [
+              "F#m",
+              "F#m",
+              "F#m",
+              "F#m",
+              "Am",
+              "Dm",
+              "Dm",
+              "Dm",
+              "Dm",
+              "D",
+              "D",
+              "Dm",
+              "Dm",
+              "Dm",
+              "Dm",
+              "Dm",
+              "Am",
+              "Dm",
+              "Dm",
+              "Am",
+              "A",
+              "A",
+              "F#m",
+              "F#m",
+              "F#m",
+              "F#m",
+              "F#m",
+              "F#m",
+              "F#m",
+              "F#m",
+              "F#m",
+              "F#m"
+            ],
+            "chordStrength": 0.6085,
+            "progression": [
+              "F#m",
+              "Am",
+              "Dm",
+              "D",
+              "Dm",
+              "D",
+              "Dm",
+              "D",
+              "Dm",
+              "D",
+              "Dm",
+              "D",
+              "Dm",
+              "Am",
+              "Dm",
+              "Am"
+            ],
+            "dominantChords": [
+              "F#m",
+              "Dm",
+              "A",
+              "D"
+            ]
+          },
+          "perceptual": {
+            "sharpness": 0.0008,
+            "roughness": 0.0001
+          },
+          "essentiaFeatures": {
+            "zeroCrossingRate": 0.0099,
+            "hfc": 82.1712,
+            "spectralComplexity": 1.0,
+            "dissonance": 0.0001
+          }
+        },
+        {
+          "bpm": 112.2,
+          "bpmConfidence": 2.39,
+          "bpmPercival": 102.3,
+          "bpmAgreement": false,
+          "bpmDoubletime": false,
+          "bpmSource": "rhythm_extractor",
+          "bpmRawOriginal": 112.2,
+          "key": "A Minor",
+          "keyConfidence": 0.75,
+          "keyProfile": "edma",
+          "tuningFrequency": 437.97,
+          "tuningCents": -8.0,
+          "timeSignature": "4/4",
+          "durationSeconds": 8.0,
+          "sampleRate": 44100,
+          "lufsIntegrated": -6.9,
+          "lufsRange": 0.0,
+          "lufsMomentaryMax": -6.9,
+          "lufsShortTermMax": -6.9,
+          "truePeak": 0.5,
+          "plr": 7.4,
+          "crestFactor": 3.0,
+          "dynamicSpread": 20709011.44,
+          "dynamicCharacter": {
+            "dynamicComplexity": 0.0007,
+            "loudnessVariation": -11.6932,
+            "spectralFlatness": 0.0014,
+            "logAttackTime": -1.2934,
+            "attackTimeStdDev": 0.0
+          },
+          "stereoDetail": {
+            "stereoWidth": 0.0,
+            "stereoCorrelation": 1.0,
+            "subBassCorrelation": 1.0,
+            "subBassMono": true
+          },
+          "monoCompatible": true,
+          "spectralBalance": {
+            "subBass": -46.9,
+            "lowBass": -4.3,
+            "lowMids": -31.1,
+            "mids": -57.5,
+            "upperMids": -76.6,
+            "highs": -83.8,
+            "brilliance": -79.6
+          },
+          "spectralDetail": {
+            "spectralCentroid": 220.0,
+            "spectralRolloff": 236.9,
+            "mfcc": [
+              -1135.64,
+              170.9699,
+              143.6183,
+              106.4805,
+              63.1256,
+              21.7115,
+              -13.2522,
+              -39.0156,
+              -53.8692,
+              -59.7475,
+              -59.2252,
+              -53.7879,
+              -46.4321
+            ],
+            "chroma": [
+              0.9971,
+              0.001,
+              0.2838,
+              0.0025,
+              0.1638,
+              0.0918,
+              0.0567,
+              0.245,
+              0.1795,
+              0.068,
+              0.0034,
+              0.0079
+            ],
+            "barkBands": [
+              -50.643,
+              -47.9514,
+              -46.8716,
+              -37.1084,
+              -4.2798,
+              -47.0776,
+              -56.4213,
+              -61.2738,
+              -63.9379,
+              -67.7864,
+              -70.8731,
+              -72.6699,
+              -75.1266,
+              -77.4328,
+              -79.3435,
+              -81.3723,
+              -83.3884,
+              -85.0706,
+              -85.976,
+              -86.2288,
+              -85.3706,
+              -91.7209,
+              -92.9351,
+              -88.1298
+            ],
+            "erbBands": [
+              -24.087,
+              -14.0895,
+              -1.0104,
+              16.4196,
+              31.5041,
+              29.3257,
+              15.0598,
+              3.1672,
+              -4.9953,
+              -10.6126,
+              -14.581,
+              -17.5383,
+              -19.8997,
+              -21.9051,
+              -23.69,
+              -25.3398,
+              -26.8932,
+              -28.3778,
+              -29.8175,
+              -31.2223,
+              -32.6164,
+              -34.0164,
+              -35.4349,
+              -36.8003,
+              -37.4585,
+              -37.6203,
+              -37.3903,
+              -38.24,
+              -39.2558,
+              -38.7755,
+              -37.9342,
+              -37.0011,
+              -37.0068,
+              -36.9274,
+              -37.1781,
+              -37.8785,
+              -40.0309,
+              -48.027,
+              -37.6447,
+              -33.8556
+            ],
+            "spectralContrast": [
+              -0.1118,
+              -0.7598,
+              -0.8943,
+              -0.9042,
+              -0.8548,
+              -0.8692
+            ],
+            "spectralValley": [
+              -7.6705,
+              -10.931,
+              -13.3041,
+              -14.5704,
+              -14.4793,
+              -14.6247
+            ]
+          },
+          "rhythmDetail": {
+            "onsetRate": 2.02,
+            "beatGrid": [
+              0.534,
+              1.08,
+              1.625,
+              2.159,
+              2.694,
+              3.228,
+              3.762,
+              4.307,
+              4.83,
+              5.364,
+              5.898,
+              6.432,
+              6.954,
+              7.454,
+              7.964
+            ],
+            "downbeats": [
+              0.534,
+              2.694,
+              4.83,
+              6.954
+            ],
+            "beatPositions": [
+              1,
+              2,
+              3,
+              4,
+              1,
+              2,
+              3,
+              4,
+              1,
+              2,
+              3,
+              4,
+              1,
+              2,
+              3
+            ],
+            "grooveAmount": 0.024,
+            "tempoStability": 0.976,
+            "phraseGrid": {
+              "phrases4Bar": [
+                0.534
+              ],
+              "phrases8Bar": [
+                0.534
+              ],
+              "phrases16Bar": [
+                0.534
+              ],
+              "totalBars": 4,
+              "totalPhrases8Bar": 1
+            }
+          },
+          "melodyDetail": {
+            "noteCount": 1,
+            "notes": [
+              {
+                "midi": 57,
+                "onset": 0.017,
+                "duration": 7.964
+              }
+            ],
+            "dominantNotes": [
+              57
+            ],
+            "pitchRange": {
+              "min": 57,
+              "max": 57
+            },
+            "pitchConfidence": 0.1912,
+            "midiFile": "/var/folders/3b/6fzyrl1d4yl7y6ddwl10fbhw0000gn/T/asa_phase1_eval_8akx_045/sine_220_melody.mid",
+            "sourceSeparated": false,
+            "vibratoPresent": false,
+            "vibratoExtent": 0.0,
+            "vibratoRate": 0.0,
+            "vibratoConfidence": 0.0
+          },
+          "transcriptionDetail": null,
+          "grooveDetail": {
+            "kickSwing": 0.1358,
+            "hihatSwing": 0.0118,
+            "kickAccent": [
+              0.0755,
+              0.0755,
+              0.0755,
+              0.0755,
+              0.0755,
+              0.0755,
+              0.0755,
+              0.0755,
+              0.0754,
+              0.0755,
+              0.0755,
+              0.0754,
+              0.0754,
+              0.0754
+            ],
+            "hihatAccent": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "beatsLoudness": {
+            "kickDominantRatio": 0.1873,
+            "midDominantRatio": 0.1849,
+            "highDominantRatio": 0.0,
+            "accentPattern": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "meanBeatLoudness": 0.4028,
+            "beatLoudnessVariation": 0.0,
+            "beatCount": 14
+          },
+          "sidechainDetail": {
+            "pumpingStrength": 0.0192,
+            "pumpingRegularity": 0.0297,
+            "pumpingRate": null,
+            "pumpingConfidence": 0.1253,
+            "envelopeShape": [
+              1.0,
+              0.998,
+              0.996,
+              0.998,
+              1.0,
+              0.998,
+              0.996,
+              0.998,
+              1.0,
+              0.998,
+              0.996,
+              0.998,
+              1.0,
+              0.998,
+              0.998,
+              0.998
+            ]
+          },
+          "acidDetail": {
+            "isAcid": false,
+            "confidence": 0.02,
+            "resonanceLevel": 0.0,
+            "centroidOscillationHz": 2,
+            "bassRhythmDensity": 0.1
+          },
+          "reverbDetail": {
+            "rt60": null,
+            "isWet": false,
+            "tailEnergyRatio": null,
+            "measured": false
+          },
+          "vocalDetail": {
+            "hasVocals": true,
+            "confidence": 0.73,
+            "vocalEnergyRatio": 1.0,
+            "formantStrength": 0.29,
+            "mfccLikelihood": 0.92
+          },
+          "supersawDetail": {
+            "isSupersaw": true,
+            "confidence": 0.47,
+            "voiceCount": 4,
+            "avgDetuneCents": 27.9,
+            "spectralComplexity": 4.0
+          },
+          "bassDetail": {
+            "averageDecayMs": 1000,
+            "type": "sustained",
+            "transientRatio": 0.2,
+            "fundamentalHz": 120,
+            "transientCount": 0,
+            "swingPercent": 0,
+            "grooveType": "straight"
+          },
+          "kickDetail": {
+            "isDistorted": false,
+            "thd": 0.0,
+            "harmonicRatio": 0.0,
+            "fundamentalHz": 50.0,
+            "kickCount": 0
+          },
+          "genreDetail": {
+            "genre": "ambient-techno",
+            "confidence": 0.4,
+            "secondaryGenre": "dub-techno",
+            "genreFamily": "techno",
+            "topScores": [
+              {
+                "genre": "ambient-techno",
+                "score": 0.6182
+              },
+              {
+                "genre": "dub-techno",
+                "score": 0.6182
+              },
+              {
+                "genre": "ambient",
+                "score": 0.6168
+              },
+              {
+                "genre": "acoustic",
+                "score": 0.5614
+              },
+              {
+                "genre": "ambient-drone",
+                "score": 0.5447
+              }
+            ]
+          },
+          "effectsDetail": {
+            "gatingDetected": false,
+            "gatingRate": null,
+            "gatingRegularity": 0.0,
+            "gatingEventCount": 1
+          },
+          "synthesisCharacter": {
+            "inharmonicity": 0.0,
+            "oddToEvenRatio": 0.0
+          },
+          "danceability": {
+            "danceability": 12.6324,
+            "dfa": 0.0769
+          },
+          "structure": {
+            "segments": [
+              {
+                "start": 0.0,
+                "end": 8.0,
+                "index": 0
+              }
+            ],
+            "segmentCount": 1
+          },
+          "arrangementDetail": {
+            "noveltyCurve": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "noveltyPeaks": [],
+            "noveltyMean": 0.0037,
+            "noveltyStdDev": 0.0557
+          },
+          "segmentLoudness": [
+            {
+              "segmentIndex": 0,
+              "start": 0.0,
+              "end": 8.0,
+              "lufs": -6.9,
+              "lra": 0.0
+            }
+          ],
+          "segmentSpectral": [
+            {
+              "segmentIndex": 0,
+              "barkBands": [
+                -50.643,
+                -47.9514,
+                -46.8716,
+                -37.1084,
+                -4.2798,
+                -47.0776,
+                -56.4213,
+                -61.2738,
+                -63.9379,
+                -67.7864,
+                -70.8731,
+                -72.6699,
+                -75.1266,
+                -77.4328,
+                -79.3435,
+                -81.3723,
+                -83.3884,
+                -85.0706,
+                -85.976,
+                -86.2288,
+                -85.3706,
+                -91.7209,
+                -92.9351,
+                -88.1298
+              ],
+              "spectralCentroid": 220.0,
+              "spectralRolloff": 236.9,
+              "stereoWidth": 0.0,
+              "stereoCorrelation": 1.0
+            }
+          ],
+          "segmentStereo": [
+            {
+              "segmentIndex": 0,
+              "stereoWidth": 0.0,
+              "stereoCorrelation": 1.0
+            }
+          ],
+          "segmentKey": [
+            {
+              "segmentIndex": 0,
+              "key": "A Minor",
+              "keyConfidence": 0.75
+            }
+          ],
+          "chordDetail": {
+            "chordSequence": [
+              "F#m",
+              "F#m",
+              "F#m",
+              "F#m",
+              "Am",
+              "Dm",
+              "Dm",
+              "Dm",
+              "Dm",
+              "D",
+              "D",
+              "Dm",
+              "Dm",
+              "Dm",
+              "Dm",
+              "Dm",
+              "Am",
+              "Dm",
+              "Dm",
+              "Am",
+              "A",
+              "A",
+              "F#m",
+              "F#m",
+              "F#m",
+              "F#m",
+              "F#m",
+              "F#m",
+              "F#m",
+              "F#m",
+              "F#m",
+              "F#m"
+            ],
+            "chordStrength": 0.6085,
+            "progression": [
+              "F#m",
+              "Am",
+              "Dm",
+              "D",
+              "Dm",
+              "D",
+              "Dm",
+              "D",
+              "Dm",
+              "D",
+              "Dm",
+              "D",
+              "Dm",
+              "Am",
+              "Dm",
+              "Am"
+            ],
+            "dominantChords": [
+              "F#m",
+              "Dm",
+              "A",
+              "D"
+            ]
+          },
+          "perceptual": {
+            "sharpness": 0.0008,
+            "roughness": 0.0001
+          },
+          "essentiaFeatures": {
+            "zeroCrossingRate": 0.0099,
+            "hfc": 82.1712,
+            "spectralComplexity": 1.0,
+            "dissonance": 0.0001
+          }
+        }
+      ],
+      "checks": [
+        {
+          "name": "threshold:bpm",
+          "passed": true,
+          "message": "target=112.2 tolerance=0.2 actual=112.2 delta=0.0"
+        },
+        {
+          "name": "threshold:lufsIntegrated",
+          "passed": true,
+          "message": "target=-6.9 tolerance=0.5 actual=-6.9 delta=0.0"
+        },
+        {
+          "name": "threshold:truePeak",
+          "passed": true,
+          "message": "target=0.5 tolerance=0.2 actual=0.5 delta=0.0"
+        },
+        {
+          "name": "threshold:plr",
+          "passed": true,
+          "message": "target=7.4 tolerance=0.7 actual=7.4 delta=0.0"
+        },
+        {
+          "name": "threshold:monoCompatible",
+          "passed": true,
+          "message": "expected=True actual=True"
+        },
+        {
+          "name": "spectral:presence",
+          "passed": true,
+          "message": "all spectral bands present and finite"
+        },
+        {
+          "name": "plr:consistency",
+          "passed": true,
+          "message": "plr=7.4 expected=7.4 delta=0.0"
+        },
+        {
+          "name": "stability:acidDetail.confidence",
+          "passed": true,
+          "message": "values=[0.02, 0.02] drift=0.0 maxDelta=0.0"
+        },
+        {
+          "name": "stability:reverbDetail.isWet",
+          "passed": true,
+          "message": "values=[False, False]"
+        },
+        {
+          "name": "stability:vocalDetail.hasVocals",
+          "passed": true,
+          "message": "values=[True, True]"
+        },
+        {
+          "name": "stability:supersawDetail.isSupersaw",
+          "passed": true,
+          "message": "values=[True, True]"
+        },
+        {
+          "name": "stability:kickDetail.kickCount",
+          "passed": true,
+          "message": "values=[0.0, 0.0] drift=0.0 maxDelta=0.0"
+        }
+      ],
+      "allPassed": true
+    }
+  ],
+  "summary": {
+    "fixtures": 2,
+    "checksPassed": 24,
+    "checksFailed": 0,
+    "allPassed": true
+  }
+}
