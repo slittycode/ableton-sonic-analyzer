@@ -3,10 +3,12 @@
 Source: active/sonic-architect-app (keep in active/ as reference)
 
 ## Data (zero deps, direct port)
-- `data/genreProfiles.ts` — 12+ EDM genre spectral targets, LUFS/crest factor/PLR ranges
+- `data/genreProfiles.ts` — 35 EDM genre spectral targets, LUFS/crest factor/PLR ranges
   → ASA slot: backend genre classification response; informs Phase 2 Gemini prompt context
-- `data/abletonDevices.ts` — 50+ spectral-characteristic → Ableton Live 12 device mappings
+  → Status: ✅ Backported to `apps/ui/src/data/genreProfiles.ts`
+- `data/abletonDevices.ts` — 14 spectral-band → Ableton Live 12 device mappings (7 bands × 2 energy levels) + FX rule engine
   → ASA slot: Phase 2/3 reconstruction advice; currently Gemini infers these freeform
+  → Status: ✅ Backported to `apps/ui/src/data/abletonDevices.ts`
 
 ## Mix Analysis (JS logic, ports cleanly to ASA's UI layer)
 - `services/mixDoctor.ts` + `components/MixDoctorPanel.tsx` — compares audio features against
