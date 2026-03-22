@@ -1,10 +1,30 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { Phase1Result } from '../types';
+import {
+  ChromaInteractiveData,
+  OnsetStrengthData,
+  Phase1Result,
+  SpectralArtifacts,
+  SpectralTimeSeriesData,
+} from '../types';
 import { generateMixDoctorReport } from '../services/mixDoctor';
+import {
+  fetchChromaInteractiveData,
+  fetchOnsetStrengthData,
+  fetchSpectralTimeSeries,
+  generateSpectralEnhancement,
+  SpectralEnhancementKind,
+} from '../services/spectralArtifactsClient';
+import { getAnalysisRun } from '../services/analysisRunsClient';
+import { SpectrogramViewer } from './SpectrogramViewer';
+import { SpectralEvolutionChart } from './SpectralEvolutionChart';
+import { ChromaHeatmap } from './ChromaHeatmap';
 
 interface MeasurementDashboardProps {
   phase1: Phase1Result;
+  spectralArtifacts?: SpectralArtifacts | null;
+  apiBaseUrl?: string;
+  runId?: string;
 }
 
 const formatNumber = (value: number | null | undefined, decimals = 2): string => {
@@ -17,6 +37,56 @@ const formatDuration = (seconds: number): string => {
   const secs = Math.floor(seconds % 60);
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 };
+
+const lufsToPercent = (value: number, min = -60, max = 0): number =>
+  Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
+
+const LUFS_METER_GRADIENT = `linear-gradient(to right,
+  rgba(0,255,157,0.7) 0%,
+  rgba(0,255,157,0.7) 60%,
+  rgba(255,184,0,0.7) 60%,
+  rgba(255,184,0,0.7) 76.7%,
+  rgba(255,136,0,0.8) 76.7%,
+  rgba(255,136,0,0.8) 90%,
+  rgba(255,51,51,0.8) 90%,
+  rgba(255,51,51,0.8) 100%
+)`;
+
+const PLATFORM_REFS = [
+  { lufs: -14, label: 'SPOT' },
+  { lufs: -16, label: 'APPL' },
+  { lufs: -23, label: 'BDCST' },
+];
+
+interface NormalizedDC {
+  complexity: number;
+  loudnessVar: number;
+  spectralFlat: number;
+  attackTime: number;
+  attackStd: number;
+}
+
+const normalizeDynamicCharacter = (dc: {
+  dynamicComplexity: number;
+  loudnessVariation: number;
+  spectralFlatness: number;
+  logAttackTime: number;
+  attackTimeStdDev: number;
+}): NormalizedDC => ({
+  complexity: Math.max(0, Math.min(1, dc.dynamicComplexity)),
+  loudnessVar: Math.max(0, Math.min(1, dc.loudnessVariation)),
+  spectralFlat: Math.max(0, Math.min(1, dc.spectralFlatness)),
+  attackTime: Math.max(0, Math.min(1, (dc.logAttackTime + 3) / 4)),
+  attackStd: Math.max(0, Math.min(1, dc.attackTimeStdDev / 2)),
+});
+
+const RADAR_AXES = [
+  { key: 'complexity' as const, label: 'Complexity' },
+  { key: 'loudnessVar' as const, label: 'Loud Var' },
+  { key: 'spectralFlat' as const, label: 'Spec Flat' },
+  { key: 'attackStd' as const, label: 'Atk Std' },
+  { key: 'attackTime' as const, label: 'Atk Time' },
+];
 
 const MetricRow = ({ label, value }: { label: string; value: React.ReactNode }) => (
   <div className="flex justify-between items-baseline gap-4">
@@ -215,10 +285,201 @@ const SimpleTable = <T extends object>({
   </div>
 );
 
+const DynamicCharacterRadar = ({ data }: { data: NormalizedDC }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.scale(dpr, dpr);
+
+    const w = rect.width;
+    const h = rect.height;
+    const cx = w / 2;
+    const cy = h / 2;
+    const radius = Math.min(cx, cy) - 28;
+    const axes = RADAR_AXES.length;
+
+    ctx.fillStyle = '#222222';
+    ctx.fillRect(0, 0, w, h);
+
+    // Concentric pentagons
+    for (const ring of [0.25, 0.5, 0.75, 1]) {
+      ctx.beginPath();
+      for (let i = 0; i < axes; i++) {
+        const angle = (Math.PI * 2 * i) / axes - Math.PI / 2;
+        const x = cx + Math.cos(angle) * radius * ring;
+        const y = cy + Math.sin(angle) * radius * ring;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    // Axis lines
+    for (let i = 0; i < axes; i++) {
+      const angle = (Math.PI * 2 * i) / axes - Math.PI / 2;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius);
+      ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    // Data polygon
+    const values = RADAR_AXES.map((a) => data[a.key]);
+    ctx.beginPath();
+    for (let i = 0; i < axes; i++) {
+      const angle = (Math.PI * 2 * i) / axes - Math.PI / 2;
+      const v = values[i];
+      const x = cx + Math.cos(angle) * radius * v;
+      const y = cy + Math.sin(angle) * radius * v;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(255,136,0,0.15)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,136,0,0.8)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Data dots
+    for (let i = 0; i < axes; i++) {
+      const angle = (Math.PI * 2 * i) / axes - Math.PI / 2;
+      const v = values[i];
+      const x = cx + Math.cos(angle) * radius * v;
+      const y = cy + Math.sin(angle) * radius * v;
+      ctx.beginPath();
+      ctx.arc(x, y, 3, 0, Math.PI * 2);
+      ctx.fillStyle = '#ff8800';
+      ctx.fill();
+    }
+
+    // Axis labels
+    ctx.font = '9px "JetBrains Mono", monospace';
+    ctx.fillStyle = 'rgba(170,170,170,0.7)';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (let i = 0; i < axes; i++) {
+      const angle = (Math.PI * 2 * i) / axes - Math.PI / 2;
+      const lx = cx + Math.cos(angle) * (radius + 18);
+      const ly = cy + Math.sin(angle) * (radius + 18);
+      ctx.fillText(RADAR_AXES[i].label, lx, ly);
+    }
+  }, [data]);
+
+  useEffect(() => {
+    draw();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ro = new ResizeObserver(draw);
+    ro.observe(canvas);
+    return () => ro.disconnect();
+  }, [draw]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="w-48 h-48"
+      style={{ imageRendering: 'auto' }}
+    />
+  );
+};
+
 export function MeasurementDashboard({
   phase1,
+  spectralArtifacts,
+  apiBaseUrl,
+  runId,
 }: MeasurementDashboardProps) {
   const mixDoctorReport = useMemo(() => generateMixDoctorReport(phase1), [phase1]);
+
+  // Local copy of spectral artifacts — updated after enhancement generation.
+  const [localArtifacts, setLocalArtifacts] = useState(spectralArtifacts);
+  useEffect(() => setLocalArtifacts(spectralArtifacts), [spectralArtifacts]);
+
+  const [spectralTimeSeries, setSpectralTimeSeries] =
+    useState<SpectralTimeSeriesData | null>(null);
+  const [onsetData, setOnsetData] = useState<OnsetStrengthData | null>(null);
+  const [chromaData, setChromaData] = useState<ChromaInteractiveData | null>(null);
+  const [generating, setGenerating] = useState<Set<SpectralEnhancementKind>>(new Set());
+
+  // Fetch spectral time-series
+  useEffect(() => {
+    if (!localArtifacts?.timeSeries || !apiBaseUrl || !runId) {
+      setSpectralTimeSeries(null);
+      return;
+    }
+    const controller = new AbortController();
+    fetchSpectralTimeSeries(
+      apiBaseUrl,
+      runId,
+      localArtifacts.timeSeries.artifactId,
+      { signal: controller.signal },
+    )
+      .then(setSpectralTimeSeries)
+      .catch(() => {});
+    return () => controller.abort();
+  }, [localArtifacts, apiBaseUrl, runId]);
+
+  // Fetch onset strength data when artifact appears
+  useEffect(() => {
+    if (!localArtifacts?.onsetStrength || !apiBaseUrl || !runId) {
+      setOnsetData(null);
+      return;
+    }
+    const controller = new AbortController();
+    fetchOnsetStrengthData(apiBaseUrl, runId, localArtifacts.onsetStrength.artifactId, { signal: controller.signal })
+      .then(setOnsetData)
+      .catch(() => {});
+    return () => controller.abort();
+  }, [localArtifacts?.onsetStrength, apiBaseUrl, runId]);
+
+  // Fetch interactive chroma data when artifact appears
+  useEffect(() => {
+    if (!localArtifacts?.chromaInteractive || !apiBaseUrl || !runId) {
+      setChromaData(null);
+      return;
+    }
+    const controller = new AbortController();
+    fetchChromaInteractiveData(apiBaseUrl, runId, localArtifacts.chromaInteractive.artifactId, { signal: controller.signal })
+      .then(setChromaData)
+      .catch(() => {});
+    return () => controller.abort();
+  }, [localArtifacts?.chromaInteractive, apiBaseUrl, runId]);
+
+  const handleGenerate = useCallback(async (kind: SpectralEnhancementKind) => {
+    if (!apiBaseUrl || !runId || generating.has(kind)) return;
+    setGenerating((prev) => new Set(prev).add(kind));
+    try {
+      await generateSpectralEnhancement(apiBaseUrl, runId, kind);
+      // Re-fetch the run snapshot to get updated artifact refs
+      const snapshot = await getAnalysisRun(runId, { apiBaseUrl });
+      if (snapshot.artifacts.spectral) {
+        setLocalArtifacts(snapshot.artifacts.spectral);
+      }
+    } catch {
+      // Silently handle — button returns to available state
+    } finally {
+      setGenerating((prev) => {
+        const next = new Set(prev);
+        next.delete(kind);
+        return next;
+      });
+    }
+  }, [apiBaseUrl, runId, generating]);
 
   return (
     <div className="space-y-4">
@@ -303,23 +564,65 @@ export function MeasurementDashboard({
           {/* Duration / Format Tile */}
           <div className="bg-bg-panel border border-border rounded-sm p-4 hover:border-accent/30 transition-colors">
             <span className="text-[9px] font-mono text-text-secondary uppercase tracking-wider">Duration</span>
-            <div className="flex items-baseline gap-2 mt-2">
-              <span className="text-2xl font-display font-bold text-text-primary">
-                {formatDuration(phase1.durationSeconds)}
-              </span>
-            </div>
-            <div className="mt-3 space-y-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[8px] font-mono text-text-secondary/60 uppercase">Meter</span>
-                <span className="text-xs font-display font-bold text-text-primary">{phase1.timeSignature}</span>
-              </div>
-              {phase1.sampleRate !== undefined && phase1.sampleRate !== null && (
-                <div className="flex items-center justify-between">
-                  <span className="text-[8px] font-mono text-text-secondary/60 uppercase">Sample Rate</span>
-                  <span className="text-xs font-display font-bold text-text-primary">{(phase1.sampleRate / 1000).toFixed(1)} kHz</span>
-                </div>
-              )}
-            </div>
+            {(() => {
+              const mins = Math.floor(phase1.durationSeconds / 60);
+              const secs = Math.floor(phase1.durationSeconds % 60);
+              const beatsPerBar = parseInt(phase1.timeSignature?.split('/')[0] || '4', 10) || 4;
+              const totalBeats = (phase1.durationSeconds / 60) * phase1.bpm;
+              const totalBars = Math.floor(totalBeats / beatsPerBar);
+              const gridSegments = Math.min(Math.ceil(totalBars / 4), 24);
+              const fullSegments = Math.floor(totalBars / 4);
+              const remainder = (totalBars % 4) / 4;
+              return (
+                <>
+                  {/* Transport LCD */}
+                  <div className="flex items-center gap-0.5 mt-2">
+                    <span className="bg-bg-app/80 border border-border/30 px-2 py-0.5 rounded-[2px] text-2xl font-mono font-bold text-text-primary tabular-nums leading-none">
+                      {mins}
+                    </span>
+                    <span className="text-xl font-mono font-bold text-accent/50">:</span>
+                    <span className="bg-bg-app/80 border border-border/30 px-2 py-0.5 rounded-[2px] text-2xl font-mono font-bold text-text-primary tabular-nums leading-none">
+                      {String(secs).padStart(2, '0')}
+                    </span>
+                    <span className="text-[9px] font-mono text-text-secondary/50 ml-2 self-end mb-0.5">{phase1.timeSignature}</span>
+                  </div>
+                  {/* Bar count + grid */}
+                  <div className="mt-3 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[8px] font-mono text-text-secondary/60 uppercase tracking-wide">Arrangement</span>
+                      <span className="text-[8px] font-mono text-accent/80 tabular-nums font-bold">{totalBars} BARS</span>
+                    </div>
+                    <div className="flex gap-[2px]">
+                      {Array.from({ length: gridSegments }).map((_, i) => (
+                        <motion.div
+                          key={i}
+                          initial={{ scaleX: 0 }}
+                          animate={{ scaleX: 1 }}
+                          transition={{ duration: 0.25, delay: i * 0.025, ease: 'easeOut' }}
+                          className="h-2 flex-1 rounded-[1px] origin-left"
+                          style={{
+                            backgroundColor: i < fullSegments
+                              ? `rgba(255, 136, 0, ${0.3 + (i / gridSegments) * 0.4})`
+                              : i === fullSegments && remainder > 0
+                                ? `rgba(255, 136, 0, ${0.2})`
+                                : undefined,
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  {/* Supporting info */}
+                  <div className="mt-2.5 space-y-1.5">
+                    {phase1.sampleRate !== undefined && phase1.sampleRate !== null && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-[8px] font-mono text-text-secondary/60 uppercase">Sample Rate</span>
+                        <span className="text-xs font-display font-bold text-text-primary tabular-nums">{(phase1.sampleRate / 1000).toFixed(1)} kHz</span>
+                      </div>
+                    )}
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
 
@@ -408,54 +711,188 @@ export function MeasurementDashboard({
 
       {/* 2. Loudness & Dynamics */}
       <Section id="section-meas-loudness" number={2} title="Loudness & Dynamics">
-        <MetricRow label="LUFS (Integrated)" value={formatNumber(phase1.lufsIntegrated, 1)} />
-        {phase1.lufsRange !== undefined && phase1.lufsRange !== null && (
-          <MetricRow label="LUFS Range" value={formatNumber(phase1.lufsRange, 1)} />
-        )}
-        {phase1.lufsMomentaryMax !== undefined && phase1.lufsMomentaryMax !== null && (
-          <MetricRow label="LUFS Momentary Max" value={formatNumber(phase1.lufsMomentaryMax, 1)} />
-        )}
-        {phase1.lufsShortTermMax !== undefined && phase1.lufsShortTermMax !== null && (
-          <MetricRow label="LUFS Short-Term Max" value={formatNumber(phase1.lufsShortTermMax, 1)} />
-        )}
-        <MetricRow label="True Peak" value={formatNumber(phase1.truePeak, 2)} />
-        {phase1.plr !== undefined && phase1.plr !== null && (
-          <MetricRow label="PLR" value={formatNumber(phase1.plr, 2)} />
-        )}
-        {phase1.crestFactor !== undefined && phase1.crestFactor !== null && (
-          <MetricRow label="Crest Factor" value={formatNumber(phase1.crestFactor, 2)} />
-        )}
-        {phase1.dynamicSpread !== undefined && phase1.dynamicSpread !== null && (
-          <MetricRow label="Dynamic Spread" value={formatNumber(phase1.dynamicSpread, 2)} />
-        )}
-        {phase1.dynamicCharacter && (
-          <>
-            <div className="border-t border-border pt-3">
-              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
-                Dynamic Character
+        {/* Zone 1 — LUFS Meter Strip */}
+        <div className="space-y-2">
+          {/* Main meter */}
+          <div className="relative h-8 bg-bg-surface-darker border border-border rounded-sm overflow-hidden">
+            {/* Platform reference markers */}
+            {PLATFORM_REFS.map((ref) => (
+              <div
+                key={ref.label}
+                className="absolute top-0 bottom-0 border-l border-dashed border-text-secondary/25 z-10"
+                style={{ left: `${lufsToPercent(ref.lufs)}%` }}
+              >
+                <span className="absolute -top-0.5 left-0.5 text-[7px] font-mono text-text-secondary/40 leading-none">
+                  {ref.label}
+                </span>
+              </div>
+            ))}
+            {/* Meter fill */}
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${lufsToPercent(phase1.lufsIntegrated)}%` }}
+              transition={{ duration: 0.6, ease: 'easeOut' }}
+              className="absolute inset-y-0 left-0 rounded-sm"
+              style={{ background: LUFS_METER_GRADIENT }}
+            />
+            {/* Value badge */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3, delay: 0.5 }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 bg-bg-card/90 border border-border rounded-sm px-1.5 py-0.5 z-20"
+            >
+              <span className="text-sm font-mono font-bold text-text-primary tabular-nums">
+                {formatNumber(phase1.lufsIntegrated, 1)}
               </span>
+              <span className="text-[7px] font-mono text-text-secondary/50 ml-1">LUFS</span>
+            </motion.div>
+          </div>
+
+          {/* Loudness hierarchy bars */}
+          <div className="space-y-1">
+            {[
+              { label: 'MOM MAX', value: phase1.lufsMomentaryMax, opacity: 'bg-accent/40', delay: 0 },
+              { label: 'ST MAX', value: phase1.lufsShortTermMax, opacity: 'bg-accent/25', delay: 0.08 },
+              { label: 'INTEGRATED', value: phase1.lufsIntegrated, opacity: 'bg-accent/15', delay: 0.16 },
+            ].filter((row) => row.value !== undefined && row.value !== null).map((row) => (
+              <div key={row.label} className="flex items-center gap-2">
+                <span className="text-[8px] font-mono text-text-secondary/50 w-16 text-right shrink-0">
+                  {row.label}
+                </span>
+                <div className="flex-1 h-1.5 bg-bg-surface-darker border border-border/20 rounded-sm overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${lufsToPercent(row.value!)}%` }}
+                    transition={{ duration: 0.5, delay: row.delay, ease: 'easeOut' }}
+                    className={`h-full rounded-sm ${row.opacity}`}
+                  />
+                </div>
+                <span className="text-[8px] font-mono text-text-secondary/60 tabular-nums w-10 text-right shrink-0">
+                  {formatNumber(row.value!, 1)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Zone 2 — Headroom & Dynamics Panel */}
+        <div className="border-t border-border pt-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {/* Left — Headroom Diagram */}
+            <div className="bg-bg-panel border border-border rounded-sm p-4 flex flex-col items-center">
+              <span className="text-[8px] font-mono text-text-secondary/60 uppercase tracking-wider mb-3 self-start">
+                Headroom
+              </span>
+              <div className="relative w-6 bg-bg-surface-darker border border-border/30 rounded-sm" style={{ height: 180 }}>
+                {/* 0 dBFS reference */}
+                <div className="absolute left-0 right-0 border-t border-dashed border-text-secondary/20" style={{ top: `${((3 - 0) / 51) * 100}%` }}>
+                  <span className="absolute -left-9 -top-1.5 text-[7px] font-mono text-text-secondary/30">0 dB</span>
+                </div>
+                {/* True Peak marker */}
+                <div
+                  className="absolute left-0 right-0 border-t-2 border-error/70 z-10"
+                  style={{ top: `${Math.max(0, Math.min(100, ((3 - phase1.truePeak) / 51) * 100))}%` }}
+                >
+                  <span className="absolute left-7 -top-1.5 text-[7px] font-mono text-error/70 whitespace-nowrap">
+                    TP {formatNumber(phase1.truePeak, 1)}
+                  </span>
+                </div>
+                {/* Integrated LUFS marker */}
+                <div
+                  className="absolute left-0 right-0 border-t-2 border-accent/70 z-10"
+                  style={{ top: `${Math.max(0, Math.min(100, ((3 - phase1.lufsIntegrated) / 51) * 100))}%` }}
+                >
+                  <span className="absolute left-7 -top-1.5 text-[7px] font-mono text-accent/70 whitespace-nowrap">
+                    INT {formatNumber(phase1.lufsIntegrated, 1)}
+                  </span>
+                </div>
+                {/* PLR gap fill */}
+                <div
+                  className="absolute left-0 right-0 bg-accent/10"
+                  style={{
+                    top: `${Math.max(0, Math.min(100, ((3 - phase1.truePeak) / 51) * 100))}%`,
+                    bottom: `${100 - Math.max(0, Math.min(100, ((3 - phase1.lufsIntegrated) / 51) * 100))}%`,
+                  }}
+                />
+                {/* PLR annotation */}
+                {phase1.plr !== undefined && phase1.plr !== null && (
+                  <div
+                    className="absolute left-8 flex items-center z-20"
+                    style={{
+                      top: `${Math.max(0, Math.min(100, ((3 - phase1.truePeak) / 51) * 100))}%`,
+                      bottom: `${100 - Math.max(0, Math.min(100, ((3 - phase1.lufsIntegrated) / 51) * 100))}%`,
+                    }}
+                  >
+                    <span className="text-[9px] font-mono text-accent font-bold whitespace-nowrap">
+                      PLR {formatNumber(phase1.plr, 1)}
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
-            <MetricRow
-              label="Complexity"
-              value={formatNumber(phase1.dynamicCharacter.dynamicComplexity, 2)}
-            />
-            <MetricRow
-              label="Loudness Variation"
-              value={formatNumber(phase1.dynamicCharacter.loudnessVariation, 2)}
-            />
-            <MetricRow
-              label="Spectral Flatness"
-              value={formatNumber(phase1.dynamicCharacter.spectralFlatness, 2)}
-            />
-            <MetricRow
-              label="Log Attack Time"
-              value={formatNumber(phase1.dynamicCharacter.logAttackTime, 2)}
-            />
-            <MetricRow
-              label="Attack Time Std Dev"
-              value={formatNumber(phase1.dynamicCharacter.attackTimeStdDev, 2)}
-            />
-          </>
+
+            {/* Right — Dynamics Metric Tiles */}
+            <div className="grid grid-cols-2 gap-2 content-start">
+              {[
+                { label: 'Crest Factor', value: phase1.crestFactor, suffix: 'dB', decimals: 2 },
+                { label: 'Dynamic Spread', value: phase1.dynamicSpread, suffix: '', decimals: 2 },
+                { label: 'LUFS Range', value: phase1.lufsRange, suffix: 'LU', decimals: 1 },
+                { label: 'True Peak', value: phase1.truePeak, suffix: 'dBTP', decimals: 2 },
+              ].filter((tile) => tile.value !== undefined && tile.value !== null).map((tile) => (
+                <div
+                  key={tile.label}
+                  className="bg-bg-panel border border-border rounded-sm p-3 hover:border-accent/30 transition-colors"
+                >
+                  <span className="text-[8px] font-mono text-text-secondary/60 uppercase tracking-wider block">
+                    {tile.label}
+                  </span>
+                  <div className="flex items-baseline gap-1 mt-1.5">
+                    <span className="text-lg font-display font-bold text-text-primary tabular-nums">
+                      {formatNumber(tile.value!, tile.decimals)}
+                    </span>
+                    {tile.suffix && (
+                      <span className="text-[7px] font-mono text-text-secondary/40">{tile.suffix}</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Zone 3 — Dynamic Character Radar */}
+        {phase1.dynamicCharacter && (
+          <div className="border-t border-border pt-3">
+            <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary block mb-3">
+              Dynamic Character
+            </span>
+            <div className="flex gap-4 items-start">
+              <DynamicCharacterRadar data={normalizeDynamicCharacter(phase1.dynamicCharacter)} />
+              <div className="flex-1 space-y-2 pt-2">
+                <MetricRow
+                  label="Complexity"
+                  value={formatNumber(phase1.dynamicCharacter.dynamicComplexity, 2)}
+                />
+                <MetricRow
+                  label="Loudness Variation"
+                  value={formatNumber(phase1.dynamicCharacter.loudnessVariation, 2)}
+                />
+                <MetricRow
+                  label="Spectral Flatness"
+                  value={formatNumber(phase1.dynamicCharacter.spectralFlatness, 2)}
+                />
+                <MetricRow
+                  label="Log Attack Time"
+                  value={formatNumber(phase1.dynamicCharacter.logAttackTime, 2)}
+                />
+                <MetricRow
+                  label="Attack Time Std Dev"
+                  value={formatNumber(phase1.dynamicCharacter.attackTimeStdDev, 2)}
+                />
+              </div>
+            </div>
+          </div>
         )}
       </Section>
 
@@ -565,6 +1002,63 @@ export function MeasurementDashboard({
           </div>
         </div>
 
+        {/* Enhancement Toolbar */}
+        {apiBaseUrl && runId && (
+          <div className="border-t border-border pt-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mr-1">
+                Enhancements
+              </span>
+              {([
+                { kind: 'cqt' as SpectralEnhancementKind, label: 'CQT', done: localArtifacts?.spectrograms.some((s) => s.kind === 'spectrogram_cqt') },
+                { kind: 'hpss' as SpectralEnhancementKind, label: 'HPSS', done: localArtifacts?.spectrograms.some((s) => s.kind === 'spectrogram_harmonic') },
+                { kind: 'onset' as SpectralEnhancementKind, label: 'Onset', done: !!localArtifacts?.onsetStrength },
+                { kind: 'chroma_interactive' as SpectralEnhancementKind, label: 'Chroma', done: !!localArtifacts?.chromaInteractive },
+              ]).map(({ kind, label, done }) =>
+                done ? (
+                  <span
+                    key={kind}
+                    className="px-2 py-0.5 text-[10px] font-mono uppercase tracking-wide text-success/70 border border-success/20 rounded-sm"
+                  >
+                    {label} ✓
+                  </span>
+                ) : (
+                  <button
+                    key={kind}
+                    onClick={() => handleGenerate(kind)}
+                    disabled={generating.has(kind)}
+                    className="px-2 py-0.5 text-[10px] font-mono uppercase tracking-wide rounded-sm border border-border text-text-secondary hover:text-text-primary hover:border-accent/30 transition-colors disabled:opacity-50 disabled:cursor-wait"
+                  >
+                    {generating.has(kind) ? `${label}...` : `Generate ${label}`}
+                  </button>
+                ),
+              )}
+            </div>
+          </div>
+        )}
+
+        {localArtifacts && apiBaseUrl && runId && localArtifacts.spectrograms.length > 0 && (
+          <div className="border-t border-border pt-3">
+            <SpectrogramViewer
+              spectrograms={localArtifacts.spectrograms}
+              apiBaseUrl={apiBaseUrl}
+              runId={runId}
+            />
+          </div>
+        )}
+
+        {spectralTimeSeries && (
+          <div className="border-t border-border pt-3">
+            <SpectralEvolutionChart data={spectralTimeSeries} onsetStrength={onsetData} />
+          </div>
+        )}
+
+        {chromaData && (
+          <div className="border-t border-border pt-3">
+            <ChromaHeatmap data={chromaData} />
+          </div>
+        )}
+
         {phase1.spectralDetail && (
           <>
             <div className="border-t border-border pt-3">
@@ -584,6 +1078,20 @@ export function MeasurementDashboard({
                 <MetricRow
                   label="Spectral Rolloff Mean"
                   value={formatNumber(phase1.spectralDetail.spectralRolloffMean, 1)}
+                />
+              )}
+            {phase1.spectralDetail.spectralBandwidthMean !== undefined &&
+              phase1.spectralDetail.spectralBandwidthMean !== null && (
+                <MetricRow
+                  label="Spectral Bandwidth Mean"
+                  value={formatNumber(phase1.spectralDetail.spectralBandwidthMean, 1)}
+                />
+              )}
+            {phase1.spectralDetail.spectralFlatnessMean !== undefined &&
+              phase1.spectralDetail.spectralFlatnessMean !== null && (
+                <MetricRow
+                  label="Spectral Flatness Mean"
+                  value={formatNumber(phase1.spectralDetail.spectralFlatnessMean, 6)}
                 />
               )}
             {phase1.spectralDetail.mfcc && phase1.spectralDetail.mfcc.length > 0 && (
