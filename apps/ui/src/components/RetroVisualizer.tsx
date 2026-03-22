@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Radio, Zap, Palette } from 'lucide-react';
+import { Zap } from 'lucide-react';
 
 // ============================================
 // THREE-BAND REACTIVE WAVEFORM VISUALIZER
@@ -33,9 +33,12 @@ interface RetroVisualizerProps {
   analyser: AnalyserNode | null;
   isPlaying: boolean;
   audioBuffer: AudioBuffer | null;
+  onBeat?: () => void;
+  currentTime?: number;
+  duration?: number;
 }
 
-export function RetroVisualizer({ analyser, isPlaying, audioBuffer }: RetroVisualizerProps) {
+export function RetroVisualizer({ analyser, isPlaying, audioBuffer, onBeat, currentTime, duration }: RetroVisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number | null>(null);
   const beatRef = useRef({ lastBeat: 0, threshold: 0.55, decay: 0 });
@@ -45,11 +48,14 @@ export function RetroVisualizer({ analyser, isPlaying, audioBuffer }: RetroVisua
   
   const [mode, setMode] = useState<ColorMode>('three-band');
   const modeRef = useRef<ColorMode>('three-band');
+  const onBeatRef = useRef(onBeat);
+  const currentTimeRef = useRef(currentTime ?? 0);
+  const durationRef = useRef(duration ?? 0);
   
-  // Keep modeRef in sync
-  useEffect(() => {
-    modeRef.current = mode;
-  }, [mode]);
+  useEffect(() => { onBeatRef.current = onBeat; }, [onBeat]);
+  useEffect(() => { currentTimeRef.current = currentTime ?? 0; }, [currentTime]);
+  useEffect(() => { durationRef.current = duration ?? 0; }, [duration]);
+  useEffect(() => { modeRef.current = mode; }, [mode]);
   
   const drawFrame = useCallback(() => {
     const canvas = canvasRef.current;
@@ -104,6 +110,7 @@ export function RetroVisualizer({ analyser, isPlaying, audioBuffer }: RetroVisua
     if (bass > beatRef.current.threshold && Date.now() - beatRef.current.lastBeat > 60) {
       beatRef.current.lastBeat = Date.now();
       beatRef.current.decay = 1;
+      onBeatRef.current?.();
     }
     beatRef.current.decay *= 0.9;
     
@@ -145,6 +152,18 @@ export function RetroVisualizer({ analyser, isPlaying, audioBuffer }: RetroVisua
     ctx.fillStyle = `rgba(255, 100, 120, ${0.3 + high * 0.5})`;
     ctx.fillText(`HIGH:${Math.round(high * 100)}`, width - 50, 26);
     
+    // (2) Time readout overlay
+    const ct = currentTimeRef.current;
+    const dur = durationRef.current;
+    if (dur > 0) {
+      const fmtTime = (s: number) => `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+      ctx.font = '9px monospace';
+      ctx.textAlign = 'right';
+      ctx.fillText(`${fmtTime(ct)} / ${fmtTime(dur)}`, width - 6, height - 6);
+      ctx.textAlign = 'left';
+    }
+    
     // Continue animation
     if (isPlaying) {
       animationRef.current = requestAnimationFrame(drawFrame);
@@ -171,109 +190,212 @@ export function RetroVisualizer({ analyser, isPlaying, audioBuffer }: RetroVisua
     };
   }, [isPlaying, drawFrame]);
   
-  // Draw static when not playing
+  // Idle pulse animation when not playing
+  const idleAnimRef = useRef<number | null>(null);
+  
   useEffect(() => {
-    if (!isPlaying && canvasRef.current) {
-      const ctx = canvasRef.current.getContext('2d');
-      if (ctx) {
-        ctx.fillStyle = '#000';
-        ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-        
-        // Grid
-        ctx.strokeStyle = 'rgba(100, 100, 120, 0.08)';
-        ctx.lineWidth = 1;
-        for (let y = 0; y < canvasRef.current.height; y += 15) {
-          ctx.beginPath();
-          ctx.moveTo(0, y);
-          ctx.lineTo(canvasRef.current.width, y);
-          ctx.stroke();
-        }
-        for (let x = 0; x < canvasRef.current.width; x += 30) {
-          ctx.beginPath();
-          ctx.moveTo(x, 0);
-          ctx.lineTo(x, canvasRef.current.height);
-          ctx.stroke();
-        }
-        
-        ctx.fillStyle = 'rgba(150, 150, 170, 0.3)';
-        ctx.font = '10px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText('▶ PLAY TO ACTIVATE', canvasRef.current.width / 2, canvasRef.current.height / 2);
-        ctx.textAlign = 'left';
+    if (isPlaying) {
+      if (idleAnimRef.current !== null) {
+        cancelAnimationFrame(idleAnimRef.current);
+        idleAnimRef.current = null;
       }
+      return;
     }
+    
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    let startTime: number | null = null;
+    
+    const drawIdle = (timestamp: number) => {
+      if (!startTime) startTime = timestamp;
+      const elapsed = (timestamp - startTime) / 1000;
+      const width = canvas.width;
+      const height = canvas.height;
+      const centerY = height / 2;
+      
+      ctx.fillStyle = '#050508';
+      ctx.fillRect(0, 0, width, height);
+      
+      // Grid
+      ctx.strokeStyle = 'rgba(100, 100, 120, 0.06)';
+      ctx.lineWidth = 1;
+      for (let y = 0; y < height; y += 15) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(width, y);
+        ctx.stroke();
+      }
+      for (let x = 0; x < width; x += 30) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, height);
+        ctx.stroke();
+      }
+      
+      // Breathing center line with glow
+      const breathe = 0.3 + Math.sin(elapsed * Math.PI) * 0.25;
+      ctx.shadowBlur = 8 + Math.sin(elapsed * Math.PI) * 6;
+      ctx.shadowColor = `rgba(255, 136, 0, ${breathe * 0.4})`;
+      ctx.strokeStyle = `rgba(255, 136, 0, ${breathe})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let x = 0; x < width; x += 2) {
+        const drift = Math.sin(x * 0.008 + elapsed * 0.5) * 1.5;
+        const y = centerY + drift;
+        if (x === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      
+      // Label
+      ctx.fillStyle = `rgba(150, 150, 170, ${0.2 + Math.sin(elapsed * Math.PI) * 0.1})`;
+      ctx.font = '9px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('STANDBY', width / 2, centerY + 20);
+      ctx.textAlign = 'left';
+      
+      drawCRTEffects(ctx, width, height);
+      
+      idleAnimRef.current = requestAnimationFrame(drawIdle);
+    };
+    
+    idleAnimRef.current = requestAnimationFrame(drawIdle);
+    
+    return () => {
+      if (idleAnimRef.current !== null) {
+        cancelAnimationFrame(idleAnimRef.current);
+        idleAnimRef.current = null;
+      }
+    };
   }, [isPlaying]);
   
+  const COLOR_MODES: { id: ColorMode; css: string; activeCss: string; label: string; icon: string }[] = [
+    { id: 'three-band', css: 'border-accent/40', activeCss: 'border-accent bg-accent/20 shadow-[0_0_6px_rgba(255,136,0,0.4)]', label: '3-BND', icon: '|||' },
+    { id: 'amber', css: 'border-orange-500/40', activeCss: 'border-orange-500 bg-orange-500/20 shadow-[0_0_6px_rgba(249,115,22,0.4)]', label: 'AMB', icon: '~' },
+    { id: 'violet', css: 'border-purple-500/40', activeCss: 'border-purple-500 bg-purple-500/20 shadow-[0_0_6px_rgba(168,85,247,0.4)]', label: 'VIO', icon: '~' },
+    { id: 'sunset', css: 'border-rose-500/40', activeCss: 'border-rose-500 bg-rose-500/20 shadow-[0_0_6px_rgba(244,63,94,0.4)]', label: 'SUN', icon: '~' },
+  ];
+  
   return (
-    <div className="bg-bg-card border border-border rounded-sm p-3">
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <Radio className="w-4 h-4 text-accent" />
-          <span className="text-xs font-bold text-text-primary tracking-widest uppercase">Waveform Visualizer</span>
-        </div>
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-1.5">
           <Zap className={`w-3 h-3 ${isPlaying ? 'text-accent' : 'text-text-secondary/30'}`} />
           <span className="text-[8px] font-mono uppercase tracking-wider text-text-secondary/70">
             {isPlaying ? 'ACTIVE' : 'STANDBY'}
           </span>
         </div>
-      </div>
-      
-      {/* Mode selector */}
-      <div className="flex items-center gap-2 mb-2">
-        <Palette className="w-3 h-3 text-text-secondary" />
-        <div className="flex gap-1">
-          <button
-            onClick={() => setMode('three-band')}
-            className={`px-2 py-0.5 text-[9px] font-mono uppercase tracking-wider rounded-sm border transition-colors ${
-              mode === 'three-band'
-                ? 'bg-accent text-bg-app border-accent'
-                : 'bg-bg-panel text-text-secondary border-border hover:border-accent/40'
-            }`}
-          >
-            3-Band
-          </button>
-          <button
-            onClick={() => setMode('amber')}
-            className={`px-2 py-0.5 text-[9px] font-mono uppercase tracking-wider rounded-sm border transition-colors ${
-              mode === 'amber'
-                ? 'bg-orange-500 text-bg-app border-orange-500'
-                : 'bg-bg-panel text-text-secondary border-border hover:border-orange-400'
-            }`}
-          >
-            Amber
-          </button>
-          <button
-            onClick={() => setMode('violet')}
-            className={`px-2 py-0.5 text-[9px] font-mono uppercase tracking-wider rounded-sm border transition-colors ${
-              mode === 'violet'
-                ? 'bg-purple-500 text-bg-app border-purple-500'
-                : 'bg-bg-panel text-text-secondary border-border hover:border-purple-400'
-            }`}
-          >
-            Violet
-          </button>
-          <button
-            onClick={() => setMode('sunset')}
-            className={`px-2 py-0.5 text-[9px] font-mono uppercase tracking-wider rounded-sm border transition-colors ${
-              mode === 'sunset'
-                ? 'bg-rose-500 text-bg-app border-rose-500'
-                : 'bg-bg-panel text-text-secondary border-border hover:border-rose-400'
-            }`}
-          >
-            Sunset
-          </button>
+        <div className="flex items-center gap-1">
+          {COLOR_MODES.map((cm) => (
+            <button
+              key={cm.id}
+              onClick={() => setMode(cm.id)}
+              title={cm.label}
+              className={`px-1.5 py-0.5 rounded-sm border text-[7px] font-mono uppercase tracking-wider transition-all ${
+                mode === cm.id
+                  ? `${cm.activeCss} text-text-primary`
+                  : `${cm.css} bg-transparent text-text-secondary/50 hover:text-text-secondary/80 hover:bg-white/5`
+              }`}
+            >
+              {cm.label}
+            </button>
+          ))}
         </div>
       </div>
       
-      <div className="relative bg-black rounded-sm overflow-hidden" style={{ height: 120 }}>
+      {/* (3) Band legend — live-reactive brightness for LOW/MID/HIGH */}
+      <div className="relative bg-black rounded-sm overflow-hidden" style={{ height: 160 }}>
         <canvas
           ref={canvasRef}
           width={800}
-          height={120}
+          height={160}
           className="w-full h-full"
         />
       </div>
+      {mode === 'three-band' && (
+        <BandLegend analyser={analyser} isPlaying={isPlaying} />
+      )}
+    </div>
+  );
+}
+
+// ============================================
+// (3) BAND LEGEND — live-reactive brightness
+// ============================================
+
+function BandLegend({ analyser, isPlaying }: { analyser: AnalyserNode | null; isPlaying: boolean }) {
+  const [levels, setLevels] = useState({ bass: 0, mid: 0, high: 0 });
+  const animRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!isPlaying || !analyser) {
+      setLevels({ bass: 0, mid: 0, high: 0 });
+      if (animRef.current !== null) cancelAnimationFrame(animRef.current);
+      animRef.current = null;
+      return;
+    }
+
+    const buf = new Uint8Array(analyser.frequencyBinCount);
+    let prevBass = 0, prevMid = 0, prevHigh = 0;
+
+    const tick = () => {
+      analyser.getByteFrequencyData(buf);
+      const bassRaw = Array.from(buf.slice(0, 6)).reduce((a, b) => a + b, 0) / 6 / 255;
+      const midRaw = Array.from(buf.slice(6, 24)).reduce((a, b) => a + b, 0) / 18 / 255;
+      const highRaw = Array.from(buf.slice(24, 48)).reduce((a, b) => a + b, 0) / 24 / 255;
+      prevBass += (bassRaw - prevBass) * 0.3;
+      prevMid += (midRaw - prevMid) * 0.3;
+      prevHigh += (highRaw - prevHigh) * 0.3;
+      setLevels({ bass: prevBass, mid: prevMid, high: prevHigh });
+      animRef.current = requestAnimationFrame(tick);
+    };
+
+    animRef.current = requestAnimationFrame(tick);
+    return () => { if (animRef.current !== null) cancelAnimationFrame(animRef.current); };
+  }, [analyser, isPlaying]);
+
+  const bands: { key: keyof typeof levels; label: string; color: string; glowColor: string }[] = [
+    { key: 'bass', label: 'LOW', color: 'rgb(255, 140, 50)', glowColor: 'rgba(255, 140, 50, 0.5)' },
+    { key: 'mid', label: 'MID', color: 'rgb(180, 100, 220)', glowColor: 'rgba(180, 100, 220, 0.5)' },
+    { key: 'high', label: 'HIGH', color: 'rgb(255, 100, 120)', glowColor: 'rgba(255, 100, 120, 0.5)' },
+  ];
+
+  return (
+    <div className="flex items-center gap-3 mt-1.5 px-1">
+      {bands.map((b) => {
+        const level = levels[b.key];
+        const opacity = isPlaying ? 0.3 + level * 0.7 : 0.15;
+        return (
+          <div key={b.key} className="flex items-center gap-1.5">
+            <div
+              className="w-1.5 h-1.5 rounded-full transition-opacity duration-75"
+              style={{
+                backgroundColor: b.color,
+                opacity,
+                boxShadow: isPlaying && level > 0.3 ? `0 0 4px ${b.glowColor}` : 'none',
+              }}
+            />
+            <span
+              className="text-[7px] font-mono uppercase tracking-wider transition-opacity duration-75"
+              style={{ color: b.color, opacity }}
+            >
+              {b.label}
+            </span>
+            {isPlaying && (
+              <span
+                className="text-[7px] font-mono tabular-nums transition-opacity duration-75"
+                style={{ color: b.color, opacity: opacity * 0.7 }}
+              >
+                {Math.round(level * 100)}
+              </span>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import WaveSurfer from 'wavesurfer.js';
 import { Play, Pause, Loader2, Activity } from 'lucide-react';
 
-import { isSpectrumActive, nextPeakValue } from './waveformPlayerUtils';
+import { RetroVisualizer } from './RetroVisualizer';
 
 interface WaveformPlayerProps {
   audioUrl: string;
@@ -10,136 +10,156 @@ interface WaveformPlayerProps {
   onAudioElement?: (el: HTMLAudioElement) => void;
 }
 
-const BAR_COUNT = 64;
-const PEAK_DROP_RATE = 2;
-const SEGMENT_HEIGHT = 4;
-const SEGMENT_GAP = 1;
+const METER_SEGMENTS = 20;
 
-export function WaveformPlayer({ audioUrl, audioFile, onAudioElement }: WaveformPlayerProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const wavesurferRef = useRef<WaveSurfer | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isReady, setIsReady] = useState(false);
-  const [isSeekPreviewActive, setIsSeekPreviewActive] = useState(false);
+function PeakMeter({ analyserL, analyserR, isPlaying }: {
+  analyserL: AnalyserNode | null;
+  analyserR: AnalyserNode | null;
+  isPlaying: boolean;
+}) {
+  const leftRef = useRef<HTMLDivElement>(null);
+  const rightRef = useRef<HTMLDivElement>(null);
+  const animRef = useRef<number | null>(null);
+  const peakLRef = useRef(0);
+  const peakRRef = useRef(0);
 
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
-  const animationRef = useRef<number | null>(null);
-  const frequencyDataRef = useRef<Uint8Array | null>(null);
-  const peakDataRef = useRef<Uint8Array | null>(null);
-  const seekingRef = useRef(false);
-  const seekPreviewTimeoutRef = useRef<number | null>(null);
-
-  const stopSpectrumLoop = useCallback(() => {
-    if (animationRef.current !== null) {
-      cancelAnimationFrame(animationRef.current);
-      animationRef.current = null;
-    }
-  }, []);
-
-  const clearSeekPreview = useCallback(() => {
-    if (seekPreviewTimeoutRef.current !== null) {
-      window.clearTimeout(seekPreviewTimeoutRef.current);
-      seekPreviewTimeoutRef.current = null;
-    }
-    setIsSeekPreviewActive(false);
-  }, []);
-
-  const ensureSpectrumBuffers = useCallback((bufferLength: number) => {
-    if (!frequencyDataRef.current || frequencyDataRef.current.length !== bufferLength) {
-      frequencyDataRef.current = new Uint8Array(bufferLength);
-    }
-
-    if (!peakDataRef.current || peakDataRef.current.length !== BAR_COUNT) {
-      peakDataRef.current = new Uint8Array(BAR_COUNT);
-    }
-
-    return {
-      frequencyData: frequencyDataRef.current,
-      peakData: peakDataRef.current,
-    };
-  }, []);
-
-  const drawSpectrumFrame = useCallback(() => {
-    const canvas = canvasRef.current;
-    const analyser = analyserRef.current;
-    if (!canvas || !analyser) return;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const bufferLength = analyser.frequencyBinCount;
-    const { frequencyData, peakData } = ensureSpectrumBuffers(bufferLength);
-
-    analyser.getByteFrequencyData(frequencyData);
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    const barWidth = canvas.width / BAR_COUNT;
-    const effectiveBarWidth = Math.max(1, barWidth - 2);
-    const step = Math.max(1, Math.floor(bufferLength / BAR_COUNT / 1.5));
-
-    for (let i = 0; i < BAR_COUNT; i++) {
-      const dataIndex = Math.min(bufferLength - 1, i * step);
-      const value = frequencyData[dataIndex];
-      peakData[i] = nextPeakValue(peakData[i], value, PEAK_DROP_RATE);
-
-      const height = (value / 255) * canvas.height;
-      const x = i * barWidth;
-      const segmentCount = Math.floor(height / (SEGMENT_HEIGHT + SEGMENT_GAP));
-
-      for (let j = 0; j < segmentCount; j++) {
-        const segmentY = canvas.height - (j * (SEGMENT_HEIGHT + SEGMENT_GAP)) - SEGMENT_HEIGHT;
-
-        let fillStyle = '#ff8800';
-        if (j > 20) fillStyle = '#ff4444';
-        else if (j > 15) fillStyle = '#ffcc00';
-
-        ctx.fillStyle = fillStyle;
-        ctx.globalAlpha = 0.8;
-        ctx.fillRect(x, segmentY, effectiveBarWidth, SEGMENT_HEIGHT);
+  useEffect(() => {
+    if (!isPlaying || !analyserL || !analyserR) {
+      if (animRef.current !== null) {
+        cancelAnimationFrame(animRef.current);
+        animRef.current = null;
       }
-
-      const peakY = canvas.height - (peakData[i] / 255) * canvas.height;
-      ctx.fillStyle = '#ffffff';
-      ctx.globalAlpha = 0.5;
-      ctx.fillRect(x, peakY, effectiveBarWidth, 2);
-    }
-
-    ctx.globalAlpha = 1;
-
-    if (isSpectrumActive(wavesurferRef.current?.isPlaying() ?? false, seekingRef.current)) {
-      animationRef.current = requestAnimationFrame(drawSpectrumFrame);
+      peakLRef.current = 0;
+      peakRRef.current = 0;
+      if (leftRef.current) leftRef.current.style.height = '0%';
+      if (rightRef.current) rightRef.current.style.height = '0%';
       return;
     }
 
-    animationRef.current = null;
-  }, [ensureSpectrumBuffers]);
+    const bufL = new Uint8Array(analyserL.fftSize);
+    const bufR = new Uint8Array(analyserR.fftSize);
 
-  const startSpectrumLoop = useCallback(() => {
-    if (animationRef.current !== null) return;
-    drawSpectrumFrame();
-  }, [drawSpectrumFrame]);
+    const tick = () => {
+      analyserL.getByteTimeDomainData(bufL);
+      analyserR.getByteTimeDomainData(bufR);
 
-  const redrawSpectrum = useCallback(() => {
-    stopSpectrumLoop();
-    drawSpectrumFrame();
-  }, [drawSpectrumFrame, stopSpectrumLoop]);
+      let maxL = 0, maxR = 0;
+      for (let i = 0; i < bufL.length; i++) {
+        const absL = Math.abs(bufL[i] - 128);
+        const absR = Math.abs(bufR[i] - 128);
+        if (absL > maxL) maxL = absL;
+        if (absR > maxR) maxR = absR;
+      }
+
+      const levelL = maxL / 128;
+      const levelR = maxR / 128;
+
+      peakLRef.current = Math.max(levelL, peakLRef.current * 0.97);
+      peakRRef.current = Math.max(levelR, peakRRef.current * 0.97);
+
+      if (leftRef.current) leftRef.current.style.height = `${peakLRef.current * 100}%`;
+      if (rightRef.current) rightRef.current.style.height = `${peakRRef.current * 100}%`;
+
+      animRef.current = requestAnimationFrame(tick);
+    };
+
+    animRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (animRef.current !== null) cancelAnimationFrame(animRef.current);
+    };
+  }, [analyserL, analyserR, isPlaying]);
+
+  const segments = Array.from({ length: METER_SEGMENTS }, (_, i) => {
+    const pos = i / METER_SEGMENTS;
+    let color = 'bg-success/70';
+    if (pos > 0.85) color = 'bg-error/80';
+    else if (pos > 0.7) color = 'bg-warning/70';
+    return color;
+  });
+
+  return (
+    <div className="flex gap-0.5 h-12">
+      {['L', 'R'].map((ch) => (
+        <div key={ch} className="flex flex-col items-center gap-0.5 w-[6px]">
+          <div className="relative w-full flex-1 bg-bg-surface-darker rounded-sm overflow-hidden">
+            <div className="absolute bottom-0 left-0 right-0 flex flex-col-reverse gap-px">
+              {segments.map((color, i) => (
+                <div key={i} className={`h-[2px] w-full ${color} opacity-20`} />
+              ))}
+            </div>
+            <div
+              ref={ch === 'L' ? leftRef : rightRef}
+              className="absolute bottom-0 left-0 right-0 overflow-hidden"
+              style={{ height: '0%' }}
+            >
+              <div className="absolute bottom-0 left-0 right-0 flex flex-col-reverse gap-px">
+                {segments.map((color, i) => (
+                  <div key={i} className={`h-[2px] w-full ${color}`} />
+                ))}
+              </div>
+            </div>
+          </div>
+          <span className="text-[6px] font-mono text-text-secondary/50">{ch}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function WaveformPlayer({ audioUrl, audioFile, onAudioElement }: WaveformPlayerProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const wavesurferRef = useRef<WaveSurfer | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isReady, setIsReady] = useState(false);
+  const [hasJustLoaded, setHasJustLoaded] = useState(false);
+  const [beatPulse, setBeatPulse] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const beatTimeoutRef = useRef<number | null>(null);
+
+  const handleBeat = useCallback(() => {
+    setBeatPulse(true);
+    if (beatTimeoutRef.current !== null) window.clearTimeout(beatTimeoutRef.current);
+    beatTimeoutRef.current = window.setTimeout(() => setBeatPulse(false), 120);
+  }, []);
+
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const analyserLRef = useRef<AnalyserNode | null>(null);
+  const analyserRRef = useRef<AnalyserNode | null>(null);
+  const splitterRef = useRef<ChannelSplitterNode | null>(null);
+  const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
 
   const setupAnalyzer = useCallback((mediaElement: HTMLMediaElement) => {
     try {
       if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
       }
+      const ctx = audioContextRef.current;
+
       if (!analyserRef.current) {
-        analyserRef.current = audioContextRef.current.createAnalyser();
+        analyserRef.current = ctx.createAnalyser();
         analyserRef.current.fftSize = 256;
       }
+      if (!analyserLRef.current) {
+        analyserLRef.current = ctx.createAnalyser();
+        analyserLRef.current.fftSize = 256;
+      }
+      if (!analyserRRef.current) {
+        analyserRRef.current = ctx.createAnalyser();
+        analyserRRef.current.fftSize = 256;
+      }
+      if (!splitterRef.current) {
+        splitterRef.current = ctx.createChannelSplitter(2);
+      }
+
       if (!sourceRef.current) {
-        sourceRef.current = audioContextRef.current.createMediaElementSource(mediaElement);
+        sourceRef.current = ctx.createMediaElementSource(mediaElement);
         sourceRef.current.connect(analyserRef.current);
-        analyserRef.current.connect(audioContextRef.current.destination);
+        analyserRef.current.connect(ctx.destination);
+        sourceRef.current.connect(splitterRef.current);
+        splitterRef.current.connect(analyserLRef.current, 0);
+        splitterRef.current.connect(analyserRRef.current, 1);
       }
     } catch (e) {
       console.error('Error setting up audio analyzer:', e);
@@ -151,16 +171,11 @@ export function WaveformPlayer({ audioUrl, audioFile, onAudioElement }: Waveform
 
     setIsReady(false);
     setIsPlaying(false);
-    clearSeekPreview();
-    stopSpectrumLoop();
-    seekingRef.current = false;
-    frequencyDataRef.current = null;
-    peakDataRef.current = null;
 
     const ws = WaveSurfer.create({
       container: containerRef.current,
-      waveColor: '#4a4b50', // Muted gray for unplayed
-      progressColor: '#ff8800', // Accent color for played
+      waveColor: '#4a4b50',
+      progressColor: '#ff8800',
       cursorColor: '#ffffff',
       barWidth: 2,
       barGap: 2,
@@ -176,8 +191,10 @@ export function WaveformPlayer({ audioUrl, audioFile, onAudioElement }: Waveform
 
     const handleReady = () => {
       setIsReady(true);
+      setHasJustLoaded(true);
+      setDuration(ws.getDuration());
+      setTimeout(() => setHasJustLoaded(false), 600);
       setupAnalyzer(mediaElement);
-      redrawSpectrum();
     };
 
     ws.on('ready', handleReady);
@@ -185,53 +202,20 @@ export function WaveformPlayer({ audioUrl, audioFile, onAudioElement }: Waveform
 
     ws.on('error', (err) => {
       console.error('WaveSurfer error:', err);
-      setIsReady(true); // Fallback to allow play attempt
+      setIsReady(true);
     });
 
     ws.on('play', () => {
       setIsPlaying(true);
-      clearSeekPreview();
       if (audioContextRef.current?.state === 'suspended') {
         void audioContextRef.current.resume();
       }
-      startSpectrumLoop();
     });
+    ws.on('pause', () => setIsPlaying(false));
+    ws.on('finish', () => setIsPlaying(false));
+    ws.on('audioprocess', () => setCurrentTime(ws.getCurrentTime()));
+    ws.on('seeking', () => setCurrentTime(ws.getCurrentTime()));
 
-    ws.on('pause', () => {
-      setIsPlaying(false);
-      if (!seekingRef.current) {
-        stopSpectrumLoop();
-      }
-    });
-
-    ws.on('finish', () => {
-      setIsPlaying(false);
-      seekingRef.current = false;
-      clearSeekPreview();
-      stopSpectrumLoop();
-    });
-
-    const handleSeeking = () => {
-      seekingRef.current = true;
-      clearSeekPreview();
-      setIsSeekPreviewActive(true);
-      startSpectrumLoop();
-    };
-
-    const handleSeeked = () => {
-      seekingRef.current = false;
-      redrawSpectrum();
-      clearSeekPreview();
-      seekPreviewTimeoutRef.current = window.setTimeout(() => {
-        setIsSeekPreviewActive(false);
-        seekPreviewTimeoutRef.current = null;
-      }, 180);
-    };
-
-    mediaElement.addEventListener('seeking', handleSeeking);
-    mediaElement.addEventListener('seeked', handleSeeked);
-
-    // Load the audio explicitly
     if (audioFile) {
       ws.loadBlob(audioFile).catch((err) => {
         console.error('WaveSurfer loadBlob error:', err);
@@ -243,33 +227,34 @@ export function WaveformPlayer({ audioUrl, audioFile, onAudioElement }: Waveform
     }
 
     return () => {
-      mediaElement.removeEventListener('seeking', handleSeeking);
-      mediaElement.removeEventListener('seeked', handleSeeked);
-      clearSeekPreview();
-      stopSpectrumLoop();
+      if (beatTimeoutRef.current !== null) window.clearTimeout(beatTimeoutRef.current);
       if (sourceRef.current) {
-        try {
-          sourceRef.current.disconnect();
-        } catch (e) {}
+        try { sourceRef.current.disconnect(); } catch (e) {}
         sourceRef.current = null;
       }
+      if (splitterRef.current) {
+        try { splitterRef.current.disconnect(); } catch (e) {}
+        splitterRef.current = null;
+      }
       if (analyserRef.current) {
-        try {
-          analyserRef.current.disconnect();
-        } catch (e) {}
+        try { analyserRef.current.disconnect(); } catch (e) {}
         analyserRef.current = null;
       }
+      if (analyserLRef.current) {
+        try { analyserLRef.current.disconnect(); } catch (e) {}
+        analyserLRef.current = null;
+      }
+      if (analyserRRef.current) {
+        try { analyserRRef.current.disconnect(); } catch (e) {}
+        analyserRRef.current = null;
+      }
       if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-        try {
-          void audioContextRef.current.close();
-        } catch (e) {}
+        try { void audioContextRef.current.close(); } catch (e) {}
         audioContextRef.current = null;
       }
-      frequencyDataRef.current = null;
-      peakDataRef.current = null;
       ws.destroy();
     };
-  }, [audioFile, audioUrl, clearSeekPreview, redrawSpectrum, setupAnalyzer, startSpectrumLoop, stopSpectrumLoop]);
+  }, [audioFile, audioUrl, setupAnalyzer]);
 
   const togglePlay = () => {
     if (wavesurferRef.current && isReady) {
@@ -280,66 +265,67 @@ export function WaveformPlayer({ audioUrl, audioFile, onAudioElement }: Waveform
   return (
     <div
       data-testid="waveform-player"
-      className="flex flex-col space-y-4 w-full bg-bg-panel p-4 rounded-sm border border-border relative overflow-hidden group"
+      className={`flex flex-col space-y-3 w-full bg-bg-panel p-4 rounded-sm border relative overflow-hidden group transition-[border-color] duration-100 ${
+        beatPulse ? 'border-accent/50' : 'border-border'
+      }`}
     >
-      <div className="flex items-center justify-between px-4 pt-1 border-b border-border/30 pb-2">
+      <div className={`flex items-center justify-between px-4 pt-1 border-b border-border/30 pb-2 transition-colors duration-200 ${hasJustLoaded ? 'bg-accent/8' : ''}`}>
         <div className="flex items-center space-x-2">
           <Activity className="w-4 h-4 text-accent" />
           <span className="text-xs font-bold text-text-primary tracking-widest uppercase">Signal Monitor</span>
         </div>
-        <div className="flex space-x-1">
-          <div className={`w-2 h-2 rounded-full ${isReady ? 'bg-success' : 'bg-error'}`}></div>
+        <div className="flex items-center space-x-1">
+          <div className={`w-2 h-2 rounded-full transition-all duration-200 ${
+            isReady
+              ? hasJustLoaded ? 'bg-accent shadow-[0_0_6px_rgba(255,136,0,0.6)]' : 'bg-success'
+              : 'bg-error'
+          }`}></div>
           <span className="text-[9px] font-mono text-text-secondary uppercase">{isReady ? 'ONLINE' : 'SYNCING'}</span>
         </div>
       </div>
 
-      <div className="flex items-center space-x-4 px-2">
-        <button
-          onClick={togglePlay}
-          disabled={!isReady}
-          data-testid="waveform-play-toggle"
-          className={`w-12 h-12 flex items-center justify-center rounded-sm border-2 transition-all ${
-            isPlaying 
-              ? 'bg-accent text-bg-app border-accent' 
-              : 'bg-bg-card text-accent border-border hover:border-accent hover:text-accent/80'
-          } disabled:opacity-50 disabled:cursor-not-allowed disabled:border-border`}
-          title={isPlaying ? "Pause" : "Play"}
-        >
-          {!isReady ? (
-            <Loader2 className="w-5 h-5 animate-spin" />
-          ) : isPlaying ? (
-            <Pause className="w-5 h-5 fill-current" />
-          ) : (
-            <Play className="w-5 h-5 ml-1 fill-current" />
-          )}
-        </button>
+      <div className="flex items-center space-x-3 px-2">
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={togglePlay}
+            disabled={!isReady}
+            data-testid="waveform-play-toggle"
+            className={`w-12 h-12 flex items-center justify-center rounded-sm border-2 transition-all ${
+              isPlaying 
+                ? 'bg-accent text-bg-app border-accent' 
+                : 'bg-bg-card text-accent border-border hover:border-accent hover:text-accent/80'
+            } disabled:opacity-50 disabled:cursor-not-allowed disabled:border-border`}
+            title={isPlaying ? "Pause" : "Play"}
+          >
+            {!isReady ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : isPlaying ? (
+              <Pause className="w-5 h-5 fill-current" />
+            ) : (
+              <Play className="w-5 h-5 ml-1 fill-current" />
+            )}
+          </button>
+          <PeakMeter
+            analyserL={analyserLRef.current}
+            analyserR={analyserRRef.current}
+            isPlaying={isPlaying}
+          />
+        </div>
         
         <div className="flex-grow bg-bg-card rounded-sm border border-border/50 p-2 relative overflow-hidden">
           <div ref={containerRef} data-testid="waveform-track" className="w-full" />
         </div>
       </div>
 
-      <div className="w-full h-32 bg-bg-surface-darker rounded-sm border border-border overflow-hidden relative">
-        <canvas 
-          ref={canvasRef} 
-          width={800} 
-          height={128} 
-          className="w-full h-full object-fill opacity-90 relative z-10"
-        />
-        
-        {!isPlaying && isReady && !isSeekPreviewActive && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center z-30">
-            <p className="text-xs text-accent font-mono uppercase tracking-widest">Awaiting Signal</p>
-            <p className="text-[10px] text-text-secondary font-mono mt-1">PRESS PLAY TO INITIALIZE SPECTRAL ANALYSIS</p>
-          </div>
-        )}
-        
-        {/* Technical readout overlay */}
-        <div className="absolute top-2 right-2 z-30 flex flex-col items-end pointer-events-none">
-          <span className="text-[8px] font-mono text-accent/50">FFT_SIZE: 256</span>
-          <span className="text-[8px] font-mono text-accent/50">SR: 44.1kHz</span>
-        </div>
-      </div>
+      {/* (1) Beat-reactive border pulse on signal monitor panel */}
+      <RetroVisualizer
+        analyser={analyserRef.current}
+        isPlaying={isPlaying}
+        audioBuffer={null}
+        onBeat={handleBeat}
+        currentTime={currentTime}
+        duration={duration}
+      />
     </div>
   );
 }

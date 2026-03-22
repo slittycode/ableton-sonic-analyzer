@@ -1,11 +1,11 @@
 import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
-import { Activity, AudioWaveform, Sparkles, X } from 'lucide-react';
+import { AudioWaveform, Sparkles, X } from 'lucide-react';
 
 import { AnalysisStatusPanel } from './components/AnalysisStatusPanel';
 import { DiagnosticLog } from './components/DiagnosticLog';
 import { FileUpload } from './components/FileUpload';
 import { WaveformPlayer } from './components/WaveformPlayer';
-import { AudioVisualizationStack } from './components/AudioVisualizationStack';
+import { IdleSignalMonitor } from './components/IdleSignalMonitor';
 import { useCpuMeter } from './hooks/useCpuMeter';
 import { useGlobalDrag } from './hooks/useGlobalDrag';
 import {
@@ -218,7 +218,6 @@ export default function App() {
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isDemoLoading, setIsDemoLoading] = useState(false);
-  const [useStackedVisualization, setUseStackedVisualization] = useState(false);
 
   const [analysisEstimate, setAnalysisEstimate] = useState<BackendAnalysisEstimate | null>(null);
   const [isEstimateLoading, setIsEstimateLoading] = useState(false);
@@ -1049,17 +1048,40 @@ export default function App() {
                       </div>
                     </div>
                     {!measurementResult && audioFile && (
-                      <div className="mt-4 flex justify-end">
-                        <button
-                          onClick={handleStartAnalysis}
-                          disabled={isAnalyzeDisabled}
-                          className="bg-accent hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed text-bg-app font-bold py-2 px-6 rounded-sm flex items-center transition-colors uppercase tracking-wider font-mono text-xs"
-                          title={estimateWrongService ? 'Point the UI at the Sonic Analyzer backend to enable analysis.' : undefined}
-                        >
-                          <Sparkles className="w-3 h-3 mr-2" />
-                          Initiate Analysis
-                        </button>
-                      </div>
+                      <>
+                        <div className="mt-3 rounded-sm border border-border bg-bg-panel p-3 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <p className="text-[10px] font-mono text-text-secondary uppercase tracking-wider">Estimated local analysis</p>
+                            <p className="text-xs font-mono font-bold tracking-wider text-text-primary">
+                              {isEstimateLoading
+                                ? 'Calculating...'
+                                : analysisEstimate
+                                  ? formatEstimateRange(analysisEstimate)
+                                  : 'Unavailable'}
+                            </p>
+                          </div>
+                          {estimateError && (
+                            <p
+                              className={`text-[10px] font-mono text-warning ${
+                                estimateWrongService ? 'leading-relaxed' : 'uppercase tracking-wider'
+                              }`}
+                            >
+                              {estimateWrongService ? estimateError : `Estimate unavailable: ${estimateError}`}
+                            </p>
+                          )}
+                        </div>
+                        <div className="mt-4 flex justify-end">
+                          <button
+                            onClick={handleStartAnalysis}
+                            disabled={isAnalyzeDisabled}
+                            className="bg-accent hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed text-bg-app font-bold py-2 px-6 rounded-sm flex items-center transition-colors uppercase tracking-wider font-mono text-xs"
+                            title={estimateWrongService ? 'Point the UI at the Sonic Analyzer backend to enable analysis.' : undefined}
+                          >
+                            <Sparkles className="w-3 h-3 mr-2" />
+                            Initiate Analysis
+                          </button>
+                        </div>
+                      </>
                     )}
                   </div>
                 </div>
@@ -1079,65 +1101,7 @@ export default function App() {
                 >
                   {audioUrl && audioFile ? (
                     <div className="h-full flex flex-col relative z-10 gap-4">
-                      {/* Visualization Toggle */}
-                      <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-wider">
-                        <button
-                          onClick={() => setUseStackedVisualization(false)}
-                          className={`px-2 py-1 rounded-sm border transition-colors ${
-                            !useStackedVisualization
-                              ? 'bg-accent text-bg-app border-accent'
-                              : 'bg-bg-panel text-text-secondary border-border hover:border-accent/50'
-                          }`}
-                        >
-                          Original
-                        </button>
-                        <button
-                          onClick={() => setUseStackedVisualization(true)}
-                          className={`px-2 py-1 rounded-sm border transition-colors ${
-                            useStackedVisualization
-                              ? 'bg-accent text-bg-app border-accent'
-                              : 'bg-bg-panel text-text-secondary border-border hover:border-accent/50'
-                          }`}
-                        >
-                          Stacked (3 Options)
-                        </button>
-                      </div>
-
-                      {useStackedVisualization ? (
-                        <AudioVisualizationStack audioUrl={audioUrl} audioFile={audioFile} />
-                      ) : (
-                        <WaveformPlayer audioUrl={audioUrl} audioFile={audioFile} onAudioElement={handleAudioElement} />
-                      )}
-
-                      {!measurementResult && (
-                        <div className="rounded-sm border border-border bg-bg-panel p-4 space-y-3">
-                          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
-                            <div>
-                              <p className="text-[10px] font-mono text-text-secondary uppercase tracking-wider">Local DSP first</p>
-                              <p className="mt-2 text-sm font-bold uppercase tracking-wide text-text-primary">Estimated local analysis</p>
-                              <p className="mt-1 text-xs font-mono tracking-wider text-text-secondary">
-                                {isEstimateLoading
-                                  ? 'Calculating estimate...'
-                                  : analysisEstimate
-                                    ? formatEstimateRange(analysisEstimate)
-                                    : 'Unavailable'}
-                              </p>
-                            </div>
-                            <div className="max-w-xs text-[10px] font-mono uppercase tracking-wider text-text-secondary leading-relaxed">
-                              Measurement runs locally first. Symbolic extraction and AI interpretation only start after measurement succeeds.
-                            </div>
-                          </div>
-                          {estimateError && (
-                            <p
-                              className={`text-[10px] font-mono text-warning ${
-                                estimateWrongService ? 'leading-relaxed' : 'uppercase tracking-wider'
-                              }`}
-                            >
-                              {estimateWrongService ? estimateError : `Estimate unavailable: ${estimateError}`}
-                            </p>
-                          )}
-                        </div>
-                      )}
+                      <WaveformPlayer audioUrl={audioUrl} audioFile={audioFile} onAudioElement={handleAudioElement} />
 
                       {shouldShowStatusPanel && (
                         <AnalysisStatusPanel
@@ -1153,10 +1117,7 @@ export default function App() {
                       )}
                     </div>
                   ) : (
-                    <div className="h-full flex flex-col items-center justify-center text-text-secondary opacity-50 font-mono text-xs border border-dashed border-border rounded-sm m-2 min-h-[150px] bg-bg-app">
-                      <Activity className="w-8 h-8 mb-2" />
-                      NO SIGNAL DETECTED
-                    </div>
+                    <IdleSignalMonitor />
                   )}
                 </div>
               </div>
