@@ -18,8 +18,10 @@ class AnalysisRuntimeTests(unittest.TestCase):
     def test_resolve_measurement_flags_supports_known_symbolic_modes(self) -> None:
         runtime = self._runtime()
 
+        # Symbolic work is now handled by the dedicated symbolic_extraction stage,
+        # not inline during measurement. Both modes return (False, False).
         self.assertEqual(runtime.resolve_measurement_flags("off"), (False, False))
-        self.assertEqual(runtime.resolve_measurement_flags("stem_notes"), (True, True))
+        self.assertEqual(runtime.resolve_measurement_flags("stem_notes"), (False, False))
 
     def test_resolve_measurement_flags_rejects_unknown_symbolic_mode(self) -> None:
         runtime = self._runtime()

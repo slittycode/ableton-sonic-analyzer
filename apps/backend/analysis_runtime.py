@@ -1267,11 +1267,13 @@ class AnalysisRuntime:
     def resolve_measurement_flags(
         requested_symbolic_mode: str,
     ) -> tuple[bool, bool]:
-        if requested_symbolic_mode == "off":
-            return False, False
-        if requested_symbolic_mode == "stem_notes":
-            return True, True
-        raise UnsupportedSymbolicModeError(requested_symbolic_mode)
+        # Symbolic work (separation + transcription) is handled by the dedicated
+        # symbolic_extraction stage enqueued via _enqueue_requested_followups().
+        # Running it inline during measurement was redundant — the result was
+        # stripped anyway (see complete_measurement: pop("transcriptionDetail")).
+        if requested_symbolic_mode not in ("off", "stem_notes"):
+            raise UnsupportedSymbolicModeError(requested_symbolic_mode)
+        return False, False
 
     @staticmethod
     def _preferred_symbolic_row(

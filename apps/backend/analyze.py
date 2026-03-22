@@ -9,6 +9,7 @@ Usage:
     ./venv/bin/python analyze.py "path/to/track.mp3" [--separate] [--fast] [--transcribe] [--yes]
 """
 
+import gc
 import json
 import heapq
 import math
@@ -102,24 +103,31 @@ def separate_stems(audio_path: str, output_dir: str | None = None):
         if mix.dim() == 1:
             mix = mix.unsqueeze(0)
 
-        sources = apply_model(
-            model,
-            mix.unsqueeze(0),
-            device=device,
-            split=True,
-            progress=False,
-        )[0]
+        with torch.no_grad():
+            sources = apply_model(
+                model,
+                mix.unsqueeze(0),
+                device=device,
+                split=True,
+                progress=False,
+            )[0]
 
         source_names = list(model.sources)
         if len(source_names) == 0:
             raise RuntimeError("Demucs output does not contain any sources")
 
         stem_paths = {}
+        model_sr = int(model.samplerate)
         for idx, source_name in enumerate(source_names):
             stem_audio = sources[idx].detach().cpu().numpy()
             stem_path = os.path.join(output_dir, f"{source_name}.wav")
-            _write_wav_pcm16(stem_path, stem_audio, int(model.samplerate))
+            _write_wav_pcm16(stem_path, stem_audio, model_sr)
             stem_paths[source_name] = stem_path
+
+        del sources, mix, model
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
         return stem_paths if len(stem_paths) > 0 else None
     except Exception:
@@ -963,36 +971,52 @@ def analyze_dynamic_character(mono: np.ndarray, sample_rate: int = 44100) -> dic
         return {"dynamicCharacter": None}
 
 
-def analyze_spectral_balance(mono: np.ndarray, sample_rate: int = 44100) -> dict:
-    """Spectral balance across 7 frequency bands using EnergyBand + spectrum."""
+SPECTRAL_BALANCE_BANDS = {
+    "subBass": (20, 80),
+    "lowBass": (80, 250),
+    "lowMids": (250, 500),
+    "mids": (500, 2000),
+    "upperMids": (2000, 5000),
+    "highs": (5000, 10000),
+    "brilliance": (10000, 20000),
+}
+
+
+def analyze_spectral_balance(
+    mono: np.ndarray,
+    sample_rate: int = 44100,
+    *,
+    precomputed_band_energies: dict | None = None,
+) -> dict:
+    """Spectral balance across 7 frequency bands using EnergyBand + spectrum.
+
+    When precomputed_band_energies is provided (from analyze_spectral_detail's
+    piggybacked loop), the per-frame FrameGenerator pass is skipped entirely.
+    """
     try:
-        bands = {
-            "subBass": (20, 80),
-            "lowBass": (80, 250),
-            "lowMids": (250, 500),
-            "mids": (500, 2000),
-            "upperMids": (2000, 5000),
-            "highs": (5000, 10000),
-            "brilliance": (10000, 20000),
-        }
+        if precomputed_band_energies is not None:
+            band_energies = precomputed_band_energies
+        else:
+            bands = SPECTRAL_BALANCE_BANDS
+            frame_size = 2048
+            hop_size = 1024
+            window = es.Windowing(type="hann", size=frame_size)
+            spectrum = es.Spectrum(size=frame_size)
 
-        frame_size = 2048
-        hop_size = 1024
-        window = es.Windowing(type="hann", size=frame_size)
-        spectrum = es.Spectrum(size=frame_size)
-
-        band_energies = {name: [] for name in bands}
-
-        for frame in es.FrameGenerator(mono, frameSize=frame_size, hopSize=hop_size):
-            spec = spectrum(window(frame))
-            for name, (lo, hi) in bands.items():
-                energy_band = es.EnergyBand(
+            band_algos = {
+                name: es.EnergyBand(
                     startCutoffFrequency=lo,
                     stopCutoffFrequency=hi,
                     sampleRate=sample_rate,
                 )
-                energy = energy_band(spec)
-                band_energies[name].append(float(energy))
+                for name, (lo, hi) in bands.items()
+            }
+            band_energies = {name: [] for name in bands}
+
+            for frame in es.FrameGenerator(mono, frameSize=frame_size, hopSize=hop_size):
+                spec = spectrum(window(frame))
+                for name, algo in band_algos.items():
+                    band_energies[name].append(float(algo(spec)))
 
         result = {}
         for name, energies in band_energies.items():
@@ -1020,8 +1044,16 @@ def analyze_plr(lufs_integrated: float | None, true_peak: float | None) -> dict:
         return {"plr": None}
 
 
-def analyze_spectral_detail(mono: np.ndarray, sample_rate: int = 44100) -> dict:
-    """Frame-by-frame SpectralCentroid, SpectralRolloff, MFCC, and HPCP (Chroma)."""
+def analyze_spectral_detail(
+    mono: np.ndarray, sample_rate: int = 44100, *, _balance_bands: dict | None = None
+) -> dict:
+    """Frame-by-frame SpectralCentroid, SpectralRolloff, MFCC, and HPCP (Chroma).
+
+    When _balance_bands is provided (dict mapping band name to (lo, hi) Hz),
+    EnergyBand values are computed in the same loop and returned under the key
+    ``_spectralBalanceBands``. This avoids a redundant second FrameGenerator pass
+    in analyze_spectral_balance().
+    """
     try:
         frame_size = 2048
         hop_size = 1024
@@ -1075,6 +1107,20 @@ def analyze_spectral_detail(mono: np.ndarray, sample_rate: int = 44100) -> dict:
                 )
             except Exception:
                 spectral_contrast_algo = None
+
+        # Optional: EnergyBand algos for spectral balance (piggyback on this loop)
+        balance_algos = None
+        balance_energies = None
+        if _balance_bands is not None:
+            balance_algos = {
+                name: es.EnergyBand(
+                    startCutoffFrequency=lo,
+                    stopCutoffFrequency=hi,
+                    sampleRate=sample_rate,
+                )
+                for name, (lo, hi) in _balance_bands.items()
+            }
+            balance_energies = {name: [] for name in _balance_bands}
 
         centroid_vals, rolloff_vals = [], []
         mfcc_matrix = []
@@ -1141,6 +1187,11 @@ def analyze_spectral_detail(mono: np.ndarray, sample_rate: int = 44100) -> dict:
                 except Exception:
                     pass
 
+            # EnergyBand for spectral balance (piggybacking)
+            if balance_algos is not None:
+                for name, algo in balance_algos.items():
+                    balance_energies[name].append(float(algo(spec)))
+
         # Compute means
         mean_centroid = (
             round(float(np.mean(centroid_vals)), 1) if centroid_vals else 0.0
@@ -1189,7 +1240,7 @@ def analyze_spectral_detail(mono: np.ndarray, sample_rate: int = 44100) -> dict:
             else []
         )
 
-        return {
+        result = {
             "spectralDetail": {
                 "spectralCentroid": mean_centroid,
                 "spectralRolloff": mean_rolloff,
@@ -1201,6 +1252,9 @@ def analyze_spectral_detail(mono: np.ndarray, sample_rate: int = 44100) -> dict:
                 "spectralValley": mean_valley,
             }
         }
+        if balance_energies is not None:
+            result["_spectralBalanceBands"] = balance_energies
+        return result
     except Exception as e:
         print(f"[warn] Spectral detail analysis failed: {e}", file=sys.stderr)
         return {"spectralDetail": None}
@@ -4778,7 +4832,7 @@ def analyze_transcription_basic_pitch(
 def main():
     if len(sys.argv) < 2:
         print(
-            "Usage: ./venv/bin/python analyze.py <audio_file> [--separate] [--fast] [--transcribe] [--yes]",
+            "Usage: ./venv/bin/python analyze.py <audio_file> [--separate] [--fast] [--standard] [--transcribe] [--yes]",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -4788,6 +4842,7 @@ def main():
     optional_args = sys.argv[2:]
     run_separation = "--separate" in optional_args
     run_fast = "--fast" in optional_args
+    run_standard = "--standard" in optional_args
     run_transcribe = "--transcribe" in optional_args
     auto_yes = "--yes" in optional_args
     stems = None
@@ -4941,12 +4996,18 @@ def main():
         stereo_detail.get("subBassMono") if isinstance(stereo_detail, dict) else None
     )
 
-    # Spectral balance
-    result.update(analyze_spectral_balance(mono, sample_rate))
-    result.update(analyze_plr(result.get("lufsIntegrated"), result.get("truePeak")))
+    # Spectral detail (also computes EnergyBand values for spectral balance in the same loop)
+    spectral_result = analyze_spectral_detail(
+        mono, sample_rate, _balance_bands=SPECTRAL_BALANCE_BANDS
+    )
+    precomputed_balance = spectral_result.pop("_spectralBalanceBands", None)
+    result.update(spectral_result)
 
-    # Spectral detail
-    result.update(analyze_spectral_detail(mono, sample_rate))
+    # Spectral balance (uses precomputed band energies — no redundant frame loop)
+    result.update(
+        analyze_spectral_balance(mono, sample_rate, precomputed_band_energies=precomputed_balance)
+    )
+    result.update(analyze_plr(result.get("lufsIntegrated"), result.get("truePeak")))
 
     # Rhythm detail
     result.update(analyze_rhythm_detail(rhythm_data))
@@ -4954,60 +5015,95 @@ def main():
     # Shared beat-domain loudness data used by groove + sidechain analyses.
     beat_data = _extract_beat_loudness_data(mono, sample_rate, rhythm_data)
 
-    # Melody detail
-    result.update(analyze_melody(audio_path, sample_rate, rhythm_data, stems))
-
-    # Groove detail
+    # Groove detail (Tier 2 — always run)
     result.update(analyze_groove(mono, sample_rate, rhythm_data, beat_data))
     result.update(analyze_beats_loudness(mono, sample_rate, rhythm_data, beat_data))
     result.update(analyze_sidechain_detail(mono, sample_rate, rhythm_data, beat_data))
-    result.update(analyze_acid_detail(mono, sample_rate, bpm=result.get("bpm")))
-    result.update(analyze_reverb_detail(mono, sample_rate, bpm=result.get("bpm")))
-    result.update(analyze_vocal_detail(mono, sample_rate, bpm=result.get("bpm")))
-    result.update(analyze_supersaw_detail(mono, sample_rate, bpm=result.get("bpm")))
-    result.update(analyze_bass_detail(mono, sample_rate, bpm=result.get("bpm")))
-    result.update(analyze_kick_detail(mono, sample_rate, bpm=result.get("bpm")))
+
+    # Genre detail (Tier 2 — derived from other results, nearly free)
     result.update(analyze_genre_detail(result))
-    result.update(
-        analyze_effects_detail(
-            mono,
-            sample_rate,
-            rhythm_data,
-            lufs_integrated=result.get("lufsIntegrated"),
-        )
-    )
 
-    # Synthesis character
-    result.update(analyze_synthesis_character(mono, sample_rate))
-
-    # Danceability
+    # Danceability (Tier 2 — single Essentia call, fast)
     result.update(analyze_danceability(mono, sample_rate))
 
-    # Structure
+    # Structure + arrangement (Tier 2)
     result.update(analyze_structure(mono, sample_rate))
     result.update(analyze_arrangement_detail(mono, sample_rate))
-    result.update(analyze_segment_stereo(result.get("structure"), stereo, sample_rate))
-    result.update(
-        analyze_segment_loudness(result.get("structure"), stereo, sample_rate)
-    )
-    result.update(
-        analyze_segment_spectral(
-            result.get("structure"),
-            mono,
-            segment_stereo_data=result.get("segmentStereo"),
-            sample_rate=sample_rate,
+
+    if run_standard:
+        # Standard mode: skip Tier 3 analyses (expensive or niche).
+        result["melodyDetail"] = None
+        result["acidDetail"] = None
+        result["reverbDetail"] = None
+        result["vocalDetail"] = None
+        result["supersawDetail"] = None
+        result["bassDetail"] = None
+        result["kickDetail"] = None
+        result["effectsDetail"] = None
+        result["synthesisCharacter"] = None
+        result["segmentLoudness"] = None
+        result["segmentSpectral"] = None
+        result["segmentStereo"] = None
+        result["segmentKey"] = None
+        result["chordDetail"] = None
+        result["perceptual"] = None
+        result["essentiaFeatures"] = None
+
+        # Stereo array no longer needed — release memory.
+        del stereo
+        gc.collect()
+    else:
+        # Full mode: run all Tier 3 analyses.
+
+        # Melody detail (expensive: PredominantPitchMelodia hop=128)
+        result.update(analyze_melody(audio_path, sample_rate, rhythm_data, stems))
+
+        # Detection detail
+        result.update(analyze_acid_detail(mono, sample_rate, bpm=result.get("bpm")))
+        result.update(analyze_reverb_detail(mono, sample_rate, bpm=result.get("bpm")))
+        result.update(analyze_vocal_detail(mono, sample_rate, bpm=result.get("bpm")))
+        result.update(analyze_supersaw_detail(mono, sample_rate, bpm=result.get("bpm")))
+        result.update(analyze_bass_detail(mono, sample_rate, bpm=result.get("bpm")))
+        result.update(analyze_kick_detail(mono, sample_rate, bpm=result.get("bpm")))
+        result.update(
+            analyze_effects_detail(
+                mono,
+                sample_rate,
+                rhythm_data,
+                lufs_integrated=result.get("lufsIntegrated"),
+            )
         )
-    )
-    result.update(analyze_segment_key(result.get("structure"), mono, sample_rate))
 
-    # Chords
-    result.update(analyze_chords(mono, sample_rate))
+        # Synthesis character
+        result.update(analyze_synthesis_character(mono, sample_rate))
 
-    # Perceptual
-    result.update(analyze_perceptual(mono, sample_rate))
+        # Segment analyses (need stereo)
+        result.update(analyze_segment_stereo(result.get("structure"), stereo, sample_rate))
+        result.update(
+            analyze_segment_loudness(result.get("structure"), stereo, sample_rate)
+        )
+        result.update(
+            analyze_segment_spectral(
+                result.get("structure"),
+                mono,
+                segment_stereo_data=result.get("segmentStereo"),
+                sample_rate=sample_rate,
+            )
+        )
+        result.update(analyze_segment_key(result.get("structure"), mono, sample_rate))
 
-    # Essentia features
-    result.update(analyze_essentia_features(mono, sample_rate))
+        # Stereo array no longer needed — release memory.
+        del stereo
+        gc.collect()
+
+        # Chords
+        result.update(analyze_chords(mono, sample_rate))
+
+        # Perceptual
+        result.update(analyze_perceptual(mono, sample_rate))
+
+        # Essentia features
+        result.update(analyze_essentia_features(mono, sample_rate))
 
     # Optional Basic Pitch transcription pass
     if run_transcribe:
@@ -5032,6 +5128,7 @@ def main():
             )
         )
         print(f"@@TRANSCRIPTION_COMPLETE mode={transcription_mode}", file=sys.stderr)
+        gc.collect()
     else:
         result["transcriptionDetail"] = None
 

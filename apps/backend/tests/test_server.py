@@ -415,11 +415,10 @@ class ServerContractTests(unittest.TestCase):
                 unittest.mock.ANY,
                 "--yes",
                 "--separate",
-                "--transcribe",
             ],
         )
         self.assertEqual(run_mock.call_args.kwargs["timeout"], 526)
-        build_estimate_mock.assert_called_once_with(214.6, True, True)
+        build_estimate_mock.assert_called_once_with(214.6, True, False)
         payload = self._decode_json_response(response)
         self.assertEqual(payload["diagnostics"]["backendDurationMs"], 200.0)
         self.assertEqual(
@@ -428,7 +427,7 @@ class ServerContractTests(unittest.TestCase):
                 "totalMs": 245.0,
                 "analysisMs": 200.0,
                 "serverOverheadMs": 45.0,
-                "flagsUsed": ["--separate", "--transcribe"],
+                "flagsUsed": ["--separate"],
                 "fileSizeBytes": 10,
                 "fileDurationSeconds": 214.6,
                 "msPerSecondOfAudio": 0.93,
@@ -440,7 +439,7 @@ class ServerContractTests(unittest.TestCase):
             "[TIMING] total=245.0ms analysis=200.0ms overhead=45.0ms",
             print_mock.call_args.args[0],
         )
-        self.assertIn("flags=[--separate, --transcribe]", print_mock.call_args.args[0])
+        self.assertIn("flags=[--separate]", print_mock.call_args.args[0])
         self.assertIn(
             "fileSize=0.0MB duration=214.6s ms/s=0.93", print_mock.call_args.args[0]
         )
@@ -654,14 +653,14 @@ class ServerContractTests(unittest.TestCase):
                 "totalMs": 255.0,
                 "analysisMs": 200.0,
                 "serverOverheadMs": 55.0,
-                "flagsUsed": ["--separate", "--transcribe"],
+                "flagsUsed": ["--separate"],
                 "fileSizeBytes": 10,
                 "fileDurationSeconds": None,
                 "msPerSecondOfAudio": None,
             },
         )
         print_mock.assert_called_once()
-        self.assertIn("flags=[--separate, --transcribe]", print_mock.call_args.args[0])
+        self.assertIn("flags=[--separate]", print_mock.call_args.args[0])
         self.assertIn("duration=n/a ms/s=n/a", print_mock.call_args.args[0])
 
     @patch.object(server, "get_audio_duration_seconds", return_value=214.6, create=True)
@@ -1906,8 +1905,8 @@ class StageWorkerTests(unittest.TestCase):
             runtime,
             created["runId"],
             request_id=created["runId"],
-            run_separation=True,
-            run_transcribe=True,
+            run_separation=False,
+            run_transcribe=False,
             run_fast=False,
         )
 
