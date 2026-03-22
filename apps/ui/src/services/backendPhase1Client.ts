@@ -560,6 +560,7 @@ export function parsePhase1Result(value: unknown): Phase1Result {
     rhythmDetail: isRecord(phase1.rhythmDetail) ? phase1.rhythmDetail as unknown as Phase1Result["rhythmDetail"] : null,
     melodyDetail,
     transcriptionDetail,
+    pitchDetail: isRecord(phase1.pitchDetail) ? phase1.pitchDetail as unknown as Phase1Result["pitchDetail"] : null,
     grooveDetail: isRecord(phase1.grooveDetail) ? phase1.grooveDetail as unknown as Phase1Result["grooveDetail"] : null,
     beatsLoudness: parseOptionalBeatsLoudness(phase1.beatsLoudness),
     sidechainDetail: isRecord(phase1.sidechainDetail) ? phase1.sidechainDetail as unknown as Phase1Result["sidechainDetail"] : null,

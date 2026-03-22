@@ -830,6 +830,42 @@ export function MeasurementDashboard({
             />
           </>
         )}
+        {phase1.pitchDetail && phase1.pitchDetail.stems && (
+          <>
+            <div className="border-t border-border pt-3 mt-3">
+              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+                Pitch Extraction ({phase1.pitchDetail.method})
+              </span>
+            </div>
+            {Object.entries(phase1.pitchDetail.stems).map(([stemName, stem]) => (
+              <div key={stemName} className="space-y-1">
+                <span className="text-[10px] font-mono uppercase tracking-wide text-accent">
+                  {stemName}
+                </span>
+                <MetricRow
+                  label="Median Pitch"
+                  value={stem.medianPitchHz !== null ? `${stem.medianPitchHz} Hz` : '—'}
+                />
+                <MetricRow
+                  label="Pitch Range (5–95%)"
+                  value={
+                    stem.pitchRangeLowHz !== null && stem.pitchRangeHighHz !== null
+                      ? `${stem.pitchRangeLowHz} – ${stem.pitchRangeHighHz} Hz`
+                      : '—'
+                  }
+                />
+                <MetricRow
+                  label="Mean Periodicity"
+                  value={formatNumber(stem.meanPeriodicity, 3)}
+                />
+                <MetricRow
+                  label="Voiced Frames"
+                  value={`${stem.voicedFramePercent}%`}
+                />
+              </div>
+            ))}
+          </>
+        )}
       </Section>
 
       {/* 8. Structure & Arrangement */}

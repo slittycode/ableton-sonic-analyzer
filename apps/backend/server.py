@@ -518,6 +518,7 @@ def _build_phase1(payload: dict[str, Any]) -> dict[str, Any]:
         "rhythmDetail": payload.get("rhythmDetail"),
         "melodyDetail": payload.get("melodyDetail"),
         "transcriptionDetail": payload.get("transcriptionDetail"),
+        "pitchDetail": payload.get("pitchDetail"),
         "grooveDetail": payload.get("grooveDetail"),
         "beatsLoudness": payload.get("beatsLoudness"),
         "sidechainDetail": payload.get("sidechainDetail"),

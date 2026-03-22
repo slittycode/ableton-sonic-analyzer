@@ -71,12 +71,16 @@ def _write_wav_pcm16(path: str, audio: np.ndarray, sample_rate: int) -> None:
 
 
 def separate_stems(audio_path: str, output_dir: str | None = None):
-    """Run Demucs separation and return written source stem paths."""
+    """Run torchaudio Hybrid Demucs separation and return written source stem paths.
+
+    Uses torchaudio.pipelines.HDEMUCS_HIGH_MUSDB_PLUS (in-process, no archived
+    demucs package dependency).  Falls back gracefully if torchaudio is missing.
+    """
     try:
         import torch
-        from demucs.apply import apply_model
-        from demucs.audio import AudioFile
-        from demucs.pretrained import get_model
+        import soundfile as sf
+        import torchaudio.functional as F
+        from torchaudio.pipelines import HDEMUCS_HIGH_MUSDB_PLUS
     except Exception:
         return None
 
@@ -88,35 +92,31 @@ def separate_stems(audio_path: str, output_dir: str | None = None):
         os.makedirs(output_dir, exist_ok=True)
 
     try:
-        model = get_model("htdemucs")
+        bundle = HDEMUCS_HIGH_MUSDB_PLUS
+        model = bundle.get_model()
         model.eval()
         device = "cuda" if torch.cuda.is_available() else "cpu"
         model.to(device)
 
-        mix_np = AudioFile(audio_path).read(
-            streams=0,
-            samplerate=model.samplerate,
-            channels=model.audio_channels,
-        )
-        mix = torch.tensor(mix_np, dtype=torch.float32, device=device)
-        if mix.dim() == 1:
-            mix = mix.unsqueeze(0)
+        target_sr = bundle.sample_rate
 
+        # Load audio with soundfile (avoids torchcodec dependency issues)
+        data, file_sr = sf.read(audio_path, always_2d=True, dtype="float32")
+        mix = torch.from_numpy(data.T)  # [C, T]
+        if file_sr != target_sr:
+            mix = F.resample(mix, file_sr, target_sr)
+
+        print(f"[demucs] separating on {device}...", file=sys.stderr)
         with torch.no_grad():
-            sources = apply_model(
-                model,
-                mix.unsqueeze(0),
-                device=device,
-                split=True,
-                progress=False,
-            )[0]
+            sources = model(mix.unsqueeze(0).to(device))  # [1, sources, C, T]
+        sources = sources.squeeze(0)  # [sources, C, T]
 
         source_names = list(model.sources)
         if len(source_names) == 0:
             raise RuntimeError("Demucs output does not contain any sources")
 
         stem_paths = {}
-        model_sr = int(model.samplerate)
+        model_sr = int(target_sr)
         for idx, source_name in enumerate(source_names):
             stem_audio = sources[idx].detach().cpu().numpy()
             stem_path = os.path.join(output_dir, f"{source_name}.wav")
@@ -133,6 +133,98 @@ def separate_stems(audio_path: str, output_dir: str | None = None):
         if temp_dir_created:
             shutil.rmtree(output_dir, ignore_errors=True)
         return None
+
+
+def analyze_crepe_pitch(stem_paths: dict | None) -> dict:
+    """Run torchcrepe pitch extraction on vocal and other stems.
+
+    Returns ``{"pitchDetail": {...}}`` with per-stem pitch statistics and the
+    raw pitch/periodicity arrays.  Only runs when separated stems are available;
+    returns ``{"pitchDetail": None}`` otherwise.
+    """
+    if stem_paths is None:
+        return {"pitchDetail": None}
+
+    try:
+        import torch
+        import torchcrepe
+        import soundfile as sf
+    except Exception:
+        return {"pitchDetail": None}
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    stem_configs = {
+        "vocals": {"fmin": 80.0, "fmax": 1000.0},
+        "other":  {"fmin": 50.0, "fmax": 1000.0},
+    }
+
+    stems_result = {}
+    for stem_name, cfg in stem_configs.items():
+        source_path = stem_paths.get(stem_name)
+        if not isinstance(source_path, str) or not os.path.isfile(source_path):
+            continue
+
+        try:
+            data, sr = sf.read(source_path, always_2d=True, dtype="float32")
+            # Downmix to mono [1, T]
+            mono = torch.from_numpy(data.T.mean(axis=0, keepdims=True))
+
+            print(f"[crepe:{stem_name}] extracting pitch...", file=sys.stderr)
+            pitch, periodicity = torchcrepe.predict(
+                mono,
+                sr,
+                hop_length=512,
+                fmin=cfg["fmin"],
+                fmax=cfg["fmax"],
+                model="tiny",
+                decoder=torchcrepe.decode.viterbi,
+                return_periodicity=True,
+                batch_size=256,
+                device=device,
+                pad=True,
+            )
+            pitch_np = pitch.squeeze().numpy()
+            period_np = periodicity.squeeze().numpy()
+
+            # Compute stats on voiced frames only
+            voiced_mask = period_np > 0.5
+            voiced_pct = round(float(voiced_mask.mean() * 100), 1)
+            mean_periodicity = round(float(period_np.mean()), 3)
+
+            if voiced_mask.sum() > 0:
+                voiced_pitch = pitch_np[voiced_mask]
+                voiced_pitch = voiced_pitch[np.isfinite(voiced_pitch)]
+                median_hz = round(float(np.median(voiced_pitch)), 1)
+                p5_hz = round(float(np.percentile(voiced_pitch, 5)), 1)
+                p95_hz = round(float(np.percentile(voiced_pitch, 95)), 1)
+            else:
+                median_hz = None
+                p5_hz = None
+                p95_hz = None
+
+            stems_result[stem_name] = {
+                "medianPitchHz": median_hz,
+                "pitchRangeLowHz": p5_hz,
+                "pitchRangeHighHz": p95_hz,
+                "meanPeriodicity": mean_periodicity,
+                "voicedFramePercent": voiced_pct,
+                "hopLength": 512,
+                "sampleRate": sr,
+                "model": "tiny",
+            }
+
+            del mono, pitch, periodicity
+        except Exception as exc:
+            print(f"[crepe:{stem_name}] failed: {exc}", file=sys.stderr)
+            continue
+
+    gc.collect()
+
+    if len(stems_result) == 0:
+        return {"pitchDetail": None}
+
+    return {"pitchDetail": {"method": "torchcrepe", "stems": stems_result}}
 
 
 def cleanup_stems(stems: dict | None) -> None:
@@ -4677,6 +4769,14 @@ def main():
         stems = separate_stems(audio_path)
         print("@@SEPARATION_COMPLETE", file=sys.stderr)
 
+    # Run torchcrepe pitch extraction on separated stems (if available)
+    if stems is not None:
+        print("Running pitch extraction (torchcrepe)...", file=sys.stderr)
+        pitch_result = analyze_crepe_pitch(stems)
+        print("@@PITCH_EXTRACTION_COMPLETE", file=sys.stderr)
+    else:
+        pitch_result = {"pitchDetail": None}
+
     print("Analyzing...", file=sys.stderr)
 
     # Run RhythmExtractor2013 once, share across BPM / time sig / rhythm detail
@@ -4858,6 +4958,9 @@ def main():
     else:
         result["transcriptionDetail"] = None
 
+    # Merge pitch extraction results
+    result.update(pitch_result)
+
     # Build final output in the exact requested key order
     output = {
         "bpm": result.get("bpm"),
@@ -4891,6 +4994,7 @@ def main():
         "rhythmDetail": result.get("rhythmDetail"),
         "melodyDetail": result.get("melodyDetail"),
         "transcriptionDetail": result.get("transcriptionDetail"),
+        "pitchDetail": result.get("pitchDetail"),
         "grooveDetail": result.get("grooveDetail"),
         "beatsLoudness": result.get("beatsLoudness"),
         "sidechainDetail": result.get("sidechainDetail"),

@@ -15,7 +15,7 @@ Conventions:
 
 Top-level keys:
 
-`bpm`, `bpmConfidence`, `bpmPercival`, `bpmAgreement`, `bpmDoubletime`, `bpmSource`, `bpmRawOriginal`, `key`, `keyConfidence`, `keyProfile`, `tuningFrequency`, `tuningCents`, `timeSignature`, `durationSeconds`, `sampleRate`, `lufsIntegrated`, `lufsRange`, `lufsMomentaryMax`, `lufsShortTermMax`, `truePeak`, `crestFactor`, `dynamicSpread`, `dynamicCharacter`, `stereoDetail`, `spectralBalance`, `spectralDetail`, `rhythmDetail`, `melodyDetail`, `transcriptionDetail`, `grooveDetail`, `beatsLoudness`, `sidechainDetail`, `effectsDetail`, `synthesisCharacter`, `danceability`, `structure`, `arrangementDetail`, `segmentLoudness`, `segmentSpectral`, `segmentStereo`, `segmentKey`, `chordDetail`, `perceptual`, `essentiaFeatures`.
+`bpm`, `bpmConfidence`, `bpmPercival`, `bpmAgreement`, `bpmDoubletime`, `bpmSource`, `bpmRawOriginal`, `key`, `keyConfidence`, `keyProfile`, `tuningFrequency`, `tuningCents`, `timeSignature`, `durationSeconds`, `sampleRate`, `lufsIntegrated`, `lufsRange`, `lufsMomentaryMax`, `lufsShortTermMax`, `truePeak`, `crestFactor`, `dynamicSpread`, `dynamicCharacter`, `stereoDetail`, `spectralBalance`, `spectralDetail`, `rhythmDetail`, `melodyDetail`, `transcriptionDetail`, `pitchDetail`, `grooveDetail`, `beatsLoudness`, `sidechainDetail`, `effectsDetail`, `synthesisCharacter`, `danceability`, `structure`, `arrangementDetail`, `segmentLoudness`, `segmentSpectral`, `segmentStereo`, `segmentKey`, `chordDetail`, `perceptual`, `essentiaFeatures`.
 
 ## Relationship To `POST /api/analyze`
 
@@ -79,6 +79,7 @@ Compatibility note:
 - `rhythmDetail`
 - `melodyDetail`
 - `transcriptionDetail`
+- `pitchDetail`
 - `grooveDetail`
 - `beatsLoudness`
 - `sidechainDetail`
@@ -128,6 +129,7 @@ Two server-only convenience fields are derived from `stereoDetail`:
 Current server behavior that affects schema expectations:
 
 - `transcriptionDetail` is only populated when `analyze.py` runs with `--transcribe`
+- `pitchDetail` is only populated when `--separate` is used; requires torchcrepe and separated stems
 - `danceability` is forwarded as the raw object shown below, not as a scalar
 - `dsp_json_override` is accepted by the server but does not alter the analyzer payload
 
@@ -378,6 +380,29 @@ Implementation notes:
 | `transcriptionDetail.notes[].durationSeconds` | `float` | Note duration. | seconds | Approximate note gate length for MIDI reconstruction. |
 | `transcriptionDetail.notes[].confidence` | `float` | Confidence score for the event. | 0.0-1.0 | Use as a weighting signal when filtering or trusting note detections. |
 | `transcriptionDetail.notes[].stemSource` | `"bass" \| "other" \| "full_mix"` | Source audio used to detect that note event. | categorical | Lets downstream tooling separate bass-derived notes from residual or fallback detections. |
+
+---
+
+## Pitch Detail (torchcrepe)
+
+### `pitchDetail`
+
+Type: `object | null`
+
+Continuous pitch tracking via torchcrepe on separated stems. Only populated when `--separate` is used; `null` otherwise.
+
+| Field | Type | Description | Units / Scale | LLM interpretation note |
+|---|---|---|---|---|
+| `pitchDetail.method` | `string` | Pitch extraction backend identifier. Currently `"torchcrepe"`. | categorical | Future backends may use different methods; check before assuming output shape. |
+| `pitchDetail.stems` | `object` | Per-stem pitch results keyed by stem name (`"vocals"`, `"other"`). | object map | Not all stems may be present; check key existence. |
+| `pitchDetail.stems[name].medianPitchHz` | `float \| null` | Median pitch of voiced frames. | Hz | Core tonal centre of the stem; `null` when no voiced frames detected. |
+| `pitchDetail.stems[name].pitchRangeLowHz` | `float \| null` | 5th percentile pitch of voiced frames. | Hz | Lower register bound for instrument/voice range estimation. |
+| `pitchDetail.stems[name].pitchRangeHighHz` | `float \| null` | 95th percentile pitch of voiced frames. | Hz | Upper register bound for instrument/voice range estimation. |
+| `pitchDetail.stems[name].meanPeriodicity` | `float` | Mean periodicity/confidence across all frames. | 0-1 | Lower values indicate noisier/less tonal content; higher values indicate cleaner pitch tracking. |
+| `pitchDetail.stems[name].voicedFramePercent` | `float` | Percentage of frames with periodicity > 0.5. | 0-100 | Indicates how much of the stem contains tonal/pitched content. Low values on vocals may indicate sparse vocal phrases or arp-style hits. |
+| `pitchDetail.stems[name].hopLength` | `int` | Hop length used for frame analysis. | samples | 512 at 44100 Hz ≈ 11.6 ms per frame. |
+| `pitchDetail.stems[name].sampleRate` | `int` | Sample rate of the analysed stem. | Hz | Matches the Demucs output rate (typically 44100). |
+| `pitchDetail.stems[name].model` | `string` | torchcrepe model variant used (`"tiny"` or `"full"`). | categorical | `tiny` is faster but less accurate; `full` is more precise but CPU-heavy. |
 
 ---
 

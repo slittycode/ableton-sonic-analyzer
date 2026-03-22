@@ -14,7 +14,7 @@ charset-normalizer==3.4.5
 click==8.3.1
 cloudpickle==3.1.2
 decorator==5.2.1
-demucs==4.0.1
+# demucs removed — separation now uses torchaudio.pipelines.HDEMUCS_HIGH_MUSDB_PLUS
 dora_search==0.1.12
 einops==0.8.2
 essentia==2.1b6.dev1389

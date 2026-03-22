@@ -203,6 +203,22 @@ export interface BeatsLoudness {
   beatCount: number;
 }
 
+export interface PitchStemResult {
+  medianPitchHz: number | null;
+  pitchRangeLowHz: number | null;
+  pitchRangeHighHz: number | null;
+  meanPeriodicity: number;
+  voicedFramePercent: number;
+  hopLength: number;
+  sampleRate: number;
+  model: string;
+}
+
+export interface PitchDetail {
+  method: string;
+  stems: Record<string, PitchStemResult>;
+}
+
 export interface AcidDetail {
   isAcid: boolean;
   confidence: number;
@@ -302,6 +318,7 @@ export interface Phase1Result {
   rhythmDetail?: RhythmDetail | null;
   melodyDetail?: MelodyDetail;
   transcriptionDetail?: TranscriptionDetail | null;
+  pitchDetail?: PitchDetail | null;
   grooveDetail?: GrooveDetail | null;
   beatsLoudness?: BeatsLoudness | null;
   sidechainDetail?: SidechainDetail | null;
