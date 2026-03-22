@@ -121,13 +121,10 @@ export function RetroVisualizer({ analyser, isPlaying, audioBuffer }: RetroVisua
       drawBandWaveform(ctx, timeData, frequencyData, width, height, beatRef.current.decay, frame, 'mid');
       drawBandWaveform(ctx, timeData, frequencyData, width, height, beatRef.current.decay, frame, 'high');
     } else {
-      // Single-color modes - still band-reactive but unified color
       const theme = getThemeColors(currentMode);
+      const selectedBand = currentMode === 'amber' ? 'bass' : currentMode === 'violet' ? 'mid' : 'high';
       drawSpectralTrace(ctx, freqHistoryRef.current, width, height, beatRef.current.decay, theme);
-      drawWaveformTrails(ctx, waveformHistoryRef.current, width, height, beatRef.current.decay, theme);
-      
-      // Single-color but band-reactive
-      drawBandWaveformUnified(ctx, timeData, frequencyData, width, height, beatRef.current.decay, frame, theme, currentMode);
+      drawBandWaveform(ctx, timeData, frequencyData, width, height, beatRef.current.decay, frame, selectedBand);
     }
     
     // CRT effects
