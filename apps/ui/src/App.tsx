@@ -5,6 +5,7 @@ import { AnalysisStatusPanel } from './components/AnalysisStatusPanel';
 import { DiagnosticLog } from './components/DiagnosticLog';
 import { FileUpload } from './components/FileUpload';
 import { WaveformPlayer } from './components/WaveformPlayer';
+import { AudioVisualizationStack } from './components/AudioVisualizationStack';
 import { useCpuMeter } from './hooks/useCpuMeter';
 import { useGlobalDrag } from './hooks/useGlobalDrag';
 import {
@@ -217,6 +218,7 @@ export default function App() {
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isDemoLoading, setIsDemoLoading] = useState(false);
+  const [useStackedVisualization, setUseStackedVisualization] = useState(false);
 
   const [analysisEstimate, setAnalysisEstimate] = useState<BackendAnalysisEstimate | null>(null);
   const [isEstimateLoading, setIsEstimateLoading] = useState(false);
@@ -1077,7 +1079,35 @@ export default function App() {
                 >
                   {audioUrl && audioFile ? (
                     <div className="h-full flex flex-col relative z-10 gap-4">
-                      <WaveformPlayer audioUrl={audioUrl} audioFile={audioFile} onAudioElement={handleAudioElement} />
+                      {/* Visualization Toggle */}
+                      <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-wider">
+                        <button
+                          onClick={() => setUseStackedVisualization(false)}
+                          className={`px-2 py-1 rounded-sm border transition-colors ${
+                            !useStackedVisualization
+                              ? 'bg-accent text-bg-app border-accent'
+                              : 'bg-bg-panel text-text-secondary border-border hover:border-accent/50'
+                          }`}
+                        >
+                          Original
+                        </button>
+                        <button
+                          onClick={() => setUseStackedVisualization(true)}
+                          className={`px-2 py-1 rounded-sm border transition-colors ${
+                            useStackedVisualization
+                              ? 'bg-accent text-bg-app border-accent'
+                              : 'bg-bg-panel text-text-secondary border-border hover:border-accent/50'
+                          }`}
+                        >
+                          Stacked (3 Options)
+                        </button>
+                      </div>
+
+                      {useStackedVisualization ? (
+                        <AudioVisualizationStack audioUrl={audioUrl} audioFile={audioFile} />
+                      ) : (
+                        <WaveformPlayer audioUrl={audioUrl} audioFile={audioFile} onAudioElement={handleAudioElement} />
+                      )}
 
                       {!measurementResult && (
                         <div className="rounded-sm border border-border bg-bg-panel p-4 space-y-3">
