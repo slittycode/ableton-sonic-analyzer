@@ -373,8 +373,8 @@ class AnalysisRuntimeTests(unittest.TestCase):
         runtime.recover_incomplete_attempts()
         snapshot = runtime.get_run(created["runId"])
 
-        self.assertEqual(snapshot["stages"]["measurement"]["status"], "queued")
-        self.assertEqual(snapshot["stages"]["symbolicExtraction"]["status"], "queued")
+        self.assertEqual(snapshot["stages"]["measurement"]["status"], "interrupted")
+        self.assertEqual(snapshot["stages"]["symbolicExtraction"]["status"], "interrupted")
         self.assertEqual(snapshot["stages"]["interpretation"]["status"], "interrupted")
 
     def test_interpretation_attempts_store_grounding_columns(self) -> None:

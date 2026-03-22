@@ -523,7 +523,7 @@ test('stop monitoring during interpretation preserves completed measurement with
   await expect(signalPanel).toBeVisible();
   await expect(signalPanel.getByText('Signal Monitor').first()).toBeVisible();
   await expect(signalPanel.getByTestId('waveform-player')).toBeVisible();
-  await expect(signalPanel.getByText('Canonical Stage Monitor')).toBeVisible();
+  await expect(signalPanel.getByText('Analysis Run')).toBeVisible();
 
   const playButton = signalPanel.getByTestId('waveform-play-toggle');
   await expect(playButton).toBeVisible();

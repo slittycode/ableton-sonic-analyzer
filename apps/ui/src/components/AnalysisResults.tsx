@@ -287,97 +287,124 @@ export function AnalysisResults({
 
       <StickyNav sections={navSections} />
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 auto-rows-fr">
-        <div className="bg-bg-panel border border-border rounded-sm p-1 relative group overflow-hidden">
-          <div className="absolute inset-0 bg-accent/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-          <div className="bg-bg-card h-full min-h-[170px] p-4 rounded-sm flex flex-col items-center justify-center text-center border border-border/50 relative z-10 overflow-hidden">
-            <div className="w-full flex justify-between items-start mb-2 opacity-50">
-              <Activity className="w-4 h-4 text-accent" />
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-mono uppercase">TEMPO</span>
-                <PhaseSourceBadge source="measured" />
-              </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {/* TEMPO */}
+        <div className="bg-bg-card border border-border rounded-sm p-4 flex flex-col group hover:border-accent/30 transition-colors">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-1.5">
+              <Activity className="w-3.5 h-3.5 text-accent/60" />
+              <span className="text-[9px] font-mono text-text-secondary uppercase tracking-wider">TEMPO</span>
             </div>
-            <div className="w-full flex items-baseline justify-center space-x-1 overflow-hidden">
-              <p className="text-3xl font-display font-bold text-text-primary truncate">{finalBpm}</p>
-              <span className="text-xs font-mono text-text-secondary flex-shrink-0">BPM</span>
-            </div>
-
-            <div className="w-full bg-bg-app h-1 mt-3 overflow-hidden border border-border/30">
+            <PhaseSourceBadge source="measured" />
+          </div>
+          <div className="flex items-baseline gap-1.5 mb-3">
+            <span className="text-3xl font-display font-bold text-text-primary">{finalBpm}</span>
+            <span className="text-xs font-mono text-text-secondary">BPM</span>
+          </div>
+          <div className="mt-auto space-y-1">
+            <div className="w-full h-1 bg-bg-app border border-border/20 rounded-sm overflow-hidden">
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: `${phase1.bpmConfidence * 100}%` }}
-                className="h-full bg-accent shadow-[0_0_5px_var(--color-accent)]"
+                className="h-full bg-accent shadow-[0_0_4px_var(--color-accent)]"
               />
             </div>
-            <p className="text-[10px] font-mono text-text-secondary mt-1 opacity-70">
-              CONF: {Math.min(Math.round(phase1.bpmConfidence * 100), 100) + '%'}
-            </p>
+            <span className="text-[8px] font-mono text-text-secondary/60 tabular-nums">
+              CONF {Math.min(Math.round(phase1.bpmConfidence * 100), 100)}%
+            </span>
           </div>
         </div>
 
-        <div className="bg-bg-panel border border-border rounded-sm p-1 relative group overflow-hidden">
-          <div className="absolute inset-0 bg-accent/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-          <div className="bg-bg-card h-full min-h-[170px] p-4 rounded flex flex-col items-center justify-center text-center border border-border/50 relative z-10 overflow-hidden">
-            <div className="w-full flex justify-between items-start mb-2 opacity-50">
-              <Music className="w-4 h-4 text-accent" />
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-mono uppercase">KEY SIG</span>
-                <PhaseSourceBadge source="measured" />
-                {lowConfidenceIndicator(keyIsApproximate)}
-              </div>
+        {/* KEY SIG */}
+        <div className="bg-bg-card border border-border rounded-sm p-4 flex flex-col group hover:border-accent/30 transition-colors">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-1.5">
+              <Music className="w-3.5 h-3.5 text-accent/60" />
+              <span className="text-[9px] font-mono text-text-secondary uppercase tracking-wider">KEY SIG</span>
             </div>
-            <div className="w-full overflow-hidden">
-              <p className="text-3xl font-display font-bold text-text-primary truncate">{finalKey}</p>
+            <div className="flex items-center gap-1">
+              <PhaseSourceBadge source="measured" />
+              {lowConfidenceIndicator(keyIsApproximate)}
             </div>
-
-            <div className="w-full bg-bg-app h-1 mt-3 overflow-hidden border border-border/30">
+          </div>
+          <div className="mb-3 overflow-hidden">
+            <span className="text-3xl font-display font-bold text-text-primary truncate block">{finalKey}</span>
+          </div>
+          <div className="mt-auto space-y-1">
+            <div className="w-full h-1 bg-bg-app border border-border/20 rounded-sm overflow-hidden">
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: `${phase1.keyConfidence * 100}%` }}
-                className="h-full bg-accent shadow-[0_0_5px_var(--color-accent)]"
+                className="h-full bg-accent shadow-[0_0_4px_var(--color-accent)]"
               />
             </div>
-            <p className="text-[10px] font-mono text-text-secondary mt-1 opacity-70">
-              CONF: {(phase1.keyConfidence * 100).toFixed(0)}%
-            </p>
+            <span className="text-[8px] font-mono text-text-secondary/60 tabular-nums">
+              CONF {(phase1.keyConfidence * 100).toFixed(0)}%
+            </span>
           </div>
         </div>
 
-        <div className="bg-bg-panel border border-border rounded-sm p-1 relative group overflow-hidden">
-          <div className="absolute inset-0 bg-accent/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-          <div className="bg-bg-card h-full min-h-[170px] p-4 rounded flex flex-col items-center justify-center text-center border border-border/50 relative z-10 overflow-hidden">
-            <div className="w-full flex justify-between items-start mb-2 opacity-50">
-              <Clock className="w-4 h-4 text-accent" />
-              <span className="text-[10px] font-mono uppercase">METER</span>
+        {/* METER */}
+        <div className="bg-bg-card border border-border rounded-sm p-4 flex flex-col group hover:border-accent/30 transition-colors">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-accent/60" />
+              <span className="text-[9px] font-mono text-text-secondary uppercase tracking-wider">METER</span>
             </div>
-            <p className="text-3xl font-display font-bold text-text-primary mt-1 w-full truncate">{phase1.timeSignature}</p>
-            <p className="text-[10px] font-mono text-text-secondary mt-auto opacity-70">DETECTED</p>
           </div>
+          <div className="flex-1 flex items-center">
+            <span className="text-3xl font-display font-bold text-text-primary">{phase1.timeSignature}</span>
+          </div>
+          <span className="text-[8px] font-mono text-text-secondary/60 mt-auto">DETECTED</span>
         </div>
 
-        <div className="bg-bg-panel border border-border rounded-sm p-1 relative group col-span-1 md:col-span-1 self-start">
-          <div className="absolute inset-0 bg-accent/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-          <div className="bg-bg-card h-full min-h-[170px] p-4 rounded-sm flex flex-col border border-border/50 relative z-10">
-            <div className="w-full flex justify-between items-start mb-2 opacity-50">
-              <Disc className="w-4 h-4 text-accent" />
-              <span className="text-[10px] font-mono uppercase">CHARACTER</span>
+        {/* CHARACTER — genre primary, characteristic pills secondary */}
+        <div className="bg-bg-card border border-border rounded-sm p-4 flex flex-col group hover:border-accent/30 transition-colors">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-1.5">
+              <Disc className="w-3.5 h-3.5 text-accent/60" />
+              <span className="text-[9px] font-mono text-text-secondary uppercase tracking-wider">CHARACTER</span>
             </div>
-            {characteristicPills.length > 0 ? (
-              <div className="w-full flex flex-wrap gap-1 mt-1">
-                {characteristicPills.map((item, idx) => (
-                  <span
-                    key={`${item.name}-${idx}`}
-                    className={`inline-flex items-center px-2 py-1 rounded-sm border text-[10px] font-mono uppercase tracking-wide ${characteristicPillClass(item.confidence)}`}
-                  >
-                    {shortenCharacteristicName(item.name)}
-                  </span>
-                ))}
+            {phase1.genreDetail && <PhaseSourceBadge source="measured" />}
+          </div>
+          {phase1.genreDetail ? (
+            <>
+              <div className="mb-1 overflow-hidden">
+                <span className="text-xl font-display font-bold text-text-primary truncate block capitalize">
+                  {phase1.genreDetail.genre}
+                </span>
               </div>
-            ) : (
-              <p className="text-xs font-mono text-text-secondary mt-1 opacity-70">SCANNING...</p>
-            )}
-          </div>
+              <span className="text-[9px] font-mono text-text-secondary/70 uppercase tracking-wider mb-2">
+                {phase1.genreDetail.genreFamily}
+                {phase1.genreDetail.secondaryGenre && ` / ${phase1.genreDetail.secondaryGenre}`}
+              </span>
+              <div className="mt-auto space-y-1">
+                <div className="w-full h-1 bg-bg-app border border-border/20 rounded-sm overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${phase1.genreDetail.confidence * 100}%` }}
+                    className="h-full bg-accent shadow-[0_0_4px_var(--color-accent)]"
+                  />
+                </div>
+                <span className="text-[8px] font-mono text-text-secondary/60 tabular-nums">
+                  CONF {Math.round(phase1.genreDetail.confidence * 100)}%
+                </span>
+              </div>
+            </>
+          ) : characteristicPills.length > 0 ? (
+            <div className="w-full flex flex-wrap gap-1">
+              {characteristicPills.map((item, idx) => (
+                <span
+                  key={`${item.name}-${idx}`}
+                  className={`inline-flex items-center px-2 py-1 rounded-sm border text-[9px] font-mono uppercase tracking-wide ${characteristicPillClass(item.confidence)}`}
+                >
+                  {shortenCharacteristicName(item.name)}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <span className="text-xs font-mono text-text-secondary/50">SCANNING...</span>
+          )}
         </div>
       </div>
 

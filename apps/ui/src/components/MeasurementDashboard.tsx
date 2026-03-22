@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { motion } from 'motion/react';
 import { Phase1Result } from '../types';
 import { generateMixDoctorReport } from '../services/mixDoctor';
 
@@ -223,78 +224,185 @@ export function MeasurementDashboard({
     <div className="space-y-4">
       {/* 1. Core Metrics */}
       <Section id="section-meas-core" number={1} title="Core Metrics">
-        <MetricRow
-          label="BPM"
-          value={
-            phase1.bpmDoubletime === true && phase1.bpmRawOriginal != null
-              ? `${formatNumber(phase1.bpm, 1)} (corrected from ${formatNumber(phase1.bpmRawOriginal, 1)})`
-              : formatNumber(phase1.bpm, 1)
-          }
-        />
-        <MetricRow
-          label="BPM Confidence"
-          value={formatNumber(phase1.bpmConfidence, 2)}
-        />
-        {phase1.bpmPercival !== undefined && phase1.bpmPercival !== null && (
-          <MetricRow label="BPM Percival" value={formatNumber(phase1.bpmPercival, 1)} />
-        )}
-        {phase1.bpmAgreement !== undefined && phase1.bpmAgreement !== null && (
-          <MetricRow
-            label="BPM Agreement"
-            value={phase1.bpmAgreement ? '✓' : '✗'}
-          />
-        )}
-        {phase1.bpmSource != null && phase1.bpmSource !== "rhythm_extractor" && (
-          <MetricRow label="BPM Source" value={phase1.bpmSource.replace(/_/g, ' ')} />
-        )}
-        <MetricRow label="Key" value={phase1.key || '—'} />
-        <MetricRow
-          label="Key Confidence"
-          value={formatNumber(phase1.keyConfidence, 2)}
-        />
-        {phase1.keyProfile && (
-          <MetricRow label="Key Profile" value={phase1.keyProfile} />
-        )}
-        {phase1.tuningFrequency !== undefined && phase1.tuningFrequency !== null && (
-          <MetricRow
-            label="Tuning Frequency"
-            value={formatNumber(phase1.tuningFrequency, 1)}
-          />
-        )}
-        {phase1.tuningCents !== undefined && phase1.tuningCents !== null && (
-          <MetricRow
-            label="Tuning Cents"
-            value={formatNumber(phase1.tuningCents, 2)}
-          />
-        )}
-        <MetricRow label="Time Signature" value={phase1.timeSignature} />
-        <MetricRow
-          label="Duration"
-          value={formatDuration(phase1.durationSeconds)}
-        />
-        {phase1.sampleRate !== undefined && phase1.sampleRate !== null && (
-          <MetricRow
-            label="Sample Rate"
-            value={`${(phase1.sampleRate / 1000).toFixed(1)} kHz`}
-          />
-        )}
-        {phase1.genreDetail && (
-          <>
-            <div className="border-t border-border pt-3">
-              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
-                Genre
+        {/* Hero Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {/* BPM Tile */}
+          <div className="bg-bg-panel border border-border rounded-sm p-4 hover:border-accent/30 transition-colors">
+            <span className="text-[9px] font-mono text-text-secondary uppercase tracking-wider">Tempo</span>
+            <div className="flex items-baseline gap-2 mt-2">
+              <span className="text-2xl font-display font-bold text-text-primary">
+                {formatNumber(phase1.bpm, 1)}
+              </span>
+              <span className="text-xs font-mono text-text-secondary">BPM</span>
+            </div>
+            {phase1.bpmDoubletime === true && phase1.bpmRawOriginal != null && (
+              <span className="text-[8px] font-mono text-warning/70 block mt-1">
+                corrected from {formatNumber(phase1.bpmRawOriginal, 1)}
+              </span>
+            )}
+            <div className="mt-3 space-y-1">
+              <div className="w-full h-1 bg-bg-app border border-border/20 rounded-sm overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${phase1.bpmConfidence * 100}%` }}
+                  transition={{ duration: 0.6, ease: 'easeOut' }}
+                  className="h-full bg-accent shadow-[0_0_4px_var(--color-accent)]"
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[8px] font-mono text-text-secondary/60 tabular-nums">
+                  CONF {Math.round(phase1.bpmConfidence * 100)}%
+                </span>
+                {phase1.bpmAgreement !== undefined && phase1.bpmAgreement !== null && (
+                  <span className={`text-[8px] font-mono ${phase1.bpmAgreement ? 'text-success/70' : 'text-error/70'}`}>
+                    {phase1.bpmAgreement ? 'CROSS-CHECK ✓' : 'CROSS-CHECK ✗'}
+                  </span>
+                )}
+              </div>
+            </div>
+            {phase1.bpmPercival !== undefined && phase1.bpmPercival !== null && (
+              <span className="text-[8px] font-mono text-text-secondary/50 block mt-1">
+                Percival: {formatNumber(phase1.bpmPercival, 1)}
+              </span>
+            )}
+            {phase1.bpmSource != null && phase1.bpmSource !== "rhythm_extractor" && (
+              <span className="text-[8px] font-mono text-text-secondary/50 block mt-0.5">
+                Source: {phase1.bpmSource.replace(/_/g, ' ')}
+              </span>
+            )}
+          </div>
+
+          {/* Key Tile */}
+          <div className="bg-bg-panel border border-border rounded-sm p-4 hover:border-accent/30 transition-colors">
+            <span className="text-[9px] font-mono text-text-secondary uppercase tracking-wider">Key Signature</span>
+            <div className="mt-2 overflow-hidden">
+              <span className="text-2xl font-display font-bold text-text-primary truncate block">
+                {phase1.key || '—'}
               </span>
             </div>
-            <MetricRow label="Genre" value={phase1.genreDetail.genre} />
-            <MetricRow
-              label="Genre Confidence"
-              value={formatNumber(phase1.genreDetail.confidence, 2)}
-            />
-            {phase1.genreDetail.secondaryGenre && (
-              <MetricRow label="Secondary Genre" value={phase1.genreDetail.secondaryGenre} />
+            {phase1.keyProfile && (
+              <span className="text-[8px] font-mono text-text-secondary/50 block mt-1">
+                Profile: {phase1.keyProfile}
+              </span>
             )}
-            <MetricRow label="Genre Family" value={phase1.genreDetail.genreFamily} />
-          </>
+            <div className="mt-3 space-y-1">
+              <div className="w-full h-1 bg-bg-app border border-border/20 rounded-sm overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${phase1.keyConfidence * 100}%` }}
+                  transition={{ duration: 0.6, ease: 'easeOut' }}
+                  className="h-full bg-accent shadow-[0_0_4px_var(--color-accent)]"
+                />
+              </div>
+              <span className="text-[8px] font-mono text-text-secondary/60 tabular-nums">
+                CONF {Math.round(phase1.keyConfidence * 100)}%
+              </span>
+            </div>
+          </div>
+
+          {/* Duration / Format Tile */}
+          <div className="bg-bg-panel border border-border rounded-sm p-4 hover:border-accent/30 transition-colors">
+            <span className="text-[9px] font-mono text-text-secondary uppercase tracking-wider">Duration</span>
+            <div className="flex items-baseline gap-2 mt-2">
+              <span className="text-2xl font-display font-bold text-text-primary">
+                {formatDuration(phase1.durationSeconds)}
+              </span>
+            </div>
+            <div className="mt-3 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[8px] font-mono text-text-secondary/60 uppercase">Meter</span>
+                <span className="text-xs font-display font-bold text-text-primary">{phase1.timeSignature}</span>
+              </div>
+              {phase1.sampleRate !== undefined && phase1.sampleRate !== null && (
+                <div className="flex items-center justify-between">
+                  <span className="text-[8px] font-mono text-text-secondary/60 uppercase">Sample Rate</span>
+                  <span className="text-xs font-display font-bold text-text-primary">{(phase1.sampleRate / 1000).toFixed(1)} kHz</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Genre Banner */}
+        {phase1.genreDetail && (
+          <div className="bg-bg-panel border border-border rounded-sm p-4 hover:border-accent/30 transition-colors">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className={`w-2 h-2 rounded-full bg-accent ${phase1.genreDetail.confidence > 0.8 ? 'animate-pulse' : ''}`} />
+                  <span className="text-[9px] font-mono text-text-secondary uppercase tracking-wider">Genre Classification</span>
+                </div>
+                <span className="text-lg font-display font-bold text-text-primary capitalize block truncate">
+                  {phase1.genreDetail.genre}
+                </span>
+                <div className="flex items-center gap-3 mt-1">
+                  <span className="text-[9px] font-mono text-text-secondary/70 uppercase">{phase1.genreDetail.genreFamily}</span>
+                  {phase1.genreDetail.secondaryGenre && (
+                    <>
+                      <span className="text-text-secondary/30">/</span>
+                      <span className="text-[9px] font-mono text-text-secondary/50 uppercase">{phase1.genreDetail.secondaryGenre}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+              <div className="shrink-0 text-right">
+                <span className="text-[8px] font-mono text-text-secondary/60 uppercase">Conf</span>
+                <span className="text-sm font-display font-bold text-text-primary ml-1.5 tabular-nums">
+                  {Math.round(phase1.genreDetail.confidence * 100)}%
+                </span>
+              </div>
+            </div>
+
+            {/* Genre fingerprint — top scores as horizontal bars */}
+            {phase1.genreDetail.topScores && phase1.genreDetail.topScores.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-border/50 space-y-1.5">
+                <span className="text-[8px] font-mono text-text-secondary/50 uppercase tracking-wider">Genre Fingerprint</span>
+                <div className="space-y-1">
+                  {phase1.genreDetail.topScores.slice(0, 5).map((score, i) => {
+                    const maxScore = phase1.genreDetail!.topScores[0]?.score || 1;
+                    const pct = (score.score / maxScore) * 100;
+                    return (
+                      <div key={`${score.genre}-${i}`} className="flex items-center gap-2">
+                        <span className="text-[8px] font-mono text-text-secondary/70 w-20 truncate text-right capitalize">
+                          {score.genre}
+                        </span>
+                        <div className="flex-1 h-2 bg-bg-app border border-border/20 rounded-sm overflow-hidden">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${pct}%` }}
+                            transition={{ duration: 0.5, delay: i * 0.08, ease: 'easeOut' }}
+                            className={`h-full rounded-sm ${
+                              i === 0 ? 'bg-accent shadow-[0_0_4px_var(--color-accent)]' : 'bg-accent/50'
+                            }`}
+                          />
+                        </div>
+                        <span className="text-[8px] font-mono text-text-secondary/50 tabular-nums w-8 text-right">
+                          {(score.score * 100).toFixed(0)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tuning Detail */}
+        {(phase1.tuningFrequency !== undefined && phase1.tuningFrequency !== null) && (
+          <div className="flex items-center gap-3 px-1">
+            <span className="text-[8px] font-mono text-text-secondary/50 uppercase tracking-wider">Tuning</span>
+            <span className="text-[9px] font-mono text-text-secondary/70 tabular-nums">
+              {formatNumber(phase1.tuningFrequency, 1)} Hz
+            </span>
+            {phase1.tuningCents !== undefined && phase1.tuningCents !== null && (
+              <span className={`text-[9px] font-mono tabular-nums ${
+                Math.abs(phase1.tuningCents) > 10 ? 'text-warning/70' : 'text-text-secondary/50'
+              }`}>
+                {phase1.tuningCents >= 0 ? '+' : ''}{formatNumber(phase1.tuningCents, 1)} cents
+              </span>
+            )}
+          </div>
         )}
       </Section>
 

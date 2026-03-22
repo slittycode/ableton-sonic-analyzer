@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, Clock3, Radio, TimerReset, RotateCcw, XCircle } from 'lucide-react';
+import { RotateCcw, Square } from 'lucide-react';
 
 import { AnalysisRunSnapshot, AnalysisStageStatus, BackendAnalysisEstimate } from '../types';
 
@@ -14,22 +14,19 @@ interface AnalysisStatusPanelProps {
   onRetryInterpretation?: () => void;
 }
 
-function formatSecondsLabel(seconds: number): string {
-  const totalSeconds = Math.max(0, Math.round(seconds));
+function formatElapsed(ms: number): string {
+  const totalSeconds = Math.max(0, Math.round(ms / 1000));
   const minutes = Math.floor(totalSeconds / 60);
   const remaining = totalSeconds % 60;
-  if (minutes > 0) {
-    return `${minutes}m ${remaining}s`;
-  }
-  return `${remaining}s`;
-}
-
-function formatElapsedLabel(elapsedMs: number): string {
-  return formatSecondsLabel(elapsedMs / 1000);
+  return minutes > 0
+    ? `${minutes}:${remaining.toString().padStart(2, '0')}`
+    : `0:${remaining.toString().padStart(2, '0')}`;
 }
 
 function formatEstimateRange(estimate: BackendAnalysisEstimate): string {
-  return `${formatSecondsLabel(estimate.totalLowMs / 1000)}-${formatSecondsLabel(estimate.totalHighMs / 1000)}`;
+  const lo = Math.round(estimate.totalLowMs / 1000);
+  const hi = Math.round(estimate.totalHighMs / 1000);
+  return `${lo}s-${hi}s`;
 }
 
 function computeProgress(elapsedMs: number, estimate?: BackendAnalysisEstimate | null): { percent: number; indeterminate: boolean } {
@@ -42,79 +39,59 @@ function computeProgress(elapsedMs: number, estimate?: BackendAnalysisEstimate |
   };
 }
 
-function stageDisplayName(stageKey: 'measurement' | 'symbolicExtraction' | 'interpretation'): string {
-  switch (stageKey) {
-    case 'measurement':
-      return 'Measurement';
-    case 'symbolicExtraction':
-      return 'Symbolic Extraction';
-    case 'interpretation':
-      return 'AI Interpretation';
-    default:
-      return stageKey;
-  }
-}
+type StageKey = 'measurement' | 'symbolicExtraction' | 'interpretation';
 
-function stageStatusLabel(status: AnalysisStageStatus): string {
-  return status.replace(/_/g, ' ');
-}
+const STAGE_LABELS: Record<StageKey, string> = {
+  measurement: 'MEASURE',
+  symbolicExtraction: 'SYMBOLIC',
+  interpretation: 'INTERPRET',
+};
 
-function statusClass(status: AnalysisStageStatus): string {
+function statusDotClass(status: AnalysisStageStatus): string {
   switch (status) {
     case 'running':
     case 'queued':
-      return 'text-accent border-accent/30 bg-accent/10';
+      return 'bg-accent animate-pulse';
     case 'completed':
-      return 'text-success border-success/30 bg-success/10';
+      return 'bg-success';
     case 'failed':
     case 'interrupted':
-      return 'text-error border-error/30 bg-error/10';
+      return 'bg-error';
     case 'not_requested':
-      return 'text-warning border-warning/30 bg-warning/10';
+      return 'bg-text-secondary/30';
     default:
-      return 'text-text-secondary border-border bg-bg-panel';
+      return 'bg-border';
   }
 }
 
-function stageSummary(run: AnalysisRunSnapshot | null, stageKey: 'measurement' | 'symbolicExtraction' | 'interpretation'): string {
-  if (!run) {
-    return 'Awaiting run state.';
-  }
-
-  const stage =
-    stageKey === 'measurement'
-      ? run.stages.measurement
-      : stageKey === 'symbolicExtraction'
-        ? run.stages.symbolicExtraction
-        : run.stages.interpretation;
-
-  if (stage.error?.message) {
-    return stage.error.message;
-  }
-
-  switch (stage.status) {
-    case 'queued':
-      return 'Queued locally.';
+function statusTextClass(status: AnalysisStageStatus): string {
+  switch (status) {
     case 'running':
-      return 'Currently processing.';
-    case 'blocked':
-      return 'Waiting for measurement to finish.';
-    case 'ready':
-      return 'Ready for retry.';
+    case 'queued':
+      return 'text-accent';
     case 'completed':
-      return stageKey === 'measurement'
-        ? 'Authoritative local measurement complete.'
-        : stageKey === 'symbolicExtraction'
-          ? 'Best-effort symbolic output available.'
-          : 'Grounded musical interpretation available.';
+      return 'text-success';
     case 'failed':
-      return 'Stage failed.';
     case 'interrupted':
-      return 'Stage was interrupted and can be retried.';
+      return 'text-error';
     case 'not_requested':
-      return 'Not requested for this run.';
+      return 'text-text-secondary/50';
     default:
-      return 'Awaiting stage state.';
+      return 'text-text-secondary';
+  }
+}
+
+function statusLabel(status: AnalysisStageStatus): string {
+  switch (status) {
+    case 'running': return 'RUNNING';
+    case 'queued': return 'QUEUED';
+    case 'completed': return 'DONE';
+    case 'failed': return 'FAILED';
+    case 'interrupted': return 'STOPPED';
+    case 'not_requested': return 'SKIP';
+    case 'blocked': return 'WAIT';
+    case 'ready': return 'READY';
+    default: return String(status).toUpperCase();
   }
 }
 
@@ -130,145 +107,108 @@ export function AnalysisStatusPanel({
 }: AnalysisStatusPanelProps) {
   const progress = computeProgress(elapsedMs, estimate);
 
-  const stageCards = [
-    {
-      key: 'measurement' as const,
-      status: run?.stages.measurement.status ?? 'queued',
-      onRetry: onRetryMeasurement,
-    },
-    {
-      key: 'symbolicExtraction' as const,
-      status: run?.stages.symbolicExtraction.status ?? 'blocked',
-      onRetry: onRetrySymbolic,
-    },
-    {
-      key: 'interpretation' as const,
-      status: run?.stages.interpretation.status ?? 'blocked',
-      onRetry: onRetryInterpretation,
-    },
+  const stages: { key: StageKey; status: AnalysisStageStatus; onRetry?: () => void }[] = [
+    { key: 'measurement', status: run?.stages.measurement.status ?? 'queued', onRetry: onRetryMeasurement },
+    { key: 'symbolicExtraction', status: run?.stages.symbolicExtraction.status ?? 'blocked', onRetry: onRetrySymbolic },
+    { key: 'interpretation', status: run?.stages.interpretation.status ?? 'blocked', onRetry: onRetryInterpretation },
   ];
 
   return (
-    <div className="h-full rounded-sm border border-border bg-bg-panel p-6 flex flex-col justify-between gap-6">
-      <div className="space-y-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-[10px] font-mono text-text-secondary uppercase tracking-[0.24em]">Analysis Run</p>
-            <h3 className="mt-2 text-lg font-bold uppercase tracking-wide text-text-primary">Canonical Stage Monitor</h3>
-            <p className="mt-2 text-sm text-text-primary/90">
-              Measurement is authoritative. Symbolic extraction and AI interpretation are tracked independently.
-            </p>
-            <p className="mt-2 text-xs font-mono text-text-secondary uppercase tracking-wider">
-              {run ? `RUN ${run.runId}` : 'Awaiting run id'}
-            </p>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <div className={`flex items-center gap-2 rounded-sm border px-3 py-2 ${isActive ? 'border-accent/30 bg-accent/10 text-accent' : 'border-success/30 bg-success/10 text-success'}`}>
-              <Activity className="w-4 h-4" />
-              <span className="text-[10px] font-mono uppercase tracking-[0.24em]">{isActive ? 'Monitoring' : 'Idle'}</span>
-            </div>
-            {onStopMonitoring && isActive && (
-              <button
-                onClick={onStopMonitoring}
-                className="flex items-center gap-1.5 rounded-sm border border-error/30 bg-error/10 px-3 py-2 text-error hover:bg-error/20 transition-colors"
-                title="Stop monitoring"
-                aria-label="Stop monitoring"
-              >
-                <XCircle className="w-4 h-4" />
-                <span className="text-[10px] font-mono uppercase tracking-[0.24em]">Stop</span>
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="rounded-sm border border-border bg-bg-card p-3">
-            <div className="flex items-center gap-2 text-text-secondary">
-              <Radio className="w-4 h-4 text-accent" />
-              <span className="text-[10px] font-mono uppercase tracking-wider">Request State</span>
-            </div>
-            <p className="mt-3 text-sm font-bold uppercase tracking-wide text-text-primary">
-              {isActive ? 'Polling canonical run' : 'Awaiting next action'}
-            </p>
-          </div>
-
-          <div className="rounded-sm border border-border bg-bg-card p-3">
-            <div className="flex items-center gap-2 text-text-secondary">
-              <Clock3 className="w-4 h-4 text-accent" />
-              <span className="text-[10px] font-mono uppercase tracking-wider">Elapsed</span>
-            </div>
-            <p className="mt-3 text-sm font-bold tracking-wide text-text-primary">{formatElapsedLabel(elapsedMs)}</p>
-          </div>
-
-          <div className="rounded-sm border border-border bg-bg-card p-3">
-            <div className="flex items-center gap-2 text-text-secondary">
-              <TimerReset className="w-4 h-4 text-accent" />
-              <span className="text-[10px] font-mono uppercase tracking-wider">Estimated local pipeline</span>
-            </div>
-            <p className="mt-3 text-sm font-bold tracking-wide text-text-primary">
-              {estimate ? formatEstimateRange(estimate) : 'Unavailable'}
-            </p>
-          </div>
-        </div>
-
-        <div className="rounded-sm border border-border bg-bg-card p-3 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-mono uppercase tracking-wider text-text-secondary">Progress</span>
-            <span className="text-[10px] font-mono tracking-wider text-text-primary">
-              {progress.indeterminate ? 'Estimating...' : `${Math.round(progress.percent)}%`}
+    <div className="rounded-sm border border-border bg-bg-panel p-3 space-y-3">
+      {/* Header row */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="text-[11px] font-mono text-text-secondary uppercase tracking-[0.2em]">Analysis Run</span>
+          {run && (
+            <span className="text-[9px] font-mono text-text-secondary/50 uppercase tracking-wider truncate">
+              {run.runId}
             </span>
+          )}
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-1.5">
+            <div className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-accent animate-pulse' : 'bg-success'}`} />
+            <span className="text-[10px] font-mono text-text-primary tabular-nums">{formatElapsed(elapsedMs)}</span>
           </div>
-          <div className="w-full h-2 bg-bg-app border border-border/30 rounded-sm overflow-hidden">
-            {progress.indeterminate ? (
-              <div className="h-full w-1/3 bg-accent/70 rounded-sm animate-pulse" />
-            ) : (
-              <div
-                className={`h-full bg-accent rounded-sm transition-all duration-500 ease-out ${progress.percent >= 95 ? 'animate-pulse' : ''}`}
-                style={{ width: `${progress.percent}%` }}
-              />
-            )}
-          </div>
+          {estimate && (
+            <span className="text-[9px] font-mono text-text-secondary/60 uppercase">
+              est {formatEstimateRange(estimate)}
+            </span>
+          )}
+          {onStopMonitoring && isActive && (
+            <button
+              onClick={onStopMonitoring}
+              className="flex items-center gap-1 rounded-sm border border-error/30 bg-error/10 px-2 py-1 text-error hover:bg-error/20 transition-colors"
+              title="Stop monitoring"
+              aria-label="Stop monitoring"
+            >
+              <Square className="w-3 h-3 fill-current" />
+              <span className="text-[9px] font-mono uppercase tracking-wider">Stop</span>
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="space-y-3">
-        {stageCards.map((card) => (
-          <div key={card.key} className="rounded-sm border border-border bg-bg-card p-3 space-y-3">
-            <div className="flex items-center justify-between gap-4">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-text-secondary">{stageDisplayName(card.key)}</span>
-              <span className={`px-2 py-1 rounded-sm border text-[10px] font-mono uppercase tracking-wider ${statusClass(card.status)}`}>
-                {stageStatusLabel(card.status)}
-              </span>
-            </div>
-            <p className="text-xs text-text-primary/90">{stageSummary(run, card.key)}</p>
-            {card.onRetry && (card.status === 'failed' || card.status === 'interrupted' || card.status === 'ready') && (
-              <button
-                onClick={card.onRetry}
-                className="inline-flex items-center gap-1.5 rounded-sm border border-accent/30 bg-accent/10 px-3 py-2 text-accent hover:bg-accent/20 transition-colors"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span className="text-[10px] font-mono uppercase tracking-[0.2em]">Retry {stageDisplayName(card.key)}</span>
-              </button>
-            )}
-          </div>
-        ))}
-
-        {estimate?.stages?.length ? (
-          estimate.stages.map((stage) => (
-            <div key={stage.key} className="rounded-sm border border-border bg-bg-card p-3">
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-[10px] font-mono uppercase tracking-wider text-text-secondary">{stage.label}</span>
-                <span className="text-[10px] font-mono tracking-wider text-text-primary">
-                  {formatSecondsLabel(stage.lowMs / 1000)}-{formatSecondsLabel(stage.highMs / 1000)}
+      {/* Stage pipeline */}
+      <div className="flex items-stretch gap-1">
+        {stages.map((stage, i) => {
+          const isRetryable = stage.onRetry && (stage.status === 'failed' || stage.status === 'interrupted' || stage.status === 'ready');
+          return (
+            <div
+              key={stage.key}
+              className={`flex-1 rounded-sm border p-2 ${
+                stage.status === 'running' || stage.status === 'queued'
+                  ? 'border-accent/30 bg-accent/5'
+                  : stage.status === 'completed'
+                    ? 'border-success/20 bg-success/5'
+                    : stage.status === 'failed' || stage.status === 'interrupted'
+                      ? 'border-error/20 bg-error/5'
+                      : 'border-border bg-bg-card'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-1.5 mb-1">
+                <span className="text-[9px] font-mono text-text-secondary uppercase tracking-wider">
+                  {STAGE_LABELS[stage.key]}
                 </span>
+                <div className={`w-2 h-2 rounded-full shrink-0 ${statusDotClass(stage.status)}`} />
+              </div>
+              <div className="flex items-center justify-between gap-1">
+                <span className={`text-[10px] font-mono font-bold uppercase tracking-wider ${statusTextClass(stage.status)}`}>
+                  {statusLabel(stage.status)}
+                </span>
+                {isRetryable && (
+                  <button
+                    onClick={stage.onRetry}
+                    className="flex items-center gap-0.5 text-accent hover:text-accent/80 transition-colors"
+                    title={`Retry ${STAGE_LABELS[stage.key]}`}
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span className="text-[8px] font-mono uppercase tracking-wider">Retry</span>
+                  </button>
+                )}
               </div>
             </div>
-          ))
-        ) : (
-          <div className="rounded-sm border border-dashed border-border p-3 text-[10px] font-mono uppercase tracking-wider text-text-secondary">
-            Backend estimate unavailable for this request.
-          </div>
-        )}
+          );
+        })}
+      </div>
+
+      {/* Progress bar */}
+      <div className="space-y-1">
+        <div className="w-full h-1 bg-bg-app border border-border/20 rounded-sm overflow-hidden">
+          {progress.indeterminate ? (
+            <div className="h-full w-1/3 bg-accent/60 rounded-sm animate-pulse" />
+          ) : (
+            <div
+              className={`h-full bg-accent rounded-sm transition-all duration-500 ease-out ${progress.percent >= 95 ? 'animate-pulse' : ''}`}
+              style={{ width: `${progress.percent}%` }}
+            />
+          )}
+        </div>
+        <div className="flex items-center justify-end">
+          <span className="text-[9px] font-mono text-text-secondary/50 tabular-nums">
+            {progress.indeterminate ? 'estimating' : `${Math.round(progress.percent)}%`}
+          </span>
+        </div>
       </div>
     </div>
   );
