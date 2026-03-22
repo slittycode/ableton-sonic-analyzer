@@ -70,8 +70,11 @@ export function deriveTranscriptionProvenance(
 
 function formatSymbolicMethodLabel(transcriptionMethod: string | null | undefined): string {
   const normalized = (transcriptionMethod ?? '').trim().toLowerCase();
+  if (normalized === 'torchcrepe-viterbi' || normalized === 'torchcrepe') {
+    return 'TORCHCREPE';
+  }
   if (normalized === 'basic-pitch' || normalized === 'basic_pitch' || normalized === 'basic-pitch-legacy') {
-    return 'BASIC PITCH LEGACY';
+    return 'BASIC PITCH (LEGACY)';
   }
   if (!normalized) {
     return 'SYMBOLIC EXTRACTION';

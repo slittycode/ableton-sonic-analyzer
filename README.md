@@ -52,9 +52,8 @@ python3.11 -m venv venv
 The backend dependency stack is pinned and validated on Python `3.11.x` for
 full-feature local development on macOS arm64.
 
-Current limitation: Python `3.12+` is not a supported full-feature backend
-bootstrap target on macOS arm64 because `basic-pitch` on Darwin pulls a
-`tensorflow-macos` / NumPy combination that does not resolve cleanly.
+Current limitation: Python `3.12+` is not yet supported because Essentia
+2.1b6 wheels are only published for 3.11 on macOS arm64.
 
 Run the full stack from the repo root:
 

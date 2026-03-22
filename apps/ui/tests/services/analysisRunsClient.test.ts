@@ -204,7 +204,7 @@ describe('analysisRunsClient', () => {
           result: {
             ...baseRunSnapshot.stages.measurement.result,
             transcriptionDetail: {
-              transcriptionMethod: 'basic-pitch-legacy',
+              transcriptionMethod: 'torchcrepe-viterbi',
               noteCount: 1,
               averageConfidence: 0.5,
               stemSeparationUsed: false,

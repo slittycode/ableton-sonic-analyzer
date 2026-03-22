@@ -45,7 +45,7 @@ FIELD GLOSSARY:
 - segmentLoudness = per-section LUFS, reveals drops and builds
 - dominantNotes = MIDI numbers, convert to note names
 - optional symbolic extraction result (when present):
-  - transcriptionMethod: symbolic backend identifier; treat `basic-pitch-legacy` as a legacy comparison backend
+  - transcriptionMethod: symbolic backend identifier (e.g. `torchcrepe-viterbi`)
   - noteCount: total retained symbolic note events
   - averageConfidence: mean note confidence 0-1
   - dominantPitches[]: top pitches with count

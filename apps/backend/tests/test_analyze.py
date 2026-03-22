@@ -330,24 +330,6 @@ class AnalyzeTranscriptionHelperTests(unittest.TestCase):
         spec.loader.exec_module(module)
         cls.analyze = module
 
-    def test_extract_basic_pitch_notes_excludes_confidence_below_noise_floor(self) -> None:
-        raw_events = [
-            {"pitchMidi": 48, "onsetSeconds": 0.0, "durationSeconds": 0.2, "confidence": 0.04},
-            {"pitchMidi": 50, "onsetSeconds": 0.3, "durationSeconds": 0.2, "confidence": 0.05},
-            {"pitchMidi": 52, "onsetSeconds": 0.6, "durationSeconds": 0.2, "confidence": 0.06},
-        ]
-
-        notes, midi_values, confidence_values = self.analyze._extract_basic_pitch_notes(
-            "ignored.wav",
-            "full_mix",
-            lambda _source_path, _model_path: (None, None, raw_events),
-            "fake_model",
-        )
-
-        self.assertEqual([note["pitchMidi"] for note in notes], [50, 52])
-        self.assertEqual(midi_values, [50, 52])
-        self.assertEqual(confidence_values, [0.05, 0.06])
-
     def test_deduplicate_transcription_notes_prefers_bass_for_low_register_overlap(self) -> None:
         notes = [
             {
@@ -427,147 +409,6 @@ class AnalyzeTranscriptionHelperTests(unittest.TestCase):
         self.assertEqual(deduplicated[0]["confidence"], 0.81)
         self.assertEqual(deduplicated[0]["durationSeconds"], 0.25)
 
-    def test_transcription_detail_caps_stem_aware_output_at_500_notes(self) -> None:
-        temp_dir = tempfile.TemporaryDirectory(prefix="sonic_analyzer_transcription_cap_")
-        self.addCleanup(temp_dir.cleanup)
-        bass_path = Path(temp_dir.name) / "bass.wav"
-        other_path = Path(temp_dir.name) / "other.wav"
-        bass_path.write_bytes(b"bass")
-        other_path.write_bytes(b"other")
-
-        bass_events = [
-            {
-                "pitchMidi": 36 + (idx % 12),
-                "onsetSeconds": idx * 0.05,
-                "durationSeconds": 0.2 + (idx % 5) * 0.01,
-                "confidence": 0.2 + (idx / 1000.0),
-            }
-            for idx in range(300)
-        ]
-        other_events = [
-            {
-                "pitchMidi": 60 + (idx % 12),
-                "onsetSeconds": 20.0 + (idx * 0.05),
-                "durationSeconds": 0.25 + (idx % 5) * 0.01,
-                "confidence": 0.25 + (idx / 1000.0),
-            }
-            for idx in range(300)
-        ]
-
-        result, stderr = self._run_basic_pitch_analysis(
-            event_map={str(bass_path): bass_events, str(other_path): other_events},
-            stem_paths={"bass": str(bass_path), "other": str(other_path)},
-        )
-
-        transcription = result["transcriptionDetail"]
-        self.assertEqual(transcription["fullMixFallback"], False)
-        self.assertEqual(transcription["noteCount"], 500)
-        self.assertEqual(len(transcription["notes"]), 500)
-        self.assertIn("[warn] transcriptionDetail: truncated to 500 notes (was 600)", stderr)
-
-    def test_transcription_detail_caps_full_mix_output_at_200_notes_and_warns(self) -> None:
-        temp_dir = tempfile.TemporaryDirectory(prefix="sonic_analyzer_transcription_full_mix_")
-        self.addCleanup(temp_dir.cleanup)
-        audio_path = Path(temp_dir.name) / "track.wav"
-        audio_path.write_bytes(b"mix")
-
-        raw_events = [
-            {
-                "pitchMidi": 36 + ((idx * 3) % 48),
-                "onsetSeconds": idx * 0.12,
-                "durationSeconds": 0.05 + (idx % 3) * 0.01,
-                "confidence": 0.1 + (idx / 1000.0),
-            }
-            for idx in range(260)
-        ]
-
-        result, stderr = self._run_basic_pitch_analysis(
-            event_map={str(audio_path): raw_events},
-            audio_path=str(audio_path),
-            stem_paths=None,
-        )
-
-        transcription = result["transcriptionDetail"]
-        self.assertEqual(transcription["fullMixFallback"], True)
-        self.assertEqual(transcription["noteCount"], 200)
-        self.assertEqual(len(transcription["notes"]), 200)
-        self.assertIn(
-            "[warn] transcriptionDetail: running on full mix — quality may be low for dense material",
-            stderr,
-        )
-        self.assertIn("[warn] transcriptionDetail: truncated to 200 notes (was 260)", stderr)
-
-    def test_transcription_detail_sets_full_mix_fallback_for_missing_or_invalid_stems(self) -> None:
-        temp_dir = tempfile.TemporaryDirectory(prefix="sonic_analyzer_transcription_fallback_")
-        self.addCleanup(temp_dir.cleanup)
-        audio_path = Path(temp_dir.name) / "track.wav"
-        bass_path = Path(temp_dir.name) / "bass.wav"
-        other_path = Path(temp_dir.name) / "other.wav"
-        audio_path.write_bytes(b"mix")
-        bass_path.write_bytes(b"bass")
-        other_path.write_bytes(b"other")
-
-        raw_events = [{"pitchMidi": 48, "onsetSeconds": 0.1, "durationSeconds": 0.2, "confidence": 0.9}]
-
-        none_result, _ = self._run_basic_pitch_analysis(
-            event_map={str(audio_path): raw_events},
-            audio_path=str(audio_path),
-            stem_paths=None,
-        )
-        empty_result, _ = self._run_basic_pitch_analysis(
-            event_map={str(audio_path): raw_events},
-            audio_path=str(audio_path),
-            stem_paths={},
-        )
-        unusable_result, _ = self._run_basic_pitch_analysis(
-            event_map={str(audio_path): raw_events},
-            audio_path=str(audio_path),
-            stem_paths={"bass": str(Path(temp_dir.name) / "missing.wav")},
-        )
-        stem_result, _ = self._run_basic_pitch_analysis(
-            event_map={str(bass_path): raw_events, str(other_path): raw_events},
-            audio_path=str(audio_path),
-            stem_paths={"bass": str(bass_path), "other": str(other_path)},
-        )
-
-        self.assertTrue(none_result["transcriptionDetail"]["fullMixFallback"])
-        self.assertTrue(empty_result["transcriptionDetail"]["fullMixFallback"])
-        self.assertTrue(unusable_result["transcriptionDetail"]["fullMixFallback"])
-        self.assertFalse(stem_result["transcriptionDetail"]["fullMixFallback"])
-
-    def _run_basic_pitch_analysis(
-        self,
-        *,
-        event_map: dict[str, list[dict]],
-        audio_path: str | None = None,
-        stem_paths: dict | None = None,
-    ) -> tuple[dict, str]:
-        if audio_path is None:
-            audio_path = next(iter(event_map.keys()))
-
-        def fake_predict(source_path: str, _model_path: str):
-            return None, None, event_map.get(source_path, [])
-
-        fake_inference_module = SimpleNamespace(predict=fake_predict)
-        fake_basic_pitch_module = SimpleNamespace(
-            ICASSP_2022_MODEL_PATH="fake_model_path",
-            inference=fake_inference_module,
-        )
-
-        stderr_buffer = io.StringIO()
-        with (
-            mock.patch.dict(
-                sys.modules,
-                {
-                    "basic_pitch": fake_basic_pitch_module,
-                    "basic_pitch.inference": fake_inference_module,
-                },
-            ),
-            mock.patch("sys.stderr", stderr_buffer),
-        ):
-            result = self.analyze.analyze_transcription_basic_pitch(audio_path, stem_paths=stem_paths)
-
-        return result, stderr_buffer.getvalue()
 
 
 class TranscriptionBackendAbstractionTests(unittest.TestCase):
@@ -582,16 +423,15 @@ class TranscriptionBackendAbstractionTests(unittest.TestCase):
         spec.loader.exec_module(module)
         cls.analyze = module
 
-    def test_basic_pitch_backend_name(self) -> None:
-        backend = self.analyze.BasicPitchBackend()
-        self.assertEqual(backend.name, "basic-pitch-legacy")
+    def test_torchcrepe_backend_name(self) -> None:
+        backend = self.analyze.TorchcrepeBackend()
+        self.assertEqual(backend.name, "torchcrepe-viterbi")
 
-    def test_basic_pitch_backend_satisfies_protocol(self) -> None:
-        backend = self.analyze.BasicPitchBackend()
+    def test_torchcrepe_backend_satisfies_protocol(self) -> None:
+        backend = self.analyze.TorchcrepeBackend()
         self.assertIsInstance(backend, self.analyze.TranscriptionBackend)
 
     def test_analyze_transcription_returns_transcription_detail_key(self) -> None:
-        # basic-pitch import will fail in test env — the key must still be present
         result = self.analyze.analyze_transcription("nonexistent.wav")
         self.assertIn("transcriptionDetail", result)
 

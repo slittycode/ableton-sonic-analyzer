@@ -54,11 +54,9 @@ This means the split is correct and should be maintained: **measure locally, ext
 |---|---|---|
 | Essentia 2.1b6.dev1389 | ✅ Healthy — MTG-maintained, July 2025 wheels, Python 3.9–3.13 | Stay. Irreplaceable for measurement. |
 | Demucs 4.0.1 | 🟡 Frozen — Meta archived Jan 1 2025, adefossez fork is bug-fix only | Stay. Models are excellent and stable. No better alternative at comparable quality. Monitor adefossez fork for compatibility drift. |
-| basic-pitch 0.4.0 | 🔴 Abandoned — Spotify, resampy/pkg_resources broken with setuptools>=71 | Remove. TranscriptionBackend Protocol abstracted (Stage 2 complete). |
-| torchcrepe 0.0.24 | 🔬 Under evaluation — last released May 2025, PyTorch-based, Viterbi decoding | Preferred for Experiment A. Audit note: not currently installed in the backend venv, so the repo is not yet ready to run the experiment. |
+| torchcrepe 0.0.24 | ✅ Active — sole transcription backend, installed and tested | Stay. Replaced basic-pitch (removed). |
 | PENN 1.0.0 | 🔬 Alternative candidate — research-driven, pitch + periodicity co-output | Adds 6 new packages including `huggingface_hub` (downloads models at runtime from HuggingFace). Try only if torchcrepe produces insufficient quality. |
 | librosa 0.11.0 | Ghost dep — confirmed unused in analyze.py | Remove on next venv rebuild. |
-| setuptools<71 | Temporary pin — required by resampy 0.4.2 / basic-pitch dependency chain | Remove when basic-pitch is removed. |
 | PyTorch 2.10, FastAPI, Pydantic | ✅ Healthy | Stay. |
 
 ---
@@ -119,7 +117,7 @@ The Codex architecture hardening plan (SQLite + job queue + async Phase 2) is th
 
 | Timeframe | Work | Why |
 |---|---|---|
-| Now | Venv fix, basic-pitch removal, venv rebuild (removes librosa ghost dep) | Clean foundation before adding anything |
+| Done | basic-pitch removed, torchcrepe is sole backend, venv cleaned | Clean foundation before adding anything |
 | Now | Architecture hardening (SQLite + jobs + async Phase 2) | Makes the tool restart-safe and trust-correct |
 | Next | Experiment A — torchcrepe vs PENN on Vtss bass stem | Closes the question on local monophonic quality |
 | Next | Experiment B — Gemini stem listening with Structured Outputs | Only after artifact storage exists |

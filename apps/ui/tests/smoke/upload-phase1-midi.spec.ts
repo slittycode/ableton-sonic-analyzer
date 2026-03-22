@@ -279,7 +279,7 @@ test('phase1 dual-source session musician panel toggles between polyphonic and m
               { attemptId: 'sym_smoke_midi_001', backendId: 'auto', mode: 'stem_notes', status: 'completed' },
             ],
             result: {
-              transcriptionMethod: 'basic-pitch-legacy',
+              transcriptionMethod: 'torchcrepe-viterbi',
               noteCount: 2,
               averageConfidence: 0.83,
               stemSeparationUsed: true,

@@ -1,7 +1,7 @@
 """Transcription backend evaluation harness.
 
-Generates synthetic audio test cases and runs both BasicPitchBackend and
-TorchcrepeBackend (if installed) to compare note extraction quality.
+Generates synthetic audio test cases and runs TorchcrepeBackend
+to verify note extraction quality.
 """
 
 import importlib
@@ -31,8 +31,9 @@ def _sine_tone(freq: float, duration: float, sr: int = 44100) -> np.ndarray:
     return 0.8 * np.sin(2 * np.pi * freq * t)
 
 
+@unittest.skipUnless(_TORCHCREPE_AVAILABLE, "torchcrepe not installed")
 class TranscriptionBackendEvaluationTests(unittest.TestCase):
-    """Synthetic audio tests for comparing transcription backends."""
+    """Synthetic audio tests for TorchcrepeBackend."""
 
     @classmethod
     def setUpClass(cls):
@@ -59,16 +60,10 @@ class TranscriptionBackendEvaluationTests(unittest.TestCase):
             _write_wav(f.name, audio, sr)
             wav_path = f.name
 
-        bp = self.analyze.BasicPitchBackend()
-        bp_result = self._run_backend(bp, wav_path)
-        self.assertIsNotNone(bp_result, "BasicPitchBackend should produce transcription")
+        tc = self.analyze.TorchcrepeBackend()
+        tc_result = self._run_backend(tc, wav_path)
+        self.assertIsNotNone(tc_result, "TorchcrepeBackend should produce transcription")
 
-        if _TORCHCREPE_AVAILABLE:
-            tc = self.analyze.TorchcrepeBackend()
-            tc_result = self._run_backend(tc, wav_path)
-            self.assertIsNotNone(tc_result, "TorchcrepeBackend should produce transcription")
-
-    @unittest.skipUnless(_TORCHCREPE_AVAILABLE, "torchcrepe not installed")
     def test_torchcrepe_returns_notes(self):
         """TorchcrepeBackend should return at least one note for a clean tone."""
         sr = self.sr
@@ -84,7 +79,7 @@ class TranscriptionBackendEvaluationTests(unittest.TestCase):
         self.assertGreater(len(notes), 0, "Should detect at least one note")
 
     def test_polyphonic_two_simultaneous_notes(self):
-        """Two simultaneous tones — tests how backends handle polyphony."""
+        """Two simultaneous tones — tests how backend handles polyphony."""
         sr = self.sr
         a = _sine_tone(220.0, 1.0, sr)
         b = _sine_tone(330.0, 1.0, sr)
@@ -94,9 +89,9 @@ class TranscriptionBackendEvaluationTests(unittest.TestCase):
             _write_wav(f.name, audio, sr)
             wav_path = f.name
 
-        bp = self.analyze.BasicPitchBackend()
-        bp_result = self._run_backend(bp, wav_path)
-        self.assertIsNotNone(bp_result)
+        tc = self.analyze.TorchcrepeBackend()
+        tc_result = self._run_backend(tc, wav_path)
+        self.assertIsNotNone(tc_result)
 
 
 if __name__ == "__main__":

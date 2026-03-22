@@ -51,7 +51,7 @@ const measurement: MeasurementResult = {
 };
 
 const symbolic: TranscriptionDetail = {
-  transcriptionMethod: 'basic-pitch-legacy',
+  transcriptionMethod: 'torchcrepe-viterbi',
   noteCount: 6,
   averageConfidence: 0.83,
   stemSeparationUsed: true,

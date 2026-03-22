@@ -79,7 +79,7 @@ const validPayload = {
       vibratoConfidence: 0.05,
     },
     transcriptionDetail: {
-      transcriptionMethod: 'basic-pitch-legacy',
+      transcriptionMethod: 'torchcrepe-viterbi',
       noteCount: 2,
       averageConfidence: 0.83,
       stemSeparationUsed: true,

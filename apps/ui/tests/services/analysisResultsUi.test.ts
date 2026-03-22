@@ -102,7 +102,7 @@ const basePhase2: Phase2Result = {
 };
 
 const baseSymbolic: TranscriptionDetail = {
-  transcriptionMethod: 'basic-pitch-legacy',
+  transcriptionMethod: 'torchcrepe-viterbi',
   noteCount: 2,
   averageConfidence: 0.83,
   stemSeparationUsed: true,
@@ -365,7 +365,7 @@ describe('AnalysisResults UI wiring', () => {
 
     expect(html).toContain('SYMBOLIC');
     expect(html).toContain('MELODY');
-    expect(html).toContain('BASIC PITCH LEGACY symbolic notes');
+    expect(html).toContain('TORCHCREPE symbolic notes');
     expect(html).toContain('Range: C3 - G4');
     expect(html).toContain('Confidence: 83%');
     expect(html.match(/Range: C3 - G4/g)?.length ?? 0).toBe(1);
@@ -373,7 +373,7 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).toContain('2 / 2 NOTES');
     expect(html).toContain('CONFIDENCE');
     expect(html).toContain('20%');
-    expect(html).toContain('SOURCE: BASIC PITCH LEGACY');
+    expect(html).toContain('SOURCE: TORCHCREPE');
     expect(html).toContain('STEM-AWARE');
     expect(html).toContain('STEMS: bass, other');
     expect(html).toContain('Adjust confidence threshold to filter noise before export.');
@@ -408,8 +408,8 @@ describe('AnalysisResults UI wiring', () => {
       }),
     );
 
-    expect(html).not.toContain('SOURCE: BASIC PITCH LEGACY');
-    expect(html).not.toContain('BASIC PITCH LEGACY symbolic notes');
+    expect(html).not.toContain('SOURCE: TORCHCREPE');
+    expect(html).not.toContain('TORCHCREPE symbolic notes');
     expect(html).toContain('SOURCE: ESSENTIA MELODY');
     expect(html).toContain('Monophonic melody guide via Essentia');
   });
@@ -420,7 +420,7 @@ describe('AnalysisResults UI wiring', () => {
         phase1: {
           ...baseMeasurement,
           transcriptionDetail: {
-          transcriptionMethod: 'basic-pitch-legacy',
+          transcriptionMethod: 'torchcrepe-viterbi',
           noteCount: 1,
           averageConfidence: 0.61,
           stemSeparationUsed: false,

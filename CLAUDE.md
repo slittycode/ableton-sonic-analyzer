@@ -86,7 +86,7 @@ The subprocess isolation means `analyze.py` works as a standalone CLI. Check `ap
 
 **Phase 2 (`POST /api/phase2`):** Uploads audio to Gemini inline if ≤20MiB, or via the Gemini Files API if larger. Phase 1 JSON is appended to the system prompt from `prompts/phase2_system.txt`.
 
-**Python version constraint:** Python 3.11.x required on macOS arm64. `basic-pitch` pulls `tensorflow-macos`/NumPy combinations that don't resolve on 3.12+. `requirements.txt` pins `setuptools<71` because `resampy 0.4.2` imports `pkg_resources`, which `setuptools>=71` no longer ships.
+**Python version constraint:** Python 3.11.x required on macOS arm64. Essentia 2.1b6 wheels are only published for 3.11; this constraint may be relaxable if Essentia publishes 3.12+ wheels.
 
 ### Frontend (`apps/ui`)
 

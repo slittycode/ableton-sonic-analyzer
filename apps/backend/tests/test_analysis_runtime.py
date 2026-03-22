@@ -87,7 +87,7 @@ class AnalysisRuntimeTests(unittest.TestCase):
                 "key": "A minor",
                 "durationSeconds": 184.2,
                 "transcriptionDetail": {
-                    "transcriptionMethod": "basic-pitch-legacy",
+                    "transcriptionMethod": "torchcrepe-viterbi",
                     "noteCount": 2,
                     "averageConfidence": 0.83,
                     "stemSeparationUsed": True,

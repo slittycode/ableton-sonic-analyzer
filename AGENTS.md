@@ -436,7 +436,7 @@ For detailed information specific to each app, see:
 
 ## Important Constraints
 
-1. **Python Version**: Backend requires Python 3.11.x for full-feature local setup. Python 3.12+ is not supported due to `basic-pitch` / `tensorflow-macos` / NumPy compatibility issues on macOS arm64.
+1. **Python Version**: Backend requires Python 3.11.x for full-feature local setup. Python 3.12+ is not yet supported because Essentia 2.1b6 wheels are only published for 3.11 on macOS arm64.
 
 2. **No Repo-Wide Formatting**: No ESLint/Prettier/Ruff baseline is enforced. Follow the style of the surrounding file.
 

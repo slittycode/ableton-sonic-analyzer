@@ -201,7 +201,7 @@ describe('SessionMusicianPanel confidence helpers', () => {
 
   it('derives transcription provenance only for the active polyphonic source', () => {
     const mixedSourceTranscriptionDetail: TranscriptionDetail = {
-      transcriptionMethod: 'basic-pitch-legacy',
+      transcriptionMethod: 'torchcrepe-viterbi',
       noteCount: 4,
       averageConfidence: 0.83,
       stemSeparationUsed: true,
@@ -259,7 +259,7 @@ describe('SessionMusicianPanel confidence helpers', () => {
         phase1: {
           ...baseMeasurement,
           transcriptionDetail: {
-          transcriptionMethod: 'basic-pitch-legacy',
+          transcriptionMethod: 'torchcrepe-viterbi',
           noteCount: 2,
           averageConfidence: 0.42,
           stemSeparationUsed: false,
@@ -325,7 +325,7 @@ describe('SessionMusicianPanel confidence helpers', () => {
         phase1: {
           ...baseMeasurement,
           transcriptionDetail: {
-            transcriptionMethod: 'basic-pitch-legacy',
+            transcriptionMethod: 'torchcrepe-viterbi',
             noteCount: 4,
             averageConfidence: 0.83,
             stemSeparationUsed: true,

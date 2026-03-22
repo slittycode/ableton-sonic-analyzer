@@ -239,9 +239,9 @@ def build_analysis_estimate(
             "transcription_stems" if run_separation else "transcription_full_mix"
         )
         transcription_label = (
-            "Legacy Basic Pitch on bass + other stems"
+            "Torchcrepe on bass + other stems"
             if run_separation
-            else "Legacy Basic Pitch on full mix"
+            else "Torchcrepe on full mix"
         )
         transcription_seconds = (
             _estimate_stage_seconds(duration_seconds, 0.22, 0.42, 60.0, 150.0)
@@ -3955,12 +3955,7 @@ from typing import Protocol, runtime_checkable
 
 @runtime_checkable
 class TranscriptionBackend(Protocol):
-    """Interface for pluggable symbolic extraction backends.
-
-    Stage 3 migration: implement this Protocol to swap the legacy
-    Basic Pitch backend for a maintained alternative without changing
-    analyze_transcription() callers.
-    """
+    """Interface for pluggable symbolic extraction backends."""
 
     name: str  # written to transcriptionDetail.transcriptionMethod in output
 
@@ -3990,154 +3985,6 @@ def _transcription_source_paths(
     if len(sources) == 0:
         return [("full_mix", audio_path)]
     return sources
-
-
-def _extract_basic_pitch_notes(
-    source_path: str,
-    stem_source: str,
-    predict,
-    model_path,
-) -> tuple[list[dict], list[int], list[float]]:
-    with contextlib.redirect_stdout(sys.stderr):
-        _model_output, _midi_data, raw_note_events = predict(source_path, model_path)
-
-    notes = []
-    midi_values = []
-    confidence_values = []
-
-    for raw_event in raw_note_events or []:
-        pitch_raw = None
-        onset_raw = None
-        duration_raw = None
-        end_raw = None
-        confidence_raw = None
-
-        if isinstance(raw_event, dict):
-            pitch_raw = raw_event.get(
-                "pitchMidi",
-                raw_event.get(
-                    "pitch_midi",
-                    raw_event.get(
-                        "pitch", raw_event.get("midi", raw_event.get("note"))
-                    ),
-                ),
-            )
-            onset_raw = raw_event.get(
-                "onsetSeconds",
-                raw_event.get(
-                    "onset_seconds",
-                    raw_event.get(
-                        "onset",
-                        raw_event.get(
-                            "startSeconds",
-                            raw_event.get("start_seconds", raw_event.get("start")),
-                        ),
-                    ),
-                ),
-            )
-            duration_raw = raw_event.get(
-                "durationSeconds",
-                raw_event.get("duration_seconds", raw_event.get("duration")),
-            )
-            end_raw = raw_event.get(
-                "offsetSeconds",
-                raw_event.get(
-                    "offset_seconds",
-                    raw_event.get(
-                        "offset",
-                        raw_event.get(
-                            "endSeconds",
-                            raw_event.get("end_seconds", raw_event.get("end")),
-                        ),
-                    ),
-                ),
-            )
-            confidence_raw = raw_event.get(
-                "confidence",
-                raw_event.get(
-                    "amplitude", raw_event.get("velocity", raw_event.get("probability"))
-                ),
-            )
-        elif isinstance(raw_event, (tuple, list)):
-            if len(raw_event) >= 3:
-                onset_raw = raw_event[0]
-                duration_raw = raw_event[1]
-                pitch_raw = raw_event[2]
-            if len(raw_event) >= 4:
-                confidence_raw = raw_event[3]
-        else:
-            pitch_raw = getattr(raw_event, "pitchMidi", None)
-            if pitch_raw is None:
-                pitch_raw = getattr(raw_event, "pitch_midi", None)
-            if pitch_raw is None:
-                pitch_raw = getattr(raw_event, "pitch", None)
-            onset_raw = (
-                getattr(raw_event, "onsetSeconds", None)
-                or getattr(raw_event, "onset_seconds", None)
-                or getattr(raw_event, "onset", None)
-                or getattr(raw_event, "start", None)
-            )
-            duration_raw = (
-                getattr(raw_event, "durationSeconds", None)
-                or getattr(raw_event, "duration_seconds", None)
-                or getattr(raw_event, "duration", None)
-            )
-            end_raw = (
-                getattr(raw_event, "offsetSeconds", None)
-                or getattr(raw_event, "offset_seconds", None)
-                or getattr(raw_event, "offset", None)
-                or getattr(raw_event, "end", None)
-            )
-            confidence_raw = (
-                getattr(raw_event, "confidence", None)
-                or getattr(raw_event, "amplitude", None)
-                or getattr(raw_event, "velocity", None)
-            )
-
-        onset_seconds = _to_finite_float(onset_raw, None)
-        second_value = _to_finite_float(duration_raw, None)
-        duration_seconds = None
-        if onset_seconds is not None and second_value is not None:
-            duration_seconds = (
-                second_value - onset_seconds
-                if second_value >= onset_seconds
-                else second_value
-            )
-        if (
-            (duration_seconds is None or duration_seconds <= 0)
-            and onset_seconds is not None
-            and end_raw is not None
-        ):
-            end_seconds = _to_finite_float(end_raw, None)
-            if end_seconds is not None:
-                duration_seconds = end_seconds - onset_seconds
-
-        pitch_midi = _to_finite_float(pitch_raw, None)
-        if pitch_midi is None or onset_seconds is None or duration_seconds is None:
-            continue
-        if onset_seconds < 0 or duration_seconds <= 0:
-            continue
-
-        pitch_midi_int = int(np.clip(int(round(pitch_midi)), 0, 127))
-        confidence = _normalize_confidence(confidence_raw)
-        # Backend floor only removes obvious garbage. The UI slider remains the
-        # primary quality filter for transcriptionDetail notes.
-        if confidence < TRANSCRIPTION_CONFIDENCE_FLOOR:
-            continue
-
-        note_obj = {
-            "pitchMidi": pitch_midi_int,
-            "pitchName": midi_to_note_name(pitch_midi_int),
-            "onsetSeconds": round(float(onset_seconds), 4),
-            "durationSeconds": round(float(duration_seconds), 4),
-            "confidence": confidence,
-            "stemSource": stem_source,
-        }
-        notes.append(note_obj)
-        midi_values.append(pitch_midi_int)
-        confidence_values.append(confidence)
-
-    return notes, midi_values, confidence_values
 
 
 def _transcription_active_end(note: dict) -> float:
@@ -4325,150 +4172,6 @@ def _deduplicate_transcription_notes(notes: list[dict]) -> list[dict]:
         cleaned_notes.append(cleaned_note)
 
     return sorted(cleaned_notes, key=lambda note: note["onsetSeconds"])
-
-
-class BasicPitchBackend:
-    """Legacy comparison backend wrapping the basic-pitch library."""
-
-    name = "basic-pitch-legacy"
-
-    def transcribe(
-        self,
-        audio_path: str,
-        stem_paths: dict | None = None,
-        emit_progress_markers: bool = False,
-    ) -> dict:
-        try:
-            from basic_pitch.inference import predict
-            from basic_pitch import ICASSP_2022_MODEL_PATH
-        except Exception as e:
-            print(f"[warn] Basic Pitch import failed: {e}", file=sys.stderr)
-            return {"transcriptionDetail": None}
-
-        try:
-            transcription_sources = _transcription_source_paths(audio_path, stem_paths)
-            full_mix_fallback = (
-                len(transcription_sources) == 1
-                and transcription_sources[0][0] == "full_mix"
-            )
-            if full_mix_fallback:
-                print(
-                    "[warn] transcriptionDetail: running on full mix — quality may be low for dense material",
-                    file=sys.stderr,
-                )
-            notes = []
-            stems_transcribed = [
-                stem_source for stem_source, _source_path in transcription_sources
-            ]
-
-            for stem_source, source_path in transcription_sources:
-                if emit_progress_markers:
-                    transcription_mode = (
-                        "stems"
-                        if stem_source in ("bass", "other")
-                        else "full_mix"
-                    )
-                    print(
-                        f"@@TRANSCRIPTION_SOURCE mode={transcription_mode} source={stem_source}",
-                        file=sys.stderr,
-                    )
-                source_notes, source_midi_values, source_confidence_values = (
-                    _extract_basic_pitch_notes(
-                        source_path,
-                        stem_source,
-                        predict,
-                        ICASSP_2022_MODEL_PATH,
-                    )
-                )
-                notes.extend(source_notes)
-
-            notes.sort(key=lambda note: note["onsetSeconds"])
-            notes = _deduplicate_transcription_notes(notes)
-            stem_separation_used = any(
-                stem_source in ("bass", "other") for stem_source in stems_transcribed
-            )
-            note_cap = (
-                FULL_MIX_TRANSCRIPTION_NOTE_CAP
-                if full_mix_fallback
-                else TRANSCRIPTION_NOTE_CAP
-            )
-            if len(notes) > note_cap:
-                original_count = len(notes)
-                ranked_notes = sorted(
-                    notes,
-                    key=lambda note: (
-                        -float(note.get("confidence", 0.0)),
-                        -float(note.get("durationSeconds", 0.0)),
-                        float(note.get("onsetSeconds", 0.0)),
-                    ),
-                )
-                notes = sorted(
-                    ranked_notes[:note_cap],
-                    key=lambda note: note["onsetSeconds"],
-                )
-                print(
-                    f"[warn] transcriptionDetail: truncated to {note_cap} notes (was {original_count})",
-                    file=sys.stderr,
-                )
-
-            if len(notes) == 0:
-                return {
-                    "transcriptionDetail": {
-                        "transcriptionMethod": self.name,
-                        "noteCount": 0,
-                        "averageConfidence": 0.0,
-                        "dominantPitches": [],
-                        "pitchRange": {
-                            "minMidi": None,
-                            "maxMidi": None,
-                            "minName": None,
-                            "maxName": None,
-                        },
-                        "stemSeparationUsed": stem_separation_used,
-                        "fullMixFallback": full_mix_fallback,
-                        "stemsTranscribed": stems_transcribed,
-                        "notes": [],
-                    }
-                }
-
-            midi_values = [int(note["pitchMidi"]) for note in notes]
-            confidence_values = [float(note["confidence"]) for note in notes]
-            dominant_pitches = [
-                {
-                    "pitchMidi": int(pitch_midi),
-                    "pitchName": midi_to_note_name(int(pitch_midi)),
-                    "count": int(count),
-                }
-                for pitch_midi, count in Counter(midi_values).most_common(5)
-            ]
-
-            min_midi = int(min(midi_values))
-            max_midi = int(max(midi_values))
-            average_confidence = round(
-                float(np.mean(np.asarray(confidence_values, dtype=np.float64))), 4
-            )
-
-            return {
-                "transcriptionDetail": {
-                    "transcriptionMethod": self.name,
-                    "noteCount": int(len(notes)),
-                    "averageConfidence": average_confidence,
-                    "dominantPitches": dominant_pitches,
-                    "pitchRange": {
-                        "minMidi": min_midi,
-                        "maxMidi": max_midi,
-                        "minName": midi_to_note_name(min_midi),
-                        "maxName": midi_to_note_name(max_midi),
-                    },
-                    "stemSeparationUsed": stem_separation_used,
-                    "fullMixFallback": full_mix_fallback,
-                    "stemsTranscribed": stems_transcribed,
-                    "notes": notes,
-                }
-            }
-        except Exception as e:
-            print(f"[warn] Basic Pitch transcription failed: {e}", file=sys.stderr)
-            return {"transcriptionDetail": None}
 
 
 TORCHCREPE_SAMPLE_RATE = 16000
@@ -4767,11 +4470,7 @@ def analyze_transcription(
     backend: TranscriptionBackend | None = None,
     emit_progress_markers: bool = False,
 ) -> dict:
-    """Run transcription via the specified backend, defaulting to the legacy Basic Pitch backend.
-
-    Pass a custom backend implementing TranscriptionBackend to use an alternative
-    transcription engine (Stage 3 migration point).
-    """
+    """Run transcription via the specified backend (torchcrepe by default)."""
     def _invoke_backend(candidate: TranscriptionBackend) -> dict:
         try:
             return candidate.transcribe(
@@ -4788,51 +4487,63 @@ def analyze_transcription(
         requested_backend = str(
             os.getenv(TRANSCRIPTION_BACKEND_ENV, "auto")
         ).strip().lower()
-        if requested_backend in ("basic-pitch", "basic-pitch-legacy"):
-            backend = BasicPitchBackend()
-        elif requested_backend in ("torchcrepe", "torchcrepe-viterbi", "auto", "", "default"):
-            backend = TorchcrepeBackend()
-        else:
+        if requested_backend not in ("torchcrepe", "torchcrepe-viterbi", "auto", "", "default"):
             print(
                 f"[warn] Unknown {TRANSCRIPTION_BACKEND_ENV}='{requested_backend}', defaulting to torchcrepe-viterbi",
                 file=sys.stderr,
             )
-            backend = TorchcrepeBackend()
+        backend = TorchcrepeBackend()
 
-    result = _invoke_backend(backend)
-    transcription_detail = result.get("transcriptionDetail") if isinstance(result, dict) else None
-
-    if getattr(backend, "name", "") == "torchcrepe-viterbi" and transcription_detail is None:
-        print(
-            "[warn] Torchcrepe backend unavailable/failed, falling back to basic-pitch-legacy",
-            file=sys.stderr,
-        )
-        return _invoke_backend(BasicPitchBackend())
-
-    return result
-
-
-def analyze_transcription_basic_pitch(
-    audio_path: str,
-    stem_paths: dict | None = None,
-    emit_progress_markers: bool = False,
-) -> dict:
-    """Deprecated: use analyze_transcription() instead."""
-    return analyze_transcription(
-        audio_path,
-        stem_paths=stem_paths,
-        backend=BasicPitchBackend(),
-        emit_progress_markers=emit_progress_markers,
-    )
+    return _invoke_backend(backend)
 
 
 # ── Main ───────────────────────────────────────────────────────────────────
 
 
+def _run_symbolic_only(audio_path: str, stem_dir: str | None = None):
+    """Run symbolic extraction only and print JSON to stdout.
+
+    Used by server.py to run symbolic work in a subprocess so that
+    Demucs/torchcrepe memory is freed when the process exits.
+
+    If --stem-dir is provided, stems are read from that directory
+    (bass.wav, other.wav, etc.) instead of running Demucs again.
+    """
+    stem_paths = None
+    if stem_dir is not None and os.path.isdir(stem_dir):
+        # Look for pre-separated stems
+        for name in ("bass", "other", "drums", "vocals"):
+            path = os.path.join(stem_dir, f"{name}.wav")
+            if os.path.isfile(path):
+                if stem_paths is None:
+                    stem_paths = {}
+                stem_paths[name] = path
+
+    need_separation = stem_paths is None
+    temp_dir = None
+
+    if need_separation:
+        temp_dir = tempfile.mkdtemp(prefix="asa_symbolic_stems_")
+        separated = separate_stems(audio_path, output_dir=temp_dir)
+        if isinstance(separated, dict) and separated:
+            stem_paths = separated
+
+    try:
+        result = analyze_transcription(
+            audio_path,
+            stem_paths=stem_paths,
+        )
+        json.dump(result, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+    finally:
+        if temp_dir is not None:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def main():
     if len(sys.argv) < 2:
         print(
-            "Usage: ./venv/bin/python analyze.py <audio_file> [--separate] [--fast] [--standard] [--transcribe] [--yes]",
+            "Usage: ./venv/bin/python analyze.py <audio_file> [--separate] [--fast] [--standard] [--transcribe] [--yes] [--symbolic-only] [--stem-dir DIR]",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -4845,6 +4556,17 @@ def main():
     run_standard = "--standard" in optional_args
     run_transcribe = "--transcribe" in optional_args
     auto_yes = "--yes" in optional_args
+    symbolic_only = "--symbolic-only" in optional_args
+
+    # --symbolic-only: run separation + transcription, print JSON, exit
+    if symbolic_only:
+        stem_dir = None
+        if "--stem-dir" in optional_args:
+            idx = optional_args.index("--stem-dir")
+            if idx + 1 < len(optional_args):
+                stem_dir = optional_args[idx + 1]
+        _run_symbolic_only(audio_path, stem_dir=stem_dir)
+        sys.exit(0)
     stems = None
 
     analysis_estimate = get_audio_duration_seconds(audio_path)

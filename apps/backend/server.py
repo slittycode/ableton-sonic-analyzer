@@ -32,12 +32,8 @@ from fastapi.responses import JSONResponse
 
 from analysis_runtime import AnalysisRuntime, UnsupportedSymbolicModeError
 from analyze import (
-    BasicPitchBackend,
-    TorchcrepeBackend,
-    analyze_transcription,
     build_analysis_estimate,
     get_audio_duration_seconds,
-    separate_stems,
 )
 
 
@@ -960,90 +956,85 @@ def _execute_reserved_measurement_job(
     )
 
 
-def _resolve_transcription_backend(backend_id: str) -> Any:
-    if backend_id in ("", "auto", "default", "transcription-backend:auto"):
-        return None
-    if backend_id in ("torchcrepe", "torchcrepe-viterbi", "transcription-backend:torchcrepe-viterbi"):
-        return TorchcrepeBackend()
-    if backend_id in ("basic-pitch", "basic-pitch-legacy", "transcription-backend:basic-pitch-legacy"):
-        return BasicPitchBackend()
-    raise RuntimeError(f"Unsupported symbolic backend '{backend_id}'.")
-
-
-def _get_or_materialize_stem_paths(
-    runtime: AnalysisRuntime,
-    run_id: str,
-    source_path: str,
-) -> dict[str, str] | None:
-    existing = runtime.get_artifacts_by_kind(run_id, "stem_")
-    stem_paths = {
-        artifact["kind"].removeprefix("stem_"): artifact["path"]
-        for artifact in existing
-        if isinstance(artifact.get("path"), str) and os.path.isfile(artifact["path"])
-    }
-    if "bass" in stem_paths or "other" in stem_paths:
-        return stem_paths
-
-    output_dir = tempfile.mkdtemp(prefix=f"asa_stems_{run_id}_", dir=runtime.runtime_dir)
-    try:
-        separated = separate_stems(source_path, output_dir=output_dir)
-        if not isinstance(separated, dict) or not separated:
-            return None
-
-        recorded_paths: dict[str, str] = {}
-        for stem_name, stem_path in separated.items():
-            if not isinstance(stem_path, str) or not os.path.isfile(stem_path):
-                continue
-            artifact = runtime.record_artifact(
-                run_id,
-                kind=f"stem_{stem_name}",
-                source_path=stem_path,
-                filename=Path(stem_path).name,
-                mime_type="audio/wav",
-                provenance={
-                    "generator": "demucs_htdemucs",
-                    "sourceRunId": run_id,
-                },
-            )
-            recorded_paths[stem_name] = artifact["path"]
-        return recorded_paths if recorded_paths else None
-    finally:
-        shutil.rmtree(output_dir, ignore_errors=True)
-
-
 def _execute_symbolic_attempt(
     runtime: AnalysisRuntime,
     attempt: dict[str, Any],
 ) -> None:
+    """Run symbolic extraction as a subprocess to isolate memory usage.
+
+    Demucs + torchcrepe load ~2-4GB of models and tensors. Running them
+    in-process causes the server to retain that memory for its entire
+    lifetime because Python/PyTorch allocators don't return memory to the
+    OS. Subprocess isolation means all that memory is freed on exit.
+    """
     started_at = _current_time()
     run_id = str(attempt["runId"])
     source_artifact = runtime.get_source_artifact(run_id)
-    provenance = {
+    provenance: dict[str, Any] = {
         "schemaVersion": "symbolic.v1",
         "backendId": attempt["backendId"],
         "mode": attempt["mode"],
     }
     try:
-        stem_paths = None
-        if attempt["mode"] == "stem_notes":
-            stem_paths = _get_or_materialize_stem_paths(
-                runtime,
-                run_id,
-                source_artifact["path"],
-            )
-        backend = _resolve_transcription_backend(str(attempt["backendId"]))
-        symbolic_payload = analyze_transcription(
+        # Build the subprocess command
+        command = [
+            "./venv/bin/python", "analyze.py",
             source_artifact["path"],
-            stem_paths=stem_paths,
-            backend=backend,
+            "--symbolic-only",
+            "--yes",
+        ]
+
+        # If stems already exist as artifacts, pass their directory
+        # so the subprocess skips Demucs separation
+        stem_dir = None
+        if attempt["mode"] == "stem_notes":
+            existing = runtime.get_artifacts_by_kind(run_id, "stem_")
+            stem_paths_map = {
+                artifact["kind"].removeprefix("stem_"): artifact["path"]
+                for artifact in existing
+                if isinstance(artifact.get("path"), str)
+                and os.path.isfile(artifact["path"])
+            }
+            if "bass" in stem_paths_map or "other" in stem_paths_map:
+                # Find the common parent directory of existing stems
+                stem_dirs = {
+                    os.path.dirname(p) for p in stem_paths_map.values()
+                }
+                if len(stem_dirs) == 1:
+                    stem_dir = stem_dirs.pop()
+                    command.extend(["--stem-dir", stem_dir])
+
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=600,
         )
+
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"Symbolic subprocess failed (exit {result.returncode}): "
+                f"{result.stderr[-500:] if result.stderr else 'no stderr'}"
+            )
+
+        symbolic_payload = json.loads(result.stdout)
         transcription_detail = None
         if isinstance(symbolic_payload, dict):
             transcription_detail = symbolic_payload.get("transcriptionDetail")
+
+        # If subprocess ran separation, record new stem artifacts
+        if stem_dir is None and attempt["mode"] == "stem_notes":
+            # Stems were created inside the subprocess's temp dir and
+            # already cleaned up — we don't persist them here.
+            # Future: pass --stem-output-dir to persist stems.
+            pass
+
         diagnostics = {
             "backendDurationMs": round(_elapsed_ms(started_at, _current_time()), 2),
-            "stemSeparationUsed": bool(stem_paths),
+            "stemSeparationUsed": attempt["mode"] == "stem_notes",
             "sourceArtifactId": source_artifact["artifactId"],
+            "isolationMode": "subprocess",
         }
         if isinstance(transcription_detail, dict):
             provenance["resolvedBackendId"] = transcription_detail.get("transcriptionMethod")

@@ -1585,11 +1585,11 @@ class Phase2EndpointTests(unittest.TestCase):
             run_id = self._make_completed_run(runtime)
             runtime.create_symbolic_attempt(
                 run_id,
-                backend_id="basic-pitch-legacy",
+                backend_id="torchcrepe-viterbi",
                 mode="stem_notes",
                 status="completed",
                 result={
-                    "transcriptionMethod": "basic-pitch-legacy",
+                    "transcriptionMethod": "torchcrepe-viterbi",
                     "noteCount": 1,
                     "averageConfidence": 0.8,
                     "stemSeparationUsed": True,
@@ -1604,7 +1604,7 @@ class Phase2EndpointTests(unittest.TestCase):
                     },
                     "notes": [],
                 },
-                provenance={"backendId": "basic-pitch-legacy"},
+                provenance={"backendId": "torchcrepe-viterbi"},
             )
             attempt_id = runtime.create_interpretation_attempt(
                 run_id,
@@ -1935,8 +1935,28 @@ class StageWorkerTests(unittest.TestCase):
             self.assertEqual(snapshot["stages"]["measurement"]["status"], "failed")
             self.assertEqual(snapshot["stages"]["measurement"]["error"]["code"], "SYMBOLIC_MODE_UNSUPPORTED")
 
-    def test_symbolic_worker_uses_analyze_transcription_protocol_entry_point(self) -> None:
+    def test_symbolic_worker_runs_as_subprocess(self) -> None:
+        """Symbolic extraction runs analyze.py --symbolic-only as a subprocess."""
         from analysis_runtime import AnalysisRuntime
+
+        mock_result = json.dumps({
+            "transcriptionDetail": {
+                "transcriptionMethod": "torchcrepe-viterbi",
+                "noteCount": 1,
+                "averageConfidence": 0.8,
+                "dominantPitches": [],
+                "pitchRange": {
+                    "minMidi": 48,
+                    "maxMidi": 48,
+                    "minName": "C3",
+                    "maxName": "C3",
+                },
+                "stemSeparationUsed": True,
+                "fullMixFallback": False,
+                "stemsTranscribed": ["bass", "other"],
+                "notes": [],
+            }
+        })
 
         with tempfile.TemporaryDirectory(prefix="asa_symbolic_runtime_") as temp_dir:
             runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
@@ -1964,42 +1984,14 @@ class StageWorkerTests(unittest.TestCase):
             )
             runtime.reserve_symbolic_attempt(attempt_id)
 
-            stem_dir = Path(temp_dir) / "mock_stems"
-            stem_dir.mkdir(parents=True, exist_ok=True)
-            bass_path = stem_dir / "bass.wav"
-            other_path = stem_dir / "other.wav"
-            bass_path.write_bytes(b"bass")
-            other_path.write_bytes(b"other")
-
-            with (
-                patch.object(
-                    server,
-                    "separate_stems",
-                    return_value={"bass": str(bass_path), "other": str(other_path)},
-                ),
-                patch.object(
-                    server,
-                    "analyze_transcription",
-                    return_value={
-                        "transcriptionDetail": {
-                            "transcriptionMethod": "stub-backend",
-                            "noteCount": 1,
-                            "averageConfidence": 0.8,
-                            "dominantPitches": [],
-                            "pitchRange": {
-                                "minMidi": 48,
-                                "maxMidi": 48,
-                                "minName": "C3",
-                                "maxName": "C3",
-                            },
-                            "stemSeparationUsed": True,
-                            "fullMixFallback": False,
-                            "stemsTranscribed": ["bass", "other"],
-                            "notes": [],
-                        }
-                    },
-                ) as analyze_transcription_mock,
-            ):
+            fake_proc = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=mock_result, stderr="",
+            )
+            with patch.object(
+                server.subprocess,
+                "run",
+                return_value=fake_proc,
+            ) as subprocess_mock:
                 server._execute_symbolic_attempt(
                     runtime,
                     {
@@ -2010,15 +2002,15 @@ class StageWorkerTests(unittest.TestCase):
                     },
                 )
 
-            analyze_transcription_mock.assert_called_once()
-            kwargs = analyze_transcription_mock.call_args.kwargs
-            self.assertIn("stem_paths", kwargs)
-            self.assertEqual(set(kwargs["stem_paths"].keys()), {"bass", "other"})
+            subprocess_mock.assert_called_once()
+            call_args = subprocess_mock.call_args
+            cmd = call_args[0][0] if call_args[0] else call_args[1].get("args", [])
+            self.assertIn("--symbolic-only", cmd)
             snapshot = runtime.get_run(created["runId"])
             self.assertEqual(snapshot["stages"]["symbolicExtraction"]["status"], "completed")
             self.assertEqual(
                 snapshot["stages"]["symbolicExtraction"]["result"]["transcriptionMethod"],
-                "stub-backend",
+                "torchcrepe-viterbi",
             )
 
 
