@@ -4214,12 +4214,17 @@ def _extract_torchcrepe_notes(
             return_periodicity=True,
             device=device,
             pad=False,
+            batch_size=512,
         )
 
     pitch = np.asarray(pitch_hz.squeeze(0).detach().cpu().numpy(), dtype=np.float64)
     periodicity_values = np.asarray(
         periodicity.squeeze(0).detach().cpu().numpy(), dtype=np.float64
     )
+    # Free torch tensors immediately — PyTorch's CPU allocator won't
+    # return memory to the OS otherwise.
+    del audio, pitch_hz, periodicity
+    import gc; gc.collect()
     pitch = np.nan_to_num(pitch, nan=0.0, posinf=0.0, neginf=0.0)
     periodicity_values = np.nan_to_num(
         periodicity_values, nan=0.0, posinf=0.0, neginf=0.0
