@@ -264,7 +264,7 @@ class AnalysisRuntimeTests(unittest.TestCase):
             pipeline_key="transcription_stems",
             status="pending",
             step_key="transcription_pending",
-            message="Legacy Basic Pitch transcription is queued for bass and other stems.",
+            message="Torchcrepe transcription is queued for bass and other stems.",
         )
         self.assertIsNotNone(progress)
         self.assertEqual(progress["seq"], 1)

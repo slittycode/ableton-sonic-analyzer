@@ -81,7 +81,7 @@ body {
 
 /* Custom Utilities for Ableton-like UI */
 .font-display {
-  font-family: var(--font-sans); /* Fallback since we removed Space Grotesk */
+  font-family: var(--font-sans);
 }
 
 .ableton-panel {

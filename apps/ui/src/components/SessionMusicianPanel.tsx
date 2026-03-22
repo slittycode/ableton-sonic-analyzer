@@ -73,6 +73,7 @@ function formatSymbolicMethodLabel(transcriptionMethod: string | null | undefine
   if (normalized === 'torchcrepe-viterbi' || normalized === 'torchcrepe') {
     return 'TORCHCREPE';
   }
+  // Defensive fallback for historical analysis data produced before torchcrepe migration
   if (normalized === 'basic-pitch' || normalized === 'basic_pitch' || normalized === 'basic-pitch-legacy') {
     return 'BASIC PITCH (LEGACY)';
   }

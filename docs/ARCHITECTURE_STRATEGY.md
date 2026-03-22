@@ -56,7 +56,7 @@ This means the split is correct and should be maintained: **measure locally, ext
 | Demucs 4.0.1 | 🟡 Frozen — Meta archived Jan 1 2025, adefossez fork is bug-fix only | Stay. Models are excellent and stable. No better alternative at comparable quality. Monitor adefossez fork for compatibility drift. |
 | torchcrepe 0.0.24 | ✅ Active — sole transcription backend, installed and tested | Stay. Replaced basic-pitch (removed). |
 | PENN 1.0.0 | 🔬 Alternative candidate — research-driven, pitch + periodicity co-output | Adds 6 new packages including `huggingface_hub` (downloads models at runtime from HuggingFace). Try only if torchcrepe produces insufficient quality. |
-| librosa 0.11.0 | Ghost dep — confirmed unused in analyze.py | Remove on next venv rebuild. |
+| librosa 0.11.0 | Ghost dep — confirmed unused in analyze.py, still in requirements.txt | Remove on next venv rebuild. |
 | PyTorch 2.10, FastAPI, Pydantic | ✅ Healthy | Stay. |
 
 ---
@@ -107,7 +107,7 @@ The Codex architecture hardening plan (SQLite + job queue + async Phase 2) is th
 - Client-supplied `phase1_json` trust gap (client can tamper with measurements Gemini interprets)
 - Blocking request model unsuitability for Demucs + transcription runtimes
 
-**Ordering constraint:** Basic-pitch removal should happen before or alongside the hardening work. The new job infrastructure should never have to accommodate a broken dependency.
+**Ordering constraint (resolved):** Basic Pitch was removed and torchcrepe is the sole transcription backend. The hardening infrastructure does not carry any legacy symbolic dependencies.
 
 **Ordering constraint:** The Gemini stem-listening experiment (Experiment B) requires server-owned artifact storage to exist first. The hardening plan creates that. Do not attempt Experiment B before the hardening is in place.
 

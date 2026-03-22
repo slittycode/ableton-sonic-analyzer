@@ -9,7 +9,7 @@ This repo contains two entry points:
 
 ## Current Scope
 
-`analyze.py` measures tempo, key, loudness, stereo, rhythm, melody, arrangement, segment-level metrics, chord content, perceptual features, optional Demucs separation, and optional legacy Basic Pitch symbolic extraction.
+`analyze.py` measures tempo, key, loudness, stereo, rhythm, melody, arrangement, segment-level metrics, chord content, perceptual features, optional Demucs separation, and optional torchcrepe symbolic extraction.
 
 `server.py` exposes two custom analysis routes:
 
@@ -24,7 +24,7 @@ FastAPI also serves the usual generated endpoints at `/openapi.json`, `/docs`, a
 - Essentia
 - NumPy
 - Demucs
-- legacy Basic Pitch comparison backend
+- torchcrepe (symbolic extraction)
 - mido
 - FastAPI
 - Uvicorn
@@ -46,7 +46,7 @@ python3.11 -m venv venv
 Bootstrap contract for this monorepo `v1.0.0` cut:
 
 - the pinned full-feature local baseline is Python `3.11.x` on macOS arm64
-- Python `3.12+` is not a supported full-feature bootstrap target on macOS arm64 because the legacy `basic-pitch` backend on Darwin pulls a `tensorflow-macos` / NumPy combination that does not resolve cleanly
+- Python `3.12+` is not a supported full-feature bootstrap target on macOS arm64 because Essentia 2.1b6 wheels are only published for 3.11 on arm64
 
 ## CLI Usage
 
@@ -61,8 +61,8 @@ Bootstrap contract for this monorepo `v1.0.0` cut:
 | Flag | Current behavior |
 | --- | --- |
 | `<audio_file>` | Required input path. |
-| `--separate` | Runs Demucs before melody analysis. If `--transcribe` is also enabled, the legacy Basic Pitch backend uses the `bass` and `other` stems when they exist. |
-| `--transcribe` | Runs the legacy Basic Pitch backend and returns `transcriptionDetail`. Without Demucs it transcribes the full mix; with Demucs it transcribes `bass` and `other` separately and merges the notes. |
+| `--separate` | Runs Demucs before melody analysis. If `--transcribe` is also enabled, the torchcrepe backend uses the `bass` and `other` stems when they exist. |
+| `--transcribe` | Runs the torchcrepe backend and returns `transcriptionDetail`. Without Demucs it transcribes the full mix; with Demucs it transcribes `bass` and `other` separately and merges the notes. |
 | `--fast` | Accepted, but currently a no-op parser stub. |
 | `--yes` | Skips the interactive confirmation prompt after the CLI prints its runtime estimate. |
 
@@ -261,35 +261,7 @@ Compatibility note:
 - `stereoCorrelation`
 - `spectralBalance`
 
-`phase1` also forwards these 17 sections from the raw analyzer payload:
-
-- `stereoDetail`
-- `spectralDetail`
-- `rhythmDetail`
-- `melodyDetail`
-- `transcriptionDetail`
-- `grooveDetail`
-- `sidechainDetail`
-- `effectsDetail`
-- `synthesisCharacter`
-- `danceability`
-- `structure`
-- `arrangementDetail`
-- `segmentLoudness`
-- `segmentSpectral`
-- `segmentKey`
-- `chordDetail`
-- `perceptual`
-
-Raw `analyze.py` fields that are not included in the HTTP `phase1` wrapper today:
-
-- `bpmPercival`
-- `bpmAgreement`
-- `sampleRate`
-- `dynamicSpread`
-- `dynamicCharacter`
-- `segmentStereo`
-- `essentiaFeatures`
+All raw `analyze.py` fields are now forwarded through the server `phase1` wrapper. See `JSON_SCHEMA.md` for the complete list of forwarded sections and scalar fields.
 
 Example:
 

@@ -339,7 +339,7 @@ def analyze_fast(mono: np.ndarray, sample_rate: int) -> dict:
 - Core fields (BPM, key, loudness, stereo, spectral) preserved
 
 **Explicitly Out of Scope:**
-- No fast mode for transcription (Basic Pitch is already the bottleneck)
+- No fast mode for transcription (torchcrepe is already the bottleneck)
 - No fast mode for stem separation (Demucs is already the bottleneck)
 
 ---

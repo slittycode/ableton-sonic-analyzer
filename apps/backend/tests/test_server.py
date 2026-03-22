@@ -280,7 +280,7 @@ class ServerContractTests(unittest.TestCase):
                 },
                 {
                     "key": "transcription_stems",
-                    "label": "Legacy Basic Pitch on bass + other stems",
+                    "label": "Torchcrepe on bass + other stems",
                     "seconds": {"min": 40, "max": 75},
                 },
             ],
@@ -330,7 +330,7 @@ class ServerContractTests(unittest.TestCase):
                 },
                 {
                     "key": "transcription_stems",
-                    "label": "Legacy Basic Pitch on bass + other stems",
+                    "label": "Torchcrepe on bass + other stems",
                     "seconds": {"min": 40, "max": 75},
                 },
             ],

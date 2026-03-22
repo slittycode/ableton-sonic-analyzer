@@ -35,9 +35,8 @@ python3.11 -m venv venv
 ```
 
 - Main runtime dependencies are pinned in `requirements.txt`.
-- Python `3.12+` is not a supported full-feature local bootstrap target on macOS arm64 because the legacy `basic-pitch` backend on Darwin pulls a `tensorflow-macos` / NumPy combination that does not resolve cleanly.
-- `requirements.txt` pins `setuptools<71`. This is a temporary bridge for the legacy `basic-pitch 0.4.0` dependency chain (`resampy 0.4.2` imports `pkg_resources`, which `setuptools>=71` no longer ships as a standalone module). Remove this pin when the legacy backend is retired.
-- For Stage 3 work, treat `BasicPitchBackend` as a legacy comparison backend only. The canonical Layer 2 slot is `TranscriptionBackend`, and new experiments should land there rather than adding new Basic Pitch-specific logic.
+- Python `3.12+` is not a supported full-feature local bootstrap target on macOS arm64 because Essentia 2.1b6 wheels are only published for 3.11 on arm64.
+- Basic Pitch has been removed. The canonical Layer 2 backend is `TorchcrepeBackend` via the `TranscriptionBackend` protocol. New experiments should land as protocol implementations rather than one-off integrations.
 - If audio/DSP imports fail, check local native dependencies before editing code.
 
 ## Main Commands

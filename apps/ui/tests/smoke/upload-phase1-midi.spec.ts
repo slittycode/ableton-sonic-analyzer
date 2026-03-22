@@ -119,7 +119,7 @@ test('phase1 dual-source session musician panel toggles between polyphonic and m
                 },
                 {
                   key: 'transcription_stems',
-                  label: 'Legacy Basic Pitch on bass + other stems',
+                  label: 'Torchcrepe on bass + other stems',
                   lowMs: 40000,
                   highMs: 75000,
                 },

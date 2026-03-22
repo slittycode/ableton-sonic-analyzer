@@ -19,7 +19,6 @@ import sys
 import tempfile
 import warnings
 import wave
-import contextlib
 from collections import Counter
 
 import numpy as np
@@ -2640,7 +2639,7 @@ def analyze_supersaw_detail(
     """Detect detuned sawtooth stacks characteristic of supersaw patches.
 
     Ported from sonic-architect-app/services/supersawDetection.ts.
-    The JS version uses Basic Pitch pitchBend data; in Python we use Essentia
+    The JS version uses pitch bend data; in Python we use Essentia
     SpectralPeaks to find near-unison partials, measure detune spread, and
     check for sawtooth harmonic decay patterns.
     """
@@ -4832,7 +4831,7 @@ def main():
         # Essentia features
         result.update(analyze_essentia_features(mono, sample_rate))
 
-    # Optional Basic Pitch transcription pass
+    # Optional torchcrepe transcription pass
     if run_transcribe:
         transcription_stem_paths = None
         if stems is not None:

@@ -659,25 +659,6 @@ export function mapLegacyToEnhanced(legacyId: string): string[] {
 }
 
 /**
- * Check if a genre ID is an enhanced subgenre.
- */
-export function isEnhancedGenre(id: string): boolean {
-  const legacyIds = [
-    'edm',
-    'hiphop',
-    'rock',
-    'pop',
-    'acoustic',
-    'techno',
-    'house',
-    'ambient',
-    'dnb',
-    'garage',
-  ];
-  return !legacyIds.includes(id) && GENRE_PROFILES.some((p) => p.id === id);
-}
-
-/**
  * Get all available genre IDs.
  */
 export function getAllGenreIds(): string[] {
