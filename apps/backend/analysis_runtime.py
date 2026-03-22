@@ -957,7 +957,7 @@ class AnalysisRuntime:
             conn.execute(
                 """
                 UPDATE measurement_outputs
-                SET status = 'queued', updated_at = ?
+                SET status = 'interrupted', updated_at = ?
                 WHERE status = 'running'
                 """,
                 (now,),
@@ -965,7 +965,7 @@ class AnalysisRuntime:
             conn.execute(
                 """
                 UPDATE symbolic_extraction_attempts
-                SET status = 'queued', updated_at = ?
+                SET status = 'interrupted', updated_at = ?
                 WHERE status = 'running'
                 """,
                 (now,),

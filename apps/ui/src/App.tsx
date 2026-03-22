@@ -1087,7 +1087,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="lg:col-span-8 flex flex-col h-full">
+              <div className="lg:col-span-8 flex flex-col">
                 <div className="bg-bg-surface-dark border border-border border-b-0 rounded-t-sm px-3 py-1.5 flex items-center justify-between">
                   <div className="flex items-center">
                     <span className={`w-2 h-2 rounded-full mr-2 ${audioUrl ? 'bg-success' : 'bg-border'}`}></span>
@@ -1100,7 +1100,7 @@ export default function App() {
                   className="flex-grow bg-bg-card border border-border rounded-b-sm p-4 relative flex flex-col"
                 >
                   {audioUrl && audioFile ? (
-                    <div className="h-full flex flex-col relative z-10 gap-4">
+                    <div className="flex flex-col relative z-10 gap-4">
                       <WaveformPlayer audioUrl={audioUrl} audioFile={audioFile} onAudioElement={handleAudioElement} />
 
                       {shouldShowStatusPanel && (

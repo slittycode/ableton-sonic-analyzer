@@ -70,11 +70,94 @@ def _write_wav_pcm16(path: str, audio: np.ndarray, sample_rate: int) -> None:
         wav_file.writeframes(interleaved.tobytes())
 
 
+def _demucs_chunked_inference(model, mix, device, segment_seconds=7.8, overlap=0.25):
+    """Run Demucs inference in overlapping chunks to bound memory usage.
+
+    Instead of feeding the entire song through the model at once (which
+    requires holding all intermediate activations — easily 10-15 GB for a
+    5-minute track), this processes ~8-second segments with a cross-fade
+    overlap and blends them together.
+
+    Args:
+        model: HDemucs model instance (already on device, eval mode).
+        mix: Tensor of shape [C, T] (stereo waveform at model sample rate).
+        device: torch device string.
+        segment_seconds: Length of each chunk in seconds (default 7.8s,
+            matching the original Demucs default).
+        overlap: Fraction of segment used for cross-fade blending (0.25 = 25%).
+
+    Returns:
+        Tensor of shape [num_sources, C, T].
+    """
+    import torch
+
+    sample_rate = 44100  # HDEMUCS_HIGH_MUSDB_PLUS target rate
+    segment_length = int(segment_seconds * sample_rate)
+    total_length = mix.shape[-1]
+
+    # Short audio — process in one shot (no chunking overhead needed)
+    if total_length <= segment_length:
+        with torch.no_grad():
+            sources = model(mix.unsqueeze(0).to(device))
+        return sources.squeeze(0).cpu()
+
+    overlap_frames = int(segment_length * overlap)
+    stride = segment_length - overlap_frames
+    num_sources = len(model.sources)
+    channels = mix.shape[0]
+
+    # Pre-allocate output and weight buffers
+    out = torch.zeros(num_sources, channels, total_length)
+    weight = torch.zeros(total_length)
+
+    # Triangular cross-fade window for smooth blending
+    ramp = torch.linspace(0, 1, overlap_frames + 2)[1:-1]
+    window = torch.ones(segment_length)
+    window[:overlap_frames] = ramp
+    window[-overlap_frames:] = ramp.flip(0)
+
+    offset = 0
+    chunk_idx = 0
+    while offset < total_length:
+        end = min(offset + segment_length, total_length)
+        chunk = mix[:, offset:end]
+
+        # Pad the last chunk if shorter than segment_length
+        if chunk.shape[-1] < segment_length:
+            pad_amount = segment_length - chunk.shape[-1]
+            chunk = torch.nn.functional.pad(chunk, (0, pad_amount))
+
+        with torch.no_grad():
+            chunk_sources = model(chunk.unsqueeze(0).to(device))  # [1, S, C, seg]
+        chunk_sources = chunk_sources.squeeze(0).cpu()  # [S, C, seg]
+
+        actual_len = end - offset
+        w = window[:actual_len]
+        out[:, :, offset:end] += chunk_sources[:, :, :actual_len] * w
+        weight[offset:end] += w
+
+        del chunk, chunk_sources
+        chunk_idx += 1
+        if chunk_idx % 4 == 0:
+            gc.collect()
+
+        offset += stride
+
+    # Normalize by accumulated weights
+    weight = weight.clamp(min=1e-8)
+    out /= weight
+
+    return out
+
+
 def separate_stems(audio_path: str, output_dir: str | None = None):
     """Run torchaudio Hybrid Demucs separation and return written source stem paths.
 
     Uses torchaudio.pipelines.HDEMUCS_HIGH_MUSDB_PLUS (in-process, no archived
     demucs package dependency).  Falls back gracefully if torchaudio is missing.
+
+    Audio is processed in overlapping ~8-second chunks to keep memory usage
+    bounded (~1-2 GB) regardless of track length.
     """
     try:
         import torch
@@ -106,10 +189,9 @@ def separate_stems(audio_path: str, output_dir: str | None = None):
         if file_sr != target_sr:
             mix = F.resample(mix, file_sr, target_sr)
 
-        print(f"[demucs] separating on {device}...", file=sys.stderr)
-        with torch.no_grad():
-            sources = model(mix.unsqueeze(0).to(device))  # [1, sources, C, T]
-        sources = sources.squeeze(0)  # [sources, C, T]
+        duration_s = mix.shape[-1] / target_sr
+        print(f"[demucs] separating {duration_s:.0f}s on {device} (chunked)...", file=sys.stderr)
+        sources = _demucs_chunked_inference(model, mix, device)
 
         source_names = list(model.sources)
         if len(source_names) == 0:
