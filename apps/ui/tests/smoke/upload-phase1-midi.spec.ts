@@ -4,12 +4,6 @@ import { fileURLToPath } from 'node:url';
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 
-function hasMultipartBoolean(body: string, fieldName: string, expected: boolean): boolean {
-  const normalizedBody = body.replace(/\r?\n/g, '\n');
-  const pattern = new RegExp(`name="${fieldName}"\\n\\n${expected ? 'true' : 'false'}\\n`);
-  return pattern.test(normalizedBody);
-}
-
 function hasMultipartTextField(body: string, fieldName: string, expected: string): boolean {
   const normalizedBody = body.replace(/\r?\n/g, '\n');
   const pattern = new RegExp(`name="${fieldName}"\\n\\n${expected}\\n`);
@@ -89,10 +83,9 @@ async function pressSliderKey(locator: import('@playwright/test').Locator, key: 
 
 test('phase1 dual-source session musician panel toggles between polyphonic and monophonic views', async ({ page }) => {
   await stubGeminiPhase2(page);
-  await page.route('**/api/analyze/estimate', async (route) => {
+  await page.route('**/api/analysis-runs/estimate', async (route) => {
     const body = route.request().postData() ?? '';
-    const transcribeEnabled = hasMultipartBoolean(body, 'transcribe', true);
-    const stemSeparationEnabled = hasMultipartBoolean(body, 'separate', true);
+    const pitchNoteTranslationEnabled = hasMultipartTextField(body, 'pitch_note_mode', 'stem_notes');
 
     await route.fulfill({
       status: 200,
@@ -101,9 +94,9 @@ test('phase1 dual-source session musician panel toggles between polyphonic and m
         requestId: 'req_estimate_smoke_midi_001',
         estimate: {
           durationSeconds: 214.6,
-          totalLowMs: transcribeEnabled && stemSeparationEnabled ? 107000 : 22000,
-          totalHighMs: transcribeEnabled && stemSeparationEnabled ? 203000 : 38000,
-          stages: transcribeEnabled && stemSeparationEnabled
+          totalLowMs: pitchNoteTranslationEnabled ? 107000 : 22000,
+          totalHighMs: pitchNoteTranslationEnabled ? 203000 : 38000,
+          stages: pitchNoteTranslationEnabled
             ? [
                 {
                   key: 'local_dsp',
@@ -357,23 +350,25 @@ test('phase1 dual-source session musician panel toggles between polyphonic and m
   await page.goto('/', { waitUntil: 'networkidle' });
   const fixturePath = path.resolve(testDir, './fixtures/silence.wav');
   await page.setInputFiles('#audio-upload', fixturePath);
-  await expect(page.getByLabel('PITCH/NOTE EXTRACTION')).toBeChecked();
-  await page.getByRole('button', { name: /Initiate Analysis/i }).click();
+  await expect(page.getByLabel('PITCH/NOTE TRANSLATION')).toBeChecked();
+  await page.getByRole('button', { name: /Run Analysis/i }).click();
 
   const panel = page.locator('section').filter({ hasText: /SESSION MUSICIAN/i }).first();
 
   await expect(page.getByText('Analysis Results')).toBeVisible();
   await expect(panel.getByRole('heading', { name: /SESSION MUSICIAN/i }).first()).toBeVisible();
-  await expect(panel.getByText('Pitch/Note notes and melody guide')).toBeVisible();
+  await expect(panel.getByText('Pitch detection and melody guide')).toBeVisible();
   await expect(panel.getByRole('button', { name: 'PITCH/NOTE' })).toBeVisible();
   await expect(panel.getByRole('button', { name: 'MELODY' })).toBeVisible();
-  await expect(panel.getByText('SOURCE: BASIC PITCH LEGACY').first()).toBeVisible();
+  await expect(panel.getByText('PITCH/NOTE: TORCHCREPE').first()).toBeVisible();
   await expect(panel.getByText('Range: C3 - G4')).toHaveCount(1);
   await expect(panel.getByText('Confidence: 83%')).toHaveCount(1);
   await expect(panel.getByText('2 / 2 NOTES')).toBeVisible();
   await expect(panel.getByText('STEM-AWARE')).toBeVisible();
-  await expect(panel.getByText('STEMS: bass, other')).toBeVisible();
-  await expect(panel.getByText('BASIC PITCH LEGACY pitch/note notes')).toBeVisible();
+  await expect(panel.getByText('STEMS:')).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'bass' })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'other' })).toBeVisible();
+  await expect(panel.getByText(/TORCHCREPE pitch detection/)).toBeVisible();
   const previewButton = panel.getByRole('button', { name: /Preview/i });
   const downloadButton = panel.getByRole('button', { name: /Download \.mid/i });
   await expect(previewButton).toBeVisible();
@@ -403,10 +398,10 @@ test('phase1 dual-source session musician panel toggles between polyphonic and m
   expect(download.suggestedFilename()).toBe('track-analysis.mid');
 
   await panel.getByRole('button', { name: 'MELODY' }).click();
-  await expect(panel.getByText('SOURCE: ESSENTIA MELODY').first()).toBeVisible();
-  await expect(panel.getByText('Monophonic melody guide via Essentia')).toBeVisible();
+  await expect(panel.getByText('MELODY GUIDE: ESSENTIA').first()).toBeVisible();
+  await expect(panel.getByText(/Monophonic melody guide via Essentia/)).toBeVisible();
   await expect(panel.getByText('STEM-AWARE')).toHaveCount(0);
-  await expect(panel.getByText('STEMS: bass, other')).toHaveCount(0);
+  await expect(panel.getByText('STEMS:')).toHaveCount(0);
   await expect(panel.getByText('3 NOTES')).toBeVisible();
   await expect(panel.getByText('3 / 3 NOTES')).toHaveCount(0);
   await expect(panel.getByText('Per-note confidence not available in melody-guide mode')).toBeVisible();
@@ -415,10 +410,10 @@ test('phase1 dual-source session musician panel toggles between polyphonic and m
   await expect(confidenceSlider).toHaveValue('0.8');
 
   await panel.getByRole('button', { name: 'PITCH/NOTE' }).click();
-  await expect(panel.getByText('SOURCE: BASIC PITCH LEGACY').first()).toBeVisible();
-  await expect(panel.getByText('BASIC PITCH LEGACY pitch/note notes')).toBeVisible();
+  await expect(panel.getByText('PITCH/NOTE: TORCHCREPE').first()).toBeVisible();
+  await expect(panel.getByText(/TORCHCREPE pitch detection/)).toBeVisible();
   await expect(panel.getByText('STEM-AWARE')).toBeVisible();
-  await expect(panel.getByText('STEMS: bass, other')).toBeVisible();
+  await expect(panel.getByText('STEMS:')).toBeVisible();
   await expect(panel.getByText('1 / 2 NOTES')).toBeVisible();
   await expect(confidenceSlider).toBeEnabled();
   await expect(confidenceSlider).toHaveValue('0.8');
@@ -432,7 +427,7 @@ test('phase1 dual-source session musician panel toggles between polyphonic and m
 
 test('missing melodyDetail shows MIDI unavailable state', async ({ page }) => {
   await stubGeminiPhase2(page);
-  await page.route('**/api/analyze/estimate', async (route) => {
+  await page.route('**/api/analysis-runs/estimate', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -610,10 +605,10 @@ test('missing melodyDetail shows MIDI unavailable state', async ({ page }) => {
   await page.goto('/', { waitUntil: 'networkidle' });
   const fixturePath = path.resolve(testDir, './fixtures/silence.wav');
   await page.setInputFiles('#audio-upload', fixturePath);
-  await page.getByRole('button', { name: /Initiate Analysis/i }).click();
+  await page.getByRole('button', { name: /Run Analysis/i }).click();
 
   const panel = page.locator('section').filter({ hasText: /SESSION MUSICIAN/i }).first();
-  await expect(panel.locator('p').filter({ hasText: 'PITCH/NOTE NOTES UNAVAILABLE' })).toBeVisible();
+  await expect(panel.locator('p').filter({ hasText: 'PITCH & MELODY UNAVAILABLE' })).toBeVisible();
   await expect(
     panel.getByText('Run with pitch/note translation enabled, or ensure melodyDetail is present in the DSP payload for a melody guide'),
   ).toBeVisible();

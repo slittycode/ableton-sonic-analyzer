@@ -14,7 +14,6 @@ BACKEND_URL="http://127.0.0.1:${BACKEND_PORT}"
 UI_ENV_KEYS=(
   VITE_API_BASE_URL
   VITE_ENABLE_PHASE2_GEMINI
-  VITE_GEMINI_API_KEY
   DISABLE_HMR
 )
 
@@ -150,8 +149,9 @@ paths = payload.get("paths") or {}
 
 if (
     info.get("title") == "Sonic Analyzer Local API"
-    and "/api/analyze" in paths
-    and "/api/analyze/estimate" in paths
+    and "/api/analysis-runs/estimate" in paths
+    and "/api/analysis-runs" in paths
+    and "/api/analysis-runs/{run_id}" in paths
 ):
     sys.exit(0)
 

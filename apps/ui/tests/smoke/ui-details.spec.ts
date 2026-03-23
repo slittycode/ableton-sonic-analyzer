@@ -53,7 +53,7 @@ function fixturePath(): string {
 
 function stubRoutes(page: import('@playwright/test').Page) {
   return Promise.all([
-    page.route('**/api/analyze/estimate', async (route) => {
+    page.route('**/api/analysis-runs/estimate', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -209,7 +209,7 @@ test('CPU indicator bar is visible in the header', async ({ page }) => {
 });
 
 test('CPU indicator animates during analysis', async ({ page }) => {
-  await page.route('**/api/analyze/estimate', async (route) => {
+  await page.route('**/api/analysis-runs/estimate', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -352,7 +352,7 @@ test('CPU indicator animates during analysis', async ({ page }) => {
 
   await page.goto('/', { waitUntil: 'networkidle' });
   await page.setInputFiles('#audio-upload', fixturePath());
-  await page.getByRole('button', { name: /Initiate Analysis/i }).click();
+  await page.getByRole('button', { name: /Run Analysis/i }).click();
 
   await expect(page.getByText('CPU')).toBeVisible();
 
@@ -366,7 +366,7 @@ test('diagnostic log shows SUCCESS badge and model info after analysis', async (
   await stubRoutes(page);
   await page.goto('/', { waitUntil: 'networkidle' });
   await page.setInputFiles('#audio-upload', fixturePath());
-  await page.getByRole('button', { name: /Initiate Analysis/i }).click();
+  await page.getByRole('button', { name: /Run Analysis/i }).click();
 
   await expect(page.getByText('Analysis Results')).toBeVisible();
   await expect(page.getByText('System Diagnostics')).toBeVisible();
@@ -386,7 +386,7 @@ test('top metric cards show TEMPO, KEY SIG, METER, CHARACTER after analysis', as
   await stubRoutes(page);
   await page.goto('/', { waitUntil: 'networkidle' });
   await page.setInputFiles('#audio-upload', fixturePath());
-  await page.getByRole('button', { name: /Initiate Analysis/i }).click();
+  await page.getByRole('button', { name: /Run Analysis/i }).click();
 
   await expect(page.getByText('Analysis Results')).toBeVisible();
 
@@ -410,7 +410,7 @@ test('JSON_DATA and REPORT_MD buttons are visible after analysis', async ({ page
   await stubRoutes(page);
   await page.goto('/', { waitUntil: 'networkidle' });
   await page.setInputFiles('#audio-upload', fixturePath());
-  await page.getByRole('button', { name: /Initiate Analysis/i }).click();
+  await page.getByRole('button', { name: /Run Analysis/i }).click();
 
   await expect(page.getByText('Analysis Results')).toBeVisible();
   await expect(page.getByRole('button', { name: /JSON_DATA/i })).toBeVisible();
@@ -421,7 +421,7 @@ test('diagnostic log can be collapsed and expanded via toggle button', async ({ 
   await stubRoutes(page);
   await page.goto('/', { waitUntil: 'networkidle' });
   await page.setInputFiles('#audio-upload', fixturePath());
-  await page.getByRole('button', { name: /Initiate Analysis/i }).click();
+  await page.getByRole('button', { name: /Run Analysis/i }).click();
 
   await expect(page.getByText('Analysis Results')).toBeVisible();
 
@@ -449,7 +449,7 @@ test('diagnostic log entry count is shown in toggle header', async ({ page }) =>
   await stubRoutes(page);
   await page.goto('/', { waitUntil: 'networkidle' });
   await page.setInputFiles('#audio-upload', fixturePath());
-  await page.getByRole('button', { name: /Initiate Analysis/i }).click();
+  await page.getByRole('button', { name: /Run Analysis/i }).click();
 
   await expect(page.getByText('Analysis Results')).toBeVisible();
 

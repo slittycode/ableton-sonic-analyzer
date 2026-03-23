@@ -11,7 +11,7 @@ ASA is a local audio analysis tool for music producers. It analyzes audio files 
 The system follows a **three-layer hybrid architecture** that separates deterministic measurement from AI interpretation:
 
 1. **Measurement is authoritative** - DSP results from Essentia are the system's ground truth
-2. **Symbolic extraction is best-effort** - Monophonic pitch tracking on separated stems, honest about uncertainty
+2. **Pitch/note translation is best-effort** - Monophonic pitch tracking on separated stems, honest about uncertainty
 3. **Interpretation is contextual** - Gemini provides musical insights grounded in measurements, not replacements for them
 
 This split exists because frontier audio-language models (as of early 2026) still degrade on measurement tasks like BPM estimation and key detection. The hybrid approach leverages the strengths of each layer.
@@ -26,7 +26,7 @@ This split exists because frontier audio-language models (as of early 2026) stil
 └─────────────────────────────────────────────────────────────────┘
                               ↓
 ┌─────────────────────────────────────────────────────────────────┐
-│  LAYER 2 — SYMBOLIC EXTRACTION (torchcrepe/PENN)               │
+│  LAYER 2 — PITCH/NOTE TRANSLATION (torchcrepe/PENN)            │
 │  Best-effort monophonic pitch on Demucs stems                  │
 │  Bass + Other stems → MIDI notes with confidence               │
 └─────────────────────────────────────────────────────────────────┘
@@ -335,9 +335,9 @@ Backend allows these origins:
 ### Local Development Only
 
 Current quality bar is for local development. Do not present as production-ready security until:
-- Gemini access is moved out of browser bundle (if applicable)
 - Proper authentication is implemented
 - Input validation is hardened
+- Database and artifact storage move beyond the local machine
 
 ## Environment Configuration
 
@@ -351,9 +351,6 @@ VITE_API_BASE_URL="http://127.0.0.1:8100"
 
 # Enable Phase 2 Gemini features
 VITE_ENABLE_PHASE2_GEMINI="true"
-
-# For direct Gemini access (if implemented)
-VITE_GEMINI_API_KEY="your_key_here"
 
 # Disable HMR for testing
 DISABLE_HMR="true"
@@ -379,7 +376,7 @@ VITE_API_BASE_URL=http://127.0.0.1:8100
 # Live Gemini smoke tests
 RUN_GEMINI_LIVE_SMOKE=true
 VITE_ENABLE_PHASE2_GEMINI=true
-VITE_GEMINI_API_KEY=your_key_here
+GEMINI_API_KEY=your_key_here
 ```
 
 ## Network Configuration
@@ -395,9 +392,11 @@ VITE_GEMINI_API_KEY=your_key_here
 
 Backend exposes:
 
-- `POST /api/analyze/estimate` - Get runtime estimate
-- `POST /api/analyze` - Run full analysis
-- `POST /api/phase2` - Gemini interpretation
+- `POST /api/analysis-runs/estimate` - Get the canonical runtime estimate
+- `POST /api/analysis-runs` - Create a staged analysis run
+- `GET /api/analysis-runs/{run_id}` - Poll the canonical run snapshot
+- `POST /api/analyze` - Legacy compatibility wrapper for full analysis
+- `POST /api/phase2` - Legacy compatibility wrapper for Gemini interpretation
 - `GET /openapi.json` - OpenAPI schema
 - `GET /docs` - Swagger UI
 - `GET /redoc` - ReDoc documentation
@@ -442,7 +441,7 @@ For detailed information specific to each app, see:
 
 3. **Contract Boundaries**:
    - Measurement result is authoritative
-   - Symbolic transcription is injected from symbolic stage (not copied from measurement)
+   - Pitch/note transcription is injected from pitch/note translation stage (not copied from measurement)
    - UI/backend contract is strict and strongly typed
 
 4. **Before Structural Changes**: Read `docs/ARCHITECTURE_STRATEGY.md` first. It contains the reasoning behind the current design and planned experiments.

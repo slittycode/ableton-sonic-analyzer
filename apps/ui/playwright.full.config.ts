@@ -26,7 +26,6 @@ export default defineConfig({
       ...process.env,
       VITE_API_BASE_URL: fullBackendUrl,
       VITE_ENABLE_PHASE2_GEMINI: process.env.VITE_ENABLE_PHASE2_GEMINI ?? '',
-      VITE_GEMINI_API_KEY: process.env.VITE_GEMINI_API_KEY ?? '',
     },
     url: fullBaseUrl,
     reuseExistingServer: false,

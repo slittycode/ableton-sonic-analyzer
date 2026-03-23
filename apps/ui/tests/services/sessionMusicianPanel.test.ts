@@ -373,7 +373,7 @@ describe('SessionMusicianPanel confidence helpers', () => {
       }),
     );
 
-    expect(html).toContain('SOURCE: ESSENTIA MELODY');
+    expect(html).toContain('MELODY GUIDE: ESSENTIA');
     expect(html).not.toContain('STEM-AWARE');
     expect(html).not.toContain('STEMS: bass, other');
     expect(html).toContain('Per-note confidence not available in melody-guide mode');

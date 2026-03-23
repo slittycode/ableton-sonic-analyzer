@@ -74,7 +74,7 @@ TEST_FLAC_PATH=/path/to/track.flac VITE_API_BASE_URL=http://127.0.0.1:8100 npm r
 - Live Gemini smoke:
 
 ```bash
-RUN_GEMINI_LIVE_SMOKE=true VITE_ENABLE_PHASE2_GEMINI=true VITE_GEMINI_API_KEY=your_key_here VITE_API_BASE_URL=http://127.0.0.1:8100 npm run test:smoke:live-gemini
+RUN_GEMINI_LIVE_SMOKE=true VITE_ENABLE_PHASE2_GEMINI=true GEMINI_API_KEY=your_key_here VITE_API_BASE_URL=http://127.0.0.1:8100 npm run test:smoke:live-gemini
 ```
 
 ## Testing Expectations
@@ -139,8 +139,8 @@ RUN_GEMINI_LIVE_SMOKE=true VITE_ENABLE_PHASE2_GEMINI=true VITE_GEMINI_API_KEY=yo
 
 ## Backend Contract Rules
 
-- The app expects `POST /api/analyze/estimate` and `POST /api/analyze`.
-- `src/types.ts` and `src/services/backendPhase1Client.ts` are the frontend source of truth for the response contract.
+- The app expects `POST /api/analysis-runs/estimate`, `POST /api/analysis-runs`, and `GET /api/analysis-runs/{run_id}`.
+- `src/types.ts`, `src/services/analysisRunsClient.ts`, and `src/services/backendPhase1Client.ts` are the frontend source of truth for the response contract.
 - The UI depends on `phase1`, `diagnostics`, and stable error envelopes.
 - Do not assume the backend returns every raw analyzer field; `server.py` exposes a normalized subset.
 - If you change frontend expectations, verify they still match backend docs and tests.

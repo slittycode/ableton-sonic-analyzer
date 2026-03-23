@@ -17,6 +17,8 @@ class RootE2EScriptTests(unittest.TestCase):
         self.repo_root = Path(__file__).resolve().parents[3]
         self.temp_dir = tempfile.TemporaryDirectory(prefix="sonic_root_e2e_script_")
         self.workspace = Path(self.temp_dir.name) / "repo"
+        self.track_path = Path(self.temp_dir.name) / "reference-track.flac"
+        self.track_path.write_bytes(b"fLaC")
 
         (self.workspace / "scripts").mkdir(parents=True, exist_ok=True)
         (self.workspace / "apps" / "backend" / "venv" / "bin").mkdir(parents=True, exist_ok=True)
@@ -48,23 +50,42 @@ class RootE2EScriptTests(unittest.TestCase):
     def test_requires_phase2_flag_before_running(self) -> None:
         completed = self._run_script(
             {
-                "VITE_GEMINI_API_KEY": "AIzaSy-valid-key",
+                "TEST_FLAC_PATH": str(self.track_path),
+                "GEMINI_API_KEY": "AIzaSy-valid-key",
             }
         )
 
         self.assertNotEqual(completed.returncode, 0)
         self.assertIn("VITE_ENABLE_PHASE2_GEMINI must be set to true", completed.stderr)
 
-    def test_requires_non_placeholder_gemini_key(self) -> None:
+    def test_requires_track_path_before_running(self) -> None:
         completed = self._run_script(
             {
                 "VITE_ENABLE_PHASE2_GEMINI": "true",
-                "VITE_GEMINI_API_KEY": "your_real_key_here",
+                "GEMINI_API_KEY": "AIzaSy-valid-key",
             }
         )
 
         self.assertNotEqual(completed.returncode, 0)
-        self.assertIn("VITE_GEMINI_API_KEY must be set to a real Gemini API key", completed.stderr)
+        self.assertIn("TEST_FLAC_PATH must point to a readable audio file", completed.stderr)
+
+    def test_requires_non_placeholder_backend_gemini_key(self) -> None:
+        completed = self._run_script(
+            {
+                "TEST_FLAC_PATH": str(self.track_path),
+                "VITE_ENABLE_PHASE2_GEMINI": "true",
+                "GEMINI_API_KEY": "your_real_key_here",
+            }
+        )
+
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("GEMINI_API_KEY must be set to a real Gemini API key", completed.stderr)
+
+    def test_script_verifies_canonical_analysis_run_routes(self) -> None:
+        script_text = (self.workspace / "scripts" / "test-e2e.sh").read_text(encoding="utf-8")
+        self.assertIn("/api/analysis-runs/estimate", script_text)
+        self.assertIn("/api/analysis-runs", script_text)
+        self.assertIn("/api/analysis-runs/{run_id}", script_text)
 
 
 if __name__ == "__main__":

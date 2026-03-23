@@ -1,0 +1,44 @@
+<h2>Phase 5: Which Enhancements?</h2>
+<p class="subtitle">Select the items you want in scope. Click multiple to build your shortlist.</p>
+
+<div class="options" data-multiselect>
+  <div class="option" data-choice="cqt" onclick="toggleSelect(this)">
+    <div class="letter">1</div>
+    <div class="content">
+      <h3>CQT Spectrogram</h3>
+      <p>Log-frequency spectrogram aligned to musical pitch. 84 bins across 7 octaves. Third tab alongside Mel and Chroma in SpectrogramViewer. Best for seeing musical pitch content &mdash; notes line up on evenly-spaced rows instead of being compressed at the bottom like mel.</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="hpss" onclick="toggleSelect(this)">
+    <div class="letter">2</div>
+    <div class="content">
+      <h3>HPSS Views</h3>
+      <p>Harmonic/percussive source separation via librosa. Produces two spectrograms: one showing sustained tonal content, one showing transient/rhythmic content. Lightweight alternative to Demucs for visual analysis only. Adds ~2-3 sec generation time.</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="onset" onclick="toggleSelect(this)">
+    <div class="letter">3</div>
+    <div class="content">
+      <h3>Onset-Strength Overlay</h3>
+      <p>Transient activity curve computed from spectral flux. Can be rendered as a time-series line on the SpectralEvolutionChart, or as a semi-transparent overlay on spectrograms. Highlights kick/snare/hat attacks, arrangement transitions, and rhythmic density changes.</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="chroma-interactive" onclick="toggleSelect(this)">
+    <div class="letter">4</div>
+    <div class="content">
+      <h3>Interactive Chroma Heatmap</h3>
+      <p>Canvas-rendered chroma replacing the static PNG. Zoom, scrub, and hover for detailed harmonic analysis. Reference implementation exists in sonic-architect-app's SpectralHeatmap.tsx. Shows 12 pitch classes over time with arrangement section overlays.</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="tonnetz" onclick="toggleSelect(this)">
+    <div class="letter">5</div>
+    <div class="content">
+      <h3>Tonnetz</h3>
+      <p>6-dimensional tonal centroid features showing harmonic relationships over time. Captures fifths, minor thirds, and major thirds as continuous coordinates. Niche &mdash; most useful for harmonic analysis of melodic/chordal material. Less meaningful for percussion-heavy electronic music.</p>
+    </div>
+  </div>
+</div>

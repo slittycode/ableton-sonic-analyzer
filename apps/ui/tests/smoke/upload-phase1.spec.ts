@@ -5,7 +5,9 @@ import { fileURLToPath } from 'node:url';
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 
 async function stubEstimateRoute(page: import('@playwright/test').Page) {
-  await page.route('**/api/analyze/estimate', async (route) => {
+  let hits = 0;
+  await page.route('**/api/analysis-runs/estimate', async (route) => {
+    hits += 1;
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -20,6 +22,7 @@ async function stubEstimateRoute(page: import('@playwright/test').Page) {
       }),
     });
   });
+  return () => hits;
 }
 
 const PHASE2_STUB = {
@@ -44,7 +47,7 @@ const PHASE2_STUB = {
 };
 
 test('upload + backend phase1 success renders analysis results', async ({ page }) => {
-  await stubEstimateRoute(page);
+  const getEstimateHits = await stubEstimateRoute(page);
 
   await page.route('**/api/analysis-runs', async (route) => {
     if (route.request().method() !== 'POST') {
@@ -190,9 +193,10 @@ test('upload + backend phase1 success renders analysis results', async ({ page }
 
   const fixturePath = path.resolve(testDir, './fixtures/silence.wav');
   await page.setInputFiles('#audio-upload', fixturePath);
+  await expect.poll(() => getEstimateHits()).toBe(1);
 
-  await expect(page.getByRole('button', { name: /Initiate Analysis/i })).toBeVisible();
-  await page.getByRole('button', { name: /Initiate Analysis/i }).click();
+  await expect(page.getByRole('button', { name: /Run Analysis/i })).toBeVisible();
+  await page.getByRole('button', { name: /Run Analysis/i }).click();
 
   await expect(page.getByText('Analysis Results')).toBeVisible();
   await expect(page.getByText('System Diagnostics')).toBeVisible();

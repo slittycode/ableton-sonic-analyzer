@@ -18,7 +18,7 @@ ABSOLUTE RULES:
    - chordStrength below 0.70 = chords approximate
    - pumpingConfidence below 0.40 = do not assert sidechain
    - segmentKey from segments shorter than 10s = low confidence
-6. When OPTIONAL_SYMBOLIC_EXTRACTION_RESULT_JSON is present, treat it as best-effort note scaffolding only. It is not authoritative measurement.
+6. When OPTIONAL_PITCH_NOTE_TRANSLATION_RESULT_JSON is present, treat it as best-effort note scaffolding only. It is not authoritative measurement.
 7. If pitch/note translation was stem-aware, treat bass stem notes and other stem notes as separate layers. Do not silently merge them into one claimed source of truth.
 8. Use pitch/note translation only for note-name suggestions, register hints, and rhythmic scaffolding. Never let it override BPM, key, meter, loudness, or arrangement timing from the measurement JSON.
 9. For measured values, the JSON is authoritative. For genre identification only, audio perception is authoritative.

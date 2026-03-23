@@ -187,6 +187,7 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
   const [sourceMode, setSourceMode] = useState<"polyphonic" | "monophonic">("polyphonic");
   const [confidenceThreshold, setConfidenceThreshold] = useState(0.2);
   const [quantizeOptions, setQuantizeOptions] = useState<QuantizeOptions>({ grid: 'off', swing: 0 });
+  const [activeStemFilter, setActiveStemFilter] = useState<string | null>(null);
   const hasTranscription = !!transcriptionDetail?.noteCount && transcriptionDetail.noteCount > 0;
   const hasMelody = !!melodyDetail?.notes?.length;
   const canToggle = hasTranscription && hasMelody;
@@ -198,9 +199,19 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
         ? 'monophonic'
         : 'none';
 
+  useEffect(() => {
+    if (activeSource !== 'polyphonic') {
+      setActiveStemFilter(null);
+    }
+  }, [activeSource]);
+
   const activeNotes = useMemo<MidiDisplayNote[]>(() => {
     if (activeSource === 'polyphonic' && transcriptionDetail?.notes?.length) {
-      return transcriptionDetail.notes.map((note) => ({
+      let notes = transcriptionDetail.notes;
+      if (activeStemFilter) {
+        notes = notes.filter((note) => note.stemSource === activeStemFilter);
+      }
+      return notes.map((note) => ({
         midi: note.pitchMidi,
         name: note.pitchName,
         startTime: note.onsetSeconds,
@@ -222,7 +233,7 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
     }
 
     return [];
-  }, [activeSource, melodyDetail, transcriptionDetail]);
+  }, [activeSource, activeStemFilter, melodyDetail, transcriptionDetail]);
 
   const filteredNotes = useMemo(() => {
     if (activeSource === 'polyphonic') {
@@ -330,15 +341,15 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
         : false;
   const sourceBadgeLabel =
     activeSource === 'polyphonic'
-      ? `SOURCE: ${formatPitchNoteMethodLabel(transcriptionDetail?.transcriptionMethod)}`
+      ? `PITCH/NOTE: ${formatPitchNoteMethodLabel(transcriptionDetail?.transcriptionMethod)}`
       : activeSource === 'monophonic'
-        ? 'SOURCE: ESSENTIA MELODY'
+        ? 'MELODY GUIDE: ESSENTIA'
         : null;
   const { transcriptionPathLabel, stemSourcesLabel } = deriveTranscriptionProvenance(activeSource, transcriptionDetail);
   const melodyIsApproximate = !!melodyDetail && (melodyDetail.pitchConfidence ?? 1) <= 0.15;
 
   return (
-    <section className="space-y-4">
+    <section data-testid="session-musician-panel" className="space-y-4">
       <div className="flex items-center justify-between border-b border-border pb-2">
         <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
           <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
@@ -353,7 +364,7 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
             </span>
           )}
         </h2>
-        <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">PITCH/NOTE NOTES</span>
+        <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">PITCH & MELODY</span>
       </div>
 
       <div className="bg-bg-card border border-border rounded-sm p-4 space-y-4">
@@ -365,7 +376,7 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
             <div>
               <h3 className="text-sm font-semibold uppercase tracking-wider">SESSION MUSICIAN</h3>
               <p className="text-[10px] font-mono uppercase tracking-widest text-text-secondary opacity-70">
-                Pitch/Note notes and melody guide
+                Pitch detection and melody guide
               </p>
             </div>
           </div>
@@ -429,7 +440,7 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
             {activeSource === 'none' && (
               <div className="border border-border rounded-sm px-3 py-2 bg-bg-panel/40 space-y-1">
                 <p className="text-[11px] font-mono text-text-secondary uppercase tracking-wide">
-                  PITCH/NOTE NOTES UNAVAILABLE
+                  PITCH & MELODY UNAVAILABLE
                 </p>
                 <p className="text-[10px] font-mono text-text-secondary/80">
                   Run with pitch/note translation enabled, or ensure melodyDetail is present in the DSP payload for a melody guide
@@ -469,9 +480,30 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
                       {transcriptionPathLabel}
                     </span>
                     {stemSourcesLabel && (
-                      <span className="px-2 py-1 rounded border border-border bg-bg-panel/40">
-                        STEMS: {stemSourcesLabel}
-                      </span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] font-mono uppercase text-text-secondary mr-1">STEMS:</span>
+                        {transcriptionDetail!.stemsTranscribed.map((stem) => (
+                          <button
+                            key={stem}
+                            onClick={() => setActiveStemFilter((prev) => (prev === stem ? null : stem))}
+                            className={`px-2 py-1 rounded border text-[10px] font-mono uppercase transition-colors ${
+                              activeStemFilter === stem
+                                ? 'border-accent text-accent bg-accent/10'
+                                : 'border-border bg-bg-panel/40 text-text-secondary hover:text-text-primary hover:border-border'
+                            }`}
+                          >
+                            {stem}
+                          </button>
+                        ))}
+                        {activeStemFilter && (
+                          <button
+                            onClick={() => setActiveStemFilter(null)}
+                            className="px-2 py-1 rounded border border-border bg-bg-panel/40 text-[10px] font-mono uppercase text-text-secondary hover:text-text-primary transition-colors"
+                          >
+                            ALL
+                          </button>
+                        )}
+                      </div>
                     )}
                     {transcriptionDetail?.fullMixFallback && (
                       <span className="px-2 py-1 rounded border border-warning/30 text-warning bg-warning/10">
@@ -584,10 +616,10 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
               <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
               <span title="Session musician transcription details">
                 {activeSource === 'polyphonic'
-                  ? `${formatPitchNoteMethodLabel(transcriptionDetail?.transcriptionMethod)} pitch/note notes. Adjust quantize before preview/export. Adjust confidence threshold to filter noise before export.`
+                  ? `${formatPitchNoteMethodLabel(transcriptionDetail?.transcriptionMethod)} pitch detection. Adjust quantize before preview/export. Adjust confidence threshold to filter noise before export.`
                   : activeSource === 'monophonic'
                     ? 'Monophonic melody guide via Essentia. Adjust quantize before preview/export. Per-note confidence not available in melody-guide mode.'
-                    : 'Pitch/Note notes unavailable until pitch/note translation or melodyDetail is present in the DSP payload.'}
+                    : 'Pitch detection unavailable until pitch/note translation or melodyDetail is present in the DSP payload.'}
                 {isDraft ? ' Confidence is low, so treat this clip as a draft scaffold.' : ''}
               </span>
             </div>

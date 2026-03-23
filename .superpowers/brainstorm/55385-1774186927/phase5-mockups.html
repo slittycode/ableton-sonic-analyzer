@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phase 5 — Spectral Enhancements</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #1a1a1e; color: #e4e4e7; font-family: ui-monospace, 'SF Mono', monospace; padding: 24px; }
+  h1 { font-size: 18px; font-weight: 700; margin-bottom: 6px; color: #fafafa; }
+  .subtitle { font-size: 12px; color: #71717a; margin-bottom: 32px; }
+  .enhancement { margin-bottom: 40px; border: 1px solid #2a2a2e; border-radius: 4px; overflow: hidden; background: #09090b; }
+  .enhancement:hover { border-color: #3a3a3e; }
+  .enh-header { padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #2a2a2e; }
+  .enh-num { font-size: 10px; color: #71717a; text-transform: uppercase; letter-spacing: 0.1em; }
+  .enh-title { font-size: 14px; font-weight: 600; color: #fafafa; }
+  .enh-badge { font-size: 9px; padding: 2px 8px; border-radius: 2px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .badge-low { background: #1a3a1a; color: #4ade80; }
+  .badge-med { background: #3a3a1a; color: #facc15; }
+  .badge-high { background: #3a1a1a; color: #f87171; }
+  .enh-body { padding: 16px; }
+  .enh-desc { font-size: 11px; color: #a1a1aa; margin-bottom: 12px; line-height: 1.5; }
+  canvas { width: 100%; border-radius: 2px; display: block; }
+  .label-row { display: flex; gap: 12px; margin-top: 8px; flex-wrap: wrap; }
+  .label-tag { font-size: 9px; padding: 2px 6px; border-radius: 2px; background: #1a1a2e; color: #818cf8; border: 1px solid #2a2a3e; }
+</style>
+</head>
+<body>
+
+<h1>Phase 5 — Spectral Enhancement Mockups</h1>
+<p class="subtitle">What each feature would look like in the Spectral section. Synthetic data for illustration.</p>
+
+<!-- 1. CQT Spectrogram -->
+<div class="enhancement">
+  <div class="enh-header">
+    <div><span class="enh-num">01 </span><span class="enh-title">CQT Spectrogram</span></div>
+    <span class="enh-badge badge-low">Low effort</span>
+  </div>
+  <div class="enh-body">
+    <div class="enh-desc">Log-frequency spectrogram where each row is a musical semitone. Notes appear as evenly-spaced horizontal bands instead of being compressed at the bottom like mel. 84 bins = 7 octaves (C1–B7).</div>
+    <canvas id="cqt" height="180"></canvas>
+    <div class="label-row">
+      <span class="label-tag">C1</span><span class="label-tag">C2</span><span class="label-tag">C3</span><span class="label-tag">C4</span><span class="label-tag">C5</span><span class="label-tag">C6</span><span class="label-tag">C7</span>
+    </div>
+  </div>
+</div>
+
+<!-- 2. HPSS -->
+<div class="enhancement">
+  <div class="enh-header">
+    <div><span class="enh-num">02 </span><span class="enh-title">HPSS — Harmonic / Percussive Split</span></div>
+    <span class="enh-badge badge-med">Medium effort</span>
+  </div>
+  <div class="enh-body">
+    <div class="enh-desc">Same audio, two views. Left: sustained tonal content (pads, bass, vocals). Right: transient hits (kicks, snares, hats). Quick visual separation without running Demucs.</div>
+    <div style="display:flex;gap:8px;">
+      <div style="flex:1">
+        <div style="font-size:9px;color:#71717a;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.1em;">Harmonic</div>
+        <canvas id="hpss-h" height="140"></canvas>
+      </div>
+      <div style="flex:1">
+        <div style="font-size:9px;color:#71717a;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.1em;">Percussive</div>
+        <canvas id="hpss-p" height="140"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 3. Onset Strength -->
+<div class="enhancement">
+  <div class="enh-header">
+    <div><span class="enh-num">03 </span><span class="enh-title">Onset-Strength Overlay</span></div>
+    <span class="enh-badge badge-low">Low effort</span>
+  </div>
+  <div class="enh-body">
+    <div class="enh-desc">Transient activity curve from spectral flux. Shows where attacks happen — kick hits, snare transients, arrangement transitions. Rendered as a line on the Spectral Evolution chart or as a translucent overlay on spectrograms.</div>
+    <canvas id="onset" height="120"></canvas>
+    <div class="label-row">
+      <span class="label-tag" style="background:#1a2a1a;color:#4ade80;border-color:#2a3a2a;">onset strength</span>
+      <span class="label-tag">overlaid on mel spectrogram</span>
+    </div>
+  </div>
+</div>
+
+<!-- 4. Interactive Chroma -->
+<div class="enhancement">
+  <div class="enh-header">
+    <div><span class="enh-num">04 </span><span class="enh-title">Interactive Chroma Heatmap</span></div>
+    <span class="enh-badge badge-med">Medium effort</span>
+  </div>
+  <div class="enh-body">
+    <div class="enh-desc">Canvas-rendered chroma replacing the static PNG. 12 pitch-class rows over time. Hover for values, zoom to inspect chord changes. Arrangement section boundaries as vertical markers. Reference implementation exists in sonic-architect-app.</div>
+    <canvas id="chroma" height="160"></canvas>
+    <div style="display:flex;justify-content:space-between;margin-top:6px;">
+      <div class="label-row">
+        <span class="label-tag">C</span><span class="label-tag">D</span><span class="label-tag">E</span><span class="label-tag">F</span><span class="label-tag">G</span><span class="label-tag">A</span><span class="label-tag">B</span>
+      </div>
+      <div style="font-size:9px;color:#52525b;">hover for pitch energy · scroll to zoom</div>
+    </div>
+  </div>
+</div>
+
+<!-- 5. Tonnetz -->
+<div class="enhancement">
+  <div class="enh-header">
+    <div><span class="enh-num">05 </span><span class="enh-title">Tonnetz — Tonal Centroid</span></div>
+    <span class="enh-badge badge-low">Low effort</span>
+  </div>
+  <div class="enh-body">
+    <div class="enh-desc">6 dimensions of harmonic relationship (fifths, minor thirds, major thirds — each as sin/cos pairs). Shown as multi-line time-series. Useful for tracking harmonic motion and chord progressions. Less meaningful for percussion-heavy material.</div>
+    <canvas id="tonnetz" height="120"></canvas>
+    <div class="label-row">
+      <span class="label-tag" style="background:#2a1a2a;color:#c084fc;border-color:#3a2a3a;">5th sin</span>
+      <span class="label-tag" style="background:#2a1a2a;color:#e879f9;border-color:#3a2a3a;">5th cos</span>
+      <span class="label-tag" style="background:#1a2a2a;color:#67e8f9;border-color:#2a3a3a;">m3 sin</span>
+      <span class="label-tag" style="background:#1a2a2a;color:#22d3ee;border-color:#2a3a3a;">m3 cos</span>
+      <span class="label-tag" style="background:#1a2a1a;color:#86efac;border-color:#2a3a2a;">M3 sin</span>
+      <span class="label-tag" style="background:#1a2a1a;color:#4ade80;border-color:#2a3a2a;">M3 cos</span>
+    </div>
+  </div>
+</div>
+
+<script>
+// Utility: seeded pseudo-random for reproducible mockups
+function mulberry32(a) {
+  return function() {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    var t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  }
+}
+
+function setupCanvas(id) {
+  const c = document.getElementById(id);
+  const dpr = window.devicePixelRatio || 1;
+  const rect = c.getBoundingClientRect();
+  c.width = rect.width * dpr;
+  c.height = rect.height * dpr;
+  const ctx = c.getContext('2d');
+  ctx.scale(dpr, dpr);
+  return { ctx, w: rect.width, h: rect.height };
+}
+
+// Color maps
+function magma(t) {
+  // Simplified magma: black → purple → orange → yellow
+  t = Math.max(0, Math.min(1, t));
+  if (t < 0.33) {
+    const u = t / 0.33;
+    return `rgb(${Math.round(u*80)},${Math.round(u*10)},${Math.round(20+u*100)})`;
+  } else if (t < 0.66) {
+    const u = (t-0.33)/0.33;
+    return `rgb(${Math.round(80+u*140)},${Math.round(10+u*40)},${Math.round(120-u*40)})`;
+  } else {
+    const u = (t-0.66)/0.34;
+    return `rgb(${Math.round(220+u*35)},${Math.round(50+u*180)},${Math.round(80-u*60)})`;
+  }
+}
+
+function coolGreen(t) {
+  t = Math.max(0, Math.min(1, t));
+  return `rgb(${Math.round(t*40)},${Math.round(20+t*200)},${Math.round(40+t*120)})`;
+}
+
+// 1. CQT — log-frequency spectrogram with harmonic structure
+(function() {
+  const { ctx, w, h } = setupCanvas('cqt');
+  const rng = mulberry32(42);
+  const bins = 84, cols = 300;
+  // Simulate harmonic series: energy at fundamental + harmonics
+  const fundamentals = [24, 36, 48, 60]; // MIDI notes as bin indices roughly
+  for (let x = 0; x < cols; x++) {
+    for (let y = 0; y < bins; y++) {
+      let energy = rng() * 0.15;
+      // Add harmonics
+      for (const f of fundamentals) {
+        for (let harm = 1; harm <= 5; harm++) {
+          const target = f * harm / (harm > 1 ? harm * 0.5 : 1);
+          const dist = Math.abs(y - (f + Math.log2(harm) * 12));
+          if (dist < 2) energy += (0.7 / harm) * Math.exp(-dist * dist * 0.5) * (0.5 + 0.5 * Math.sin(x * 0.03 * harm));
+        }
+      }
+      // Time-varying envelope
+      const env = 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(x * 0.02));
+      energy *= env;
+      ctx.fillStyle = magma(energy);
+      ctx.fillRect(x * w / cols, h - (y + 1) * h / bins, Math.ceil(w / cols) + 1, Math.ceil(h / bins) + 1);
+    }
+  }
+  // Octave lines
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.lineWidth = 0.5;
+  for (let oct = 0; oct < 7; oct++) {
+    const y = h - (oct * 12 + 0.5) * h / bins;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+  }
+})();
+
+// 2. HPSS — harmonic (smooth horizontal) vs percussive (vertical transients)
+(function() {
+  // Harmonic: horizontal streaks
+  const { ctx: ctxH, w: wH, h: hH } = setupCanvas('hpss-h');
+  const rng1 = mulberry32(77);
+  const rows = 60, cols = 200;
+  for (let y = 0; y < rows; y++) {
+    const baseEnergy = Math.exp(-y * y / (rows * rows * 0.3)) * 0.6;
+    let streak = rng1() * 0.3;
+    for (let x = 0; x < cols; x++) {
+      streak += (rng1() - 0.5) * 0.05;
+      streak = Math.max(0, Math.min(1, streak));
+      const energy = baseEnergy * (0.4 + streak * 0.6) * (0.5 + 0.5 * Math.sin(x * 0.015));
+      ctxH.fillStyle = magma(energy);
+      ctxH.fillRect(x * wH / cols, hH - (y + 1) * hH / rows, Math.ceil(wH / cols) + 1, Math.ceil(hH / rows) + 1);
+    }
+  }
+
+  // Percussive: vertical columns at transients
+  const { ctx: ctxP, w: wP, h: hP } = setupCanvas('hpss-p');
+  const rng2 = mulberry32(88);
+  // Generate transient positions
+  const transients = [];
+  for (let i = 0; i < 40; i++) transients.push(Math.floor(rng2() * cols));
+  transients.sort((a,b) => a - b);
+
+  for (let x = 0; x < cols; x++) {
+    const nearestDist = Math.min(...transients.map(t => Math.abs(x - t)));
+    const transientStrength = Math.exp(-nearestDist * nearestDist * 0.5);
+    for (let y = 0; y < rows; y++) {
+      const energy = transientStrength * (0.3 + rng2() * 0.4) * (y < rows * 0.7 ? 0.8 : 0.3);
+      ctxP.fillStyle = magma(energy);
+      ctxP.fillRect(x * wP / cols, hP - (y + 1) * hP / rows, Math.ceil(wP / cols) + 1, Math.ceil(hP / rows) + 1);
+    }
+  }
+})();
+
+// 3. Onset strength — mel spectrogram with green onset curve overlay
+(function() {
+  const { ctx, w, h } = setupCanvas('onset');
+  const rng = mulberry32(55);
+  const rows = 50, cols = 300;
+
+  // Draw mel background
+  for (let x = 0; x < cols; x++) {
+    for (let y = 0; y < rows; y++) {
+      const energy = (Math.exp(-y / rows * 2) * 0.4 + rng() * 0.15) * (0.4 + 0.6 * Math.abs(Math.sin(x * 0.02)));
+      ctx.fillStyle = magma(energy * 0.7);
+      ctx.fillRect(x * w / cols, h - (y + 1) * h / rows, Math.ceil(w / cols) + 1, Math.ceil(h / rows) + 1);
+    }
+  }
+
+  // Draw onset strength curve
+  ctx.beginPath();
+  ctx.strokeStyle = '#4ade80';
+  ctx.lineWidth = 2;
+  ctx.globalAlpha = 0.9;
+  const rng2 = mulberry32(99);
+  let prev = 0.2;
+  for (let x = 0; x < cols; x++) {
+    // Spiky onset function
+    const spike = rng2() < 0.08 ? 0.5 + rng2() * 0.5 : 0;
+    prev = prev * 0.85 + spike * 0.15 + (rng2() - 0.5) * 0.03;
+    prev = Math.max(0.02, Math.min(1, prev));
+    const px = x * w / cols;
+    const py = h - prev * h * 0.9 - 4;
+    if (x === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // Onset peak markers
+  ctx.fillStyle = 'rgba(74, 222, 128, 0.3)';
+  const rng3 = mulberry32(99);
+  let prev2 = 0.2;
+  for (let x = 0; x < cols; x++) {
+    const spike = rng3() < 0.08 ? 0.5 + rng3() * 0.5 : 0;
+    prev2 = prev2 * 0.85 + spike * 0.15 + (rng3() - 0.5) * 0.03;
+    prev2 = Math.max(0.02, Math.min(1, prev2));
+    if (prev2 > 0.4) {
+      const px = x * w / cols;
+      ctx.fillRect(px - 0.5, 0, 1, h);
+    }
+  }
+})();
+
+// 4. Interactive Chroma Heatmap
+(function() {
+  const { ctx, w, h } = setupCanvas('chroma');
+  const rng = mulberry32(33);
+  const pitchNames = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  const rows = 12, cols = 250;
+  const labelW = 28;
+  const plotW = w - labelW;
+
+  ctx.fillStyle = '#09090b';
+  ctx.fillRect(0, 0, w, h);
+
+  // Simulate chord progression: C# minor emphasis
+  const chordPattern = [
+    [1,4,8],    // C# minor (C#, E, G#)
+    [1,4,8],
+    [6,9,1],    // F# minor
+    [4,8,11],   // E major
+  ];
+
+  for (let x = 0; x < cols; x++) {
+    const chordIdx = Math.floor((x / cols) * chordPattern.length * 2) % chordPattern.length;
+    const chord = chordPattern[chordIdx];
+    for (let y = 0; y < rows; y++) {
+      let energy = rng() * 0.12;
+      if (chord.includes(y)) energy += 0.4 + rng() * 0.3;
+      // Smooth transitions
+      const nextChordIdx = (chordIdx + 1) % chordPattern.length;
+      const nextChord = chordPattern[nextChordIdx];
+      const phase = ((x / cols) * chordPattern.length * 2) % 1;
+      if (phase > 0.8 && nextChord.includes(y)) energy += (phase - 0.8) * 2 * 0.3;
+
+      const t = Math.max(0, Math.min(1, energy));
+      // Cyan-yellow ramp
+      let r, g, b;
+      if (t < 0.3) { r = t/0.3*10; g = t/0.3*20; b = 40+t/0.3*80; }
+      else if (t < 0.6) { const u=(t-0.3)/0.3; r=10+u*20; g=20+u*200; b=120+u*135; }
+      else { const u=(t-0.6)/0.4; r=30+u*225; g=220+u*35; b=255-u*200; }
+      ctx.fillStyle = `rgb(${Math.round(r)},${Math.round(g)},${Math.round(b)})`;
+      const cellH = h / rows;
+      ctx.fillRect(labelW + x * plotW / cols, h - (y + 1) * cellH, Math.ceil(plotW / cols) + 1, Math.ceil(cellH) + 1);
+    }
+  }
+
+  // Pitch labels
+  ctx.font = '9px ui-monospace, monospace';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#71717a';
+  for (let y = 0; y < rows; y++) {
+    ctx.fillText(pitchNames[y], labelW - 4, h - (y + 0.5) * h / rows);
+  }
+
+  // Section boundaries
+  ctx.setLineDash([4, 3]);
+  ctx.strokeStyle = 'rgba(139, 92, 246, 0.6)';
+  ctx.lineWidth = 1;
+  for (let i = 1; i < 4; i++) {
+    const x = labelW + (i / 4) * plotW;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  // Hover indicator mockup
+  const hoverX = labelW + 0.35 * plotW;
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(hoverX, 0); ctx.lineTo(hoverX, h); ctx.stroke();
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  ctx.fillRect(hoverX + 4, 8, 90, 20);
+  ctx.fillStyle = '#e4e4e7';
+  ctx.font = '9px ui-monospace, monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText('1:46 · G# 0.82', hoverX + 8, 22);
+})();
+
+// 5. Tonnetz — 6 time-series lines
+(function() {
+  const { ctx, w, h } = setupCanvas('tonnetz');
+  const rng = mulberry32(111);
+  const cols = 300;
+  const pad = { top: 6, bottom: 16, left: 4, right: 4 };
+  const plotW = w - pad.left - pad.right;
+  const plotH = h - pad.top - pad.bottom;
+
+  const colors = ['#c084fc','#e879f9','#67e8f9','#22d3ee','#86efac','#4ade80'];
+  const series = [];
+  for (let s = 0; s < 6; s++) {
+    const vals = [];
+    let v = rng() * 0.5;
+    for (let x = 0; x < cols; x++) {
+      v += (rng() - 0.5) * 0.08;
+      v = Math.max(-1, Math.min(1, v));
+      // Add some harmonic motion
+      v += Math.sin(x * 0.03 + s * 1.1) * 0.02;
+      vals.push(v);
+    }
+    series.push(vals);
+  }
+
+  // Normalize each series
+  for (const vals of series) {
+    let min = Infinity, max = -Infinity;
+    for (const v of vals) { if (v < min) min = v; if (v > max) max = v; }
+    const range = max - min || 1;
+    for (let i = 0; i < vals.length; i++) vals[i] = (vals[i] - min) / range;
+  }
+
+  // Draw
+  for (let s = 0; s < 6; s++) {
+    ctx.beginPath();
+    ctx.strokeStyle = colors[s];
+    ctx.lineWidth = 1.2;
+    ctx.globalAlpha = 0.75;
+    for (let x = 0; x < cols; x++) {
+      const px = pad.left + (x / (cols - 1)) * plotW;
+      const py = pad.top + plotH - series[s][x] * plotH;
+      if (x === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  // Time axis
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.font = '9px monospace';
+  ctx.textAlign = 'center';
+  for (let i = 0; i <= 5; i++) {
+    const t = i * 60;
+    const x = pad.left + (i / 5) * plotW;
+    const min = Math.floor(t / 60);
+    const sec = t % 60;
+    ctx.fillText(`${min}:${sec.toString().padStart(2,'0')}`, x, h - 2);
+  }
+})();
+</script>
+</body>
+</html>

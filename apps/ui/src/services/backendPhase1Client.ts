@@ -83,9 +83,7 @@ export interface AnalyzePhase1Options {
 type UnknownRecord = Record<string, unknown>;
 type BackendIdentityProbe = {
   title: string | null;
-  hasAnalyzeRoute: boolean;
-  hasEstimateRoute: boolean;
-  isExpectedBackend: boolean;
+  paths: string[];
 };
 
 const backendIdentityCache = new Map<string, Promise<BackendIdentityProbe | null>>();
@@ -106,24 +104,54 @@ export async function estimatePhase1WithBackend(
   file: File,
   options: AnalyzePhase1Options,
 ): Promise<BackendEstimateResponse> {
+  return requestBackendEstimate(
+    buildTrackFormData(file, null, options.transcribe ?? false, options.separate ?? false),
+    {
+      apiBaseUrl: options.apiBaseUrl,
+      endpointPath: "/api/analyze/estimate",
+      requiredRoutes: ["/api/analyze", "/api/analyze/estimate"],
+      timeoutMs: options.timeoutMs,
+      sourceLabel: "DSP estimate endpoint",
+    },
+  );
+}
+
+interface RequestBackendEstimateOptions {
+  apiBaseUrl: string;
+  endpointPath: string;
+  requiredRoutes: string[];
+  timeoutMs?: number;
+  sourceLabel?: string;
+  signal?: AbortSignal;
+}
+
+export async function requestBackendEstimate(
+  formData: FormData,
+  options: RequestBackendEstimateOptions,
+): Promise<BackendEstimateResponse> {
   try {
     const response = await postBackendMultipart(
-      `${options.apiBaseUrl}/api/analyze/estimate`,
-      buildTrackFormData(file, null, options.transcribe ?? false, options.separate ?? false),
+      `${normalizeBaseUrl(options.apiBaseUrl)}${options.endpointPath}`,
+      formData,
       options.timeoutMs ?? DEFAULT_ESTIMATE_TIMEOUT_MS,
+      options.signal,
     );
 
-    const payload = await parseJsonPayload(response, "DSP estimate endpoint");
+    const payload = await parseJsonPayload(response, options.sourceLabel ?? "DSP estimate endpoint");
 
     return parseBackendEstimateResponse(payload);
   } catch (error) {
-    const diagnosedError = await maybePromoteWrongServiceError(error, options.apiBaseUrl);
+    const diagnosedError = await maybePromoteWrongServiceError(
+      error,
+      options.apiBaseUrl,
+      options.requiredRoutes,
+    );
     if (diagnosedError instanceof BackendClientError) {
       throw diagnosedError;
     }
     throw new BackendClientError(
       "BACKEND_BAD_RESPONSE",
-      `DSP estimate response did not match the expected contract: ${formatError(diagnosedError)}`,
+      `${options.sourceLabel ?? "DSP estimate endpoint"} response did not match the expected contract: ${formatError(diagnosedError)}`,
       { cause: diagnosedError },
     );
   }
@@ -203,6 +231,7 @@ export function mapBackendError(
 async function maybePromoteWrongServiceError(
   error: unknown,
   apiBaseUrl: string,
+  requiredRoutes: string[],
 ): Promise<unknown> {
   if (!(error instanceof BackendClientError)) {
     return error;
@@ -214,16 +243,22 @@ async function maybePromoteWrongServiceError(
   }
 
   const identity = await getBackendIdentity(apiBaseUrl);
-  if (!identity || identity.isExpectedBackend) {
+  if (!identity) {
+    return error;
+  }
+
+  const configuredBaseUrl = normalizeBaseUrl(apiBaseUrl);
+  const hasRequiredRoutes = requiredRoutes.every((route) => identity.paths.includes(route));
+  if (identity.title === EXPECTED_BACKEND_API_TITLE && hasRequiredRoutes) {
     return error;
   }
 
   return new BackendClientError(
     "BACKEND_WRONG_SERVICE",
-    buildWrongServiceMessage(apiBaseUrl, identity),
+    buildWrongServiceMessage(configuredBaseUrl, identity, requiredRoutes),
     {
       ...error.details,
-      configuredBaseUrl: normalizeBaseUrl(apiBaseUrl),
+      configuredBaseUrl,
       detectedServiceTitle: identity.title ?? undefined,
     },
   );
@@ -259,15 +294,10 @@ async function probeBackendIdentity(apiBaseUrl: string): Promise<BackendIdentity
     const info = isRecord(payload.info) ? payload.info : null;
     const title = toOptionalStringOrNull(info?.title) ?? null;
     const paths = isRecord(payload.paths) ? payload.paths : null;
-    const hasAnalyzeRoute = Boolean(paths?.["/api/analyze"]);
-    const hasEstimateRoute = Boolean(paths?.["/api/analyze/estimate"]);
 
     return {
       title,
-      hasAnalyzeRoute,
-      hasEstimateRoute,
-      isExpectedBackend:
-        title === EXPECTED_BACKEND_API_TITLE && hasAnalyzeRoute && hasEstimateRoute,
+      paths: paths ? Object.keys(paths) : [],
     };
   } catch {
     return null;
@@ -277,15 +307,12 @@ async function probeBackendIdentity(apiBaseUrl: string): Promise<BackendIdentity
 }
 
 function buildWrongServiceMessage(
-  apiBaseUrl: string,
+  configuredBaseUrl: string,
   identity: BackendIdentityProbe,
+  requiredRoutes: string[],
 ): string {
-  const configuredBaseUrl = normalizeBaseUrl(apiBaseUrl);
   const detectedTitle = identity.title ? `"${identity.title}"` : "a different API";
-  const missingRoutes = [
-    identity.hasAnalyzeRoute ? null : "/api/analyze",
-    identity.hasEstimateRoute ? null : "/api/analyze/estimate",
-  ].filter((route): route is string => route !== null);
+  const missingRoutes = requiredRoutes.filter((route) => !identity.paths.includes(route));
   const missingRouteMessage = missingRoutes.length
     ? ` It does not expose ${missingRoutes.join(" and ")}.`
     : "";

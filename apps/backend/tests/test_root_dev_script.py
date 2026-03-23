@@ -57,26 +57,24 @@ class RootDevScriptEnvLoadingTests(unittest.TestCase):
             [
                 'VITE_API_BASE_URL="http://127.0.0.1:9999"',
                 'VITE_ENABLE_PHASE2_GEMINI="true"',
-                'VITE_GEMINI_API_KEY="dotenv-key"',
                 'DISABLE_HMR="true"',
             ]
         )
 
         output = self._source_dev_script(
             repo_root,
-            'unset VITE_API_BASE_URL VITE_ENABLE_PHASE2_GEMINI VITE_GEMINI_API_KEY DISABLE_HMR; '
+            'unset VITE_API_BASE_URL VITE_ENABLE_PHASE2_GEMINI DISABLE_HMR; '
             'load_ui_env_file; '
-            'printf "%s|%s|%s|%s" "${VITE_API_BASE_URL:-}" "${VITE_ENABLE_PHASE2_GEMINI:-}" "${VITE_GEMINI_API_KEY:-}" "${DISABLE_HMR:-}"',
+            'printf "%s|%s|%s" "${VITE_API_BASE_URL:-}" "${VITE_ENABLE_PHASE2_GEMINI:-}" "${DISABLE_HMR:-}"',
         )
 
-        self.assertEqual(output, "http://127.0.0.1:9999|true|dotenv-key|true")
+        self.assertEqual(output, "http://127.0.0.1:9999|true|true")
 
     def test_load_ui_env_file_preserves_exported_values_over_dotenv(self):
         repo_root = self._write_temp_repo(
             [
                 'VITE_API_BASE_URL="http://127.0.0.1:9999"',
                 'VITE_ENABLE_PHASE2_GEMINI="false"',
-                'VITE_GEMINI_API_KEY="dotenv-key"',
                 'DISABLE_HMR="false"',
             ]
         )
@@ -84,17 +82,28 @@ class RootDevScriptEnvLoadingTests(unittest.TestCase):
         output = self._source_dev_script(
             repo_root,
             'load_ui_env_file; '
-            'printf "%s|%s|%s|%s" "${VITE_API_BASE_URL:-}" "${VITE_ENABLE_PHASE2_GEMINI:-}" "${VITE_GEMINI_API_KEY:-}" "${DISABLE_HMR:-}"',
+            'printf "%s|%s|%s" "${VITE_API_BASE_URL:-}" "${VITE_ENABLE_PHASE2_GEMINI:-}" "${DISABLE_HMR:-}"',
             extra_env={
                 "PATH": str(Path("/usr/bin")),
                 "VITE_API_BASE_URL": "http://127.0.0.1:8100",
                 "VITE_ENABLE_PHASE2_GEMINI": "true",
-                "VITE_GEMINI_API_KEY": "exported-key",
                 "DISABLE_HMR": "true",
             },
         )
 
-        self.assertEqual(output, "http://127.0.0.1:8100|true|exported-key|true")
+        self.assertEqual(output, "http://127.0.0.1:8100|true|true")
+
+    def test_verify_backend_contract_checks_run_centered_routes(self):
+        repo_root = self._write_temp_repo([])
+
+        output = self._source_dev_script(
+            repo_root,
+            'declare -f verify_backend_contract',
+        )
+
+        self.assertIn('/api/analysis-runs/estimate', output)
+        self.assertIn('/api/analysis-runs', output)
+        self.assertIn('/api/analysis-runs/{run_id}', output)
 
 
 if __name__ == "__main__":

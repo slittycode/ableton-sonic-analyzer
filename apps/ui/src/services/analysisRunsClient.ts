@@ -4,6 +4,7 @@ import {
   AnalysisRunSnapshot,
   AnalysisStageError,
   AnalysisStageStatus,
+  BackendEstimateResponse,
   InterpretationAttemptSummary,
   InterpretationResult,
   InterpretationStageSnapshot,
@@ -17,6 +18,7 @@ import {
   PitchNoteTranslationStageSnapshot,
 } from '../types';
 import { BackendClientError, createUserCancelledError, parsePhase1Result } from './backendPhase1Client';
+import { requestBackendEstimate } from './backendPhase1Client';
 
 interface AnalysisRunsClientOptions {
   apiBaseUrl: string;
@@ -30,6 +32,8 @@ interface CreateAnalysisRunOptions extends AnalysisRunsClientOptions {
   interpretationProfile: string;
   interpretationModel?: string | null;
 }
+
+type EstimateAnalysisRunOptions = CreateAnalysisRunOptions;
 
 interface CreatePitchNoteAttemptOptions extends AnalysisRunsClientOptions {
   pitchNoteMode: string;
@@ -51,6 +55,29 @@ const ANALYSIS_RUN_STATUSES = new Set<AnalysisStageStatus>([
   'interrupted',
   'not_requested',
 ]);
+
+export async function estimateAnalysisRun(
+  file: File,
+  options: EstimateAnalysisRunOptions,
+): Promise<BackendEstimateResponse> {
+  const body = new FormData();
+  body.append('track', file);
+  body.append('pitch_note_mode', options.pitchNoteMode);
+  body.append('pitch_note_backend', options.pitchNoteBackend);
+  body.append('interpretation_mode', options.interpretationMode);
+  body.append('interpretation_profile', options.interpretationProfile);
+  if (options.interpretationModel) {
+    body.append('interpretation_model', options.interpretationModel);
+  }
+
+  return requestBackendEstimate(body, {
+    apiBaseUrl: options.apiBaseUrl,
+    endpointPath: '/api/analysis-runs/estimate',
+    requiredRoutes: ['/api/analysis-runs/estimate', '/api/analysis-runs', '/api/analysis-runs/{run_id}'],
+    signal: options.signal,
+    sourceLabel: 'Analysis run estimate endpoint',
+  });
+}
 
 export async function createAnalysisRun(
   file: File,

@@ -9,12 +9,21 @@ This repo contains two entry points:
 
 ## Current Scope
 
-`analyze.py` measures tempo, key, loudness, stereo, rhythm, melody, arrangement, segment-level metrics, chord content, perceptual features, optional Demucs separation, and optional torchcrepe symbolic extraction.
+`analyze.py` measures tempo, key, loudness, stereo, rhythm, melody, arrangement, segment-level metrics, chord content, perceptual features, optional Demucs separation, and optional torchcrepe pitch/note translation.
 
-`server.py` exposes two custom analysis routes:
+`server.py` now exposes a staged canonical runtime API plus legacy compatibility wrappers.
 
-- `POST /api/analyze/estimate`
-- `POST /api/analyze`
+Canonical live-analysis routes:
+
+- `POST /api/analysis-runs/estimate`
+- `POST /api/analysis-runs`
+- `GET /api/analysis-runs/{run_id}`
+- `GET /api/analysis-runs/{run_id}/artifacts...`
+
+Legacy compatibility routes:
+
+- `POST /api/analyze` (legacy compatibility wrapper)
+- `POST /api/phase2` (legacy compatibility wrapper)
 
 FastAPI also serves the usual generated endpoints at `/openapi.json`, `/docs`, and `/redoc`.
 
@@ -24,7 +33,7 @@ FastAPI also serves the usual generated endpoints at `/openapi.json`, `/docs`, a
 - Essentia
 - NumPy
 - Demucs
-- torchcrepe (symbolic extraction)
+- torchcrepe (pitch/note translation)
 - mido
 - FastAPI
 - Uvicorn
@@ -150,24 +159,22 @@ Current CORS allow list:
 
 ## HTTP API
 
-### `POST /api/analyze/estimate`
+### `POST /api/analysis-runs/estimate`
 
 Purpose:
 
 - Persist the uploaded file temporarily
 - Read duration metadata
-- Return a backend runtime estimate for local DSP and optional Demucs separation
+- Return the canonical runtime estimate for the staged run request
 
 Multipart form fields:
 
 - `track` required file upload
-- `dsp_json_override` optional string, accepted but ignored
-- `transcribe` optional boolean-like form value; when true the estimate includes transcription runtime
-
-Query parameters:
-
-- `separate=true`
-- `--separate=true`
+- `pitch_note_mode` optional string; `stem_notes` includes Demucs plus pitch/note translation time
+- `pitch_note_backend` optional string
+- `interpretation_mode` optional string
+- `interpretation_profile` optional string
+- `interpretation_model` optional string
 
 Response shape:
 
@@ -189,11 +196,12 @@ Current stage keys returned by the server:
 Example:
 
 ```bash
-curl -X POST "http://127.0.0.1:8100/api/analyze/estimate" \
-  -F "track=@track.wav"
+curl -X POST "http://127.0.0.1:8100/api/analysis-runs/estimate" \
+  -F "track=@track.wav" \
+  -F "pitch_note_mode=stem_notes"
 ```
 
-### `POST /api/analyze`
+### `POST /api/analyze` (legacy compatibility wrapper)
 
 Purpose:
 
@@ -320,4 +328,13 @@ When the analyzer does not produce a valid payload, `diagnostics.timings.fileDur
 ```bash
 ./venv/bin/python -m py_compile server.py
 ./venv/bin/python -m unittest discover -s tests
+```
+
+Canonical live end-to-end verification is local-only and runs from the repo root with a real audio fixture plus backend Gemini credentials:
+
+```bash
+TEST_FLAC_PATH=/path/to/track.flac \
+GEMINI_API_KEY=your_real_key_here \
+VITE_ENABLE_PHASE2_GEMINI=true \
+./scripts/test-e2e.sh
 ```

@@ -33,7 +33,7 @@ function fixturePath(): string {
 }
 
 function stubEstimateRoute(page: import('@playwright/test').Page, requestId: string) {
-  return page.route('**/api/analyze/estimate', async (route) => {
+  return page.route('**/api/analysis-runs/estimate', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -206,7 +206,7 @@ test('Phase 2 controls show config-disabled state when the env kill-switch is of
   await expect(page.getByTestId('phase2-model-desktop')).toBeDisabled();
 
   await page.setInputFiles('#audio-upload', fixturePath());
-  await page.getByRole('button', { name: /Initiate Analysis/i }).click();
+  await page.getByRole('button', { name: /Run Analysis/i }).click();
 
   await expectAnalysisResultsVisible(page);
   await expect(page.getByText('126')).toBeVisible();
@@ -230,7 +230,7 @@ test('turning Phase 2 off in the UI runs Phase 1 only and records the user-disab
 
   await expect(page.getByTestId('phase2-status-inline')).toHaveText('INTERPRETATION USER OFF');
 
-  await page.getByRole('button', { name: /Initiate Analysis/i }).click();
+  await page.getByRole('button', { name: /Run Analysis/i }).click();
 
   await expectAnalysisResultsVisible(page);
   await expect(
@@ -266,7 +266,7 @@ test('Phase 2 runs Phase 1 and delegates Gemini to the backend when enabled', as
   await page.goto('/', { waitUntil: 'networkidle' });
   await page.setInputFiles('#audio-upload', fixturePath());
 
-  await page.getByRole('button', { name: /Initiate Analysis/i }).click();
+  await page.getByRole('button', { name: /Run Analysis/i }).click();
 
   await expectAnalysisResultsVisible(page);
   await expect(page.getByText('126', { exact: true }).first()).toBeVisible();
@@ -290,7 +290,7 @@ test('malformed Gemini Phase 2 response degrades gracefully to skipped', async (
   await page.setInputFiles('#audio-upload', fixturePath());
   await expect(page.getByLabel('AI INTERPRETATION')).toBeChecked();
 
-  await page.getByRole('button', { name: /Initiate Analysis/i }).click();
+  await page.getByRole('button', { name: /Run Analysis/i }).click();
 
   await expectAnalysisResultsVisible(page);
   await expect(page.getByText('126')).toBeVisible();

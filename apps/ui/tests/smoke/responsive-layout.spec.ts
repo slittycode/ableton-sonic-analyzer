@@ -53,7 +53,7 @@ function fixturePath(): string {
 
 function stubRoutes(page: import('@playwright/test').Page) {
   return Promise.all([
-    page.route('**/api/analyze/estimate', async (route) => {
+    page.route('**/api/analysis-runs/estimate', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -198,7 +198,7 @@ test('mobile viewport (375px) renders landing and results in single column', asy
   await expect(page.getByText('NO SIGNAL DETECTED')).toBeVisible();
 
   await page.setInputFiles('#audio-upload', fixturePath());
-  await page.getByRole('button', { name: /Initiate Analysis/i }).click();
+  await page.getByRole('button', { name: /Run Analysis/i }).click();
   await expect(page.getByText('Analysis Results')).toBeVisible();
   await expect(page.getByText('126', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('System Diagnostics')).toBeVisible();
@@ -210,7 +210,7 @@ test('tablet viewport (768px) renders results with readable metrics', async ({ p
   await page.goto('/', { waitUntil: 'networkidle' });
 
   await page.setInputFiles('#audio-upload', fixturePath());
-  await page.getByRole('button', { name: /Initiate Analysis/i }).click();
+  await page.getByRole('button', { name: /Run Analysis/i }).click();
   await expect(page.getByText('Analysis Results')).toBeVisible();
   await expect(page.getByText('126', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('F minor', { exact: true }).first()).toBeVisible();

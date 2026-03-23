@@ -32,7 +32,7 @@ function fixturePath(): string {
 
 function stubBackendRoutes(page: import('@playwright/test').Page) {
   return Promise.all([
-    page.route('**/api/analyze/estimate', async (route) => {
+    page.route('**/api/analysis-runs/estimate', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -233,7 +233,7 @@ test('re-upload after results resets to file-selected state', async ({ page }) =
   await page.goto('/', { waitUntil: 'networkidle' });
 
   await page.setInputFiles('#audio-upload', fixturePath());
-  await page.getByRole('button', { name: /Initiate Analysis/i }).click();
+  await page.getByRole('button', { name: /Run Analysis/i }).click();
   await expect(page.getByText('Analysis Results')).toBeVisible();
 
   // Wait for analysis to fully complete (including Phase 2 if enabled)
@@ -245,7 +245,7 @@ test('re-upload after results resets to file-selected state', async ({ page }) =
   await page.setInputFiles('#audio-upload', fixturePath());
 
   await expect(page.getByText('silence.wav')).toBeVisible();
-  await expect(page.getByRole('button', { name: /Initiate Analysis/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Run Analysis/i })).toBeVisible();
   await expect(page.getByText('Analysis Results')).toHaveCount(0);
 });
 

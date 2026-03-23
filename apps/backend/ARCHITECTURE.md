@@ -43,9 +43,12 @@ Responsibilities:
 
 Custom routes:
 
-- `POST /api/analyze/estimate`
-- `POST /api/analyze`
-- `POST /api/phase2`
+- `POST /api/analysis-runs/estimate`
+- `POST /api/analysis-runs`
+- `GET /api/analysis-runs/{run_id}`
+- `POST /api/analyze` (legacy compatibility)
+- `POST /api/analyze/estimate` (legacy compatibility)
+- `POST /api/phase2` (legacy compatibility)
 
 FastAPI-generated routes remain available at `/openapi.json`, `/docs`, and `/redoc`.
 
@@ -77,23 +80,24 @@ Important sections:
 
 ## HTTP Flow
 
-### `POST /api/analyze/estimate`
+### `POST /api/analysis-runs/estimate`
 
 1. Persist the uploaded file to a temporary path.
 2. Read duration metadata with `get_audio_duration_seconds()`.
-3. Call `build_analysis_estimate(duration, run_separation, run_transcribe)`.
-4. Normalize stage keys into the server contract:
+3. Resolve staged estimate flags from the requested run shape.
+4. Call `build_analysis_estimate(duration, run_separation, run_transcribe)`.
+5. Normalize stage keys into the server contract:
    - `dsp` -> `local_dsp`
    - `separation` -> `demucs_separation`
-5. Return:
+6. Return:
    - `requestId`
    - `estimate.durationSeconds`
    - `estimate.totalLowMs`
    - `estimate.totalHighMs`
    - `estimate.stages[]`
-6. Close the upload and delete the temporary file.
+7. Close the upload and delete the temporary file.
 
-### `POST /api/analyze`
+### `POST /api/analyze` (legacy compatibility wrapper)
 
 1. Persist the uploaded file to a temporary path.
 2. Build the same estimate object used by the estimate route.
@@ -123,7 +127,7 @@ Multipart form fields accepted by both routes:
 
 - `track` required
 - `dsp_json_override` optional and currently ignored
-- `transcribe` optional; `POST /api/analyze` forwards it to `analyze.py`, and `POST /api/analyze/estimate` uses it for runtime estimation
+- `transcribe` optional; the legacy `POST /api/analyze` wrapper forwards it to `analyze.py`, and the legacy `POST /api/analyze/estimate` wrapper uses it for runtime estimation
 
 Query parameters accepted by both routes:
 
@@ -233,7 +237,7 @@ Error diagnostics can include:
 
 When the analyzer never produces a valid JSON object, `timings.fileDurationSeconds` and `timings.msPerSecondOfAudio` are `null`.
 
-### `POST /api/phase2`
+### `POST /api/phase2` (legacy compatibility wrapper)
 
 1. Optionally use a cached temp file from a prior Phase 1 request (keyed by `phase1_request_id` form field); fall back to persisting the uploaded file if no cache hit.
 2. Parse `phase1_json` form field — used as-is (already normalized by the frontend).
@@ -277,7 +281,7 @@ Flow:
 ## Current Caveats
 
 - `dsp_json_override` is a reserved field only. The backend accepts it but does not use it.
-- `--fast` is forwarded via form field `fast` or query param `fast` on `POST /api/analyze`. The estimate endpoint does not account for fast mode.
+- `--fast` is forwarded via form field `fast` or query param `fast` on the legacy `POST /api/analyze` wrapper. The estimate endpoint does not account for fast mode.
 - The HTTP API is intentionally narrower than the raw CLI schema.
 
 ## Verification Surface

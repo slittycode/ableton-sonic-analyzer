@@ -5,7 +5,8 @@
       "mcp__gemini-claude-code-mcp__summarize_project",
       "Skill(update-config)",
       "Skill(commit-commands:commit-push-pr)",
-      "Skill(commit-commands:commit-push-pr:*)"
+      "Skill(commit-commands:commit-push-pr:*)",
+      "mcp__Control_Chrome__execute_javascript"
     ]
   }
 }

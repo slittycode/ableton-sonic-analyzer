@@ -665,6 +665,61 @@ def _resolve_pitch_note_mode_for_legacy(transcribe: bool) -> str:
     return "stem_notes" if transcribe else "off"
 
 
+def _resolve_estimate_flags_for_stage_request(
+    requested_pitch_note_mode: str,
+) -> tuple[bool, bool]:
+    if requested_pitch_note_mode == "off":
+        return False, False
+    if requested_pitch_note_mode == "stem_notes":
+        return True, True
+    raise UnsupportedPitchNoteModeError(requested_pitch_note_mode)
+
+
+async def _estimate_analysis_run(
+    *,
+    track: UploadFile,
+    pitch_note_mode: str,
+    pitch_note_backend: str,
+    interpretation_mode: str,
+    interpretation_profile: str,
+    interpretation_model: str | None,
+    run_separation_override: bool | None = None,
+    run_transcribe_override: bool | None = None,
+) -> JSONResponse:
+    temp_path: str | None = None
+    try:
+        if interpretation_mode != "off":
+            _resolve_interpretation_profile_config(interpretation_profile)
+
+        temp_path, _file_size_bytes = _persist_upload(track)
+        _ = pitch_note_backend
+        _ = interpretation_model
+
+        resolved_run_separation, resolved_run_transcribe = _resolve_estimate_flags_for_stage_request(
+            pitch_note_mode,
+        )
+        run_separation = (
+            resolved_run_separation
+            if run_separation_override is None
+            else run_separation_override
+        )
+        run_transcribe = (
+            resolved_run_transcribe
+            if run_transcribe_override is None
+            else run_transcribe_override
+        )
+        estimate = _build_backend_estimate(temp_path, run_separation, run_transcribe)
+        return JSONResponse(
+            content={
+                "requestId": str(uuid4()),
+                "estimate": estimate,
+            }
+        )
+    finally:
+        await track.close()
+        _cleanup_temp_path(temp_path)
+
+
 def _run_measurement_subprocess(
     *,
     audio_path: str,
@@ -1519,6 +1574,46 @@ async def create_analysis_run(
         )
     finally:
         await track.close()
+
+
+@app.post("/api/analysis-runs/estimate")
+async def estimate_analysis_run(
+    track: UploadFile = File(...),
+    pitch_note_mode: str = Form("off"),
+    pitch_note_backend: str = Form("auto"),
+    interpretation_mode: str = Form("off"),
+    interpretation_profile: str = Form("producer_summary"),
+    interpretation_model: str | None = Form(None),
+) -> JSONResponse:
+    try:
+        return await _estimate_analysis_run(
+            track=track,
+            pitch_note_mode=pitch_note_mode,
+            pitch_note_backend=pitch_note_backend,
+            interpretation_mode=interpretation_mode,
+            interpretation_profile=interpretation_profile,
+            interpretation_model=interpretation_model,
+        )
+    except UnsupportedPitchNoteModeError as exc:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "code": "PITCH_NOTE_MODE_UNSUPPORTED",
+                    "message": str(exc),
+                }
+            },
+        )
+    except ValueError as exc:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "code": "INTERPRETATION_PROFILE_UNSUPPORTED",
+                    "message": str(exc),
+                }
+            },
+        )
 
 
 @app.get("/api/analysis-runs/{run_id}")
@@ -2609,21 +2704,19 @@ async def estimate_analysis(
         description="Alias for separate; accepts query key --separate",
     ),
 ):
-    temp_path: str | None = None
-    try:
-        temp_path, _file_size_bytes = _persist_upload(track)
-        _ = dsp_json_override
-        run_separation = bool(separate or separate_query or separate_flag)
-        estimate = _build_backend_estimate(temp_path, run_separation, transcribe)
-        return JSONResponse(
-            content={
-                "requestId": str(uuid4()),
-                "estimate": estimate,
-            }
-        )
-    finally:
-        await track.close()
-        _cleanup_temp_path(temp_path)
+    logger.warning("Legacy compatibility endpoint hit: /api/analyze/estimate")
+    _ = dsp_json_override
+    response = await _estimate_analysis_run(
+        track=track,
+        pitch_note_mode=_resolve_pitch_note_mode_for_legacy(transcribe),
+        pitch_note_backend="auto",
+        interpretation_mode="off",
+        interpretation_profile="producer_summary",
+        interpretation_model=None,
+        run_separation_override=bool(separate or separate_query or separate_flag),
+        run_transcribe_override=bool(transcribe),
+    )
+    return _mark_legacy_endpoint_response(response, endpoint="/api/analyze/estimate")
 
 
 @app.post("/api/analyze")

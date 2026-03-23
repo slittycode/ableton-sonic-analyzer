@@ -429,7 +429,7 @@ const BreathingBpmPulse = ({ bpm, bpmSource }: { bpm: number; bpmSource?: string
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.5 }}
-      className="flex flex-col items-center"
+      className="flex min-h-[188px] w-full shrink-0 items-center justify-center rounded-sm border border-[#1e1e1e] bg-[#141414] px-4 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] md:w-[176px]"
     >
       <svg viewBox="0 0 120 120" className="w-[120px] h-[120px]">
         <circle cx="60" cy="60" r="52" fill="none" stroke="#ff880015" strokeWidth="10" />
@@ -835,18 +835,35 @@ const SidechainEnvelope = ({
   envelopeShape,
   pumpingRate,
   pumpingStrength,
+  pumpingRegularity,
+  pumpingConfidence,
 }: {
-  envelopeShape: number[];
-  pumpingRate: string | null;
-  pumpingStrength: number;
+  envelopeShape?: number[] | null;
+  pumpingRate?: string | null;
+  pumpingStrength?: number | null;
+  pumpingRegularity?: number | null;
+  pumpingConfidence?: number | null;
 }) => {
-  const max = Math.max(...envelopeShape, 0.001);
-  const w = 240;
-  const h = 36;
-  const pad = 2;
+  const resolvedStrength = pumpingStrength ?? 0;
+  const resolvedRegularity = pumpingRegularity ?? 0;
+  const resolvedConfidence = pumpingConfidence ?? 0;
+  const contour =
+    envelopeShape && envelopeShape.length > 0
+      ? envelopeShape
+      : Array.from({ length: 16 }, (_, index) => {
+          const phase = (index / 15) * Math.PI * 3;
+          const duck = Math.max(0, Math.sin(phase)) * (0.38 + resolvedStrength * 0.42);
+          const stepAccent = index % 4 === 0 ? resolvedRegularity * 0.22 : 0;
+          return 0.34 + duck + stepAccent;
+        });
 
-  const points = envelopeShape.map((v, i) => ({
-    x: (i / (envelopeShape.length - 1)) * w,
+  const max = Math.max(...contour, 0.001);
+  const w = 360;
+  const h = 88;
+  const pad = 6;
+
+  const points = contour.map((v, i) => ({
+    x: (i / (contour.length - 1)) * w,
     y: pad + (1 - v / max) * (h - pad * 2),
   }));
 
@@ -860,23 +877,28 @@ const SidechainEnvelope = ({
   const fillD = d + ` L${w},${h} L0,${h} Z`;
 
   const strengthLabel =
-    pumpingStrength >= 0.7 ? 'heavy' : pumpingStrength >= 0.4 ? 'moderate' : 'subtle';
+    resolvedStrength >= 0.7 ? 'heavy' : resolvedStrength >= 0.4 ? 'moderate' : 'subtle';
 
   return (
-    <div className="bg-[#141414] border border-[#1e1e1e] rounded-sm p-3">
-      <div className="flex justify-between items-center mb-1.5">
-        <span className="text-[7px] font-mono uppercase tracking-widest text-[#555]">
+    <div className="flex h-full flex-col rounded-sm border border-[#242424] bg-[#101010] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
+      <div className="flex items-start justify-between gap-3">
+        <span className="text-[8px] font-mono uppercase tracking-[0.2em] text-[#6f6f6f]">
           Sidechain Envelope
         </span>
-        <span className="text-[8px] font-mono text-[#a78bfa60]">
+        <span className="text-[8px] font-mono text-[#a78bfa75]">
           {pumpingRate ?? 'n/a'} · {strengthLabel}
         </span>
       </div>
-      <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-[36px]">
+      <svg viewBox={`0 0 ${w} ${h}`} className="mt-3 h-[88px] w-full">
         <defs>
-          <linearGradient id="sc-grad" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id="sc-grad-panel" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" stopColor="#a78bfa" stopOpacity="0.3" />
             <stop offset="1" stopColor="#a78bfa" stopOpacity="0.02" />
+          </linearGradient>
+          <linearGradient id="sc-stroke-panel" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stopColor="#8d72ee" stopOpacity="0.7" />
+            <stop offset="0.55" stopColor="#b493ff" stopOpacity="0.95" />
+            <stop offset="1" stopColor="#8d72ee" stopOpacity="0.7" />
           </linearGradient>
         </defs>
         {[0, 4, 8, 12].map((pos) => (
@@ -890,41 +912,165 @@ const SidechainEnvelope = ({
             strokeWidth="0.5"
           />
         ))}
-        <path d={fillD} fill="url(#sc-grad)" />
-        <path d={d} fill="none" stroke="#a78bfa" strokeWidth="1.5" opacity="0.8" />
+        <path d={fillD} fill="url(#sc-grad-panel)" />
+        <path d={d} fill="none" stroke="url(#sc-stroke-panel)" strokeWidth="2.2" opacity="0.95" />
       </svg>
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        <div className="rounded-sm border border-[#232323] bg-[#121212] px-3 py-2">
+          <span className="block text-[7px] font-mono uppercase tracking-[0.18em] text-[#5f5f5f]">
+            Confidence
+          </span>
+          <span className="mt-1 block text-sm font-display font-bold text-text-primary">
+            {Math.round(resolvedConfidence * 100)}%
+          </span>
+        </div>
+        <div className="rounded-sm border border-[#232323] bg-[#121212] px-3 py-2">
+          <span className="block text-[7px] font-mono uppercase tracking-[0.18em] text-[#5f5f5f]">
+            Regularity
+          </span>
+          <span className="mt-1 block text-sm font-display font-bold text-text-primary">
+            {formatNumber(resolvedRegularity, 2)}
+          </span>
+        </div>
+      </div>
     </div>
   );
 };
 
-const GatingBadge = ({
+const EffectsFieldPanel = ({
+  gatingDetected,
   gatingRate,
   gatingRegularity,
+  gatingEventCount,
+  pumpingStrength,
+  pumpingRegularity,
+  pumpingConfidence,
 }: {
-  gatingRate: number | null;
-  gatingRegularity: number | null;
+  gatingDetected?: boolean | null;
+  gatingRate?: number | null;
+  gatingRegularity?: number | null;
+  gatingEventCount?: number | null;
+  pumpingStrength?: number | null;
+  pumpingRegularity?: number | null;
+  pumpingConfidence?: number | null;
 }) => {
   const rateLabel =
-    gatingRate === 16 ? '16th' : gatingRate === 8 ? '8th' : gatingRate === 4 ? 'quarter' : `${gatingRate}`;
-  return (
-    <div className="flex items-center gap-3 bg-[#141414] border border-[#1e1e1e] rounded-sm px-3 py-2">
-      <span className="text-[8px] font-mono font-bold uppercase tracking-wider text-[#fbbf24]">
-        Gate Detected
-      </span>
-      {gatingRate != null && (
-        <span className="text-[8px] font-mono text-[#fbbf2480]">{rateLabel}</span>
-      )}
-      {gatingRegularity != null && (
-        <div className="flex items-center gap-1.5 ml-auto">
-          <span className="text-[7px] font-mono text-[#555]">REG</span>
-          <div className="w-12 h-[4px] bg-[#1a1a1a] rounded-sm overflow-hidden">
+    gatingRate === 16
+      ? '16th'
+      : gatingRate === 8
+        ? '8th'
+        : gatingRate === 4
+          ? 'quarter'
+          : gatingRate != null
+            ? `${gatingRate}`
+            : 'n/a';
+
+  if (gatingDetected) {
+    const pulseStride = gatingRate === 16 ? 1 : gatingRate === 8 ? 2 : gatingRate === 4 ? 4 : 3;
+    const pulseCells = Array.from({ length: 16 }, (_, index) => index % pulseStride === 0);
+
+    return (
+      <div className="flex h-full flex-col rounded-sm border border-[#242424] bg-[#101010] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <span className="block text-[8px] font-mono uppercase tracking-[0.2em] text-[#7f6a2c]">
+              Effects Field
+            </span>
+            <span className="mt-1 block text-[11px] font-mono uppercase tracking-[0.2em] text-[#fbbf24]">
+              Gate Active
+            </span>
+          </div>
+          <span className="text-[8px] font-mono text-[#fbbf2480]">{rateLabel}</span>
+        </div>
+
+        <div className="mt-4 grid grid-cols-8 gap-1.5">
+          {pulseCells.map((active, index) => (
             <div
-              className="h-full rounded-sm bg-[#fbbf24]"
-              style={{ width: `${gatingRegularity * 100}%`, opacity: 0.7 }}
-            />
+              key={index}
+              className="rounded-sm border border-[#2e2614] bg-[#15120b]"
+              style={{
+                height: active ? 24 : 12,
+                opacity: active ? 0.85 : 0.45,
+                boxShadow: active ? '0 0 10px rgba(251,191,36,0.12)' : undefined,
+              }}
+            >
+              <div
+                className="h-full rounded-sm bg-gradient-to-t from-[#f59e0b] via-[#fbbf24] to-[#fde68a]"
+                style={{ opacity: active ? 0.85 : 0.2 }}
+              />
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <div className="rounded-sm border border-[#2a2416] bg-[#121212] px-3 py-2">
+            <span className="block text-[7px] font-mono uppercase tracking-[0.18em] text-[#6b6040]">
+              Gate Events
+            </span>
+            <span className="mt-1 block text-sm font-display font-bold text-text-primary">
+              {gatingEventCount ?? 'n/a'}
+            </span>
+          </div>
+          <div className="rounded-sm border border-[#2a2416] bg-[#121212] px-3 py-2">
+            <span className="block text-[7px] font-mono uppercase tracking-[0.18em] text-[#6b6040]">
+              Gate Regularity
+            </span>
+            <div className="mt-2 h-[6px] rounded-full bg-[#1c1a12]">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-[#f59e0b] to-[#fbbf24]"
+                style={{ width: `${(gatingRegularity ?? 0) * 100}%`, opacity: 0.9 }}
+              />
+            </div>
           </div>
         </div>
-      )}
+      </div>
+    );
+  }
+
+  const fallbackRows = [
+    { label: 'Pump Strength', value: pumpingStrength ?? 0, color: '#a78bfa' },
+    { label: 'Pump Regularity', value: pumpingRegularity ?? 0, color: '#60a5fa' },
+    { label: 'Pump Confidence', value: pumpingConfidence ?? 0, color: '#34d399' },
+  ];
+
+  return (
+    <div className="flex h-full flex-col rounded-sm border border-[#242424] bg-[#101010] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <span className="block text-[8px] font-mono uppercase tracking-[0.2em] text-[#6f6f6f]">
+            Pump Matrix
+          </span>
+          <span className="mt-1 block text-[11px] font-mono uppercase tracking-[0.2em] text-[#a78bfa]">
+            No Gating Effect
+          </span>
+        </div>
+        <span className="text-[8px] font-mono text-[#8c8c8c]">{rateLabel}</span>
+      </div>
+
+      <div className="mt-4 space-y-3">
+        {fallbackRows.map((row) => (
+          <div key={row.label}>
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-[7px] font-mono uppercase tracking-[0.18em] text-[#5f5f5f]">
+                {row.label}
+              </span>
+              <span className="text-[8px] font-mono" style={{ color: `${row.color}cc` }}>
+                {Math.round(row.value * 100)}%
+              </span>
+            </div>
+            <div className="h-[6px] rounded-full bg-[#181818]">
+              <div
+                className="h-full rounded-full"
+                style={{
+                  width: `${row.value * 100}%`,
+                  background: `linear-gradient(90deg, ${row.color}66, ${row.color})`,
+                  boxShadow: `0 0 10px ${row.color}24`,
+                }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
@@ -938,38 +1084,54 @@ const PhraseStructureTimeline = ({ phraseGrid }: { phraseGrid: PhraseGrid }) => 
   ];
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-1">
-        <span className="text-[7px] font-mono uppercase tracking-widest text-[#555]">
+    <div className="rounded-sm border border-[#1e1e1e] bg-[#141414] px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
           Phrase Structure
         </span>
-        <span className="text-[8px] font-mono text-[#444]">{total} bars</span>
+        <span className="text-[8px] font-mono uppercase tracking-[0.18em] text-[#666]">
+          {total} bars
+        </span>
       </div>
-      <div className="space-y-[2px]">
+      <div className="space-y-2.5">
         {tiers.map((tier) => {
           if (!tier.items.length) return null;
           const segCount = tier.items.length;
           return (
             <div
               key={tier.label}
-              className="flex gap-[1px]"
-              style={{ height: tier.size === 16 ? 10 : tier.size === 8 ? 8 : 6 }}
+              className="grid grid-cols-[28px_minmax(0,1fr)] items-center gap-2"
             >
-              {Array.from({ length: segCount }, (_, i) => (
-                <div
-                  key={i}
-                  className="rounded-[1px] flex items-center justify-center"
-                  style={{
-                    flex: tier.size,
-                    background: `linear-gradient(90deg, ${tier.color}20, ${tier.color}10)`,
-                    border: `1px solid ${tier.color}25`,
-                  }}
-                >
-                  <span className="font-mono" style={{ fontSize: 6, color: `${tier.color}50` }}>
-                    {tier.label}
-                  </span>
-                </div>
-              ))}
+              <span
+                className="text-[9px] font-mono font-bold uppercase tracking-[0.18em]"
+                style={{ color: `${tier.color}bb` }}
+              >
+                {tier.label}
+              </span>
+              <div
+                className="flex gap-1"
+                style={{ height: tier.size === 16 ? 18 : tier.size === 8 ? 14 : 12 }}
+              >
+                {Array.from({ length: segCount }, (_, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center justify-center rounded-[2px]"
+                    style={{
+                      flex: tier.size,
+                      background: `linear-gradient(90deg, ${tier.color}22, ${tier.color}12)`,
+                      border: `1px solid ${tier.color}45`,
+                      boxShadow: `inset 0 1px 0 ${tier.color}18`,
+                    }}
+                  >
+                    <span
+                      className="font-mono"
+                      style={{ fontSize: 8, color: `${tier.color}80` }}
+                    >
+                      {tier.label}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           );
         })}
@@ -1847,9 +2009,9 @@ export function MeasurementDashboard({
 
       {/* 6. Rhythm & Groove */}
       <Section id="section-meas-rhythm" number={6} title="Rhythm & Groove">
-        <div className="flex gap-4 items-start">
+        <div className="flex flex-col gap-4 md:flex-row md:items-stretch">
           <BreathingBpmPulse bpm={phase1.bpm} bpmSource={phase1.bpmSource} />
-          <div className="flex-1 grid grid-cols-2 gap-2">
+          <div className="flex-1 grid grid-cols-1 gap-2 md:grid-cols-2">
             {phase1.rhythmDetail && (
               <>
                 <ComparativeMetricTile
@@ -2022,41 +2184,26 @@ export function MeasurementDashboard({
             <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary block">
               Sidechain & Effects
             </span>
-            {phase1.sidechainDetail &&
-              phase1.sidechainDetail.envelopeShape &&
-              phase1.sidechainDetail.envelopeShape.length > 0 && (
+            <div className="rounded-sm border border-[#1e1e1e] bg-[#141414] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(260px,0.9fr)]">
                 <SidechainEnvelope
-                  envelopeShape={phase1.sidechainDetail.envelopeShape}
-                  pumpingRate={phase1.sidechainDetail.pumpingRate}
-                  pumpingStrength={phase1.sidechainDetail.pumpingStrength}
+                  envelopeShape={phase1.sidechainDetail?.envelopeShape}
+                  pumpingRate={phase1.sidechainDetail?.pumpingRate}
+                  pumpingStrength={phase1.sidechainDetail?.pumpingStrength}
+                  pumpingRegularity={phase1.sidechainDetail?.pumpingRegularity}
+                  pumpingConfidence={phase1.sidechainDetail?.pumpingConfidence}
                 />
-              )}
-            {phase1.sidechainDetail && !phase1.sidechainDetail.envelopeShape && (
-              <div className="bg-[#141414] border border-[#1e1e1e] rounded-sm p-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <span className="text-[7px] font-mono text-[#555] block">
-                      Pumping Strength
-                    </span>
-                    <span className="text-sm font-display font-bold text-text-primary">
-                      {formatNumber(phase1.sidechainDetail.pumpingStrength, 2)}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-[7px] font-mono text-[#555] block">Regularity</span>
-                    <span className="text-sm font-display font-bold text-text-primary">
-                      {formatNumber(phase1.sidechainDetail.pumpingRegularity, 2)}
-                    </span>
-                  </div>
-                </div>
+                <EffectsFieldPanel
+                  gatingDetected={phase1.effectsDetail?.gatingDetected}
+                  gatingRate={phase1.effectsDetail?.gatingRate ?? null}
+                  gatingRegularity={phase1.effectsDetail?.gatingRegularity ?? null}
+                  gatingEventCount={phase1.effectsDetail?.gatingEventCount ?? null}
+                  pumpingStrength={phase1.sidechainDetail?.pumpingStrength ?? null}
+                  pumpingRegularity={phase1.sidechainDetail?.pumpingRegularity ?? null}
+                  pumpingConfidence={phase1.sidechainDetail?.pumpingConfidence ?? null}
+                />
               </div>
-            )}
-            {phase1.effectsDetail && phase1.effectsDetail.gatingDetected && (
-              <GatingBadge
-                gatingRate={phase1.effectsDetail.gatingRate ?? null}
-                gatingRegularity={phase1.effectsDetail.gatingRegularity ?? null}
-              />
-            )}
+            </div>
           </div>
         )}
 

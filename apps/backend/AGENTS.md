@@ -157,8 +157,8 @@ python3.11 -m venv venv
 
 ## Backend Contract Rules
 
-- `POST /api/analyze/estimate` and `POST /api/analyze` are the important app-facing routes.
-- Both routes accept multipart `track`, optional `transcribe`, optional ignored `dsp_json_override`, and `separate` / `--separate` query aliases.
+- `POST /api/analysis-runs/estimate`, `POST /api/analysis-runs`, and `GET /api/analysis-runs/{run_id}` are the primary app-facing routes.
+- `POST /api/analyze`, `POST /api/analyze/estimate`, and `POST /api/phase2` are compatibility wrappers only.
 - `server.py` normalizes raw analyzer output into `phase1`; it does not expose every raw field.
 - The raw CLI schema and the HTTP schema are intentionally different; check `JSON_SCHEMA.md` before expanding or removing fields.
 - `transcriptionDetail` is only present when `analyze.py` runs with `--transcribe`.

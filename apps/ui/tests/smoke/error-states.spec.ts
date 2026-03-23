@@ -120,11 +120,11 @@ function buildRunSnapshot(runId: string, overrides: RunSnapshotOverrides = {}) {
 async function loadFileAndClick(page: import('@playwright/test').Page) {
   await page.goto('/', { waitUntil: 'networkidle' });
   await page.setInputFiles('#audio-upload', fixturePath());
-  await page.getByRole('button', { name: /Initiate Analysis/i }).click();
+  await page.getByRole('button', { name: /Run Analysis/i }).click();
 }
 
 function stubEstimateRoute(page: import('@playwright/test').Page) {
-  return page.route('**/api/analyze/estimate', async (route) => {
+  return page.route('**/api/analysis-runs/estimate', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -227,7 +227,7 @@ test('network failure shows NETWORK_UNREACHABLE-style error', async ({ page }) =
 });
 
 test('estimate endpoint failure shows yellow warning but does not block analysis', async ({ page }) => {
-  await page.route('**/api/analyze/estimate', async (route) => {
+  await page.route('**/api/analysis-runs/estimate', async (route) => {
     await route.fulfill({
       status: 500,
       contentType: 'text/plain',
@@ -293,7 +293,7 @@ test('estimate endpoint failure shows yellow warning but does not block analysis
 
   await expect(page.getByText(/Estimate unavailable/i)).toBeVisible();
 
-  const analyzeButton = page.getByRole('button', { name: /Initiate Analysis/i });
+  const analyzeButton = page.getByRole('button', { name: /Run Analysis/i });
   await expect(analyzeButton).toBeVisible();
   await expect(analyzeButton).toBeEnabled();
 
@@ -302,7 +302,7 @@ test('estimate endpoint failure shows yellow warning but does not block analysis
 });
 
 test('wrong backend service warning disables initiate analysis until the backend URL is fixed', async ({ page }) => {
-  await page.route('**/api/analyze/estimate', async (route) => {
+  await page.route('**/api/analysis-runs/estimate', async (route) => {
     await route.fulfill({
       status: 404,
       contentType: 'application/json',
@@ -331,7 +331,7 @@ test('wrong backend service warning disables initiate analysis until the backend
   await expect(page.getByText(/127\.0\.0\.1:8100/)).toBeVisible();
   await expect(page.getByText(/VITE_API_BASE_URL=http:\/\/127\.0\.0\.1:8100/i)).toBeVisible();
 
-  const analyzeButton = page.getByRole('button', { name: /Initiate Analysis/i });
+  const analyzeButton = page.getByRole('button', { name: /Run Analysis/i });
   await expect(analyzeButton).toBeVisible();
   await expect(analyzeButton).toBeDisabled();
 });

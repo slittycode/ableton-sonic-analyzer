@@ -4,19 +4,18 @@ import { fileURLToPath } from 'node:url';
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 
-function hasMultipartBoolean(body: string, fieldName: string, expected: boolean): boolean {
+function hasMultipartTextField(body: string, fieldName: string, expected: string): boolean {
   const normalizedBody = body.replace(/\r?\n/g, '\n');
-  const pattern = new RegExp(`name="${fieldName}"\\n\\n${expected ? 'true' : 'false'}\\n`);
+  const pattern = new RegExp(`name="${fieldName}"\\n\\n${expected}\\n`);
   return pattern.test(normalizedBody);
 }
 
 test('upload shows estimate and local DSP processing copy before phase1 completes', async ({ page }) => {
-  await page.route('**/api/analyze/estimate', async (route) => {
+  await page.route('**/api/analysis-runs/estimate', async (route) => {
     const body = route.request().postData() ?? '';
-    const transcribeEnabled = hasMultipartBoolean(body, 'transcribe', true);
-    const stemSeparationEnabled = hasMultipartBoolean(body, 'separate', true);
+    const pitchNoteMode = hasMultipartTextField(body, 'pitch_note_mode', 'stem_notes') ? 'stem_notes' : 'off';
     const estimate =
-      transcribeEnabled && stemSeparationEnabled
+      pitchNoteMode === 'stem_notes'
         ? {
             totalLowMs: 107000,
             totalHighMs: 203000,
@@ -41,56 +40,18 @@ test('upload shows estimate and local DSP processing copy before phase1 complete
               },
             ],
           }
-        : transcribeEnabled
-          ? {
-              totalLowMs: 47000,
-              totalHighMs: 113000,
-              stages: [
-                {
-                  key: 'local_dsp',
-                  label: 'Local DSP analysis',
-                  lowMs: 22000,
-                  highMs: 38000,
-                },
-                {
-                  key: 'transcription_full_mix',
-                  label: 'Pitch/Note Translation on full mix',
-                  lowMs: 25000,
-                  highMs: 75000,
-                },
-              ],
-            }
-          : stemSeparationEnabled
-            ? {
-                totalLowMs: 67000,
-                totalHighMs: 128000,
-                stages: [
-                  {
-                    key: 'local_dsp',
-                    label: 'Local DSP analysis',
-                    lowMs: 22000,
-                    highMs: 38000,
-                  },
-                  {
-                    key: 'demucs_separation',
-                    label: 'Demucs separation',
-                    lowMs: 45000,
-                    highMs: 90000,
-                  },
-                ],
-              }
-          : {
-              totalLowMs: 22000,
-              totalHighMs: 38000,
-              stages: [
-                {
-                  key: 'local_dsp',
-                  label: 'Local DSP analysis',
-                  lowMs: 22000,
-                  highMs: 38000,
-                },
-              ],
-            };
+        : {
+            totalLowMs: 22000,
+            totalHighMs: 38000,
+            stages: [
+              {
+                key: 'local_dsp',
+                label: 'Local DSP analysis',
+                lowMs: 22000,
+                highMs: 38000,
+              },
+            ],
+          };
 
     await route.fulfill({
       status: 200,
@@ -287,7 +248,7 @@ test('upload shows estimate and local DSP processing copy before phase1 complete
   await pitchNoteToggle.uncheck();
   await expect(page.getByText('22s-38s')).toBeVisible();
 
-  await page.getByRole('button', { name: /Initiate Analysis/i }).click();
+  await page.getByRole('button', { name: /Run Analysis/i }).click();
 
   await expect(page.getByRole('heading', { name: 'Analysis Results' })).toBeVisible();
   await expect(page.getByText('Analysis Results')).toBeVisible();

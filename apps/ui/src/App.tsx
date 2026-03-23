@@ -15,11 +15,16 @@ import {
 } from './config';
 import { getAudioMimeTypeOrDefault, isSupportedAudioFile } from './services/audioFile';
 import { analyzeAudio, monitorAnalysisRun } from './services/analyzer';
-import { createInterpretationAttempt, createPitchNoteTranslationAttempt } from './services/analysisRunsClient';
+import {
+  createInterpretationAttempt,
+  createPitchNoteTranslationAttempt,
+  estimateAnalysisRun,
+  projectPhase1FromRun,
+  projectPhase2FromRun,
+} from './services/analysisRunsClient';
 import {
   BackendClientError,
   deriveAnalyzeTimeoutMs,
-  estimatePhase1WithBackend,
   mapBackendError,
 } from './services/backendPhase1Client';
 import { MEASUREMENT_LABEL, INTERPRETATION_LABEL } from './services/phaseLabels';
@@ -28,10 +33,7 @@ import {
   AnalysisStageStatus,
   BackendAnalysisEstimate,
   DiagnosticLogEntry,
-  MeasurementResult,
   Phase1Result,
-  Phase2Result,
-  TranscriptionDetail,
 } from './types';
 import type { AnalysisResultsProps } from './components/AnalysisResults';
 import {
@@ -208,9 +210,6 @@ export default function App() {
   const [selectedModel, setSelectedModel] = useState(MODELS[0].id);
   const [interpretationRequested, setInterpretationRequested] = useState(() => loadPhase2RequestedPreference());
 
-  const [measurementResult, setMeasurementResult] = useState<MeasurementResult | null>(null);
-  const [pitchNoteResult, setPitchNoteResult] = useState<TranscriptionDetail | null>(null);
-  const [phase2Result, setPhase2Result] = useState<Phase2Result | null>(null);
   const [phase2StatusMessage, setPhase2StatusMessage] = useState<string | null>(null);
   const [logs, setLogs] = useState<DiagnosticLogEntry[]>([]);
   const [analysisRun, setAnalysisRun] = useState<AnalysisRunSnapshot | null>(null);
@@ -261,11 +260,13 @@ export default function App() {
     setEstimateWrongService(false);
     setIsEstimateLoading(true);
 
-    // Legacy estimate route — retained pending canonicalization into analysis-runs API.
-    estimatePhase1WithBackend(audioFile, {
+    estimateAnalysisRun(audioFile, {
       apiBaseUrl: appConfig.apiBaseUrl,
-      transcribe: pitchNoteTranslationRequested,
-      separate: pitchNoteTranslationRequested,
+      pitchNoteMode: pitchNoteTranslationRequested ? 'stem_notes' : 'off',
+      pitchNoteBackend: 'auto',
+      interpretationMode: interpretationWillRun ? 'async' : 'off',
+      interpretationProfile: 'producer_summary',
+      interpretationModel: interpretationWillRun ? selectedModel : undefined,
     })
       .then((result) => {
         if (isCancelled) return;
@@ -286,7 +287,7 @@ export default function App() {
     return () => {
       isCancelled = true;
     };
-  }, [audioFile, pitchNoteTranslationRequested]);
+  }, [audioFile, interpretationWillRun, pitchNoteTranslationRequested, selectedModel]);
 
   useEffect(() => {
     if (!isAnalyzing || analysisStartedAtRef.current === null) {
@@ -308,9 +309,6 @@ export default function App() {
     if (audioUrl) URL.revokeObjectURL(audioUrl);
     setAudioFile(file);
     setAudioUrl(URL.createObjectURL(file));
-    setMeasurementResult(null);
-    setPitchNoteResult(null);
-    setPhase2Result(null);
     setPhase2StatusMessage(null);
     setLogs([]);
     setAnalysisRun(null);
@@ -328,9 +326,6 @@ export default function App() {
     setAudioFile(null);
     if (audioUrl) URL.revokeObjectURL(audioUrl);
     setAudioUrl(null);
-    setMeasurementResult(null);
-    setPitchNoteResult(null);
-    setPhase2Result(null);
     setPhase2StatusMessage(null);
     setLogs([]);
     setAnalysisRun(null);
@@ -541,17 +536,8 @@ export default function App() {
             ];
           });
           completionRef.current.measurement = true;
-          if (result) {
-            const { transcriptionDetail, ...measurement } = result;
-            setMeasurementResult(measurement);
-            setPitchNoteResult(transcriptionDetail ?? null);
-          } else {
-            setMeasurementResult(null);
-            setPitchNoteResult(null);
-          }
         },
         (result, log) => {
-          setPhase2Result(result);
           setPhase2StatusMessage(log.message ?? null);
           setLogs((prev) => {
             const baseMessage =
@@ -625,17 +611,9 @@ export default function App() {
           onRunUpdate: (update) => {
             setActiveRunId(update.runId);
             setAnalysisRun(update.snapshot);
-            const p1 = update.displayPhase1;
-            if (p1) {
-              const { transcriptionDetail, ...measurement } = p1;
-              setMeasurementResult(measurement);
-              setPitchNoteResult(transcriptionDetail ?? null);
-            } else {
-              setMeasurementResult(null);
-              setPitchNoteResult(null);
-            }
-            setPhase2Result(update.displayPhase2);
-            if (!update.displayPhase2 && isTerminalStageStatus(update.snapshot.stages.interpretation.status)) {
+            if (update.displayPhase2) {
+              setPhase2StatusMessage(null);
+            } else if (isTerminalStageStatus(update.snapshot.stages.interpretation.status)) {
               setPhase2StatusMessage(
                 update.snapshot.stages.interpretation.error?.message ??
                   (update.snapshot.stages.interpretation.status === 'not_requested'
@@ -734,18 +712,9 @@ export default function App() {
         selectedModel,
         (result, log) => {
           completionRef.current.measurement = true;
-          if (result) {
-            const { transcriptionDetail, ...measurement } = result;
-            setMeasurementResult(measurement);
-            setPitchNoteResult(transcriptionDetail ?? null);
-          } else {
-            setMeasurementResult(null);
-            setPitchNoteResult(null);
-          }
           setLogs((prev) => replaceRunningLog(prev, 'measurement', { ...log, status: 'success' }));
         },
         (result, log) => {
-          setPhase2Result(result);
           setPhase2StatusMessage(log.message ?? null);
           setLogs((prev) => replaceRunningLog(prev, 'interpretation', { ...log, status: log.status ?? 'success' }));
         },
@@ -763,16 +732,9 @@ export default function App() {
           onRunUpdate: (update) => {
             setActiveRunId(update.runId);
             setAnalysisRun(update.snapshot);
-            const p1 = update.displayPhase1;
-            if (p1) {
-              const { transcriptionDetail, ...measurement } = p1;
-              setMeasurementResult(measurement);
-              setPitchNoteResult(transcriptionDetail ?? null);
-            } else {
-              setMeasurementResult(null);
-              setPitchNoteResult(null);
+            if (update.displayPhase2) {
+              setPhase2StatusMessage(null);
             }
-            setPhase2Result(update.displayPhase2);
             previousRunRef.current = update.snapshot;
           },
         },
@@ -809,18 +771,9 @@ export default function App() {
         selectedModel,
         (result, log) => {
           completionRef.current.measurement = true;
-          if (result) {
-            const { transcriptionDetail, ...measurement } = result;
-            setMeasurementResult(measurement);
-            setPitchNoteResult(transcriptionDetail ?? null);
-          } else {
-            setMeasurementResult(null);
-            setPitchNoteResult(null);
-          }
           setLogs((prev) => replaceRunningLog(prev, 'measurement', { ...log, status: 'success' }));
         },
         (result, log) => {
-          setPhase2Result(result);
           setPhase2StatusMessage(log.message ?? null);
           setLogs((prev) => replaceRunningLog(prev, 'interpretation', { ...log, status: log.status ?? 'success' }));
         },
@@ -838,16 +791,9 @@ export default function App() {
           onRunUpdate: (update) => {
             setActiveRunId(update.runId);
             setAnalysisRun(update.snapshot);
-            const p1 = update.displayPhase1;
-            if (p1) {
-              const { transcriptionDetail, ...measurement } = p1;
-              setMeasurementResult(measurement);
-              setPitchNoteResult(transcriptionDetail ?? null);
-            } else {
-              setMeasurementResult(null);
-              setPitchNoteResult(null);
+            if (update.displayPhase2) {
+              setPhase2StatusMessage(null);
             }
-            setPhase2Result(update.displayPhase2);
             previousRunRef.current = update.snapshot;
           },
         },
@@ -880,12 +826,8 @@ export default function App() {
       ),
   );
   const shouldShowStatusPanel = Boolean(audioUrl && audioFile && analysisRun && (isAnalyzing || hasRetryableRunStage));
-  const phase1ForRender: Phase1Result | null = measurementResult
-    ? {
-        ...measurementResult,
-        transcriptionDetail: pitchNoteResult ?? null,
-      }
-    : null;
+  const phase1ForRender: Phase1Result | null = analysisRun ? projectPhase1FromRun(analysisRun) : null;
+  const phase2ForRender = analysisRun ? projectPhase2FromRun(analysisRun) : null;
 
   return (
     <div className="min-h-screen bg-bg-app px-3 py-3 md:px-6 md:py-5 font-sans flex items-center justify-center">
@@ -979,11 +921,11 @@ export default function App() {
                           checked={pitchNoteTranslationRequested}
                           onChange={(e) => setPitchNoteTranslationRequested(e.target.checked)}
                           disabled={isAnalyzing}
-                          aria-label="SYMBOLIC EXTRACTION"
+                          aria-label="PITCH/NOTE TRANSLATION"
                           className="mt-0.5 h-4 w-4 accent-accent"
                         />
                         <div className="space-y-1">
-                          <p className="text-[10px] font-mono uppercase tracking-wider">SYMBOLIC EXTRACTION</p>
+                          <p className="text-[10px] font-mono uppercase tracking-wider">PITCH/NOTE TRANSLATION</p>
                           <p className="text-[10px] font-mono uppercase tracking-wide opacity-80">
                             Best-effort local note extraction from separated stems
                           </p>
@@ -1048,7 +990,7 @@ export default function App() {
                         </select>
                       </div>
                     </div>
-                    {!measurementResult && audioFile && (
+                    {!phase1ForRender && audioFile && (
                       <>
                         <motion.div
                           initial={{ opacity: 0, y: 8 }}
@@ -1184,7 +1126,7 @@ export default function App() {
               >
                 <AnalysisResults
                   phase1={phase1ForRender}
-                  phase2={phase2Result}
+                  phase2={phase2ForRender}
                   phase2StatusMessage={phase2StatusMessage}
                   sourceFileName={audioFile?.name ?? null}
                   spectralArtifacts={analysisRun?.artifacts?.spectral ?? null}

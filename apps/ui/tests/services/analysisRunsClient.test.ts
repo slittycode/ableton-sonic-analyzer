@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AnalysisRunSnapshot } from '../../src/types';
 import {
   createAnalysisRun,
+  estimateAnalysisRun,
   createInterpretationAttempt,
   createPitchNoteTranslationAttempt,
   getAnalysisRun,
@@ -140,6 +141,103 @@ afterEach(() => {
 });
 
 describe('analysisRunsClient', () => {
+  it('creates a canonical estimate request with staged fields', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: () => Promise.resolve({
+        requestId: 'req_estimate_123',
+        estimate: {
+          durationSeconds: 210.6,
+          totalLowMs: 22000,
+          totalHighMs: 38000,
+          stages: [{ key: 'local_dsp', label: 'Local DSP analysis', lowMs: 22000, highMs: 38000 }],
+        },
+      }),
+    } as Response);
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const file = new File(['audio-data'], 'track.mp3', { type: 'audio/mpeg' });
+    const estimate = await estimateAnalysisRun(file, {
+      apiBaseUrl: 'http://127.0.0.1:8100',
+      pitchNoteMode: 'stem_notes',
+      pitchNoteBackend: 'auto',
+      interpretationMode: 'async',
+      interpretationProfile: 'producer_summary',
+      interpretationModel: 'gemini-2.5-flash',
+    });
+
+    expect(estimate.requestId).toBe('req_estimate_123');
+
+    const request = fetchSpy.mock.calls[0];
+    expect(request[0]).toBe('http://127.0.0.1:8100/api/analysis-runs/estimate');
+    const body = request[1].body as FormData;
+    expect(body.get('pitch_note_mode')).toBe('stem_notes');
+    expect(body.get('pitch_note_backend')).toBe('auto');
+    expect(body.get('interpretation_mode')).toBe('async');
+    expect(body.get('interpretation_profile')).toBe('producer_summary');
+    expect(body.get('interpretation_model')).toBe('gemini-2.5-flash');
+  });
+
+  it('classifies canonical estimate failures as wrong-service when openapi identifies another API', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+
+        if (url.endsWith('/api/analysis-runs/estimate')) {
+          return new Response(JSON.stringify({ detail: 'Not Found' }), {
+            status: 404,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          });
+        }
+
+        if (url.endsWith('/openapi.json')) {
+          return new Response(
+            JSON.stringify({
+              info: { title: 'Multi-Agent Dashboard API' },
+              paths: {
+                '/api/state': {},
+              },
+            }),
+            {
+              status: 200,
+              headers: {
+                'Content-Type': 'application/json',
+              },
+            },
+          );
+        }
+
+        throw new Error(`Unexpected fetch URL: ${url}`);
+      }),
+    );
+
+    await expect(
+      estimateAnalysisRun(
+        new File(['wave'], 'track.mp3', { type: 'audio/mpeg' }),
+        {
+          apiBaseUrl: 'http://localhost:8000',
+          pitchNoteMode: 'off',
+          pitchNoteBackend: 'auto',
+          interpretationMode: 'off',
+          interpretationProfile: 'producer_summary',
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: 'BACKEND_WRONG_SERVICE',
+      message: expect.stringContaining('/api/analysis-runs/estimate'),
+      details: {
+        status: 404,
+        configuredBaseUrl: 'http://localhost:8000',
+        detectedServiceTitle: 'Multi-Agent Dashboard API',
+      },
+    });
+  });
+
   it('creates a canonical run with pitch/note and interpretation form fields', async () => {
     const fetchSpy = vi.fn().mockResolvedValue({
       ok: true,

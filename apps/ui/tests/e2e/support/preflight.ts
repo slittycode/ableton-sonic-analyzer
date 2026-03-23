@@ -1,3 +1,6 @@
+import { access } from 'node:fs/promises';
+import path from 'node:path';
+
 const DEFAULT_BACKEND_BASE_URL = 'http://127.0.0.1:8100';
 const PLACEHOLDER_GEMINI_KEYS = new Set([
   'your_real_key_here',
@@ -28,21 +31,53 @@ export function isPlaceholderGeminiApiKey(value: string | null | undefined): boo
   );
 }
 
-export function validateLiveGeminiEnv(env: Record<string, string | undefined>): string[] {
+const AUDIO_EXTENSIONS = new Set([
+  '.aac',
+  '.aif',
+  '.aiff',
+  '.flac',
+  '.m4a',
+  '.mp3',
+  '.ogg',
+  '.wav',
+  '.wma',
+]);
+
+async function isReadableAudioFile(filePath: string | undefined): Promise<boolean> {
+  const normalized = filePath?.trim() ?? '';
+  if (!normalized) return false;
+
+  const extension = path.extname(normalized).toLowerCase();
+  if (!AUDIO_EXTENSIONS.has(extension)) {
+    return false;
+  }
+
+  try {
+    await access(normalized);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function validateLiveE2EEnv(env: Record<string, string | undefined>): Promise<string[]> {
   const issues: string[] = [];
+  if (!(await isReadableAudioFile(env.TEST_FLAC_PATH))) {
+    issues.push('TEST_FLAC_PATH must point to a readable audio file for the full live E2E suite.');
+  }
 
   if (env.VITE_ENABLE_PHASE2_GEMINI !== 'true') {
     issues.push('VITE_ENABLE_PHASE2_GEMINI must be set to "true" for the full live E2E suite.');
   }
 
-  if (isPlaceholderGeminiApiKey(env.VITE_GEMINI_API_KEY)) {
-    issues.push('VITE_GEMINI_API_KEY must be set to a real Gemini API key for the full live E2E suite.');
+  if (isPlaceholderGeminiApiKey(env.GEMINI_API_KEY)) {
+    issues.push('GEMINI_API_KEY must be set to a real Gemini API key for the full live E2E suite.');
   }
 
   return issues;
 }
 
-export async function backendSupportsPhase1Routes(
+export async function backendSupportsLiveE2ERoutes(
   baseUrl: string,
   fetchImpl: FetchLike = fetch,
 ): Promise<boolean> {
@@ -57,9 +92,9 @@ export async function backendSupportsPhase1Routes(
 
     const spec = (await response.json()) as { paths?: Record<string, unknown> };
     return Boolean(
-      spec.paths?.['/api/analyze'] &&
-      spec.paths?.['/api/analyze/estimate'] &&
-      spec.paths?.['/api/phase2'],
+      spec.paths?.['/api/analysis-runs/estimate'] &&
+      spec.paths?.['/api/analysis-runs'] &&
+      spec.paths?.['/api/analysis-runs/{run_id}'],
     );
   } catch {
     return false;
@@ -75,18 +110,18 @@ interface LiveE2EPreflightOptions {
 
 export async function assertLiveE2EPreflight(options: LiveE2EPreflightOptions = {}): Promise<void> {
   const env = options.env ?? (process.env as Record<string, string | undefined>);
-  const issues = validateLiveGeminiEnv(env);
+  const issues = await validateLiveE2EEnv(env);
 
   if (issues.length > 0) {
     throw new Error(issues.join('\n'));
   }
 
   const backendBaseUrl = resolveLiveBackendBaseUrl(env);
-  const backendReady = await backendSupportsPhase1Routes(backendBaseUrl, options.fetchImpl);
+  const backendReady = await backendSupportsLiveE2ERoutes(backendBaseUrl, options.fetchImpl);
 
   if (!backendReady) {
     throw new Error(
-      `Backend at ${backendBaseUrl} must expose /api/analyze and /api/analyze/estimate for the full live E2E suite.`,
+      `Backend at ${backendBaseUrl} must expose /api/analysis-runs/estimate, /api/analysis-runs, and /api/analysis-runs/{run_id} for the full live E2E suite.`,
     );
   }
 }

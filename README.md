@@ -21,6 +21,15 @@ Migration note:
 - UI: `http://127.0.0.1:3100`
 - backend: `http://127.0.0.1:8100`
 
+## Canonical Runtime Flow
+
+- `POST /api/analysis-runs/estimate`
+- `POST /api/analysis-runs`
+- `GET /api/analysis-runs/{run_id}`
+- `GET /api/analysis-runs/{run_id}/artifacts...`
+
+Legacy `POST /api/analyze`, `POST /api/analyze/estimate`, and `POST /api/phase2` remain available only as temporary compatibility wrappers during the migration window.
+
 ## Local Setup
 
 Frontend dependencies:
@@ -78,25 +87,24 @@ Then set:
 ```bash
 VITE_API_BASE_URL="http://127.0.0.1:8100"
 VITE_ENABLE_PHASE2_GEMINI="true"
-VITE_GEMINI_API_KEY="your_real_key_here"
 ```
 
 Supported shell-based overrides:
 
 ```bash
-export VITE_GEMINI_API_KEY="your_real_key_here"
+export GEMINI_API_KEY="your_real_key_here"
 ./scripts/dev.sh
 ```
 
 ```bash
-VITE_GEMINI_API_KEY="your_real_key_here" ./scripts/dev.sh
+GEMINI_API_KEY="your_real_key_here" ./scripts/dev.sh
 ```
 
 This does **not** work because the variable is not exported to the next
 command:
 
 ```bash
-VITE_GEMINI_API_KEY="your_real_key_here"
+GEMINI_API_KEY="your_real_key_here"
 ./scripts/dev.sh
 ```
 
@@ -128,13 +136,22 @@ cd apps/backend
 ./venv/bin/python -m unittest discover -s tests
 ```
 
+Canonical live end-to-end verification is local-only and requires a real audio file plus backend Gemini credentials:
+
+```bash
+TEST_FLAC_PATH=/path/to/track.flac \
+GEMINI_API_KEY=your_real_key_here \
+VITE_ENABLE_PHASE2_GEMINI=true \
+./scripts/test-e2e.sh
+```
+
 ## Release Position
 
 The initial monorepo cut was **local/dev `v1.0.0`**. Current tags: `v1.2.0` (root), `ui-v1.6.0` (frontend).
 
 The current quality bar is met for local development and iterative product work.
 It should not be presented as a stronger production/security milestone until
-Gemini access is moved out of the browser bundle.
+authentication, stronger input hardening, and non-local artifact/database infrastructure are in place.
 
 Keep the backend bootstrap limitation in mind when handing the repo to another machine:
 

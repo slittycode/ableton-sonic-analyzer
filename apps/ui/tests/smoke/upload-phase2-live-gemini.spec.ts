@@ -18,9 +18,9 @@ async function backendSupportsPhase2Route(baseUrl: string): Promise<boolean> {
 
     const spec = (await response.json()) as { paths?: Record<string, unknown> };
     return Boolean(
-      spec.paths?.["/api/analyze"] &&
-      spec.paths?.["/api/analyze/estimate"] &&
-      spec.paths?.["/api/phase2"],
+      spec.paths?.["/api/analysis-runs/estimate"] &&
+      spec.paths?.["/api/analysis-runs"] &&
+      spec.paths?.["/api/analysis-runs/{run_id}"],
     );
   } catch {
     return false;
@@ -63,16 +63,15 @@ test("live Gemini Files API path: large audio triggers server-side upload+genera
   test.skip(!geminiPhase2Enabled, "VITE_ENABLE_PHASE2_GEMINI must be true for the live Gemini smoke test.");
   test.skip(
     !(await backendSupportsPhase2Route(backendBaseUrl)),
-    `Backend at ${backendBaseUrl} must expose /api/analyze, /api/analyze/estimate, and /api/phase2.`,
+    `Backend at ${backendBaseUrl} must expose /api/analysis-runs/estimate, /api/analysis-runs, and /api/analysis-runs/{run_id}.`,
   );
 
   const largeWavPath = testInfo.outputPath("live-gemini-large-silence.wav");
   const fileSizeBytes = await writeOversizedSilentWav(largeWavPath);
   expect(fileSizeBytes).toBeGreaterThan(INLINE_SIZE_LIMIT);
 
-  // Monitor the browser→backend phase2 request (Gemini calls happen server-side now).
-  const phase2RequestPromise = page.waitForRequest(
-    (request) => request.method() === "POST" && request.url().includes("/api/phase2"),
+  const createRunResponsePromise = page.waitForResponse(
+    (response) => response.request().method() === "POST" && response.url().includes("/api/analysis-runs"),
     { timeout: 8 * 60 * 1_000 },
   );
 
@@ -87,11 +86,12 @@ test("live Gemini Files API path: large audio triggers server-side upload+genera
     await expect(modelSelect).toHaveValue("gemini-2.5-flash");
     await expect(page.getByText("PHASE 2 OFF")).toHaveCount(0);
 
-    await page.getByRole("button", { name: /Initiate Analysis/i }).click();
+    await page.getByRole("button", { name: /Run Analysis/i }).click();
 
-    const phase2Request = await phase2RequestPromise;
-    expect(phase2Request.method()).toBe("POST");
-    expect(phase2Request.url()).toContain("/api/phase2");
+    const createRunResponse = await createRunResponsePromise;
+    expect(createRunResponse.ok()).toBeTruthy();
+    const payload = (await createRunResponse.json()) as { runId?: string };
+    expect(payload.runId).toBeTruthy();
 
     await expect(page.getByText("Analysis Results")).toBeVisible({ timeout: 8 * 60 * 1_000 });
     await expect(page.getByText("System Diagnostics")).toBeVisible();
@@ -101,6 +101,24 @@ test("live Gemini Files API path: large audio triggers server-side upload+genera
     await expect(page.getByText(/Phase 2 advisory complete\. Upload: \d+ms, Generate: \d+ms/)).toBeVisible({
       timeout: 8 * 60 * 1_000,
     });
+
+    const snapshotResponse = await fetch(`${backendBaseUrl.replace(/\/+$/, "")}/api/analysis-runs/${payload.runId}`);
+    expect(snapshotResponse.ok).toBeTruthy();
+    const snapshot = (await snapshotResponse.json()) as {
+      stages: {
+        interpretation: {
+          status: string;
+          diagnostics?: {
+            timings?: {
+              flagsUsed?: string[];
+            };
+          };
+        };
+      };
+    };
+
+    expect(snapshot.stages.interpretation.status).toBe("completed");
+    expect(snapshot.stages.interpretation.diagnostics?.timings?.flagsUsed ?? []).toContain("files-api");
     await expect(page.getByText(/Unexpected DSP backend error/i)).toHaveCount(0);
     await expect(page.getByText(/Phase 2 advisory is disabled or missing an API key/i)).toHaveCount(0);
   } finally {

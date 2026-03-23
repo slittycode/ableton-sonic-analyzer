@@ -261,6 +261,7 @@ export function AnalysisResults({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
+      data-testid="analysis-results-root"
       className="space-y-12"
     >
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-border relative">
@@ -276,6 +277,7 @@ export function AnalysisResults({
         <div className="flex items-center gap-3">
           <button
             onClick={handleExportJSON}
+            data-testid="analysis-export-json"
             className="flex items-center gap-2 px-4 py-2 bg-bg-panel border border-border rounded text-xs font-mono uppercase tracking-wider hover:bg-bg-card-hover hover:border-accent/50 transition-all group"
           >
             <FileJson className="w-3 h-3 text-text-secondary group-hover:text-accent" />
@@ -283,6 +285,7 @@ export function AnalysisResults({
           </button>
           <button
             onClick={handleExportMD}
+            data-testid="analysis-export-markdown"
             className="flex items-center gap-2 px-4 py-2 bg-accent/10 border border-accent/50 text-accent rounded text-xs font-mono uppercase tracking-wider hover:bg-accent/20 transition-all shadow-[0_0_10px_rgba(255,85,0,0.1)]"
           >
             <FileText className="w-3 h-3" />
@@ -421,7 +424,7 @@ export function AnalysisResults({
         runId={runId}
       />
 
-      <div className="space-y-2">
+      <section data-testid="interpretation-panel" className="space-y-2">
         <div className="flex items-center justify-between border-b border-border pb-2">
           <h2 className="text-sm font-mono uppercase tracking-wider flex items-center gap-2 text-text-secondary">
             <span className="w-2 h-2 bg-accent rounded-full"></span>
@@ -442,7 +445,7 @@ export function AnalysisResults({
             Draft — AI interpretation is incomplete or unavailable.
           </p>
         )}
-      </div>
+      </section>
 
       {confidenceBadges.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 px-1">

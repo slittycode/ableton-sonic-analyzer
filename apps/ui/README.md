@@ -12,15 +12,15 @@ The app uploads a track to the local DSP backend, shows the estimate and executi
 - automatic measurement estimate request on file selection
 - local DSP execution status with elapsed time, stage estimates, and progress bar
 - cancel button during analysis with end-to-end abort handling across measurement and AI interpretation
-- optional symbolic extraction toggle for the backend request
-- optional Demucs stem separation toggle for the backend request, independent of symbolic extraction
+- optional pitch/note translation toggle for the backend request
+- optional Demucs stem separation toggle for the backend request, independent of pitch/note translation
 - optional Gemini AI interpretation pass with a selectable model
 - analysis result dashboard with arrangement, sonic, mix-chain, patch, and secret-sauce sections
 - Session Musician panel with:
-  - symbolic note view when `transcriptionDetail` exists
+  - pitch/note view when `transcriptionDetail` exists
   - monophonic Essentia melody guide when `melodyDetail` exists
   - source toggle when both are available
-  - confidence threshold slider (symbolic-note mode only; disabled in melody-guide mode with tooltip)
+  - confidence threshold slider (pitch/note mode only; disabled in melody-guide mode with tooltip)
   - quantize grid and swing controls
   - browser preview and `.mid` download
 - JSON export and markdown report export
@@ -63,11 +63,12 @@ cp .env.example .env
 
 | Variable | Meaning | Current behavior |
 | --- | --- | --- |
-| `VITE_API_BASE_URL` | Base URL for the backend API. | `src/config.ts` falls back to `http://127.0.0.1:8100` when unset. The checked-in `.env.example` uses `http://127.0.0.1:8100`. If another FastAPI app is answering on your configured URL, the UI now reports that it found the wrong service and disables `Initiate Analysis`. |
+| `VITE_API_BASE_URL` | Base URL for the backend API. | `src/config.ts` falls back to `http://127.0.0.1:8100` when unset. The checked-in `.env.example` uses `http://127.0.0.1:8100`. If another FastAPI app is answering on your configured URL, the UI now reports that it found the wrong service and disables `Run Analysis`. |
 | `VITE_ENABLE_PHASE2_GEMINI` | Hard kill-switch for the optional Gemini interpretation pass. | Defaults to `"true"` when unset. Set it to `"false"` only when you want to disable AI interpretation for the whole build. |
-| `VITE_GEMINI_API_KEY` | Gemini API key. | AI interpretation is on by default in the UI, but the interpretation run is blocked until this value is non-empty. |
 | `RUN_GEMINI_LIVE_SMOKE` | Enables the opt-in live Playwright proof for the Gemini Files API path. | Must be `"true"` to run `npm run test:smoke:live-gemini`; default smoke coverage keeps Gemini mocked. |
 | `DISABLE_HMR` | Vite dev-server knob. | `vite.config.ts` disables HMR only when this is `"true"`. |
+
+Gemini interpretation is now backend-mediated. The backend reads `GEMINI_API_KEY` from the shell environment; the UI does not consume `VITE_GEMINI_API_KEY`.
 
 ## Running Locally
 
@@ -90,27 +91,26 @@ Then set:
 ```bash
 VITE_API_BASE_URL="http://127.0.0.1:8100"
 VITE_ENABLE_PHASE2_GEMINI="true"
-VITE_GEMINI_API_KEY="your_real_key_here"
 ```
 
 Supported shell-based overrides:
 
 ```bash
-export VITE_GEMINI_API_KEY="your_real_key_here"
+export GEMINI_API_KEY="your_real_key_here"
 cd /Users/christiansmith/code/projects/asa
 ./scripts/dev.sh
 ```
 
 ```bash
 cd /Users/christiansmith/code/projects/asa
-VITE_GEMINI_API_KEY="your_real_key_here" ./scripts/dev.sh
+GEMINI_API_KEY="your_real_key_here" ./scripts/dev.sh
 ```
 
 This does **not** work because the variable is only local to the shell line and
 is not exported to the next command:
 
 ```bash
-VITE_GEMINI_API_KEY="your_real_key_here"
+GEMINI_API_KEY="your_real_key_here"
 ./scripts/dev.sh
 ```
 
@@ -141,7 +141,7 @@ Legacy note:
 
 The app talks to two backend routes.
 
-### `POST /api/analyze/estimate`
+### `POST /api/analysis-runs/estimate`
 
 When it runs:
 
@@ -150,8 +150,11 @@ When it runs:
 What the UI sends today:
 
 - multipart `track`
-- multipart `transcribe=false`
-- no `separate` query parameter
+- multipart `pitch_note_mode`
+- multipart `pitch_note_backend`
+- multipart `interpretation_mode`
+- multipart `interpretation_profile`
+- multipart `interpretation_model` when interpretation is enabled
 
 What the UI expects back:
 
@@ -166,38 +169,36 @@ Current note:
 - the UI uses this response only for display
 - if this request fails, the app still lets the user start analysis
 
-### `POST /api/analyze`
+### `POST /api/analysis-runs`
 
 When it runs:
 
-- after the user clicks `Initiate Analysis`
+- after the user clicks `Run Analysis`
 
 What the UI sends today:
 
 - multipart `track`
-- multipart `transcribe=true|false` based on the symbolic extraction toggle
-- multipart `separate=true|false` based on the stem separation toggle
-- no `separate` query parameter
+- multipart `pitch_note_mode=stem_notes|off` based on the pitch/note translation toggle
+- multipart `pitch_note_backend=auto`
+- multipart `interpretation_mode=async|off` based on the interpretation toggle and config gate
+- multipart `interpretation_profile=producer_summary`
+- multipart `interpretation_model` when interpretation is enabled
 
 ### Known Behavior
 
-- the UI no longer exposes `dsp_json_override` because the current backend ignores it
-- the frontend client transport still supports `dsp_json_override` as a reserved multipart field, but the visible App flow does not send it
-
-What the backend actually does with those fields today:
-
-- `track` is required and used
-- `transcribe` is used by `server.py`
+- the canonical UI flow no longer uses the legacy `POST /api/analyze` wrapper
+- the UI polls `GET /api/analysis-runs/{run_id}` and derives display-oriented `phase1` and `phase2` views from the run snapshot
 
 ### Success Response
 
-The UI expects the backend success envelope to contain:
+The UI expects the canonical run-creation response to contain:
 
-- `requestId`
-- `phase1`
-- `diagnostics`
+- `runId`
+- `requestedStages`
+- `stages`
+- `artifacts`
 
-Core `phase1` fields the app depends on:
+Core measurement fields the app depends on after projection:
 
 - `bpm`
 - `bpmConfidence`
@@ -267,13 +268,13 @@ This is what powers the visible backend error message and the diagnostic log ent
 
 ## AI Interpretation
 
-AI interpretation is optional and entirely frontend-owned.
+AI interpretation is optional and backend-mediated.
 
 Current behavior:
 
 - AI interpretation is on by default unless `VITE_ENABLE_PHASE2_GEMINI="false"` is used as a hard kill-switch.
 - The app remembers the user's AI interpretation toggle in browser storage.
-- If the UI toggle is on but `VITE_GEMINI_API_KEY` is missing, analysis start is blocked and the app tells you to either update `apps/ui/.env`, `export VITE_GEMINI_API_KEY=...`, or run `VITE_GEMINI_API_KEY=... ./scripts/dev.sh`.
+- The backend must have `GEMINI_API_KEY` in its shell environment before interpretation can run.
 - The user can choose from the baked-in Gemini model list in `src/App.tsx`.
 - The prompt uses the uploaded audio file plus the completed measurement payload and any server-owned downstream context.
 - Phase 2 results drive the arrangement narrative, sonic element cards, mix chain, patch framework, secret sauce, and recommendation sections.
@@ -305,11 +306,26 @@ npm run verify
 Notes about tests:
 
 - most smoke tests stub the backend and Gemini calls
-- `tests/smoke/upload-phase1-live.spec.ts` checks a real backend if `VITE_API_BASE_URL` is reachable
-- `tests/smoke/upload-phase1-live.spec.ts` uses `TEST_FLAC_PATH` when it points to an existing file, otherwise it silently falls back to `tests/smoke/fixtures/silence.wav`
-- `tests/smoke/upload-phase2-live-gemini.spec.ts` is opt-in and checks the real Gemini Files API path against a generated `>100MB` WAV when `RUN_GEMINI_LIVE_SMOKE=true`, `VITE_ENABLE_PHASE2_GEMINI=true`, and `VITE_GEMINI_API_KEY` is set
+- `tests/smoke` remains the mocked, CI-friendly UI-contract layer
+- `tests/e2e` is the canonical always-live suite and uses the current staged runtime contract: `POST /api/analysis-runs/estimate`, `POST /api/analysis-runs`, `GET /api/analysis-runs/{run_id}`, and artifact endpoints
+- the live E2E suite is local-only and requires:
+  - `TEST_FLAC_PATH` pointing at a readable audio file
+  - `GEMINI_API_KEY` in the backend environment
+  - `VITE_ENABLE_PHASE2_GEMINI=true`
+- `tests/smoke/upload-phase1-live.spec.ts` is a lightweight opt-in proof against the canonical `analysis-runs` flow
+- `tests/smoke/upload-phase2-live-gemini.spec.ts` is an opt-in Files API proof using a generated `>100MB` WAV and backend-mediated Gemini
 
-Run the live backend smoke against a real FLAC when one is available:
+Run the canonical local-only live suite:
+
+```bash
+TEST_FLAC_PATH=/path/to/track.flac \
+GEMINI_API_KEY=your_real_key_here \
+VITE_ENABLE_PHASE2_GEMINI=true \
+VITE_API_BASE_URL=http://127.0.0.1:8100 \
+./scripts/test-e2e.sh
+```
+
+Run the lightweight live backend smoke explicitly:
 
 ```bash
 TEST_FLAC_PATH=/path/to/track.flac \
@@ -317,12 +333,12 @@ VITE_API_BASE_URL=http://127.0.0.1:8100 \
 npm run test:smoke -- tests/smoke/upload-phase1-live.spec.ts
 ```
 
-Run the live Gemini proof explicitly:
+Run the live Gemini Files API smoke explicitly:
 
 ```bash
 RUN_GEMINI_LIVE_SMOKE=true \
 VITE_ENABLE_PHASE2_GEMINI=true \
-VITE_GEMINI_API_KEY=your_key_here \
+GEMINI_API_KEY=your_real_key_here \
 VITE_API_BASE_URL=http://127.0.0.1:8100 \
 npm run test:smoke:live-gemini
 ```

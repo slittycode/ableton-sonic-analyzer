@@ -1,0 +1,6 @@
+{"type":"server-started","port":64345,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:64345","screen_dir":"/Users/christiansmith/code/projects/asa/.superpowers/brainstorm/55385-1774186927"}
+{"type":"screen-added","file":"/Users/christiansmith/code/projects/asa/.superpowers/brainstorm/55385-1774186927/phase5-scope.html"}
+{"source":"user-event","type":"click","text":"1\n    \n      CQT Spectrogram\n      Log-frequency spectrogram aligned to musical pitch. 84 bins across 7 octaves. Third tab alongside Mel and Chroma in SpectrogramViewer. Best for seeing musical pitch content — notes line up on evenly-spaced rows instead of being compressed at the bottom like mel.","choice":"cqt","id":null,"timestamp":1774187066581}
+{"type":"screen-added","file":"/Users/christiansmith/code/projects/asa/.superpowers/brainstorm/55385-1774186927/waiting.html"}
+{"type":"screen-added","file":"/Users/christiansmith/code/projects/asa/.superpowers/brainstorm/55385-1774186927/phase5-mockups.html"}
+{"type":"server-stopped","reason":"idle timeout"}

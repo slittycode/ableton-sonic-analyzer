@@ -540,6 +540,76 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).toContain('Pumping Strength');
   });
 
+  it('renders an effects field panel in rhythm section when gating data is present', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: {
+          ...baseMeasurement,
+          rhythmDetail: {
+            onsetRate: 2.4,
+            beatGrid: [],
+            downbeats: [],
+            beatPositions: [],
+            grooveAmount: 0.22,
+            tempoStability: 0.94,
+            phraseGrid: {
+              phrases4Bar: [0, 4, 8, 12],
+              phrases8Bar: [0, 8],
+              phrases16Bar: [0],
+              totalBars: 16,
+            },
+          },
+          sidechainDetail: {
+            pumpingStrength: 0.61,
+            pumpingRegularity: 0.78,
+            pumpingRate: 'eighth',
+            pumpingConfidence: 0.83,
+            envelopeShape: [0.9, 0.5, 0.4, 0.6, 1, 0.55, 0.5, 0.48, 0.47, 0.44, 0.43, 0.45, 1, 0.58, 0.42, 0.62],
+          },
+          effectsDetail: {
+            gatingDetected: true,
+            gatingRate: 8,
+            gatingRegularity: 0.67,
+            gatingEventCount: 12,
+          },
+        },
+        phase2: basePhase2,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).toContain('Effects Field');
+    expect(html).toContain('Gate Events');
+    expect(html).toContain('Gate Regularity');
+    expect(html).toContain('Phrase Structure');
+  });
+
+  it('renders pump matrix fallback in rhythm section when no gating effect is present', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: {
+          ...baseMeasurement,
+          sidechainDetail: {
+            pumpingStrength: 0.31,
+            pumpingRegularity: 0.4,
+            pumpingRate: 'eighth',
+            pumpingConfidence: 0.7,
+            envelopeShape: [0.8, 0.6, 0.55, 0.72, 0.92, 0.58, 0.54, 0.6, 0.85, 0.63, 0.52, 0.5, 0.79, 0.62, 0.58, 0.69],
+          },
+          effectsDetail: {
+            gatingDetected: false,
+          },
+        },
+        phase2: basePhase2,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).toContain('Pump Matrix');
+    expect(html).toContain('Pump Confidence');
+    expect(html).not.toContain('Effects Field');
+  });
+
   it('renders chroma section and nav link when 12-bin chroma data is present', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {

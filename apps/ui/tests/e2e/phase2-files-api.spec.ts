@@ -5,14 +5,14 @@ import {
   DEFAULT_PHASE2_MODEL,
   expectNoCommonConnectivityErrors,
   gotoUploadPage,
-  observeGeminiTraffic,
   openDiagnosticLog,
   selectPhase2Model,
   setToggle,
-  startAnalysis,
+  startAnalysisAndCaptureRunId,
   uploadAudioFile,
   waitForAnalysisResults,
   waitForEstimate,
+  waitForRunToReachTerminalState,
 } from './support/liveHarness';
 
 test('live Gemini Files API path uploads, generates, and deletes large audio', async ({ page }, testInfo) => {
@@ -22,42 +22,30 @@ test('live Gemini Files API path uploads, generates, and deletes large audio', a
   const fixture = await writeOversizedMusicalWav(fixturePath);
   expect(fixture.byteLength).toBeGreaterThan(INLINE_SIZE_LIMIT);
 
-  const geminiTraffic = observeGeminiTraffic(page);
-
   await gotoUploadPage(page);
   await uploadAudioFile(page, fixturePath);
+  await setToggle(page, 'PITCH/NOTE EXTRACTION', false);
   await setToggle(page, 'AI INTERPRETATION', true);
   await selectPhase2Model(page, DEFAULT_PHASE2_MODEL);
 
   await waitForEstimate(page, 60_000);
-  const uploadRequestPromise = geminiTraffic.waitForUploadRequest(12 * 60 * 1_000);
-  const generateRequestPromise = geminiTraffic.waitForGenerateRequest(12 * 60 * 1_000);
-  const deleteRequestPromise = geminiTraffic.waitForDeleteRequest(12 * 60 * 1_000);
-
-  await startAnalysis(page);
-
-  const uploadRequest = await uploadRequestPromise;
-  const generateRequest = await generateRequestPromise;
-  const deleteRequest = await deleteRequestPromise;
-  const generateBody = generateRequest.postData() ?? '';
-
-  expect(uploadRequest.method()).toBe('POST');
-  expect(generateRequest.method()).toBe('POST');
-  expect(deleteRequest.method()).toBe('DELETE');
-  expect(generateBody).toContain('"fileData"');
-  expect(generateBody).toContain('"fileUri"');
-  expect(generateBody).not.toContain('"inlineData"');
-
-  const uploadIndex = geminiTraffic.requestOrder.indexOf('upload');
-  const generateIndex = geminiTraffic.requestOrder.indexOf('generate');
-  const deleteIndex = geminiTraffic.requestOrder.indexOf('delete');
-  expect(uploadIndex).toBeGreaterThanOrEqual(0);
-  expect(generateIndex).toBeGreaterThan(uploadIndex);
-  expect(deleteIndex).toBeGreaterThan(generateIndex);
+  const runId = await startAnalysisAndCaptureRunId(page);
+  const finalSnapshot = await waitForRunToReachTerminalState(runId, { timeoutMs: 12 * 60 * 1_000 });
 
   await waitForAnalysisResults(page, 12 * 60 * 1_000);
   await openDiagnosticLog(page);
   await expectNoCommonConnectivityErrors(page);
+
+  expect(finalSnapshot.stages.measurement.status).toBe('completed');
+  expect(finalSnapshot.stages.pitchNoteTranslation.status).toBe('not_requested');
+  expect(finalSnapshot.stages.interpretation.status).toBe('completed');
+
+  const timings = ((finalSnapshot.stages.interpretation.diagnostics ?? {}) as Record<string, unknown>)
+    .timings as Record<string, unknown> | undefined;
+  const flagsUsed = Array.isArray(timings?.flagsUsed) ? timings.flagsUsed : [];
+  expect(flagsUsed).toEqual(expect.arrayContaining(['files-api']));
+  expect(flagsUsed).not.toEqual(expect.arrayContaining(['inline']));
+
   await expect(page.getByText(/Phase 2 advisory complete\. Upload: \d+ms, Generate: \d+ms/)).toBeVisible({
     timeout: 12 * 60 * 1_000,
   });

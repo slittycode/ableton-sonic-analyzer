@@ -6,8 +6,9 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
+from fastapi.responses import JSONResponse
 from fastapi import UploadFile
 
 import server
@@ -192,6 +193,18 @@ class ServerContractTests(unittest.TestCase):
         self.assertIn("interpretation_profile", properties)
         self.assertIn("interpretation_model", properties)
 
+    def test_analysis_runs_estimate_endpoint_openapi_contract_exposes_stage_request_fields(
+        self,
+    ) -> None:
+        properties = self._request_body_properties("/api/analysis-runs/estimate")
+
+        self.assertIn("track", properties)
+        self.assertIn("pitch_note_mode", properties)
+        self.assertIn("pitch_note_backend", properties)
+        self.assertIn("interpretation_mode", properties)
+        self.assertIn("interpretation_profile", properties)
+        self.assertIn("interpretation_model", properties)
+
     def test_analysis_runs_endpoint_returns_canonical_stage_snapshot(self) -> None:
         from analysis_runtime import AnalysisRuntime
 
@@ -215,6 +228,90 @@ class ServerContractTests(unittest.TestCase):
         self.assertEqual(payload["stages"]["measurement"]["status"], "queued")
         self.assertEqual(payload["stages"]["pitchNoteTranslation"]["status"], "blocked")
         self.assertEqual(payload["stages"]["interpretation"]["status"], "blocked")
+
+    @patch.object(server, "get_audio_duration_seconds", return_value=214.6, create=True)
+    @patch.object(
+        server,
+        "build_analysis_estimate",
+        return_value={
+            "durationSeconds": 214.6,
+            "totalSeconds": {"min": 107, "max": 203},
+            "stages": [
+                {
+                    "key": "dsp",
+                    "label": "DSP analysis",
+                    "seconds": {"min": 22, "max": 38},
+                },
+                {
+                    "key": "separation",
+                    "label": "Demucs separation",
+                    "seconds": {"min": 45, "max": 90},
+                },
+                {
+                    "key": "transcription_stems",
+                    "label": "Torchcrepe on bass + other stems",
+                    "seconds": {"min": 40, "max": 75},
+                },
+            ],
+        },
+        create=True,
+    )
+    def test_analysis_runs_estimate_endpoint_uses_staged_request_fields(
+        self, build_estimate_mock, *_mocks
+    ) -> None:
+        response = asyncio.run(
+            server.estimate_analysis_run(
+                track=self._upload_file(),
+                pitch_note_mode="stem_notes",
+                pitch_note_backend="auto",
+                interpretation_mode="async",
+                interpretation_profile="producer_summary",
+                interpretation_model="gemini-2.5-flash",
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["estimate"]["totalLowMs"], 107000)
+        self.assertEqual(
+            [stage["key"] for stage in payload["estimate"]["stages"]],
+            ["local_dsp", "demucs_separation", "transcription_stems"],
+        )
+        build_estimate_mock.assert_called_once_with(214.6, True, True)
+
+    def test_analysis_runs_estimate_rejects_unknown_pitch_note_mode(self) -> None:
+        response = asyncio.run(
+            server.estimate_analysis_run(
+                track=self._upload_file(),
+                pitch_note_mode="invalid_mode",
+                pitch_note_backend="auto",
+                interpretation_mode="off",
+                interpretation_profile="producer_summary",
+                interpretation_model=None,
+            )
+        )
+
+        self.assertEqual(response.status_code, 400)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["error"]["code"], "PITCH_NOTE_MODE_UNSUPPORTED")
+        self.assertIn("invalid_mode", payload["error"]["message"])
+
+    def test_analysis_runs_estimate_rejects_unknown_interpretation_profile(self) -> None:
+        response = asyncio.run(
+            server.estimate_analysis_run(
+                track=self._upload_file(),
+                pitch_note_mode="off",
+                pitch_note_backend="auto",
+                interpretation_mode="async",
+                interpretation_profile="nonexistent_profile",
+                interpretation_model=None,
+            )
+        )
+
+        self.assertEqual(response.status_code, 400)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["error"]["code"], "INTERPRETATION_PROFILE_UNSUPPORTED")
+        self.assertIn("nonexistent_profile", payload["error"]["message"])
 
     def test_analysis_runs_endpoint_accepts_stem_summary_profile(self) -> None:
         from analysis_runtime import AnalysisRuntime
@@ -598,6 +695,49 @@ class ServerContractTests(unittest.TestCase):
         self.assertEqual(payload["estimate"]["totalLowMs"], 22000)
         self.assertEqual(payload["estimate"]["totalHighMs"], 38000)
         self.assertEqual(payload["estimate"]["stages"][0]["key"], "local_dsp")
+
+    @patch.object(
+        server,
+        "_estimate_analysis_run",
+        new_callable=AsyncMock,
+        create=True,
+    )
+    def test_legacy_estimate_endpoint_delegates_to_canonical_estimate_helper(
+        self,
+        estimate_mock: AsyncMock,
+    ) -> None:
+        estimate_mock.return_value = JSONResponse(
+            content={
+                "requestId": "req_estimate_legacy",
+                "estimate": {
+                    "durationSeconds": 60.0,
+                    "totalLowMs": 10000,
+                    "totalHighMs": 20000,
+                    "stages": [
+                        {
+                            "key": "local_dsp",
+                            "label": "Local DSP analysis",
+                            "lowMs": 10000,
+                            "highMs": 20000,
+                        }
+                    ],
+                },
+            }
+        )
+
+        response = asyncio.run(
+            server.estimate_analysis(
+                track=self._upload_file(),
+                dsp_json_override=None,
+                transcribe=True,
+                separate=False,
+                separate_query=False,
+                separate_flag=False,
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        estimate_mock.assert_awaited_once()
 
     @patch.object(server, "get_audio_duration_seconds", return_value=214.6, create=True)
     @patch.object(
@@ -1551,7 +1691,7 @@ class Phase2EndpointTests(unittest.TestCase):
         self.assertEqual(body["analysisRunId"], run_id)
         prompt = mock_client.models.generate_content.call_args.kwargs["contents"][0]["parts"][1]["text"]
         self.assertIn("AUTHORITATIVE_MEASUREMENT_RESULT_JSON", prompt)
-        self.assertIn("OPTIONAL_SYMBOLIC_EXTRACTION_RESULT_JSON", prompt)
+        self.assertIn("OPTIONAL_PITCH_NOTE_TRANSLATION_RESULT_JSON", prompt)
         self.assertIn("GROUNDING_METADATA", prompt)
         self.assertIn('"bpm": 128', prompt)
         self.assertNotIn('"bpm": 999', prompt)
