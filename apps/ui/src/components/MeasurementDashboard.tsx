@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   ChromaInteractiveData,
   OnsetStrengthData,
   Phase1Result,
+  PhraseGrid,
   SpectralArtifacts,
   SpectralTimeSeriesData,
 } from '../types';
@@ -140,11 +141,13 @@ const SectionHeader = ({
 
 const Section = ({
   id,
+  testId,
   number,
   title,
   children,
 }: {
   id?: string;
+  testId?: string;
   number: number;
   title: string;
   children: React.ReactNode;
@@ -152,7 +155,11 @@ const Section = ({
   const [isOpen, setIsOpen] = useState(true);
 
   return (
-    <div id={id} className="bg-bg-card border border-border rounded-sm p-4 space-y-4 scroll-mt-24">
+    <div
+      id={id}
+      data-testid={testId}
+      className="bg-bg-card border border-border rounded-sm p-4 space-y-4 scroll-mt-24"
+    >
       <SectionHeader
         number={number}
         title={title}
@@ -412,6 +419,565 @@ const DynamicCharacterRadar = ({ data }: { data: NormalizedDC }) => {
   );
 };
 
+/* ── Rhythm & Groove Components ─────────────────────────────────────── */
+
+const BreathingBpmPulse = ({ bpm, bpmSource }: { bpm: number; bpmSource?: string | null }) => {
+  const pulseDuration = bpm > 0 ? 60 / bpm : 0.5;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.5 }}
+      className="flex flex-col items-center"
+    >
+      <svg viewBox="0 0 120 120" className="w-[120px] h-[120px]">
+        <circle cx="60" cy="60" r="52" fill="none" stroke="#ff880015" strokeWidth="10" />
+        <circle
+          cx="60"
+          cy="60"
+          r="52"
+          fill="none"
+          stroke="#ff8800"
+          strokeWidth="2"
+          strokeDasharray="3 9"
+          opacity="0.4"
+        >
+          <animateTransform
+            attributeName="transform"
+            type="rotate"
+            dur="8s"
+            from="0 60 60"
+            to="360 60 60"
+            repeatCount="indefinite"
+          />
+        </circle>
+        <circle
+          cx="60"
+          cy="60"
+          r="38"
+          fill="none"
+          stroke="#a78bfa"
+          strokeWidth="1.5"
+          strokeDasharray="4 7"
+          opacity="0.25"
+        >
+          <animateTransform
+            attributeName="transform"
+            type="rotate"
+            dur="12s"
+            from="360 60 60"
+            to="0 60 60"
+            repeatCount="indefinite"
+          />
+        </circle>
+        <circle cx="60" cy="60" r="4" fill="#ff8800">
+          <animate
+            attributeName="r"
+            values="3;5.5;3"
+            dur={`${pulseDuration}s`}
+            repeatCount="indefinite"
+          />
+          <animate
+            attributeName="opacity"
+            values="0.8;0.35;0.8"
+            dur={`${pulseDuration}s`}
+            repeatCount="indefinite"
+          />
+        </circle>
+        <text
+          x="60"
+          y="57"
+          textAnchor="middle"
+          fill="#fff"
+          fontSize="22"
+          fontWeight="800"
+          fontFamily="'JetBrains Mono', monospace"
+        >
+          {Math.round(bpm)}
+        </text>
+        <text
+          x="60"
+          y="70"
+          textAnchor="middle"
+          fill="#555"
+          fontSize="8"
+          fontFamily="'JetBrains Mono', monospace"
+        >
+          BPM
+        </text>
+        {bpmSource && (
+          <text
+            x="60"
+            y="82"
+            textAnchor="middle"
+            fill="#00ff9d80"
+            fontSize="6.5"
+            fontFamily="'JetBrains Mono', monospace"
+          >
+            {bpmSource === 'percival_ratio_corrected'
+              ? '● corrected'
+              : bpmSource === 'rhythm_extractor_confirmed'
+                ? '● confirmed'
+                : '● detected'}
+          </text>
+        )}
+      </svg>
+    </motion.div>
+  );
+};
+
+const COMPARATIVE_ZONES: Record<
+  string,
+  { color: string; zones: string[]; max: number; unit?: string }
+> = {
+  groove: { color: '#ff8800', zones: ['tight', 'loose', 'swung', 'free'], max: 1 },
+  stability: {
+    color: '#a78bfa',
+    zones: ['erratic', 'loose', 'steady', 'locked'],
+    max: 100,
+    unit: '%',
+  },
+  danceability: {
+    color: '#fbbf24',
+    zones: ['ambient', 'chill', 'groovy', 'peak'],
+    max: 1,
+  },
+  onsetRate: {
+    color: '#34d399',
+    zones: ['sparse', 'moderate', 'dense', 'maximal'],
+    max: 8,
+    unit: '/sec',
+  },
+};
+
+const ComparativeMetricTile = ({
+  metricKey,
+  value,
+  delay = 0,
+}: {
+  metricKey: string;
+  value: number;
+  delay?: number;
+}) => {
+  const cfg = COMPARATIVE_ZONES[metricKey];
+  if (!cfg) return null;
+  const pct = Math.max(0, Math.min(100, (value / cfg.max) * 100));
+  const displayValue = cfg.unit === '%' ? `${value.toFixed(1)}%` : value.toFixed(2);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, delay }}
+      className="bg-[#141414] border border-[#1e1e1e] rounded-sm p-3"
+    >
+      <span
+        className="text-[7px] font-mono uppercase tracking-wider block"
+        style={{ color: `${cfg.color}80` }}
+      >
+        {metricKey === 'onsetRate' ? 'Onset Rate' : metricKey}
+      </span>
+      <div className="flex items-baseline gap-1 mt-1">
+        <span
+          className="text-[22px] font-display font-extrabold tabular-nums"
+          style={{ color: cfg.color }}
+        >
+          {cfg.unit === '/sec' ? value.toFixed(1) : displayValue}
+        </span>
+        {cfg.unit === '/sec' && (
+          <span className="text-[9px] font-mono" style={{ color: `${cfg.color}60` }}>
+            /sec
+          </span>
+        )}
+      </div>
+      <div className="relative mt-2.5">
+        <div className="flex h-[6px] rounded-[3px] overflow-hidden">
+          {cfg.zones.map((_, i) => (
+            <div
+              key={i}
+              className="flex-1"
+              style={{
+                background: `linear-gradient(90deg, ${cfg.color}${
+                  i === Math.floor(pct / 25) ? '30' : '12'
+                }, ${cfg.color}${i === Math.floor(pct / 25) ? '40' : '18'})`,
+              }}
+            />
+          ))}
+        </div>
+        <div
+          className="absolute top-[-2px] w-[2px] h-[10px] rounded-sm"
+          style={{
+            left: `${pct}%`,
+            transform: 'translateX(-50%)',
+            background: cfg.color,
+            boxShadow: `0 0 6px ${cfg.color}80`,
+          }}
+        />
+        <div className="flex justify-between mt-1">
+          {cfg.zones.map((z) => (
+            <span key={z} className="text-[6px] font-mono text-[#444]">
+              {z}
+            </span>
+          ))}
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
+const BeatSequencerGrid = ({
+  kickAccent,
+  hihatAccent,
+  accentPattern,
+}: {
+  kickAccent: number[];
+  hihatAccent: number[];
+  accentPattern: number[];
+}) => {
+  const cols = 16;
+  const pad = (arr: number[]) => {
+    const out = [...arr];
+    while (out.length < cols) out.push(0);
+    return out.slice(0, cols);
+  };
+  const kick = pad(kickAccent);
+  const hh = pad(hihatAccent);
+  const vel = pad(
+    accentPattern.length === 4 ? accentPattern.flatMap((v) => [v, 0, 0, 0]) : accentPattern,
+  );
+
+  const maxKick = Math.max(...kick, 0.001);
+  const maxHh = Math.max(...hh, 0.001);
+  const maxVel = Math.max(...vel, 0.001);
+
+  return (
+    <div className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-sm p-3">
+      <div className="text-[8px] font-mono uppercase tracking-widest text-[#555] mb-2">
+        Beat Pattern
+      </div>
+      <div className="grid gap-[3px]" style={{ gridTemplateColumns: `32px repeat(${cols}, 1fr)` }}>
+        <div />
+        {Array.from({ length: 4 }, (_, i) => (
+          <div
+            key={i}
+            className="text-[7px] font-mono text-[#444] text-center"
+            style={{ gridColumn: 'span 4' }}
+          >
+            {i + 1}
+          </div>
+        ))}
+        <div className="text-[8px] font-mono text-[#ff4444] self-center">KICK</div>
+        {kick.map((v, i) => {
+          const intensity = v / maxKick;
+          return (
+            <div
+              key={i}
+              className="aspect-square rounded-sm"
+              style={{
+                background: intensity > 0.1 ? '#ff4444' : '#1a1a1a',
+                opacity: intensity > 0.1 ? 0.3 + intensity * 0.7 : 1,
+                boxShadow: intensity > 0.7 ? '0 0 8px #ff444440' : undefined,
+              }}
+            />
+          );
+        })}
+        <div className="text-[8px] font-mono text-[#60a5fa] self-center">HH</div>
+        {hh.map((v, i) => {
+          const intensity = v / maxHh;
+          return (
+            <div
+              key={i}
+              className="aspect-square rounded-sm"
+              style={{
+                background: intensity > 0.1 ? '#60a5fa' : '#1a1a1a',
+                opacity: intensity > 0.1 ? 0.3 + intensity * 0.7 : 1,
+                boxShadow: intensity > 0.7 ? '0 0 6px #60a5fa30' : undefined,
+              }}
+            />
+          );
+        })}
+        <div className="text-[8px] font-mono text-[#555] self-center">VEL</div>
+        {vel.map((v, i) => (
+          <div
+            key={i}
+            className="h-[14px] rounded-[1px]"
+            style={{
+              background: `linear-gradient(to top, #00ff9d${Math.round(
+                (v / maxVel) * 0.8 * 255,
+              )
+                .toString(16)
+                .padStart(2, '0')}, transparent)`,
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const AccentPatternBars = ({
+  kickAccent,
+  hihatAccent,
+}: {
+  kickAccent: number[];
+  hihatAccent: number[];
+}) => {
+  const beats = Math.min(kickAccent.length, hihatAccent.length, 4);
+  const maxVal = Math.max(
+    ...kickAccent.slice(0, beats),
+    ...hihatAccent.slice(0, beats),
+    0.001,
+  );
+
+  return (
+    <div className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-sm p-3">
+      <div className="text-[7px] font-mono uppercase tracking-widest text-[#555] mb-2">
+        Accent Pattern · {beats} beats
+      </div>
+      <div className="flex gap-3 items-end h-[36px]">
+        {Array.from({ length: beats }, (_, i) => (
+          <div key={i} className="flex-1 flex gap-[2px] items-end h-full">
+            <div
+              className="flex-1 rounded-[1px]"
+              style={{
+                height: `${(kickAccent[i] / maxVal) * 100}%`,
+                background: 'linear-gradient(to top, #ff4444, #ff444460)',
+                minHeight: kickAccent[i] > 0 ? '3px' : '1px',
+              }}
+            />
+            <div
+              className="flex-1 rounded-[1px]"
+              style={{
+                height: `${(hihatAccent[i] / maxVal) * 100}%`,
+                background: 'linear-gradient(to top, #60a5fa, #60a5fa60)',
+                minHeight: hihatAccent[i] > 0 ? '3px' : '1px',
+              }}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="flex justify-around mt-1">
+        {Array.from({ length: beats }, (_, i) => (
+          <span key={i} className="text-[7px] font-mono text-[#333]">
+            {i + 1}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const BeatEnergyWaveform = ({
+  kickAccent,
+  hihatAccent,
+}: {
+  kickAccent: number[];
+  hihatAccent: number[];
+}) => {
+  const maxVal = Math.max(...kickAccent, ...hihatAccent, 0.001);
+  const bars: { value: number; color: string; opacity: number }[] = [];
+  const len = Math.max(kickAccent.length, hihatAccent.length);
+  for (let i = 0; i < len; i++) {
+    if (i < kickAccent.length) {
+      bars.push({
+        value: kickAccent[i],
+        color: '#ff4444',
+        opacity: 0.3 + (kickAccent[i] / maxVal) * 0.7,
+      });
+    }
+    if (i < hihatAccent.length) {
+      bars.push({
+        value: hihatAccent[i],
+        color: '#60a5fa',
+        opacity: 0.3 + (hihatAccent[i] / maxVal) * 0.7,
+      });
+    }
+  }
+
+  const svgW = 300;
+  const barW = Math.max(8, (svgW - bars.length * 3) / bars.length);
+
+  return (
+    <div className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-sm p-3">
+      <div className="text-[7px] font-mono uppercase tracking-widest text-[#555] mb-2">
+        Beat Energy
+      </div>
+      <svg viewBox={`0 0 ${svgW} 50`} className="w-full h-[50px]">
+        {bars.map((b, i) => {
+          const h = (b.value / maxVal) * 42;
+          const x = i * (barW + 3);
+          return (
+            <rect
+              key={i}
+              x={x}
+              y={50 - h - 4}
+              width={barW}
+              height={Math.max(h, 2)}
+              rx="2"
+              fill={b.color}
+              opacity={b.opacity}
+            />
+          );
+        })}
+      </svg>
+      <div className="flex justify-around mt-1 font-mono text-[7px] text-[#333]">
+        <span>|1</span>
+        <span>|2</span>
+        <span>|3</span>
+        <span>|4</span>
+      </div>
+    </div>
+  );
+};
+
+const SidechainEnvelope = ({
+  envelopeShape,
+  pumpingRate,
+  pumpingStrength,
+}: {
+  envelopeShape: number[];
+  pumpingRate: string | null;
+  pumpingStrength: number;
+}) => {
+  const max = Math.max(...envelopeShape, 0.001);
+  const w = 240;
+  const h = 36;
+  const pad = 2;
+
+  const points = envelopeShape.map((v, i) => ({
+    x: (i / (envelopeShape.length - 1)) * w,
+    y: pad + (1 - v / max) * (h - pad * 2),
+  }));
+
+  let d = `M${points[0].x},${points[0].y}`;
+  for (let i = 1; i < points.length; i++) {
+    const prev = points[i - 1];
+    const curr = points[i];
+    const cpx = (prev.x + curr.x) / 2;
+    d += ` C${cpx},${prev.y} ${cpx},${curr.y} ${curr.x},${curr.y}`;
+  }
+  const fillD = d + ` L${w},${h} L0,${h} Z`;
+
+  const strengthLabel =
+    pumpingStrength >= 0.7 ? 'heavy' : pumpingStrength >= 0.4 ? 'moderate' : 'subtle';
+
+  return (
+    <div className="bg-[#141414] border border-[#1e1e1e] rounded-sm p-3">
+      <div className="flex justify-between items-center mb-1.5">
+        <span className="text-[7px] font-mono uppercase tracking-widest text-[#555]">
+          Sidechain Envelope
+        </span>
+        <span className="text-[8px] font-mono text-[#a78bfa60]">
+          {pumpingRate ?? 'n/a'} · {strengthLabel}
+        </span>
+      </div>
+      <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-[36px]">
+        <defs>
+          <linearGradient id="sc-grad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="#a78bfa" stopOpacity="0.3" />
+            <stop offset="1" stopColor="#a78bfa" stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+        {[0, 4, 8, 12].map((pos) => (
+          <line
+            key={pos}
+            x1={(pos / 15) * w}
+            y1="0"
+            x2={(pos / 15) * w}
+            y2={h}
+            stroke="#1e1e1e"
+            strokeWidth="0.5"
+          />
+        ))}
+        <path d={fillD} fill="url(#sc-grad)" />
+        <path d={d} fill="none" stroke="#a78bfa" strokeWidth="1.5" opacity="0.8" />
+      </svg>
+    </div>
+  );
+};
+
+const GatingBadge = ({
+  gatingRate,
+  gatingRegularity,
+}: {
+  gatingRate: number | null;
+  gatingRegularity: number | null;
+}) => {
+  const rateLabel =
+    gatingRate === 16 ? '16th' : gatingRate === 8 ? '8th' : gatingRate === 4 ? 'quarter' : `${gatingRate}`;
+  return (
+    <div className="flex items-center gap-3 bg-[#141414] border border-[#1e1e1e] rounded-sm px-3 py-2">
+      <span className="text-[8px] font-mono font-bold uppercase tracking-wider text-[#fbbf24]">
+        Gate Detected
+      </span>
+      {gatingRate != null && (
+        <span className="text-[8px] font-mono text-[#fbbf2480]">{rateLabel}</span>
+      )}
+      {gatingRegularity != null && (
+        <div className="flex items-center gap-1.5 ml-auto">
+          <span className="text-[7px] font-mono text-[#555]">REG</span>
+          <div className="w-12 h-[4px] bg-[#1a1a1a] rounded-sm overflow-hidden">
+            <div
+              className="h-full rounded-sm bg-[#fbbf24]"
+              style={{ width: `${gatingRegularity * 100}%`, opacity: 0.7 }}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const PhraseStructureTimeline = ({ phraseGrid }: { phraseGrid: PhraseGrid }) => {
+  const total = phraseGrid.totalBars || 1;
+  const tiers = [
+    { label: '16', items: phraseGrid.phrases16Bar, color: '#a78bfa', size: 16 },
+    { label: '8', items: phraseGrid.phrases8Bar, color: '#fbbf24', size: 8 },
+    { label: '4', items: phraseGrid.phrases4Bar, color: '#60a5fa', size: 4 },
+  ];
+
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-1">
+        <span className="text-[7px] font-mono uppercase tracking-widest text-[#555]">
+          Phrase Structure
+        </span>
+        <span className="text-[8px] font-mono text-[#444]">{total} bars</span>
+      </div>
+      <div className="space-y-[2px]">
+        {tiers.map((tier) => {
+          if (!tier.items.length) return null;
+          const segCount = tier.items.length;
+          return (
+            <div
+              key={tier.label}
+              className="flex gap-[1px]"
+              style={{ height: tier.size === 16 ? 10 : tier.size === 8 ? 8 : 6 }}
+            >
+              {Array.from({ length: segCount }, (_, i) => (
+                <div
+                  key={i}
+                  className="rounded-[1px] flex items-center justify-center"
+                  style={{
+                    flex: tier.size,
+                    background: `linear-gradient(90deg, ${tier.color}20, ${tier.color}10)`,
+                    border: `1px solid ${tier.color}25`,
+                  }}
+                >
+                  <span className="font-mono" style={{ fontSize: 6, color: `${tier.color}50` }}>
+                    {tier.label}
+                  </span>
+                </div>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 export function MeasurementDashboard({
   phase1,
   spectralArtifacts,
@@ -429,6 +995,7 @@ export function MeasurementDashboard({
   const [onsetData, setOnsetData] = useState<OnsetStrengthData | null>(null);
   const [chromaData, setChromaData] = useState<ChromaInteractiveData | null>(null);
   const [generating, setGenerating] = useState<Set<SpectralEnhancementKind>>(new Set());
+  const [beatView, setBeatView] = useState<'grid' | 'energy'>('grid');
 
   // Fetch spectral time-series
   useEffect(() => {
@@ -496,7 +1063,7 @@ export function MeasurementDashboard({
   }, [apiBaseUrl, runId, generating]);
 
   return (
-    <div className="space-y-4">
+    <div data-testid="measurement-dashboard" className="space-y-4">
       {/* 1. Core Metrics */}
       <Section id="section-meas-core" number={1} title="Core Metrics">
         {/* Hero Grid */}
@@ -983,7 +1550,7 @@ export function MeasurementDashboard({
       </Section>
 
       {/* 4. Spectral */}
-      <Section id="section-meas-spectral" number={4} title="Spectral">
+      <Section id="section-meas-spectral" testId="spectral-section" number={4} title="Spectral">
         <div className="space-y-3">
           <div>
             <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
@@ -1074,7 +1641,7 @@ export function MeasurementDashboard({
 
         {/* Enhancement Toolbar */}
         {apiBaseUrl && runId && (
-          <div className="border-t border-border pt-3">
+          <div data-testid="spectral-enhancements-toolbar" className="border-t border-border pt-3">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mr-1">
                 Enhancements
@@ -1109,7 +1676,7 @@ export function MeasurementDashboard({
 
         <SpectralCursorProvider>
           {localArtifacts && apiBaseUrl && runId && localArtifacts.spectrograms.length > 0 && (
-            <div className="border-t border-border pt-3">
+            <div data-testid="spectral-visualizations-panel" className="border-t border-border pt-3">
               <SpectrogramViewer
                 spectrograms={localArtifacts.spectrograms}
                 apiBaseUrl={apiBaseUrl}
@@ -1280,132 +1847,232 @@ export function MeasurementDashboard({
 
       {/* 6. Rhythm & Groove */}
       <Section id="section-meas-rhythm" number={6} title="Rhythm & Groove">
-        {phase1.rhythmDetail && (
-          <>
-            <MetricRow
-              label="Onset Rate"
-              value={formatNumber(phase1.rhythmDetail.onsetRate, 2)}
-            />
-            <MetricRow
-              label="Groove Amount"
-              value={formatNumber(phase1.rhythmDetail.grooveAmount, 2)}
-            />
-            {phase1.rhythmDetail.tempoStability !== undefined &&
-              phase1.rhythmDetail.tempoStability !== null && (
-                <MetricRow
-                  label="Tempo Stability"
-                  value={`${(phase1.rhythmDetail.tempoStability * 100).toFixed(1)}%`}
-                />
-              )}
-            {phase1.rhythmDetail.phraseGrid && (
+        <div className="flex gap-4 items-start">
+          <BreathingBpmPulse bpm={phase1.bpm} bpmSource={phase1.bpmSource} />
+          <div className="flex-1 grid grid-cols-2 gap-2">
+            {phase1.rhythmDetail && (
               <>
-                <div className="border-t border-border pt-3">
-                  <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
-                    Phrase Grid
-                  </span>
-                </div>
-                <MetricRow
-                  label="4-Bar Phrases"
-                  value={formatNumber(phase1.rhythmDetail.phraseGrid.phrases4Bar.length, 0)}
+                <ComparativeMetricTile
+                  metricKey="groove"
+                  value={phase1.rhythmDetail.grooveAmount}
+                  delay={0}
                 />
-                <MetricRow
-                  label="8-Bar Phrases"
-                  value={formatNumber(phase1.rhythmDetail.phraseGrid.phrases8Bar.length, 0)}
-                />
-                <MetricRow
-                  label="16-Bar Phrases"
-                  value={formatNumber(phase1.rhythmDetail.phraseGrid.phrases16Bar.length, 0)}
-                />
-                <MetricRow
-                  label="Total Bars"
-                  value={formatNumber(phase1.rhythmDetail.phraseGrid.totalBars, 0)}
+                <ComparativeMetricTile
+                  metricKey="stability"
+                  value={
+                    (phase1.rhythmDetail.tempoStability ??
+                      1 - phase1.rhythmDetail.grooveAmount) * 100
+                  }
+                  delay={0.08}
                 />
               </>
             )}
-          </>
-        )}
-
-        {phase1.grooveDetail && (
-          <>
-            <div className="border-t border-border pt-3">
-              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
-                Groove Detail
-              </span>
-            </div>
-            <MetricRow
-              label="Kick Swing"
-              value={formatNumber(phase1.grooveDetail.kickSwing, 2)}
-            />
-            <MetricRow
-              label="Hi-Hat Swing"
-              value={formatNumber(phase1.grooveDetail.hihatSwing, 2)}
-            />
-            {phase1.grooveDetail.kickAccent && phase1.grooveDetail.kickAccent.length > 0 && (
-              <BarChart
-                values={phase1.grooveDetail.kickAccent}
-                count={4}
-                label="Kick Accents"
+            {phase1.danceability && (
+              <ComparativeMetricTile
+                metricKey="danceability"
+                value={phase1.danceability.danceability}
+                delay={0.16}
               />
             )}
-            {phase1.grooveDetail.hihatAccent && phase1.grooveDetail.hihatAccent.length > 0 && (
-              <BarChart
-                values={phase1.grooveDetail.hihatAccent}
-                count={4}
-                label="Hi-Hat Accents"
+            {phase1.rhythmDetail && (
+              <ComparativeMetricTile
+                metricKey="onsetRate"
+                value={phase1.rhythmDetail.onsetRate}
+                delay={0.24}
               />
             )}
-          </>
+          </div>
+        </div>
+
+        {phase1.grooveDetail &&
+          phase1.grooveDetail.kickAccent?.length > 0 &&
+          phase1.grooveDetail.hihatAccent?.length > 0 && (
+            <div className="border-t border-border pt-3 space-y-2">
+              <div className="flex items-center gap-1">
+                {(['grid', 'energy'] as const).map((view) => (
+                  <button
+                    key={view}
+                    onClick={() => setBeatView(view)}
+                    className={`text-[8px] font-mono uppercase tracking-wider px-2 py-1 rounded-sm transition-colors ${
+                      beatView === view
+                        ? 'bg-[#1e1e1e] text-text-primary'
+                        : 'text-[#555] hover:text-[#888]'
+                    }`}
+                  >
+                    {view}
+                  </button>
+                ))}
+              </div>
+              <AnimatePresence mode="wait">
+                {beatView === 'grid' ? (
+                  <motion.div
+                    key="grid"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="space-y-2"
+                  >
+                    <BeatSequencerGrid
+                      kickAccent={phase1.grooveDetail.kickAccent}
+                      hihatAccent={phase1.grooveDetail.hihatAccent}
+                      accentPattern={phase1.beatsLoudness?.accentPattern ?? []}
+                    />
+                    <AccentPatternBars
+                      kickAccent={phase1.grooveDetail.kickAccent}
+                      hihatAccent={phase1.grooveDetail.hihatAccent}
+                    />
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="energy"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <BeatEnergyWaveform
+                      kickAccent={phase1.grooveDetail.kickAccent}
+                      hihatAccent={phase1.grooveDetail.hihatAccent}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
+
+        {(phase1.grooveDetail || phase1.beatsLoudness) && (
+          <div className="border-t border-border pt-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {phase1.grooveDetail && (
+                <div className="bg-[#141414] border border-[#1e1e1e] rounded-sm p-3">
+                  <div className="text-[7px] font-mono uppercase tracking-widest text-[#555] mb-2">
+                    Swing
+                  </div>
+                  <div className="space-y-2">
+                    {[
+                      { label: 'KICK', value: phase1.grooveDetail.kickSwing, color: '#ff4444' },
+                      { label: 'HH', value: phase1.grooveDetail.hihatSwing, color: '#60a5fa' },
+                    ].map((s) => (
+                      <div key={s.label}>
+                        <div className="flex justify-between mb-1">
+                          <span
+                            className="text-[7px] font-mono"
+                            style={{ color: `${s.color}80` }}
+                          >
+                            {s.label}
+                          </span>
+                          <span
+                            className="text-[8px] font-mono font-bold"
+                            style={{ color: s.color }}
+                          >
+                            {formatNumber(s.value, 2)}
+                          </span>
+                        </div>
+                        <div className="h-[5px] bg-[#1a1a1a] rounded-sm overflow-hidden">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${s.value * 100}%` }}
+                            transition={{ duration: 0.5, ease: 'easeOut' }}
+                            className="h-full rounded-sm"
+                            style={{ background: s.color, opacity: 0.7 }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {phase1.beatsLoudness && (
+                <div className="bg-[#141414] border border-[#1e1e1e] rounded-sm p-3">
+                  <HorizontalDominance
+                    kickRatio={phase1.beatsLoudness.kickDominantRatio}
+                    midRatio={phase1.beatsLoudness.midDominantRatio}
+                    highRatio={phase1.beatsLoudness.highDominantRatio}
+                  />
+                  <div className="mt-2 grid grid-cols-3 gap-2">
+                    <div>
+                      <span className="text-[7px] font-mono text-[#555] block">Beat Count</span>
+                      <span className="text-sm font-display font-bold text-text-primary">
+                        {formatNumber(phase1.beatsLoudness.beatCount, 0)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[7px] font-mono text-[#555] block">Mean Loud</span>
+                      <span className="text-sm font-display font-bold text-text-primary">
+                        {formatNumber(phase1.beatsLoudness.meanBeatLoudness, 2)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[7px] font-mono text-[#555] block">Variation</span>
+                      <span className="text-sm font-display font-bold text-text-primary">
+                        {formatNumber(phase1.beatsLoudness.beatLoudnessVariation, 2)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         )}
 
-        {phase1.beatsLoudness && (
-          <>
-            <div className="border-t border-border pt-3">
-              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
-                Beats & Loudness
-              </span>
-            </div>
-            <HorizontalDominance
-              kickRatio={phase1.beatsLoudness.kickDominantRatio}
-              midRatio={phase1.beatsLoudness.midDominantRatio}
-              highRatio={phase1.beatsLoudness.highDominantRatio}
-            />
-            {phase1.beatsLoudness.accentPattern &&
-              phase1.beatsLoudness.accentPattern.length > 0 && (
-                <BarChart
-                  values={phase1.beatsLoudness.accentPattern}
-                  count={4}
-                  label="Accent Pattern"
-                  height="h-5"
+        {(phase1.sidechainDetail ||
+          (phase1.effectsDetail && phase1.effectsDetail.gatingDetected)) && (
+          <div className="border-t border-border pt-3 space-y-2">
+            <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary block">
+              Sidechain & Effects
+            </span>
+            {phase1.sidechainDetail &&
+              phase1.sidechainDetail.envelopeShape &&
+              phase1.sidechainDetail.envelopeShape.length > 0 && (
+                <SidechainEnvelope
+                  envelopeShape={phase1.sidechainDetail.envelopeShape}
+                  pumpingRate={phase1.sidechainDetail.pumpingRate}
+                  pumpingStrength={phase1.sidechainDetail.pumpingStrength}
                 />
               )}
-            <MetricRow
-              label="Mean Beat Loudness"
-              value={formatNumber(phase1.beatsLoudness.meanBeatLoudness, 2)}
-            />
-            <MetricRow
-              label="Beat Loudness Variation"
-              value={formatNumber(phase1.beatsLoudness.beatLoudnessVariation, 2)}
-            />
-            <MetricRow
-              label="Beat Count"
-              value={formatNumber(phase1.beatsLoudness.beatCount, 0)}
-            />
-          </>
+            {phase1.sidechainDetail && !phase1.sidechainDetail.envelopeShape && (
+              <div className="bg-[#141414] border border-[#1e1e1e] rounded-sm p-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <span className="text-[7px] font-mono text-[#555] block">
+                      Pumping Strength
+                    </span>
+                    <span className="text-sm font-display font-bold text-text-primary">
+                      {formatNumber(phase1.sidechainDetail.pumpingStrength, 2)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[7px] font-mono text-[#555] block">Regularity</span>
+                    <span className="text-sm font-display font-bold text-text-primary">
+                      {formatNumber(phase1.sidechainDetail.pumpingRegularity, 2)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+            {phase1.effectsDetail && phase1.effectsDetail.gatingDetected && (
+              <GatingBadge
+                gatingRate={phase1.effectsDetail.gatingRate ?? null}
+                gatingRegularity={phase1.effectsDetail.gatingRegularity ?? null}
+              />
+            )}
+          </div>
+        )}
+
+        {phase1.rhythmDetail?.phraseGrid && (
+          <div className="border-t border-border pt-3">
+            <PhraseStructureTimeline phraseGrid={phase1.rhythmDetail.phraseGrid} />
+          </div>
         )}
 
         {phase1.danceability && (
-          <>
-            <div className="border-t border-border pt-3">
-              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
-                Danceability
-              </span>
-            </div>
+          <div className="border-t border-border pt-3">
             <MetricRow
-              label="Danceability"
-              value={formatNumber(phase1.danceability.danceability, 2)}
+              label="DFA (Rhythmic Complexity)"
+              value={formatNumber(phase1.danceability.dfa, 3)}
             />
-            <MetricRow label="DFA" value={formatNumber(phase1.danceability.dfa, 3)} />
-          </>
+          </div>
         )}
       </Section>
 

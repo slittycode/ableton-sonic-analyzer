@@ -300,7 +300,7 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).not.toContain('title="Low confidence — treat this as approximate."');
   });
 
-  it('renders a danceability section when backend danceability data is present', () => {
+  it('renders danceability metrics in the rhythm section when backend danceability data is present', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
         phase1: {
@@ -315,10 +315,10 @@ describe('AnalysisResults UI wiring', () => {
       }),
     );
 
-    expect(html).toContain('Danceability');
-    expect(html).toContain('DFA');
+    expect(html).toContain('Rhythm &amp; Groove');
     expect(html).toContain('1.24');
-    expect(html).toContain('0.87');
+    expect(html).toContain('DFA (Rhythmic Complexity)');
+    expect(html).toContain('0.870');
   });
 
   it('uses normalized midi download filename', () => {
@@ -334,7 +334,7 @@ describe('AnalysisResults UI wiring', () => {
       }),
     );
 
-    expect(html).toContain('PITCH/NOTE NOTES UNAVAILABLE');
+    expect(html).toContain('PITCH &amp; MELODY UNAVAILABLE');
     expect(html).toContain('Run with pitch/note translation enabled, or ensure melodyDetail is present in the DSP payload for a melody guide');
   });
 
@@ -365,7 +365,7 @@ describe('AnalysisResults UI wiring', () => {
 
     expect(html).toContain('PITCH/NOTE');
     expect(html).toContain('MELODY');
-    expect(html).toContain('TORCHCREPE pitch/note notes');
+    expect(html).toContain('TORCHCREPE pitch detection');
     expect(html).toContain('Range: C3 - G4');
     expect(html).toContain('Confidence: 83%');
     expect(html.match(/Range: C3 - G4/g)?.length ?? 0).toBe(1);
@@ -373,11 +373,10 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).toContain('2 / 2 NOTES');
     expect(html).toContain('CONFIDENCE');
     expect(html).toContain('20%');
-    expect(html).toContain('SOURCE: TORCHCREPE');
+    expect(html).toContain('PITCH/NOTE: TORCHCREPE');
     expect(html).toContain('STEM-AWARE');
-    expect(html).toContain('STEMS: bass, other');
     expect(html).toContain('Adjust confidence threshold to filter noise before export.');
-    expect(html).not.toContain('PITCH/NOTE NOTES UNAVAILABLE');
+    expect(html).not.toContain('PITCH &amp; MELODY UNAVAILABLE');
   });
 
   it('shows Essentia source badges when only melodyDetail is available', () => {
@@ -408,9 +407,9 @@ describe('AnalysisResults UI wiring', () => {
       }),
     );
 
-    expect(html).not.toContain('SOURCE: TORCHCREPE');
-    expect(html).not.toContain('TORCHCREPE pitch/note notes');
-    expect(html).toContain('SOURCE: ESSENTIA MELODY');
+    expect(html).not.toContain('PITCH/NOTE: TORCHCREPE');
+    expect(html).not.toContain('TORCHCREPE pitch detection');
+    expect(html).toContain('MELODY GUIDE: ESSENTIA');
     expect(html).toContain('Monophonic melody guide via Essentia');
   });
 
