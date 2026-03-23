@@ -17,26 +17,26 @@ Stage 3 is not “find the next Basic Pitch.” The product question is:
 
 The current repo should be judged against two intended outputs:
 
-- **Output A — Local symbolic notes**
+- **Output A — Local pitch/note notes**
   - Purpose: import and clean up
   - Layer: 2
   - Nature: local, stem-based, confidence-aware, best-effort
 - **Output B — AI musical stem summary**
   - Purpose: understand what’s happening
   - Layer: 3
-  - Nature: grounded, editorial, uncertainty-aware, not symbolic truth
+  - Nature: grounded, editorial, uncertainty-aware, not pitch/note truth
 
 ## Audit Matrix
 
 | Area | Current state | Classification | Notes |
 | --- | --- | --- | --- |
-| Canonical runtime model | `apps/backend/analysis_runtime.py` separates measurement, symbolic extraction, and interpretation with distinct tables and attempt histories. | `Aligned` | This is the structural foundation the Stage 3 plan needs. |
+| Canonical runtime model | `apps/backend/analysis_runtime.py` separates measurement, pitch/note translation, and interpretation with distinct tables and attempt histories. | `Aligned` | This is the structural foundation the Stage 3 plan needs. |
 | Canonical transport boundary | `apps/ui/src/services/analysisRunsClient.ts` parses canonical measurement separately and only reconstructs `transcriptionDetail` in `projectPhase1FromRun()`. | `Aligned` | This is the correct compatibility edge. |
-| Symbolic worker integration point | `apps/backend/server.py` symbolic worker calls `analyze_transcription()` rather than importing Basic Pitch directly. | `Aligned` | The `TranscriptionBackend` slot is real. |
+| Pitch/note translation worker integration point | `apps/backend/server.py` pitch/note translation worker calls `analyze_transcription()` rather than importing Basic Pitch directly. | `Aligned` | The `TranscriptionBackend` slot is real. |
 | Measurement authority | Canonical measurement strips `transcriptionDetail` before persistence. | `Aligned` | Layer 1 is no longer silently polluted by Layer 2 output. |
 | Legacy wrappers | `/api/analyze`, `/api/phase2`, `Phase1Result.transcriptionDetail`, and display projections still preserve the old flat blob. | `Misaligned but compatibility-only` | Acceptable during migration. Do not expand this surface. |
-| Session Musician UI wording | The panel existed in a “MIDI transcription / polyphonic vs monophonic” frame. | `Misaligned and needs migration` | Updated in this pass toward symbolic notes vs melody guide wording. |
-| Producer-summary Gemini prompt | `apps/backend/prompts/phase2_system.txt` still treated `transcriptionDetail` as polyphonic truth and blurred symbolic vs measurement authority. | `Misaligned and needs migration` | Updated in this pass. |
+| Session Musician UI wording | The panel existed in a “MIDI transcription / polyphonic vs monophonic” frame. | `Misaligned and needs migration` | Updated in this pass toward pitch/note notes vs melody guide wording. |
+| Producer-summary Gemini prompt | `apps/backend/prompts/phase2_system.txt` still treated `transcriptionDetail` as polyphonic truth and blurred pitch/note vs measurement authority. | `Misaligned and needs migration` | Updated in this pass. |
 | Basic Pitch framing | Core docs and runtime strings still presented Basic Pitch as a normal/default backend. | `Misaligned and needs migration` | Updated in this pass to `legacy` framing. |
 | Experiment B profile | No dedicated `stem_summary` interpretation profile existed. | `Misaligned and needs migration` | Added in this pass as a distinct Layer 3 profile. |
 | Descriptor hooks for experiments | Measurement had the raw data (`rhythmDetail.downbeats`, `segmentLoudness`, `sidechainDetail`) but no explicit experiment-oriented hook bundle. | `Misaligned and needs migration` | Added in this pass through prompt grounding hooks, not a broad MIR expansion. |
@@ -132,7 +132,7 @@ Repo consequence:
 
 ## Decision Gates
 
-### Local symbolic notes ship only if:
+### Local pitch/note notes ship only if:
 
 - at least 2 of 3 evaluation cases are `Green`
 - the result is importable after light cleanup
@@ -150,7 +150,7 @@ Repo consequence:
 The runtime architecture is ahead of the product language. The repo already has the right Stage 3 skeleton:
 
 - authoritative measurement
-- pluggable symbolic extraction slot
+- pluggable pitch/note translation slot
 - grounded interpretation slot
 
 What it lacked was honesty at the edges:

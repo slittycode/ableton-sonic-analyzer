@@ -79,8 +79,8 @@ function stubRoutes(page: import('@playwright/test').Page) {
         body: JSON.stringify({
           runId: 'run_ui_001',
           requestedStages: {
-            symbolicMode: 'off',
-            symbolicBackend: 'auto',
+            pitchNoteMode: 'off',
+            pitchNoteBackend: 'auto',
             interpretationMode: 'async',
             interpretationProfile: 'producer_summary',
             interpretationModel: 'gemini-3.1-pro-preview',
@@ -104,7 +104,7 @@ function stubRoutes(page: import('@playwright/test').Page) {
               diagnostics: null,
               error: null,
             },
-            symbolicExtraction: {
+            pitchNoteTranslation: {
               status: 'not_requested',
               authoritative: false,
               preferredAttemptId: null,
@@ -135,8 +135,8 @@ function stubRoutes(page: import('@playwright/test').Page) {
         body: JSON.stringify({
           runId: 'run_ui_001',
           requestedStages: {
-            symbolicMode: 'off',
-            symbolicBackend: 'auto',
+            pitchNoteMode: 'off',
+            pitchNoteBackend: 'auto',
             interpretationMode: 'async',
             interpretationProfile: 'producer_summary',
             interpretationModel: 'gemini-3.1-pro-preview',
@@ -160,7 +160,7 @@ function stubRoutes(page: import('@playwright/test').Page) {
               diagnostics: { timings: { totalMs: 400, analysisMs: 360, serverOverheadMs: 40, flagsUsed: [], fileSizeBytes: 2048, fileDurationSeconds: 10, msPerSecondOfAudio: 40 } },
               error: null,
             },
-            symbolicExtraction: {
+            pitchNoteTranslation: {
               status: 'not_requested',
               authoritative: false,
               preferredAttemptId: null,
@@ -236,8 +236,8 @@ test('CPU indicator animates during analysis', async ({ page }) => {
       body: JSON.stringify({
         runId: 'run_cpu_001',
         requestedStages: {
-          symbolicMode: 'off',
-          symbolicBackend: 'auto',
+          pitchNoteMode: 'off',
+          pitchNoteBackend: 'auto',
           interpretationMode: 'async',
           interpretationProfile: 'producer_summary',
           interpretationModel: 'gemini-3.1-pro-preview',
@@ -261,7 +261,7 @@ test('CPU indicator animates during analysis', async ({ page }) => {
             diagnostics: null,
             error: null,
           },
-          symbolicExtraction: {
+          pitchNoteTranslation: {
             status: 'not_requested',
             authoritative: false,
             preferredAttemptId: null,
@@ -298,8 +298,8 @@ test('CPU indicator animates during analysis', async ({ page }) => {
       body: JSON.stringify({
         runId: 'run_cpu_001',
         requestedStages: {
-          symbolicMode: 'off',
-          symbolicBackend: 'auto',
+          pitchNoteMode: 'off',
+          pitchNoteBackend: 'auto',
           interpretationMode: 'async',
           interpretationProfile: 'producer_summary',
           interpretationModel: 'gemini-3.1-pro-preview',
@@ -323,7 +323,7 @@ test('CPU indicator animates during analysis', async ({ page }) => {
             diagnostics: { timings: { totalMs: 400, analysisMs: 360, serverOverheadMs: 40, flagsUsed: [], fileSizeBytes: 2048, fileDurationSeconds: 10, msPerSecondOfAudio: 40 } },
             error: null,
           },
-          symbolicExtraction: {
+          pitchNoteTranslation: {
             status: 'not_requested',
             authoritative: false,
             preferredAttemptId: null,

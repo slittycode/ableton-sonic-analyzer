@@ -1295,7 +1295,11 @@ def analyze_spectral_detail(
             }
             balance_energies = {name: [] for name in _balance_bands}
 
+        flatness_algo = es.Flatness()
+
         centroid_vals, rolloff_vals = [], []
+        flatness_vals = []
+        bandwidth_vals = []
         mfcc_matrix = []
         hpcp_matrix = []
         bark_matrix = []
@@ -1312,6 +1316,25 @@ def analyze_spectral_detail(
 
             # SpectralRolloff
             rolloff_vals.append(float(rolloff_algo(spec)))
+
+            # Spectral flatness
+            try:
+                flatness_vals.append(float(flatness_algo(spec)))
+            except Exception:
+                pass
+
+            # Spectral bandwidth (weighted std dev around centroid)
+            try:
+                spec_arr = np.asarray(spec, dtype=np.float64)
+                if spec_arr.sum() > 0:
+                    freqs = np.linspace(0, sample_rate / 2, len(spec_arr))
+                    centroid_hz = float(centroid_algo(frame))
+                    bw = float(
+                        np.sqrt(np.sum(spec_arr * (freqs - centroid_hz) ** 2) / np.sum(spec_arr))
+                    )
+                    bandwidth_vals.append(bw)
+            except Exception:
+                pass
 
             # MFCC (returns bands and coefficients)
             _bands, mfcc_coeffs = mfcc_algo(spec)
@@ -1413,10 +1436,19 @@ def analyze_spectral_detail(
             else []
         )
 
+        mean_flatness = (
+            round(float(np.mean(flatness_vals)), 6) if flatness_vals else 0.0
+        )
+        mean_bandwidth = (
+            round(float(np.mean(bandwidth_vals)), 1) if bandwidth_vals else 0.0
+        )
+
         result = {
             "spectralDetail": {
                 "spectralCentroid": mean_centroid,
                 "spectralRolloff": mean_rolloff,
+                "spectralBandwidth": mean_bandwidth,
+                "spectralFlatness": mean_flatness,
                 "mfcc": mean_mfcc,
                 "chroma": mean_chroma,
                 "barkBands": mean_bark,
@@ -4128,7 +4160,7 @@ from typing import Protocol, runtime_checkable
 
 @runtime_checkable
 class TranscriptionBackend(Protocol):
-    """Interface for pluggable symbolic extraction backends."""
+    """Interface for pluggable pitch/note translation backends."""
 
     name: str  # written to transcriptionDetail.transcriptionMethod in output
 
@@ -4678,10 +4710,10 @@ def analyze_transcription(
 # ── Main ───────────────────────────────────────────────────────────────────
 
 
-def _run_symbolic_only(audio_path: str, stem_dir: str | None = None):
-    """Run symbolic extraction only and print JSON to stdout.
+def _run_pitch_note_translation(audio_path: str, stem_dir: str | None = None):
+    """Run pitch/note translation only and print JSON to stdout.
 
-    Used by server.py to run symbolic work in a subprocess so that
+    Used by server.py to run pitch/note translation work in a subprocess so that
     Demucs/torchcrepe memory is freed when the process exits.
 
     If --stem-dir is provided, stems are read from that directory
@@ -4701,7 +4733,7 @@ def _run_symbolic_only(audio_path: str, stem_dir: str | None = None):
     temp_dir = None
 
     if need_separation:
-        temp_dir = tempfile.mkdtemp(prefix="asa_symbolic_stems_")
+        temp_dir = tempfile.mkdtemp(prefix="asa_pitch_note_stems_")
         separated = separate_stems(audio_path, output_dir=temp_dir)
         if isinstance(separated, dict) and separated:
             stem_paths = separated
@@ -4721,7 +4753,7 @@ def _run_symbolic_only(audio_path: str, stem_dir: str | None = None):
 def main():
     if len(sys.argv) < 2:
         print(
-            "Usage: ./venv/bin/python analyze.py <audio_file> [--separate] [--fast] [--standard] [--transcribe] [--yes] [--symbolic-only] [--stem-dir DIR]",
+            "Usage: ./venv/bin/python analyze.py <audio_file> [--separate] [--fast] [--standard] [--transcribe] [--yes] [--pitch-note-only] [--stem-dir DIR]",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -4734,16 +4766,16 @@ def main():
     run_standard = "--standard" in optional_args
     run_transcribe = "--transcribe" in optional_args
     auto_yes = "--yes" in optional_args
-    symbolic_only = "--symbolic-only" in optional_args
+    pitch_note_only = "--pitch-note-only" in optional_args
 
-    # --symbolic-only: run separation + transcription, print JSON, exit
-    if symbolic_only:
+    # --pitch-note-only: run pitch/note translation, print JSON, exit
+    if pitch_note_only:
         stem_dir = None
         if "--stem-dir" in optional_args:
             idx = optional_args.index("--stem-dir")
             if idx + 1 < len(optional_args):
                 stem_dir = optional_args[idx + 1]
-        _run_symbolic_only(audio_path, stem_dir=stem_dir)
+        _run_pitch_note_translation(audio_path, stem_dir=stem_dir)
         sys.exit(0)
     stems = None
 

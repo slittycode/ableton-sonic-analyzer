@@ -101,7 +101,7 @@ const basePhase2: Phase2Result = {
   ],
 };
 
-const baseSymbolic: TranscriptionDetail = {
+const basePitchNote: TranscriptionDetail = {
   transcriptionMethod: 'torchcrepe-viterbi',
   noteCount: 2,
   averageConfidence: 0.83,
@@ -325,7 +325,7 @@ describe('AnalysisResults UI wiring', () => {
     expect(MIDI_DOWNLOAD_FILE_NAME).toBe('track-analysis.mid');
   });
 
-  it('renders symbolic-note unavailable state when melodyDetail is missing', () => {
+  it('renders pitch/note unavailable state when melodyDetail is missing', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
         phase1: baseMeasurement,
@@ -334,16 +334,16 @@ describe('AnalysisResults UI wiring', () => {
       }),
     );
 
-    expect(html).toContain('SYMBOLIC NOTES UNAVAILABLE');
-    expect(html).toContain('Run with symbolic extraction enabled, or ensure melodyDetail is present in the DSP payload for a melody guide');
+    expect(html).toContain('PITCH/NOTE NOTES UNAVAILABLE');
+    expect(html).toContain('Run with pitch/note translation enabled, or ensure melodyDetail is present in the DSP payload for a melody guide');
   });
 
-  it('shows the symbolic toggle state by default when both sources are available', () => {
+  it('shows the pitch/note toggle state by default when both sources are available', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
         phase1: {
           ...baseMeasurement,
-          transcriptionDetail: baseSymbolic,
+          transcriptionDetail: basePitchNote,
           melodyDetail: {
             noteCount: 1,
             notes: [{ midi: 72, onset: 0.1, duration: 0.2 }],
@@ -363,9 +363,9 @@ describe('AnalysisResults UI wiring', () => {
       }),
     );
 
-    expect(html).toContain('SYMBOLIC');
+    expect(html).toContain('PITCH/NOTE');
     expect(html).toContain('MELODY');
-    expect(html).toContain('TORCHCREPE symbolic notes');
+    expect(html).toContain('TORCHCREPE pitch/note notes');
     expect(html).toContain('Range: C3 - G4');
     expect(html).toContain('Confidence: 83%');
     expect(html.match(/Range: C3 - G4/g)?.length ?? 0).toBe(1);
@@ -377,7 +377,7 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).toContain('STEM-AWARE');
     expect(html).toContain('STEMS: bass, other');
     expect(html).toContain('Adjust confidence threshold to filter noise before export.');
-    expect(html).not.toContain('SYMBOLIC NOTES UNAVAILABLE');
+    expect(html).not.toContain('PITCH/NOTE NOTES UNAVAILABLE');
   });
 
   it('shows Essentia source badges when only melodyDetail is available', () => {
@@ -409,7 +409,7 @@ describe('AnalysisResults UI wiring', () => {
     );
 
     expect(html).not.toContain('SOURCE: TORCHCREPE');
-    expect(html).not.toContain('TORCHCREPE symbolic notes');
+    expect(html).not.toContain('TORCHCREPE pitch/note notes');
     expect(html).toContain('SOURCE: ESSENTIA MELODY');
     expect(html).toContain('Monophonic melody guide via Essentia');
   });

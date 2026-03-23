@@ -19,6 +19,9 @@ import { getAnalysisRun } from '../services/analysisRunsClient';
 import { SpectrogramViewer } from './SpectrogramViewer';
 import { SpectralEvolutionChart } from './SpectralEvolutionChart';
 import { ChromaHeatmap } from './ChromaHeatmap';
+import { MiniHeatmap } from './MiniHeatmap';
+import { Sparkline } from './Sparkline';
+import { SpectralCursorProvider } from '../hooks/useSpectralCursorBus';
 
 interface MeasurementDashboardProps {
   phase1: Phase1Result;
@@ -88,14 +91,25 @@ const RADAR_AXES = [
   { key: 'attackTime' as const, label: 'Atk Time' },
 ];
 
-const MetricRow = ({ label, value }: { label: string; value: React.ReactNode }) => (
-  <div className="flex justify-between items-baseline gap-4">
+const MetricRow = ({
+  label,
+  value,
+  sparkline,
+}: {
+  label: string;
+  value: React.ReactNode;
+  sparkline?: React.ReactNode;
+}) => (
+  <div className="flex justify-between items-center gap-4">
     <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
       {label}
     </span>
-    <span className="text-sm font-display font-bold text-text-primary">
-      {value}
-    </span>
+    <div className="flex items-center gap-2">
+      {sparkline && <span className="flex-shrink-0">{sparkline}</span>}
+      <span className="text-sm font-display font-bold text-text-primary">
+        {value}
+      </span>
+    </div>
   </div>
 );
 
@@ -1000,6 +1014,62 @@ export function MeasurementDashboard({
               />
             </div>
           </div>
+          {phase1.spectralDetail && (
+            <div className="border-t border-border/30 pt-2 mt-2 space-y-1.5">
+              {phase1.spectralDetail.spectralCentroidMean !== undefined &&
+                phase1.spectralDetail.spectralCentroidMean !== null && (
+                  <MetricRow
+                    label="Centroid Mean"
+                    value={formatNumber(phase1.spectralDetail.spectralCentroidMean, 1)}
+                    sparkline={
+                      spectralTimeSeries?.spectralCentroid &&
+                      spectralTimeSeries.spectralCentroid.length > 1 && (
+                        <Sparkline values={spectralTimeSeries.spectralCentroid} color="#60a5fa" />
+                      )
+                    }
+                  />
+                )}
+              {phase1.spectralDetail.spectralRolloffMean !== undefined &&
+                phase1.spectralDetail.spectralRolloffMean !== null && (
+                  <MetricRow
+                    label="Rolloff Mean"
+                    value={formatNumber(phase1.spectralDetail.spectralRolloffMean, 1)}
+                    sparkline={
+                      spectralTimeSeries?.spectralRolloff &&
+                      spectralTimeSeries.spectralRolloff.length > 1 && (
+                        <Sparkline values={spectralTimeSeries.spectralRolloff} color="#a78bfa" />
+                      )
+                    }
+                  />
+                )}
+              {phase1.spectralDetail.spectralBandwidthMean !== undefined &&
+                phase1.spectralDetail.spectralBandwidthMean !== null && (
+                  <MetricRow
+                    label="Bandwidth Mean"
+                    value={formatNumber(phase1.spectralDetail.spectralBandwidthMean, 1)}
+                    sparkline={
+                      spectralTimeSeries?.spectralBandwidth &&
+                      spectralTimeSeries.spectralBandwidth.length > 1 && (
+                        <Sparkline values={spectralTimeSeries.spectralBandwidth} color="#34d399" />
+                      )
+                    }
+                  />
+                )}
+              {phase1.spectralDetail.spectralFlatnessMean !== undefined &&
+                phase1.spectralDetail.spectralFlatnessMean !== null && (
+                  <MetricRow
+                    label="Flatness Mean"
+                    value={formatNumber(phase1.spectralDetail.spectralFlatnessMean, 6)}
+                    sparkline={
+                      spectralTimeSeries?.spectralFlatness &&
+                      spectralTimeSeries.spectralFlatness.length > 1 && (
+                        <Sparkline values={spectralTimeSeries.spectralFlatness} color="#fbbf24" />
+                      )
+                    }
+                  />
+                )}
+            </div>
+          )}
         </div>
 
         {/* Enhancement Toolbar */}
@@ -1037,63 +1107,33 @@ export function MeasurementDashboard({
           </div>
         )}
 
-        {localArtifacts && apiBaseUrl && runId && localArtifacts.spectrograms.length > 0 && (
-          <div className="border-t border-border pt-3">
-            <SpectrogramViewer
-              spectrograms={localArtifacts.spectrograms}
-              apiBaseUrl={apiBaseUrl}
-              runId={runId}
-            />
-          </div>
-        )}
+        <SpectralCursorProvider>
+          {localArtifacts && apiBaseUrl && runId && localArtifacts.spectrograms.length > 0 && (
+            <div className="border-t border-border pt-3">
+              <SpectrogramViewer
+                spectrograms={localArtifacts.spectrograms}
+                apiBaseUrl={apiBaseUrl}
+                runId={runId}
+                durationSeconds={phase1.durationSeconds}
+              />
+            </div>
+          )}
 
-        {spectralTimeSeries && (
-          <div className="border-t border-border pt-3">
-            <SpectralEvolutionChart data={spectralTimeSeries} onsetStrength={onsetData} />
-          </div>
-        )}
+          {spectralTimeSeries && (
+            <div className="border-t border-border pt-3">
+              <SpectralEvolutionChart data={spectralTimeSeries} onsetStrength={onsetData} />
+            </div>
+          )}
 
-        {chromaData && (
-          <div className="border-t border-border pt-3">
-            <ChromaHeatmap data={chromaData} />
-          </div>
-        )}
+          {chromaData && (
+            <div className="border-t border-border pt-3">
+              <ChromaHeatmap data={chromaData} />
+            </div>
+          )}
+        </SpectralCursorProvider>
 
         {phase1.spectralDetail && (
           <>
-            <div className="border-t border-border pt-3">
-              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
-                Spectral Detail
-              </span>
-            </div>
-            {phase1.spectralDetail.spectralCentroidMean !== undefined &&
-              phase1.spectralDetail.spectralCentroidMean !== null && (
-                <MetricRow
-                  label="Spectral Centroid Mean"
-                  value={formatNumber(phase1.spectralDetail.spectralCentroidMean, 1)}
-                />
-              )}
-            {phase1.spectralDetail.spectralRolloffMean !== undefined &&
-              phase1.spectralDetail.spectralRolloffMean !== null && (
-                <MetricRow
-                  label="Spectral Rolloff Mean"
-                  value={formatNumber(phase1.spectralDetail.spectralRolloffMean, 1)}
-                />
-              )}
-            {phase1.spectralDetail.spectralBandwidthMean !== undefined &&
-              phase1.spectralDetail.spectralBandwidthMean !== null && (
-                <MetricRow
-                  label="Spectral Bandwidth Mean"
-                  value={formatNumber(phase1.spectralDetail.spectralBandwidthMean, 1)}
-                />
-              )}
-            {phase1.spectralDetail.spectralFlatnessMean !== undefined &&
-              phase1.spectralDetail.spectralFlatnessMean !== null && (
-                <MetricRow
-                  label="Spectral Flatness Mean"
-                  value={formatNumber(phase1.spectralDetail.spectralFlatnessMean, 6)}
-                />
-              )}
             {phase1.spectralDetail.mfcc && phase1.spectralDetail.mfcc.length > 0 && (
               <BarChart
                 values={phase1.spectralDetail.mfcc.slice(0, 8)}
@@ -1124,18 +1164,15 @@ export function MeasurementDashboard({
             )}
             {phase1.spectralDetail.spectralContrast &&
               phase1.spectralDetail.spectralContrast.length > 0 && (
-                <BarChart
-                  values={phase1.spectralDetail.spectralContrast}
-                  count={Math.min(7, phase1.spectralDetail.spectralContrast.length)}
-                  label="Spectral Contrast"
-                />
-              )}
-            {phase1.spectralDetail.spectralValley &&
-              phase1.spectralDetail.spectralValley.length > 0 && (
-                <BarChart
-                  values={phase1.spectralDetail.spectralValley}
-                  count={Math.min(7, phase1.spectralDetail.spectralValley.length)}
-                  label="Spectral Valley"
+                <MiniHeatmap
+                  title="Spectral Contrast"
+                  rows={[
+                    { label: 'Contrast', values: phase1.spectralDetail.spectralContrast.slice(0, 7) },
+                    ...(phase1.spectralDetail.spectralValley && phase1.spectralDetail.spectralValley.length > 0
+                      ? [{ label: 'Valley', values: phase1.spectralDetail.spectralValley.slice(0, 7) }]
+                      : []),
+                  ]}
+                  cellLabels={['B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7']}
                 />
               )}
           </>

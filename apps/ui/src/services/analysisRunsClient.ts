@@ -10,9 +10,11 @@ import {
   MeasurementResult,
   Phase1Result,
   Phase2Result,
+  SpectralArtifactRef,
+  SpectralArtifacts,
   StemSummaryResult,
-  SymbolicExtractionAttemptSummary,
-  SymbolicExtractionStageSnapshot,
+  PitchNoteTranslationAttemptSummary,
+  PitchNoteTranslationStageSnapshot,
 } from '../types';
 import { BackendClientError, createUserCancelledError, parsePhase1Result } from './backendPhase1Client';
 
@@ -22,16 +24,16 @@ interface AnalysisRunsClientOptions {
 }
 
 interface CreateAnalysisRunOptions extends AnalysisRunsClientOptions {
-  symbolicMode: string;
-  symbolicBackend: string;
+  pitchNoteMode: string;
+  pitchNoteBackend: string;
   interpretationMode: string;
   interpretationProfile: string;
   interpretationModel?: string | null;
 }
 
-interface CreateSymbolicAttemptOptions extends AnalysisRunsClientOptions {
-  symbolicMode: string;
-  symbolicBackend: string;
+interface CreatePitchNoteAttemptOptions extends AnalysisRunsClientOptions {
+  pitchNoteMode: string;
+  pitchNoteBackend: string;
 }
 
 interface CreateInterpretationAttemptOptions extends AnalysisRunsClientOptions {
@@ -56,8 +58,8 @@ export async function createAnalysisRun(
 ): Promise<AnalysisRunSnapshot> {
   const body = new FormData();
   body.append('track', file);
-  body.append('symbolic_mode', options.symbolicMode);
-  body.append('symbolic_backend', options.symbolicBackend);
+  body.append('pitch_note_mode', options.pitchNoteMode);
+  body.append('pitch_note_backend', options.pitchNoteBackend);
   body.append('interpretation_mode', options.interpretationMode);
   body.append('interpretation_profile', options.interpretationProfile);
   if (options.interpretationModel) {
@@ -91,16 +93,16 @@ export async function getAnalysisRun(
   return parseAnalysisRunSnapshot(response);
 }
 
-export async function createSymbolicExtractionAttempt(
+export async function createPitchNoteTranslationAttempt(
   runId: string,
-  options: CreateSymbolicAttemptOptions,
+  options: CreatePitchNoteAttemptOptions,
 ): Promise<AnalysisRunSnapshot> {
   const body = new FormData();
-  body.append('symbolic_mode', options.symbolicMode);
-  body.append('symbolic_backend', options.symbolicBackend);
+  body.append('pitch_note_mode', options.pitchNoteMode);
+  body.append('pitch_note_backend', options.pitchNoteBackend);
 
   const response = await fetchJson(
-    `${options.apiBaseUrl}/api/analysis-runs/${runId}/symbolic-extractions`,
+    `${options.apiBaseUrl}/api/analysis-runs/${runId}/pitch-note-translations`,
     {
       method: 'POST',
       body,
@@ -137,14 +139,14 @@ export function projectPhase1FromRun(snapshot: AnalysisRunSnapshot): Phase1Resul
   }
 
   const measurement: MeasurementResult = snapshot.stages.measurement.result;
-  const symbolic = snapshot.stages.symbolicExtraction.result;
-  if (!symbolic) {
+  const pitchNote = snapshot.stages.pitchNoteTranslation.result;
+  if (!pitchNote) {
     return measurement;
   }
 
   return {
     ...measurement,
-    transcriptionDetail: symbolic,
+    transcriptionDetail: pitchNote,
   };
 }
 
@@ -218,14 +220,17 @@ function parseAnalysisRunSnapshot(value: unknown): AnalysisRunSnapshot {
   const root = expectRecord(value, 'analysis run');
   const stages = expectRecord(root.stages, 'analysis run stages');
   const measurement = expectRecord(stages.measurement, 'measurement stage');
-  const symbolicExtraction = expectRecord(stages.symbolicExtraction, 'symbolic extraction stage');
+  const pitchNoteTranslation = expectRecord(stages.pitchNoteTranslation, 'pitch/note translation stage');
   const interpretation = expectRecord(stages.interpretation, 'interpretation stage');
+
+  const artifactsRaw = expectRecord(root.artifacts, 'artifacts');
 
   return {
     runId: expectString(root.runId, 'runId'),
     requestedStages: parseRequestedStages(root.requestedStages),
     artifacts: {
-      sourceAudio: parseArtifact(expectRecord(expectRecord(root.artifacts, 'artifacts').sourceAudio, 'sourceAudio')),
+      sourceAudio: parseArtifact(expectRecord(artifactsRaw.sourceAudio, 'sourceAudio')),
+      ...(artifactsRaw.spectral ? { spectral: parseSpectralArtifacts(artifactsRaw.spectral) } : {}),
     },
     stages: {
       measurement: {
@@ -236,7 +241,7 @@ function parseAnalysisRunSnapshot(value: unknown): AnalysisRunSnapshot {
         diagnostics: parseNullableRecord(measurement.diagnostics),
         error: parseNullableError(measurement.error),
       },
-      symbolicExtraction: parseSymbolicStage(symbolicExtraction),
+      pitchNoteTranslation: parsePitchNoteStage(pitchNoteTranslation),
       interpretation: parseInterpretationStage(interpretation),
     },
   };
@@ -250,8 +255,8 @@ function parseCanonicalMeasurementResult(value: unknown): MeasurementResult {
 function parseRequestedStages(value: unknown): AnalysisRunRequestedStages {
   const requested = expectRecord(value, 'requestedStages');
   return {
-    symbolicMode: expectString(requested.symbolicMode, 'requestedStages.symbolicMode'),
-    symbolicBackend: expectString(requested.symbolicBackend, 'requestedStages.symbolicBackend'),
+    pitchNoteMode: expectString(requested.pitchNoteMode, 'requestedStages.pitchNoteMode'),
+    pitchNoteBackend: expectString(requested.pitchNoteBackend, 'requestedStages.pitchNoteBackend'),
     interpretationMode: expectString(requested.interpretationMode, 'requestedStages.interpretationMode'),
     interpretationProfile: expectString(requested.interpretationProfile, 'requestedStages.interpretationProfile'),
     interpretationModel: asString(requested.interpretationModel),
@@ -269,15 +274,37 @@ function parseArtifact(value: Record<string, unknown>): AnalysisRunArtifact {
   };
 }
 
-function parseSymbolicStage(value: Record<string, unknown>): SymbolicExtractionStageSnapshot {
+function parseSpectralArtifactRef(value: unknown, label: string): SpectralArtifactRef {
+  const s = value as Record<string, unknown>;
+  return {
+    artifactId: expectString(s.artifactId, `${label} artifactId`),
+    kind: expectString(s.kind, `${label} kind`) as SpectralArtifactRef['kind'],
+    filename: expectString(s.filename, `${label} filename`),
+    mimeType: expectString(s.mimeType, `${label} mimeType`),
+    sizeBytes: expectNumber(s.sizeBytes, `${label} sizeBytes`),
+  };
+}
+
+function parseSpectralArtifacts(value: unknown): SpectralArtifacts {
+  const raw = value as Record<string, unknown>;
+  const spectrograms = Array.isArray(raw.spectrograms) ? raw.spectrograms : [];
+  return {
+    spectrograms: spectrograms.map((s) => parseSpectralArtifactRef(s, 'spectral')),
+    timeSeries: raw.timeSeries ? parseSpectralArtifactRef(raw.timeSeries, 'ts') : null,
+    onsetStrength: raw.onsetStrength ? parseSpectralArtifactRef(raw.onsetStrength, 'onset') : null,
+    chromaInteractive: raw.chromaInteractive ? parseSpectralArtifactRef(raw.chromaInteractive, 'chroma') : null,
+  };
+}
+
+function parsePitchNoteStage(value: Record<string, unknown>): PitchNoteTranslationStageSnapshot {
   return {
     status: expectStageStatus(value.status),
     authoritative: false,
     preferredAttemptId: asString(value.preferredAttemptId),
     attemptsSummary: Array.isArray(value.attemptsSummary)
-      ? value.attemptsSummary.map(parseSymbolicAttemptSummary)
+      ? value.attemptsSummary.map(parsePitchNoteAttemptSummary)
       : [],
-    result: value.result == null ? null : parseSymbolicResult(value.result),
+    result: value.result == null ? null : parsePitchNoteResult(value.result),
     provenance: parseNullableRecord(value.provenance),
     diagnostics: parseNullableRecord(value.diagnostics),
     error: parseNullableError(value.error),
@@ -304,12 +331,12 @@ function parseInterpretationStage(value: Record<string, unknown>): Interpretatio
   };
 }
 
-function parseSymbolicAttemptSummary(value: unknown): SymbolicExtractionAttemptSummary {
-  const attempt = expectRecord(value, 'symbolic attempt');
+function parsePitchNoteAttemptSummary(value: unknown): PitchNoteTranslationAttemptSummary {
+  const attempt = expectRecord(value, 'pitch/note attempt');
   return {
-    attemptId: expectString(attempt.attemptId, 'symbolic attemptId'),
-    backendId: expectString(attempt.backendId, 'symbolic backendId'),
-    mode: expectString(attempt.mode, 'symbolic mode'),
+    attemptId: expectString(attempt.attemptId, 'pitch/note attemptId'),
+    backendId: expectString(attempt.backendId, 'pitch/note backendId'),
+    mode: expectString(attempt.mode, 'pitch/note mode'),
     status: expectStageStatus(attempt.status),
   };
 }
@@ -370,23 +397,23 @@ function parseStemSummaryResult(value: unknown): StemSummaryResult {
   };
 }
 
-function parseSymbolicResult(value: unknown): SymbolicExtractionStageSnapshot['result'] {
-  const result = expectRecord(value, 'symbolic result');
+function parsePitchNoteResult(value: unknown): PitchNoteTranslationStageSnapshot['result'] {
+  const result = expectRecord(value, 'pitch/note result');
   return {
     transcriptionMethod: asString(result.transcriptionMethod) ?? 'unknown',
-    noteCount: expectNumber(result.noteCount, 'symbolic noteCount'),
-    averageConfidence: expectNumber(result.averageConfidence, 'symbolic averageConfidence'),
+    noteCount: expectNumber(result.noteCount, 'pitch/note noteCount'),
+    averageConfidence: expectNumber(result.averageConfidence, 'pitch/note averageConfidence'),
     stemSeparationUsed: Boolean(result.stemSeparationUsed),
     fullMixFallback: Boolean(result.fullMixFallback),
     stemsTranscribed: Array.isArray(result.stemsTranscribed)
       ? result.stemsTranscribed.map((entry) => String(entry))
       : [],
     dominantPitches: Array.isArray(result.dominantPitches)
-      ? result.dominantPitches.map((entry) => expectRecord(entry, 'dominant pitch') as SymbolicExtractionStageSnapshot['result']['dominantPitches'][number])
+      ? result.dominantPitches.map((entry) => expectRecord(entry, 'dominant pitch') as PitchNoteTranslationStageSnapshot['result']['dominantPitches'][number])
       : [],
-    pitchRange: expectRecord(result.pitchRange, 'symbolic pitchRange') as SymbolicExtractionStageSnapshot['result']['pitchRange'],
+    pitchRange: expectRecord(result.pitchRange, 'pitch/note pitchRange') as PitchNoteTranslationStageSnapshot['result']['pitchRange'],
     notes: Array.isArray(result.notes)
-      ? result.notes.map((entry) => expectRecord(entry, 'symbolic note') as unknown as SymbolicExtractionStageSnapshot['result']['notes'][number])
+      ? result.notes.map((entry) => expectRecord(entry, 'pitch/note note') as unknown as PitchNoteTranslationStageSnapshot['result']['notes'][number])
       : [],
   };
 }

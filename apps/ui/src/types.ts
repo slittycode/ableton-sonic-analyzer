@@ -68,6 +68,8 @@ export interface StereoDetail {
 export interface SpectralDetail {
   spectralCentroidMean?: number | null;
   spectralRolloffMean?: number | null;
+  spectralBandwidthMean?: number | null;
+  spectralFlatnessMean?: number | null;
   mfcc?: number[] | null;
   chroma?: number[] | null;
   barkBands?: number[] | null;
@@ -493,9 +495,61 @@ export interface AnalysisRunArtifact {
   path: string;
 }
 
+export interface SpectralArtifactRef {
+  artifactId: string;
+  kind:
+    | 'spectrogram_mel'
+    | 'spectrogram_chroma'
+    | 'spectrogram_cqt'
+    | 'spectrogram_harmonic'
+    | 'spectrogram_percussive'
+    | 'spectrogram_onset';
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+}
+
+export interface SpectralArtifacts {
+  spectrograms: SpectralArtifactRef[];
+  timeSeries: SpectralArtifactRef | null;
+  onsetStrength: SpectralArtifactRef | null;
+  chromaInteractive: SpectralArtifactRef | null;
+}
+
+export interface OnsetStrengthData {
+  timePoints: number[];
+  onsetStrength: number[];
+  sampleRate: number;
+  hopLength: number;
+  originalFrameCount: number;
+  downsampledTo: number;
+}
+
+export interface ChromaInteractiveData {
+  timePoints: number[];
+  pitchClasses: string[];
+  chroma: number[][];
+  sampleRate: number;
+  hopLength: number;
+  originalFrameCount: number;
+  downsampledTo: number;
+}
+
+export interface SpectralTimeSeriesData {
+  timePoints: number[];
+  spectralCentroid: number[];
+  spectralRolloff: number[];
+  spectralBandwidth: number[];
+  spectralFlatness: number[];
+  sampleRate: number;
+  hopLength: number;
+  originalFrameCount: number;
+  downsampledTo: number;
+}
+
 export interface AnalysisRunRequestedStages {
-  symbolicMode: string;
-  symbolicBackend: string;
+  pitchNoteMode: string;
+  pitchNoteBackend: string;
   interpretationMode: string;
   interpretationProfile: string;
   interpretationModel: string | null;
@@ -510,7 +564,7 @@ export interface MeasurementStageSnapshot {
   error: AnalysisStageError | null;
 }
 
-export interface SymbolicExtractionAttemptSummary {
+export interface PitchNoteTranslationAttemptSummary {
   attemptId: string;
   backendId: string;
   mode: string;
@@ -524,11 +578,11 @@ export interface InterpretationAttemptSummary {
   status: AnalysisStageStatus;
 }
 
-export interface SymbolicExtractionStageSnapshot {
+export interface PitchNoteTranslationStageSnapshot {
   status: AnalysisStageStatus;
   authoritative: false;
   preferredAttemptId: string | null;
-  attemptsSummary: SymbolicExtractionAttemptSummary[];
+  attemptsSummary: PitchNoteTranslationAttemptSummary[];
   result: TranscriptionDetail | null;
   provenance: Record<string, unknown> | null;
   diagnostics: Record<string, unknown> | null;
@@ -551,10 +605,11 @@ export interface AnalysisRunSnapshot {
   requestedStages: AnalysisRunRequestedStages;
   artifacts: {
     sourceAudio: AnalysisRunArtifact;
+    spectral?: SpectralArtifacts;
   };
   stages: {
     measurement: MeasurementStageSnapshot;
-    symbolicExtraction: SymbolicExtractionStageSnapshot;
+    pitchNoteTranslation: PitchNoteTranslationStageSnapshot;
     interpretation: InterpretationStageSnapshot;
   };
 }
@@ -596,7 +651,7 @@ export type DiagnosticLogStatus = "running" | "success" | "error" | "skipped";
 export interface DiagnosticLogEntry {
   model: string;
   phase: string;
-  stageKey?: 'measurement' | 'symbolicExtraction' | 'interpretation' | 'system';
+  stageKey?: 'measurement' | 'pitchNoteTranslation' | 'interpretation' | 'system';
   promptLength: number;
   responseLength: number;
   durationMs: number;

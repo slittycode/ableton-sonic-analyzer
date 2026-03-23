@@ -55,7 +55,7 @@ type RunSnapshotOverrides = {
   requestedStages?: Record<string, unknown>;
   stages?: {
     measurement?: Record<string, unknown>;
-    symbolicExtraction?: Record<string, unknown>;
+    pitchNoteTranslation?: Record<string, unknown>;
     interpretation?: Record<string, unknown>;
   };
 };
@@ -64,8 +64,8 @@ function buildRunSnapshot(runId: string, overrides: RunSnapshotOverrides = {}) {
   return {
     runId,
     requestedStages: {
-      symbolicMode: 'off',
-      symbolicBackend: 'auto',
+      pitchNoteMode: 'off',
+      pitchNoteBackend: 'auto',
       interpretationMode: 'async',
       interpretationProfile: 'producer_summary',
       interpretationModel: 'gemini-3.1-pro-preview',
@@ -91,7 +91,7 @@ function buildRunSnapshot(runId: string, overrides: RunSnapshotOverrides = {}) {
         error: null,
         ...overrides.stages?.measurement,
       },
-      symbolicExtraction: {
+      pitchNoteTranslation: {
         status: 'not_requested',
         authoritative: false,
         preferredAttemptId: null,
@@ -100,7 +100,7 @@ function buildRunSnapshot(runId: string, overrides: RunSnapshotOverrides = {}) {
         provenance: null,
         diagnostics: null,
         error: null,
-        ...overrides.stages?.symbolicExtraction,
+        ...overrides.stages?.pitchNoteTranslation,
       },
       interpretation: {
         status: 'blocked',

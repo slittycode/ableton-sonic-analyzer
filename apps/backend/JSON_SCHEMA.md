@@ -229,8 +229,10 @@ Type: `object \| null`
 
 | Field | Type | Description | Units / Scale | LLM interpretation note |
 |---|---|---|---|---|
-| `spectralDetail.spectralCentroid` | `float` | Global mean centroid. | Hz | Higher centroid generally means brighter spectral tilt. |
-| `spectralDetail.spectralRolloff` | `float` | Global mean rolloff frequency. | Hz | Indicates where most spectral energy accumulates below. |
+| `spectralDetail.spectralCentroid` | `float` | Global mean centroid. | Hz | Higher centroid generally means brighter spectral tilt. Normalized to `spectralCentroidMean` in HTTP response. |
+| `spectralDetail.spectralRolloff` | `float` | Global mean rolloff frequency. | Hz | Indicates where most spectral energy accumulates below. Normalized to `spectralRolloffMean` in HTTP response. |
+| `spectralDetail.spectralBandwidth` | `float` | Global mean spectral bandwidth (weighted std dev around centroid). | Hz | Wider bandwidth → richer harmonic content. Normalized to `spectralBandwidthMean` in HTTP response. |
+| `spectralDetail.spectralFlatness` | `float` | Global mean spectral flatness. | 0–1 ratio | 0 = pure tone, 1 = white noise. Indicates noise-like vs tonal character. Normalized to `spectralFlatnessMean` in HTTP response. |
 | `spectralDetail.mfcc` | `float[13]` | Mean MFCC coefficients. | coefficient vector | Compact timbre fingerprint; compare tracks by vector similarity. |
 | `spectralDetail.chroma` | `float[12]` | Mean HPCP/chroma profile. | 12 pitch classes | Pitch-class energy distribution; useful for harmonic centre hints. |
 | `spectralDetail.barkBands` | `float[24]` | Mean Bark band energies. | dB per Bark band | Psychoacoustic distribution across critical bands. |

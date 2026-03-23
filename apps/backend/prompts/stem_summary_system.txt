@@ -17,7 +17,7 @@ ABSOLUTE RULES:
 1. AUTHORITATIVE_MEASUREMENT_RESULT_JSON is the only source of truth for BPM, key, meter, loudness, duration, arrangement timing, and other numeric measurement fields.
 2. Do not re-estimate or override BPM, key, time signature, LUFS, or segment boundaries from listening.
 3. OPTIONAL_SYMBOLIC_EXTRACTION_RESULT_JSON is best-effort note scaffolding only. Use it to support note-name or scale-degree hypotheses when it helps, but never promote it to measurement truth.
-4. If the symbolic result is absent, sparse, or low confidence, say so and fall back to cautious musical language.
+4. If the pitch/note translation result is absent, sparse, or low confidence, say so and fall back to cautious musical language.
 5. Keep the output bar-aligned. Use the provided stable bar grid and measured arrangement timing rather than inventing a new grid.
 6. Keep uncertainty explicit. If a bar is ambiguous, say that in the bar entry instead of pretending certainty.
 7. Do not ask for or imply piano-roll precision. No MIDI editing language, no exact velocity claims, and no exact note-length claims beyond what is musically defensible.

@@ -1,5 +1,6 @@
 import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
-import { AudioWaveform, Sparkles, X } from 'lucide-react';
+import { motion } from 'motion/react';
+import { AudioWaveform, Play, X } from 'lucide-react';
 
 import { AnalysisStatusPanel } from './components/AnalysisStatusPanel';
 import { DiagnosticLog } from './components/DiagnosticLog';
@@ -14,7 +15,7 @@ import {
 } from './config';
 import { getAudioMimeTypeOrDefault, isSupportedAudioFile } from './services/audioFile';
 import { analyzeAudio, monitorAnalysisRun } from './services/analyzer';
-import { createInterpretationAttempt, createSymbolicExtractionAttempt } from './services/analysisRunsClient';
+import { createInterpretationAttempt, createPitchNoteTranslationAttempt } from './services/analysisRunsClient';
 import {
   BackendClientError,
   deriveAnalyzeTimeoutMs,
@@ -108,8 +109,8 @@ function stageDisplayLabel(stageKey: StageKey): string {
   switch (stageKey) {
     case 'measurement':
       return 'Measurement';
-    case 'symbolicExtraction':
-      return 'Symbolic Extraction';
+    case 'pitchNoteTranslation':
+      return 'Pitch/Note Translation';
     case 'interpretation':
       return 'AI Interpretation';
     default:
@@ -121,8 +122,8 @@ function buildStageLogMessage(stageKey: StageKey, status: AnalysisStageStatus, r
   const stage =
     stageKey === 'measurement'
       ? run.stages.measurement
-      : stageKey === 'symbolicExtraction'
-        ? run.stages.symbolicExtraction
+      : stageKey === 'pitchNoteTranslation'
+        ? run.stages.pitchNoteTranslation
         : run.stages.interpretation;
   const error = stage.error;
 
@@ -134,8 +135,8 @@ function buildStageLogMessage(stageKey: StageKey, status: AnalysisStageStatus, r
     switch (stageKey) {
       case 'measurement':
         return 'Measurement complete.';
-      case 'symbolicExtraction':
-        return 'Symbolic extraction complete.';
+      case 'pitchNoteTranslation':
+        return 'Pitch/Note Translation complete.';
       case 'interpretation':
         return 'AI interpretation complete.';
       default:
@@ -146,7 +147,7 @@ function buildStageLogMessage(stageKey: StageKey, status: AnalysisStageStatus, r
   if (status === 'not_requested') {
     return stageKey === 'interpretation'
       ? 'AI interpretation skipped.'
-      : 'Symbolic extraction was not requested.';
+      : 'Pitch/Note Translation was not requested.';
   }
 
   if (status === 'queued') {
@@ -208,7 +209,7 @@ export default function App() {
   const [interpretationRequested, setInterpretationRequested] = useState(() => loadPhase2RequestedPreference());
 
   const [measurementResult, setMeasurementResult] = useState<MeasurementResult | null>(null);
-  const [symbolicResult, setSymbolicResult] = useState<TranscriptionDetail | null>(null);
+  const [pitchNoteResult, setPitchNoteResult] = useState<TranscriptionDetail | null>(null);
   const [phase2Result, setPhase2Result] = useState<Phase2Result | null>(null);
   const [phase2StatusMessage, setPhase2StatusMessage] = useState<string | null>(null);
   const [logs, setLogs] = useState<DiagnosticLogEntry[]>([]);
@@ -224,7 +225,7 @@ export default function App() {
   const [estimateError, setEstimateError] = useState<string | null>(null);
   const [estimateWrongService, setEstimateWrongService] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
-  const [symbolicExtractionRequested, setSymbolicExtractionRequested] = useState(true);
+  const [pitchNoteTranslationRequested, setPitchNoteTranslationRequested] = useState(true);
 
   const analysisStartedAtRef = useRef<number | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -263,8 +264,8 @@ export default function App() {
     // Legacy estimate route — retained pending canonicalization into analysis-runs API.
     estimatePhase1WithBackend(audioFile, {
       apiBaseUrl: appConfig.apiBaseUrl,
-      transcribe: symbolicExtractionRequested,
-      separate: symbolicExtractionRequested,
+      transcribe: pitchNoteTranslationRequested,
+      separate: pitchNoteTranslationRequested,
     })
       .then((result) => {
         if (isCancelled) return;
@@ -285,7 +286,7 @@ export default function App() {
     return () => {
       isCancelled = true;
     };
-  }, [audioFile, symbolicExtractionRequested]);
+  }, [audioFile, pitchNoteTranslationRequested]);
 
   useEffect(() => {
     if (!isAnalyzing || analysisStartedAtRef.current === null) {
@@ -308,7 +309,7 @@ export default function App() {
     setAudioFile(file);
     setAudioUrl(URL.createObjectURL(file));
     setMeasurementResult(null);
-    setSymbolicResult(null);
+    setPitchNoteResult(null);
     setPhase2Result(null);
     setPhase2StatusMessage(null);
     setLogs([]);
@@ -328,7 +329,7 @@ export default function App() {
     if (audioUrl) URL.revokeObjectURL(audioUrl);
     setAudioUrl(null);
     setMeasurementResult(null);
-    setSymbolicResult(null);
+    setPitchNoteResult(null);
     setPhase2Result(null);
     setPhase2StatusMessage(null);
     setLogs([]);
@@ -408,8 +409,8 @@ export default function App() {
     const stageError =
       stageKey === 'measurement'
         ? run.stages.measurement.error
-        : stageKey === 'symbolicExtraction'
-          ? run.stages.symbolicExtraction.error
+        : stageKey === 'pitchNoteTranslation'
+          ? run.stages.pitchNoteTranslation.error
           : run.stages.interpretation.error;
 
     if (nextStatus === 'queued' || nextStatus === 'running') {
@@ -427,7 +428,7 @@ export default function App() {
       });
     }
 
-    if (nextStatus === 'completed' && stageKey === 'symbolicExtraction') {
+    if (nextStatus === 'completed' && stageKey === 'pitchNoteTranslation') {
       return replaceRunningLog(
         currentLogs,
         stageKey,
@@ -543,10 +544,10 @@ export default function App() {
           if (result) {
             const { transcriptionDetail, ...measurement } = result;
             setMeasurementResult(measurement);
-            setSymbolicResult(transcriptionDetail ?? null);
+            setPitchNoteResult(transcriptionDetail ?? null);
           } else {
             setMeasurementResult(null);
-            setSymbolicResult(null);
+            setPitchNoteResult(null);
           }
         },
         (result, log) => {
@@ -616,7 +617,7 @@ export default function App() {
           }
         },
         {
-          symbolicRequested: symbolicExtractionRequested,
+          pitchNoteRequested: pitchNoteTranslationRequested,
           timeoutMs: activeTimeoutMs,
           signal: ac.signal,
           interpretationRequested,
@@ -628,10 +629,10 @@ export default function App() {
             if (p1) {
               const { transcriptionDetail, ...measurement } = p1;
               setMeasurementResult(measurement);
-              setSymbolicResult(transcriptionDetail ?? null);
+              setPitchNoteResult(transcriptionDetail ?? null);
             } else {
               setMeasurementResult(null);
-              setSymbolicResult(null);
+              setPitchNoteResult(null);
             }
             setPhase2Result(update.displayPhase2);
             if (!update.displayPhase2 && isTerminalStageStatus(update.snapshot.stages.interpretation.status)) {
@@ -649,7 +650,7 @@ export default function App() {
             setLogs((prev) => {
               let nextLogs = prev;
               const measurementStatus = update.snapshot.stages.measurement.status;
-              const symbolicStatus = update.snapshot.stages.symbolicExtraction.status;
+              const pitchNoteStatus = update.snapshot.stages.pitchNoteTranslation.status;
               const interpretationStatus = update.snapshot.stages.interpretation.status;
 
               if (!previous || previous.stages.measurement.status !== measurementStatus) {
@@ -664,11 +665,11 @@ export default function App() {
                 );
               }
 
-              if (!previous || previous.stages.symbolicExtraction.status !== symbolicStatus) {
+              if (!previous || previous.stages.pitchNoteTranslation.status !== pitchNoteStatus) {
                 nextLogs = syncStageLog(
                   nextLogs,
-                  'symbolicExtraction',
-                  symbolicStatus,
+                  'pitchNoteTranslation',
+                  pitchNoteStatus,
                   update.snapshot,
                   audioMetadata,
                   activeModel,
@@ -710,7 +711,7 @@ export default function App() {
     abortControllerRef.current?.abort();
   };
 
-  const handleRetrySymbolicExtraction = useCallback(async () => {
+  const handleRetryPitchNoteExtraction = useCallback(async () => {
     if (!audioFile || !activeRunId) return;
 
     const controller = new AbortController();
@@ -721,10 +722,10 @@ export default function App() {
     analysisStartedAtRef.current = Date.now();
 
     try {
-      await createSymbolicExtractionAttempt(activeRunId, {
+      await createPitchNoteTranslationAttempt(activeRunId, {
         apiBaseUrl: appConfig.apiBaseUrl,
-        symbolicMode: 'stem_notes',
-        symbolicBackend: 'auto',
+        pitchNoteMode: 'stem_notes',
+        pitchNoteBackend: 'auto',
         signal: controller.signal,
       });
       await monitorAnalysisRun(
@@ -736,10 +737,10 @@ export default function App() {
           if (result) {
             const { transcriptionDetail, ...measurement } = result;
             setMeasurementResult(measurement);
-            setSymbolicResult(transcriptionDetail ?? null);
+            setPitchNoteResult(transcriptionDetail ?? null);
           } else {
             setMeasurementResult(null);
-            setSymbolicResult(null);
+            setPitchNoteResult(null);
           }
           setLogs((prev) => replaceRunningLog(prev, 'measurement', { ...log, status: 'success' }));
         },
@@ -755,7 +756,7 @@ export default function App() {
           }
         },
         {
-          symbolicRequested: symbolicExtractionRequested,
+          pitchNoteRequested: pitchNoteTranslationRequested,
           interpretationRequested,
           interpretationConfigEnabled: phase2ConfigEnabled,
           signal: controller.signal,
@@ -766,10 +767,10 @@ export default function App() {
             if (p1) {
               const { transcriptionDetail, ...measurement } = p1;
               setMeasurementResult(measurement);
-              setSymbolicResult(transcriptionDetail ?? null);
+              setPitchNoteResult(transcriptionDetail ?? null);
             } else {
               setMeasurementResult(null);
-              setSymbolicResult(null);
+              setPitchNoteResult(null);
             }
             setPhase2Result(update.displayPhase2);
             previousRunRef.current = update.snapshot;
@@ -782,7 +783,7 @@ export default function App() {
       analysisStartedAtRef.current = null;
       setElapsedMs(0);
     }
-  }, [activeRunId, audioFile, interpretationRequested, phase2ConfigEnabled, selectedModel, symbolicExtractionRequested]);
+  }, [activeRunId, audioFile, interpretationRequested, phase2ConfigEnabled, selectedModel, pitchNoteTranslationRequested]);
 
   const handleRetryInterpretation = useCallback(async () => {
     if (!audioFile || !activeRunId) return;
@@ -811,10 +812,10 @@ export default function App() {
           if (result) {
             const { transcriptionDetail, ...measurement } = result;
             setMeasurementResult(measurement);
-            setSymbolicResult(transcriptionDetail ?? null);
+            setPitchNoteResult(transcriptionDetail ?? null);
           } else {
             setMeasurementResult(null);
-            setSymbolicResult(null);
+            setPitchNoteResult(null);
           }
           setLogs((prev) => replaceRunningLog(prev, 'measurement', { ...log, status: 'success' }));
         },
@@ -830,7 +831,7 @@ export default function App() {
           }
         },
         {
-          symbolicRequested: symbolicExtractionRequested,
+          pitchNoteRequested: pitchNoteTranslationRequested,
           interpretationRequested,
           interpretationConfigEnabled: phase2ConfigEnabled,
           signal: controller.signal,
@@ -841,10 +842,10 @@ export default function App() {
             if (p1) {
               const { transcriptionDetail, ...measurement } = p1;
               setMeasurementResult(measurement);
-              setSymbolicResult(transcriptionDetail ?? null);
+              setPitchNoteResult(transcriptionDetail ?? null);
             } else {
               setMeasurementResult(null);
-              setSymbolicResult(null);
+              setPitchNoteResult(null);
             }
             setPhase2Result(update.displayPhase2);
             previousRunRef.current = update.snapshot;
@@ -857,7 +858,7 @@ export default function App() {
       analysisStartedAtRef.current = null;
       setElapsedMs(0);
     }
-  }, [activeRunId, audioFile, interpretationRequested, phase2ConfigEnabled, selectedModel, symbolicExtractionRequested]);
+  }, [activeRunId, audioFile, interpretationRequested, phase2ConfigEnabled, selectedModel, pitchNoteTranslationRequested]);
 
   const handleAudioElement = useCallback((el: HTMLAudioElement) => {
     audioElementRef.current = el;
@@ -874,7 +875,7 @@ export default function App() {
     analysisRun &&
       (
         ['failed', 'interrupted'].includes(analysisRun.stages.measurement.status) ||
-        ['failed', 'interrupted'].includes(analysisRun.stages.symbolicExtraction.status) ||
+        ['failed', 'interrupted'].includes(analysisRun.stages.pitchNoteTranslation.status) ||
         ['failed', 'interrupted'].includes(analysisRun.stages.interpretation.status)
       ),
   );
@@ -882,7 +883,7 @@ export default function App() {
   const phase1ForRender: Phase1Result | null = measurementResult
     ? {
         ...measurementResult,
-        transcriptionDetail: symbolicResult ?? null,
+        transcriptionDetail: pitchNoteResult ?? null,
       }
     : null;
 
@@ -967,7 +968,7 @@ export default function App() {
                     />
                     <label
                       className={`mt-4 rounded-sm border px-3 py-3 transition-colors cursor-pointer ${
-                        symbolicExtractionRequested
+                        pitchNoteTranslationRequested
                           ? 'border-accent bg-accent/10 text-accent'
                           : 'border-border bg-bg-panel text-text-secondary'
                       } ${isAnalyzing ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -975,8 +976,8 @@ export default function App() {
                       <div className="flex items-start gap-3">
                         <input
                           type="checkbox"
-                          checked={symbolicExtractionRequested}
-                          onChange={(e) => setSymbolicExtractionRequested(e.target.checked)}
+                          checked={pitchNoteTranslationRequested}
+                          onChange={(e) => setPitchNoteTranslationRequested(e.target.checked)}
                           disabled={isAnalyzing}
                           aria-label="SYMBOLIC EXTRACTION"
                           className="mt-0.5 h-4 w-4 accent-accent"
@@ -1049,7 +1050,12 @@ export default function App() {
                     </div>
                     {!measurementResult && audioFile && (
                       <>
-                        <div className="mt-3 rounded-sm border border-border bg-bg-panel p-3 space-y-2">
+                        <motion.div
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.35, ease: 'easeOut' }}
+                          className="mt-3 rounded-sm border border-border hover:border-accent/30 bg-bg-panel p-3 space-y-2 transition-colors"
+                        >
                           <div className="flex items-center justify-between">
                             <p className="text-[10px] font-mono text-text-secondary uppercase tracking-wider">Estimated local analysis</p>
                             <p className="text-xs font-mono font-bold tracking-wider text-text-primary">
@@ -1069,18 +1075,26 @@ export default function App() {
                               {estimateWrongService ? estimateError : `Estimate unavailable: ${estimateError}`}
                             </p>
                           )}
-                        </div>
-                        <div className="mt-4 flex justify-end">
-                          <button
+                        </motion.div>
+                        <motion.div
+                          initial={{ opacity: 0, y: 6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.3, ease: 'easeOut', delay: 0.1 }}
+                          className="mt-4 flex justify-end"
+                        >
+                          <motion.button
                             onClick={handleStartAnalysis}
                             disabled={isAnalyzeDisabled}
-                            className="bg-accent hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed text-bg-app font-bold py-2 px-6 rounded-sm flex items-center transition-colors uppercase tracking-wider font-mono text-xs"
+                            whileHover={isAnalyzeDisabled ? {} : { scale: 1.02 }}
+                            whileTap={isAnalyzeDisabled ? {} : { scale: 0.98 }}
+                            className="group relative bg-bg-panel border border-accent/60 hover:bg-accent hover:border-accent text-accent hover:text-bg-app shadow-[0_0_10px_rgba(255,136,0,0.15)] hover:shadow-[0_0_18px_rgba(255,136,0,0.4)] disabled:opacity-40 disabled:shadow-none disabled:border-border disabled:text-text-secondary disabled:cursor-not-allowed font-bold py-2.5 px-7 rounded-sm flex items-center transition-all duration-200 uppercase tracking-wider font-mono text-xs"
                             title={estimateWrongService ? 'Point the UI at the Sonic Analyzer backend to enable analysis.' : undefined}
                           >
-                            <Sparkles className="w-3 h-3 mr-2" />
-                            Initiate Analysis
-                          </button>
-                        </div>
+                            <span className="w-1.5 h-1.5 rounded-full bg-accent group-hover:bg-bg-app/50 group-disabled:bg-border mr-3 animate-pulse" />
+                            <Play className="w-3 h-3 mr-2 fill-current" />
+                            Run Analysis
+                          </motion.button>
+                        </motion.div>
                       </>
                     )}
                   </div>
@@ -1090,7 +1104,7 @@ export default function App() {
               <div className="lg:col-span-8 flex flex-col">
                 <div className="bg-bg-surface-dark border border-border border-b-0 rounded-t-sm px-3 py-1.5 flex items-center justify-between">
                   <div className="flex items-center">
-                    <span className={`w-2 h-2 rounded-full mr-2 ${audioUrl ? 'bg-success' : 'bg-border'}`}></span>
+                    <span className={`w-2 h-2 rounded-full mr-2 ${isAnalyzing ? 'bg-accent animate-pulse' : audioUrl ? 'bg-success' : 'bg-border'}`}></span>
                     <h3 className="text-[10px] font-mono text-text-secondary uppercase tracking-wider">Signal Monitor</h3>
                   </div>
                 </div>
@@ -1111,7 +1125,7 @@ export default function App() {
                           isActive={isAnalyzing}
                           onStopMonitoring={handleStopMonitoring}
                           onRetryMeasurement={audioFile ? handleStartAnalysis : undefined}
-                          onRetrySymbolic={analysisRun && ['failed', 'interrupted'].includes(analysisRun.stages.symbolicExtraction.status) ? handleRetrySymbolicExtraction : undefined}
+                          onRetryPitchNote={analysisRun && ['failed', 'interrupted'].includes(analysisRun.stages.pitchNoteTranslation.status) ? handleRetryPitchNoteExtraction : undefined}
                           onRetryInterpretation={analysisRun && ['failed', 'interrupted'].includes(analysisRun.stages.interpretation.status) ? handleRetryInterpretation : undefined}
                         />
                       )}
@@ -1173,6 +1187,9 @@ export default function App() {
                   phase2={phase2Result}
                   phase2StatusMessage={phase2StatusMessage}
                   sourceFileName={audioFile?.name ?? null}
+                  spectralArtifacts={analysisRun?.artifacts?.spectral ?? null}
+                  apiBaseUrl={appConfig.apiBaseUrl}
+                  runId={activeRunId ?? undefined}
                 />
               </Suspense>
             ) : null}

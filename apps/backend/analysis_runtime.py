@@ -28,10 +28,10 @@ def _json_loads(value: str | None) -> Any:
     return json.loads(value)
 
 
-class UnsupportedSymbolicModeError(ValueError):
-    def __init__(self, symbolic_mode: str):
-        self.symbolic_mode = symbolic_mode
-        super().__init__(f"Unsupported symbolic mode '{symbolic_mode}'.")
+class UnsupportedPitchNoteModeError(ValueError):
+    def __init__(self, pitch_note_mode: str):
+        self.pitch_note_mode = pitch_note_mode
+        super().__init__(f"Unsupported pitch/note mode '{pitch_note_mode}'.")
 
 
 class AnalysisRuntime:
@@ -59,13 +59,13 @@ class AnalysisRuntime:
                 CREATE TABLE IF NOT EXISTS analysis_runs (
                     id TEXT PRIMARY KEY,
                     source_artifact_id TEXT NOT NULL,
-                    requested_symbolic_mode TEXT NOT NULL,
-                    requested_symbolic_backend TEXT NOT NULL,
+                    requested_pitch_note_mode TEXT NOT NULL,
+                    requested_pitch_note_backend TEXT NOT NULL,
                     requested_interpretation_mode TEXT NOT NULL,
                     requested_interpretation_profile TEXT NOT NULL,
                     requested_interpretation_model TEXT,
                     legacy_request_id TEXT,
-                    preferred_symbolic_attempt_id TEXT,
+                    preferred_pitch_note_attempt_id TEXT,
                     preferred_interpretation_attempt_id TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
@@ -96,7 +96,7 @@ class AnalysisRuntime:
                     updated_at TEXT NOT NULL
                 );
 
-                CREATE TABLE IF NOT EXISTS symbolic_extraction_attempts (
+                CREATE TABLE IF NOT EXISTS pitch_note_translation_attempts (
                     id TEXT PRIMARY KEY,
                     run_id TEXT NOT NULL,
                     backend_id TEXT NOT NULL,
@@ -116,7 +116,7 @@ class AnalysisRuntime:
                     profile_id TEXT NOT NULL,
                     model_name TEXT,
                     grounded_measurement_output_id TEXT,
-                    grounded_symbolic_attempt_id TEXT,
+                    grounded_pitch_note_attempt_id TEXT,
                     status TEXT NOT NULL,
                     result_json TEXT,
                     provenance_json TEXT,
@@ -136,7 +136,7 @@ class AnalysisRuntime:
             self._ensure_column(
                 conn,
                 "interpretation_attempts",
-                "grounded_symbolic_attempt_id",
+                "grounded_pitch_note_attempt_id",
                 "TEXT",
             )
 
@@ -161,8 +161,8 @@ class AnalysisRuntime:
         filename: str,
         content: bytes,
         mime_type: str,
-        symbolic_mode: str,
-        symbolic_backend: str,
+        pitch_note_mode: str,
+        pitch_note_backend: str,
         interpretation_mode: str,
         interpretation_profile: str,
         interpretation_model: str | None,
@@ -184,8 +184,8 @@ class AnalysisRuntime:
                 INSERT INTO analysis_runs (
                     id,
                     source_artifact_id,
-                    requested_symbolic_mode,
-                    requested_symbolic_backend,
+                    requested_pitch_note_mode,
+                    requested_pitch_note_backend,
                     requested_interpretation_mode,
                     requested_interpretation_profile,
                     requested_interpretation_model,
@@ -197,8 +197,8 @@ class AnalysisRuntime:
                 (
                     run_id,
                     artifact_id,
-                    symbolic_mode,
-                    symbolic_backend,
+                    pitch_note_mode,
+                    pitch_note_backend,
                     interpretation_mode,
                     interpretation_profile,
                     interpretation_model,
@@ -338,9 +338,9 @@ class AnalysisRuntime:
                 "SELECT * FROM measurement_outputs WHERE run_id = ?",
                 (run_id,),
             ).fetchone()
-            symbolic_rows = conn.execute(
+            pitch_note_rows = conn.execute(
                 """
-                SELECT * FROM symbolic_extraction_attempts
+                SELECT * FROM pitch_note_translation_attempts
                 WHERE run_id = ?
                 ORDER BY created_at DESC
                 """,
@@ -348,20 +348,20 @@ class AnalysisRuntime:
             ).fetchall()
         if run_row is None or measurement_row is None:
             raise KeyError(f"Unknown run {run_id}")
-        preferred_symbolic = self._preferred_symbolic_row(run_row, symbolic_rows)
+        preferred_pitch_note = self._preferred_pitch_note_row(run_row, pitch_note_rows)
         return {
             "measurementOutputId": str(measurement_row["id"]),
             "measurementStatus": str(measurement_row["status"]),
             "measurementResult": _json_loads(measurement_row["result_json"]),
-            "symbolicAttemptId": (
-                str(preferred_symbolic["id"]) if preferred_symbolic is not None else None
+            "pitchNoteAttemptId": (
+                str(preferred_pitch_note["id"]) if preferred_pitch_note is not None else None
             ),
-            "symbolicStatus": (
-                str(preferred_symbolic["status"]) if preferred_symbolic is not None else "not_requested"
+            "pitchNoteStatus": (
+                str(preferred_pitch_note["status"]) if preferred_pitch_note is not None else "not_requested"
             ),
-            "symbolicResult": (
-                _json_loads(preferred_symbolic["result_json"])
-                if preferred_symbolic is not None
+            "pitchNoteResult": (
+                _json_loads(preferred_pitch_note["result_json"])
+                if preferred_pitch_note is not None
                 else None
             ),
         }
@@ -380,9 +380,9 @@ class AnalysisRuntime:
             measurement_row = conn.execute(
                 "SELECT * FROM measurement_outputs WHERE run_id = ?", (run_id,)
             ).fetchone()
-            symbolic_rows = conn.execute(
+            pitch_note_rows = conn.execute(
                 """
-                SELECT * FROM symbolic_extraction_attempts
+                SELECT * FROM pitch_note_translation_attempts
                 WHERE run_id = ?
                 ORDER BY created_at DESC
                 """,
@@ -397,7 +397,7 @@ class AnalysisRuntime:
                 (run_id,),
             ).fetchall()
 
-        preferred_symbolic = self._preferred_symbolic_row(run_row, symbolic_rows)
+        preferred_pitch_note = self._preferred_pitch_note_row(run_row, pitch_note_rows)
         preferred_interpretation = self._preferred_interpretation_row(
             run_row, interpretation_rows
         )
@@ -406,8 +406,8 @@ class AnalysisRuntime:
         return {
             "runId": run_id,
             "requestedStages": {
-                "symbolicMode": run_row["requested_symbolic_mode"],
-                "symbolicBackend": run_row["requested_symbolic_backend"],
+                "pitchNoteMode": run_row["requested_pitch_note_mode"],
+                "pitchNoteBackend": run_row["requested_pitch_note_backend"],
                 "interpretationMode": run_row["requested_interpretation_mode"],
                 "interpretationProfile": run_row["requested_interpretation_profile"],
                 "interpretationModel": run_row["requested_interpretation_model"],
@@ -431,11 +431,11 @@ class AnalysisRuntime:
                     "diagnostics": _json_loads(measurement_row["diagnostics_json"]),
                     "error": _json_loads(measurement_row["error_json"]),
                 },
-                "symbolicExtraction": self._symbolic_stage_snapshot(
-                    run_row["requested_symbolic_mode"],
+                "pitchNoteTranslation": self._pitch_note_stage_snapshot(
+                    run_row["requested_pitch_note_mode"],
                     measurement_status,
-                    preferred_symbolic,
-                    symbolic_rows,
+                    preferred_pitch_note,
+                    pitch_note_rows,
                 ),
                 "interpretation": self._interpretation_stage_snapshot(
                     run_row["requested_interpretation_mode"],
@@ -468,7 +468,7 @@ class AnalysisRuntime:
             row = conn.execute(
                 """
                 SELECT mo.id AS measurement_id, mo.run_id,
-                       ar.requested_symbolic_mode, ar.requested_symbolic_backend
+                       ar.requested_pitch_note_mode, ar.requested_pitch_note_backend
                 FROM measurement_outputs mo
                 JOIN analysis_runs ar ON ar.id = mo.run_id
                 WHERE mo.status = 'queued'
@@ -490,8 +490,8 @@ class AnalysisRuntime:
                 return None
         return {
             "runId": row["run_id"],
-            "requestedSymbolicMode": row["requested_symbolic_mode"],
-            "requestedSymbolicBackend": row["requested_symbolic_backend"],
+            "requestedPitchNoteMode": row["requested_pitch_note_mode"],
+            "requestedPitchNoteBackend": row["requested_pitch_note_backend"],
         }
 
     def complete_measurement(
@@ -503,8 +503,8 @@ class AnalysisRuntime:
         diagnostics: dict[str, Any],
     ) -> None:
         measurement_result = dict(payload)
-        # Strip transcriptionDetail — it's a Layer 2 (symbolic extraction) concern.
-        # The symbolic worker produces this independently through its own stage.
+        # Strip transcriptionDetail — it's a Layer 2 (pitch/note translation) concern.
+        # The pitch/note translation worker produces this independently through its own stage.
         measurement_result.pop("transcriptionDetail", None)
         self._update_measurement_row(
             run_id,
@@ -533,7 +533,7 @@ class AnalysisRuntime:
             error=error,
         )
 
-    def create_symbolic_attempt(
+    def create_pitch_note_attempt(
         self,
         run_id: str,
         *,
@@ -548,7 +548,7 @@ class AnalysisRuntime:
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT INTO symbolic_extraction_attempts (
+                INSERT INTO pitch_note_translation_attempts (
                     id,
                     run_id,
                     backend_id,
@@ -580,19 +580,19 @@ class AnalysisRuntime:
                 conn.execute(
                     """
                     UPDATE analysis_runs
-                    SET preferred_symbolic_attempt_id = ?, updated_at = ?
+                    SET preferred_pitch_note_attempt_id = ?, updated_at = ?
                     WHERE id = ?
                     """,
                     (attempt_id, now, run_id),
                 )
         return attempt_id
 
-    def reserve_symbolic_attempt(self, attempt_id: str) -> bool:
+    def reserve_pitch_note_attempt(self, attempt_id: str) -> bool:
         now = _utc_now_iso()
         with self._connect() as conn:
             cursor = conn.execute(
                 """
-                UPDATE symbolic_extraction_attempts
+                UPDATE pitch_note_translation_attempts
                 SET status = 'running', updated_at = ?
                 WHERE id = ? AND status = 'queued'
                 """,
@@ -600,13 +600,13 @@ class AnalysisRuntime:
             )
         return cursor.rowcount > 0
 
-    def reserve_next_symbolic_attempt(self) -> dict[str, Any] | None:
+    def reserve_next_pitch_note_attempt(self) -> dict[str, Any] | None:
         now = _utc_now_iso()
         with self._connect() as conn:
             row = conn.execute(
                 """
                 SELECT sea.id, sea.run_id, sea.backend_id, sea.mode
-                FROM symbolic_extraction_attempts sea
+                FROM pitch_note_translation_attempts sea
                 JOIN measurement_outputs mo ON mo.run_id = sea.run_id
                 WHERE sea.status = 'queued' AND mo.status = 'completed'
                 ORDER BY sea.created_at ASC
@@ -617,7 +617,7 @@ class AnalysisRuntime:
                 return None
             cursor = conn.execute(
                 """
-                UPDATE symbolic_extraction_attempts
+                UPDATE pitch_note_translation_attempts
                 SET status = 'running', updated_at = ?
                 WHERE id = ? AND status = 'queued'
                 """,
@@ -632,7 +632,7 @@ class AnalysisRuntime:
             "mode": row["mode"],
         }
 
-    def complete_symbolic_attempt(
+    def complete_pitch_note_attempt(
         self,
         attempt_id: str,
         *,
@@ -643,14 +643,14 @@ class AnalysisRuntime:
         now = _utc_now_iso()
         with self._connect() as conn:
             attempt_row = conn.execute(
-                "SELECT run_id FROM symbolic_extraction_attempts WHERE id = ?",
+                "SELECT run_id FROM pitch_note_translation_attempts WHERE id = ?",
                 (attempt_id,),
             ).fetchone()
             if attempt_row is None:
-                raise KeyError(f"Unknown symbolic attempt {attempt_id}")
+                raise KeyError(f"Unknown pitch/note translation attempt {attempt_id}")
             conn.execute(
                 """
-                UPDATE symbolic_extraction_attempts
+                UPDATE pitch_note_translation_attempts
                 SET status = ?, result_json = ?, provenance_json = ?, diagnostics_json = ?, error_json = ?, updated_at = ?
                 WHERE id = ?
                 """,
@@ -667,13 +667,13 @@ class AnalysisRuntime:
             conn.execute(
                 """
                 UPDATE analysis_runs
-                SET preferred_symbolic_attempt_id = ?, updated_at = ?
+                SET preferred_pitch_note_attempt_id = ?, updated_at = ?
                 WHERE id = ?
                 """,
                 (attempt_id, now, attempt_row["run_id"]),
             )
 
-    def fail_symbolic_attempt(
+    def fail_pitch_note_attempt(
         self,
         attempt_id: str,
         *,
@@ -682,7 +682,7 @@ class AnalysisRuntime:
         diagnostics: dict[str, Any] | None = None,
     ) -> None:
         self._update_attempt_row(
-            table="symbolic_extraction_attempts",
+            table="pitch_note_translation_attempts",
             attempt_id=attempt_id,
             status="failed",
             result=None,
@@ -798,7 +798,7 @@ class AnalysisRuntime:
         provenance: dict[str, Any] | None,
         diagnostics: dict[str, Any] | None = None,
         grounded_measurement_output_id: str | None = None,
-        grounded_symbolic_attempt_id: str | None = None,
+        grounded_pitch_note_attempt_id: str | None = None,
     ) -> None:
         now = _utc_now_iso()
         with self._connect() as conn:
@@ -811,13 +811,13 @@ class AnalysisRuntime:
             conn.execute(
                 """
                 UPDATE interpretation_attempts
-                SET status = ?, grounded_measurement_output_id = ?, grounded_symbolic_attempt_id = ?, result_json = ?, provenance_json = ?, diagnostics_json = ?, error_json = ?, updated_at = ?
+                SET status = ?, grounded_measurement_output_id = ?, grounded_pitch_note_attempt_id = ?, result_json = ?, provenance_json = ?, diagnostics_json = ?, error_json = ?, updated_at = ?
                 WHERE id = ?
                 """,
                 (
                     "completed",
                     grounded_measurement_output_id,
-                    grounded_symbolic_attempt_id,
+                    grounded_pitch_note_attempt_id,
                     _json_dumps(result),
                     _json_dumps(provenance),
                     _json_dumps(diagnostics),
@@ -843,19 +843,19 @@ class AnalysisRuntime:
         provenance: dict[str, Any] | None = None,
         diagnostics: dict[str, Any] | None = None,
         grounded_measurement_output_id: str | None = None,
-        grounded_symbolic_attempt_id: str | None = None,
+        grounded_pitch_note_attempt_id: str | None = None,
     ) -> None:
         with self._connect() as conn:
             conn.execute(
                 """
                 UPDATE interpretation_attempts
-                SET status = ?, grounded_measurement_output_id = ?, grounded_symbolic_attempt_id = ?, result_json = ?, provenance_json = ?, diagnostics_json = ?, error_json = ?, updated_at = ?
+                SET status = ?, grounded_measurement_output_id = ?, grounded_pitch_note_attempt_id = ?, result_json = ?, provenance_json = ?, diagnostics_json = ?, error_json = ?, updated_at = ?
                 WHERE id = ?
                 """,
                 (
                     "failed",
                     grounded_measurement_output_id,
-                    grounded_symbolic_attempt_id,
+                    grounded_pitch_note_attempt_id,
                     None,
                     _json_dumps(provenance),
                     _json_dumps(diagnostics),
@@ -925,6 +925,7 @@ class AnalysisRuntime:
             "kind": kind,
             "filename": filename,
             "mimeType": mime_type,
+            "sizeBytes": size_bytes,
         }
 
     def get_artifacts_by_kind(self, run_id: str, kind_prefix: str) -> list[dict[str, Any]]:
@@ -964,7 +965,7 @@ class AnalysisRuntime:
             )
             conn.execute(
                 """
-                UPDATE symbolic_extraction_attempts
+                UPDATE pitch_note_translation_attempts
                 SET status = 'interrupted', updated_at = ?
                 WHERE status = 'running'
                 """,
@@ -1057,7 +1058,7 @@ class AnalysisRuntime:
             )
         return progress_payload
 
-    def update_symbolic_attempt_progress(
+    def update_pitch_note_attempt_progress(
         self,
         attempt_id: str,
         *,
@@ -1065,7 +1066,7 @@ class AnalysisRuntime:
         message: str,
     ) -> dict[str, Any] | None:
         return self._update_stage_progress(
-            table="symbolic_extraction_attempts",
+            table="pitch_note_translation_attempts",
             identifier_column="id",
             identifier=attempt_id,
             step_key=step_key,
@@ -1204,8 +1205,8 @@ class AnalysisRuntime:
             ).fetchone()
             if run_row is None:
                 return
-            symbolic_exists = conn.execute(
-                "SELECT 1 FROM symbolic_extraction_attempts WHERE run_id = ? LIMIT 1",
+            pitch_note_exists = conn.execute(
+                "SELECT 1 FROM pitch_note_translation_attempts WHERE run_id = ? LIMIT 1",
                 (run_id,),
             ).fetchone()
             interpretation_exists = conn.execute(
@@ -1214,19 +1215,19 @@ class AnalysisRuntime:
             ).fetchone()
 
         if (
-            run_row["requested_symbolic_mode"] != "off"
-            and symbolic_exists is None
+            run_row["requested_pitch_note_mode"] != "off"
+            and pitch_note_exists is None
         ):
-            self.create_symbolic_attempt(
+            self.create_pitch_note_attempt(
                 run_id,
-                backend_id=self._resolve_symbolic_backend(
-                    run_row["requested_symbolic_backend"]
+                backend_id=self._resolve_pitch_note_backend(
+                    run_row["requested_pitch_note_backend"]
                 ),
-                mode=run_row["requested_symbolic_mode"],
+                mode=run_row["requested_pitch_note_mode"],
                 status="queued",
                 provenance={
-                    "backendId": self._resolve_symbolic_backend(
-                        run_row["requested_symbolic_backend"]
+                    "backendId": self._resolve_pitch_note_backend(
+                        run_row["requested_pitch_note_backend"]
                     ),
                 },
             )
@@ -1258,33 +1259,33 @@ class AnalysisRuntime:
         return int(row["count"])
 
     @staticmethod
-    def _resolve_symbolic_backend(requested_backend: str) -> str:
+    def _resolve_pitch_note_backend(requested_backend: str) -> str:
         if requested_backend == "auto":
             return "auto"
         return requested_backend
 
     @staticmethod
     def resolve_measurement_flags(
-        requested_symbolic_mode: str,
+        requested_pitch_note_mode: str,
     ) -> tuple[bool, bool]:
         # Symbolic work (separation + transcription) is handled by the dedicated
-        # symbolic_extraction stage enqueued via _enqueue_requested_followups().
+        # pitch_note_translation stage enqueued via _enqueue_requested_followups().
         # Running it inline during measurement was redundant — the result was
         # stripped anyway (see complete_measurement: pop("transcriptionDetail")).
-        if requested_symbolic_mode not in ("off", "stem_notes"):
-            raise UnsupportedSymbolicModeError(requested_symbolic_mode)
+        if requested_pitch_note_mode not in ("off", "stem_notes"):
+            raise UnsupportedPitchNoteModeError(requested_pitch_note_mode)
         return False, False
 
     @staticmethod
-    def _preferred_symbolic_row(
-        run_row: sqlite3.Row, symbolic_rows: list[sqlite3.Row]
+    def _preferred_pitch_note_row(
+        run_row: sqlite3.Row, pitch_note_rows: list[sqlite3.Row]
     ) -> sqlite3.Row | None:
-        preferred_id = run_row["preferred_symbolic_attempt_id"]
+        preferred_id = run_row["preferred_pitch_note_attempt_id"]
         if preferred_id:
-            for row in symbolic_rows:
+            for row in pitch_note_rows:
                 if row["id"] == preferred_id:
                     return row
-        return symbolic_rows[0] if symbolic_rows else None
+        return pitch_note_rows[0] if pitch_note_rows else None
 
     @staticmethod
     def _preferred_interpretation_row(
@@ -1298,7 +1299,7 @@ class AnalysisRuntime:
         return interpretation_rows[0] if interpretation_rows else None
 
     @staticmethod
-    def _symbolic_stage_snapshot(
+    def _pitch_note_stage_snapshot(
         requested_mode: str,
         measurement_status: str,
         preferred_row: sqlite3.Row | None,

@@ -4,7 +4,7 @@ import type { AnalysisRunSnapshot } from '../../src/types';
 import {
   createAnalysisRun,
   createInterpretationAttempt,
-  createSymbolicExtractionAttempt,
+  createPitchNoteTranslationAttempt,
   getAnalysisRun,
   projectPhase1FromRun,
   projectPhase2FromRun,
@@ -14,8 +14,8 @@ import {
 const baseRunSnapshot: AnalysisRunSnapshot = {
   runId: 'run_123',
   requestedStages: {
-    symbolicMode: 'stem_notes',
-    symbolicBackend: 'auto',
+    pitchNoteMode: 'stem_notes',
+    pitchNoteBackend: 'auto',
     interpretationMode: 'async',
     interpretationProfile: 'producer_summary',
     interpretationModel: 'gemini-2.5-flash',
@@ -59,7 +59,7 @@ const baseRunSnapshot: AnalysisRunSnapshot = {
       diagnostics: null,
       error: null,
     },
-    symbolicExtraction: {
+    pitchNoteTranslation: {
       status: 'completed',
       authoritative: false,
       preferredAttemptId: 'sym_123',
@@ -140,7 +140,7 @@ afterEach(() => {
 });
 
 describe('analysisRunsClient', () => {
-  it('creates a canonical run with symbolic and interpretation form fields', async () => {
+  it('creates a canonical run with pitch/note and interpretation form fields', async () => {
     const fetchSpy = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -152,8 +152,8 @@ describe('analysisRunsClient', () => {
     const file = new File(['audio-data'], 'track.mp3', { type: 'audio/mpeg' });
     const snapshot = await createAnalysisRun(file, {
       apiBaseUrl: 'http://127.0.0.1:8100',
-      symbolicMode: 'stem_notes',
-      symbolicBackend: 'auto',
+      pitchNoteMode: 'stem_notes',
+      pitchNoteBackend: 'auto',
       interpretationMode: 'async',
       interpretationProfile: 'producer_summary',
       interpretationModel: 'gemini-2.5-flash',
@@ -164,8 +164,8 @@ describe('analysisRunsClient', () => {
     const request = fetchSpy.mock.calls[0];
     expect(request[0]).toBe('http://127.0.0.1:8100/api/analysis-runs');
     const body = request[1].body as FormData;
-    expect(body.get('symbolic_mode')).toBe('stem_notes');
-    expect(body.get('symbolic_backend')).toBe('auto');
+    expect(body.get('pitch_note_mode')).toBe('stem_notes');
+    expect(body.get('pitch_note_backend')).toBe('auto');
     expect(body.get('interpretation_mode')).toBe('async');
     expect(body.get('interpretation_profile')).toBe('producer_summary');
     expect(body.get('interpretation_model')).toBe('gemini-2.5-flash');
@@ -184,17 +184,17 @@ describe('analysisRunsClient', () => {
     });
 
     expect(snapshot.stages.measurement.status).toBe('completed');
-    expect(snapshot.stages.symbolicExtraction.preferredAttemptId).toBe('sym_123');
+    expect(snapshot.stages.pitchNoteTranslation.preferredAttemptId).toBe('sym_123');
   });
 
-  it('projects phase 1 from the canonical run and injects symbolic transcription detail', () => {
+  it('projects phase 1 from the canonical run and injects pitch/note transcription detail', () => {
     const phase1 = projectPhase1FromRun(baseRunSnapshot);
 
     expect(phase1?.bpm).toBe(126);
     expect(phase1?.transcriptionDetail?.transcriptionMethod).toBe('torchcrepe');
   });
 
-  it('strips leaked transcriptionDetail from canonical measurement while preserving symbolic output', async () => {
+  it('strips leaked transcriptionDetail from canonical measurement while preserving pitch/note output', async () => {
     const payloadWithTranscription = {
       ...baseRunSnapshot,
       stages: {
@@ -238,7 +238,7 @@ describe('analysisRunsClient', () => {
 
     expect(snapshot.stages.measurement.result).not.toBeNull();
     expect('transcriptionDetail' in (snapshot.stages.measurement.result ?? {})).toBe(false);
-    expect(snapshot.stages.symbolicExtraction.result?.transcriptionMethod).toBe('torchcrepe');
+    expect(snapshot.stages.pitchNoteTranslation.result?.transcriptionMethod).toBe('torchcrepe');
     expect(projectedPhase1?.transcriptionDetail?.transcriptionMethod).toBe('torchcrepe');
   });
 
@@ -280,7 +280,7 @@ describe('analysisRunsClient', () => {
                 scaleDegreeHypotheses: ['1'],
                 rhythmicPattern: 'Short off-beat bass pulses.',
                 uncertaintyLevel: 'LOW',
-                uncertaintyReason: 'Symbolic extraction and measured bar grid agree.',
+                uncertaintyReason: 'Pitch/Note Translation and measured bar grid agree.',
               },
             ],
             globalPatterns: {
@@ -309,7 +309,7 @@ describe('analysisRunsClient', () => {
     expect(projectStemSummaryFromRun(snapshot)?.bars[0].noteHypotheses).toEqual(['C3 pedal']);
   });
 
-  it('creates symbolic retry attempts against the canonical endpoint', async () => {
+  it('creates pitch/note retry attempts against the canonical endpoint', async () => {
     const fetchSpy = vi.fn().mockResolvedValue({
       ok: true,
       status: 202,
@@ -318,13 +318,13 @@ describe('analysisRunsClient', () => {
     } as Response);
     vi.stubGlobal('fetch', fetchSpy);
 
-    await createSymbolicExtractionAttempt('run_123', {
+    await createPitchNoteTranslationAttempt('run_123', {
       apiBaseUrl: 'http://127.0.0.1:8100',
-      symbolicMode: 'stem_notes',
-      symbolicBackend: 'auto',
+      pitchNoteMode: 'stem_notes',
+      pitchNoteBackend: 'auto',
     });
 
-    expect(fetchSpy.mock.calls[0]?.[0]).toBe('http://127.0.0.1:8100/api/analysis-runs/run_123/symbolic-extractions');
+    expect(fetchSpy.mock.calls[0]?.[0]).toBe('http://127.0.0.1:8100/api/analysis-runs/run_123/pitch-note-translations');
   });
 
   it('creates interpretation retry attempts against the canonical endpoint', async () => {

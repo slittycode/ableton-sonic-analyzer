@@ -56,18 +56,18 @@ ASA's hybrid architecture splits work into three layers. Read `docs/ARCHITECTURE
 
 ```
 Layer 1 — MEASUREMENT (Essentia/DSP)    → deterministic, authoritative for numbers
-Layer 2 — SYMBOLIC EXTRACTION (torchcrepe/PENN) → best-effort pitch/note extraction on stems
+Layer 2 — PITCH/NOTE TRANSLATION (torchcrepe/PENN) → best-effort pitch/note extraction on stems
 Layer 3 — INTERPRETATION (Gemini)        → contextual advice grounded in Layer 1 measurements
 ```
 
-Core thesis: measure locally, extract symbolically where honest, interpret with AI grounded in measurements. Phase 2 (Gemini) never overrides Phase 1 measured values.
+Core thesis: measure locally, translate pitch/notes where honest, interpret with AI grounded in measurements. Phase 2 (Gemini) never overrides Phase 1 measured values.
 
 ### Staged Analysis Runs
 
 The backend supports staged execution via `analysis_runtime.py`, which persists run state in SQLite (`.runtime/analysis_runs.sqlite3`) and artifacts on disk. Stages execute as a queue:
 
 1. **measurement** — Phase 1 DSP via `analyze.py`
-2. **symbolic extraction** — pitch/note extraction on Demucs-separated stems
+2. **pitch/note translation** — pitch/note extraction on Demucs-separated stems
 3. **interpretation** — Gemini Phase 2 advisory
 
 Run-oriented endpoints (`/api/analysis-runs*`) are the canonical interface for staged execution. Legacy `POST /api/analyze` and `POST /api/analyze/estimate` remain but are not the primary path.

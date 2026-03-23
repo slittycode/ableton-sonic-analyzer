@@ -58,8 +58,8 @@ function stubBackendRoutes(page: import('@playwright/test').Page) {
         body: JSON.stringify({
           runId: 'run_file_validation_001',
           requestedStages: {
-            symbolicMode: 'stem_notes',
-            symbolicBackend: 'auto',
+            pitchNoteMode: 'stem_notes',
+            pitchNoteBackend: 'auto',
             interpretationMode: 'async',
             interpretationProfile: 'producer_summary',
             interpretationModel: 'gemini-3.1-pro-preview',
@@ -83,7 +83,7 @@ function stubBackendRoutes(page: import('@playwright/test').Page) {
               diagnostics: null,
               error: null,
             },
-            symbolicExtraction: {
+            pitchNoteTranslation: {
               status: 'blocked',
               authoritative: false,
               preferredAttemptId: null,
@@ -114,8 +114,8 @@ function stubBackendRoutes(page: import('@playwright/test').Page) {
         body: JSON.stringify({
           runId: 'run_file_validation_001',
           requestedStages: {
-            symbolicMode: 'stem_notes',
-            symbolicBackend: 'auto',
+            pitchNoteMode: 'stem_notes',
+            pitchNoteBackend: 'auto',
             interpretationMode: 'async',
             interpretationProfile: 'producer_summary',
             interpretationModel: 'gemini-3.1-pro-preview',
@@ -149,7 +149,7 @@ function stubBackendRoutes(page: import('@playwright/test').Page) {
               },
               error: null,
             },
-            symbolicExtraction: {
+            pitchNoteTranslation: {
               status: 'not_requested',
               authoritative: false,
               preferredAttemptId: null,

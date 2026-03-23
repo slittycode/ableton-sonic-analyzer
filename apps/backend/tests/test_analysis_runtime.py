@@ -15,18 +15,18 @@ class AnalysisRuntimeTests(unittest.TestCase):
 
         return AnalysisRuntime(Path(self.temp_dir.name) / "runtime", max_pending_per_stage=4)
 
-    def test_resolve_measurement_flags_supports_known_symbolic_modes(self) -> None:
+    def test_resolve_measurement_flags_supports_known_pitch_note_modes(self) -> None:
         runtime = self._runtime()
 
-        # Symbolic work is now handled by the dedicated symbolic_extraction stage,
+        # Pitch/note translation work is now handled by the dedicated pitch_note_translation stage,
         # not inline during measurement. Both modes return (False, False).
         self.assertEqual(runtime.resolve_measurement_flags("off"), (False, False))
         self.assertEqual(runtime.resolve_measurement_flags("stem_notes"), (False, False))
 
-    def test_resolve_measurement_flags_rejects_unknown_symbolic_mode(self) -> None:
+    def test_resolve_measurement_flags_rejects_unknown_pitch_note_mode(self) -> None:
         runtime = self._runtime()
 
-        with self.assertRaisesRegex(ValueError, "Unsupported symbolic mode 'melody_only'"):
+        with self.assertRaisesRegex(ValueError, "Unsupported pitch/note mode 'melody_only'"):
             runtime.resolve_measurement_flags("melody_only")
 
     def test_runtime_initializes_sqlite_for_poll_heavy_local_access(self) -> None:
@@ -46,8 +46,8 @@ class AnalysisRuntimeTests(unittest.TestCase):
             filename="track.mp3",
             content=b"fake-audio",
             mime_type="audio/mpeg",
-            symbolic_mode="stem_notes",
-            symbolic_backend="auto",
+            pitch_note_mode="stem_notes",
+            pitch_note_backend="auto",
             interpretation_mode="async",
             interpretation_profile="producer_summary",
             interpretation_model="gemini-2.5-flash",
@@ -59,13 +59,13 @@ class AnalysisRuntimeTests(unittest.TestCase):
         self.assertEqual(snapshot["artifacts"]["sourceAudio"]["filename"], "track.mp3")
         self.assertEqual(snapshot["stages"]["measurement"]["status"], "queued")
         self.assertTrue(snapshot["stages"]["measurement"]["authoritative"])
-        self.assertEqual(snapshot["stages"]["symbolicExtraction"]["status"], "blocked")
-        self.assertFalse(snapshot["stages"]["symbolicExtraction"]["authoritative"])
+        self.assertEqual(snapshot["stages"]["pitchNoteTranslation"]["status"], "blocked")
+        self.assertFalse(snapshot["stages"]["pitchNoteTranslation"]["authoritative"])
         self.assertEqual(snapshot["stages"]["interpretation"]["status"], "blocked")
-        self.assertEqual(snapshot["requestedStages"]["symbolicMode"], "stem_notes")
+        self.assertEqual(snapshot["requestedStages"]["pitchNoteMode"], "stem_notes")
         self.assertEqual(snapshot["requestedStages"]["interpretationMode"], "async")
 
-    def test_measurement_completion_strips_transcription_and_enqueues_symbolic_stage(
+    def test_measurement_completion_strips_transcription_and_enqueues_pitch_note_stage(
         self,
     ) -> None:
         runtime = self._runtime()
@@ -73,8 +73,8 @@ class AnalysisRuntimeTests(unittest.TestCase):
             filename="track.mp3",
             content=b"fake-audio",
             mime_type="audio/mpeg",
-            symbolic_mode="stem_notes",
-            symbolic_backend="auto",
+            pitch_note_mode="stem_notes",
+            pitch_note_backend="auto",
             interpretation_mode="off",
             interpretation_profile="producer_summary",
             interpretation_model=None,
@@ -113,13 +113,13 @@ class AnalysisRuntimeTests(unittest.TestCase):
         self.assertNotIn("transcriptionDetail", snapshot["stages"]["measurement"]["result"])
         self.assertEqual(snapshot["stages"]["measurement"]["provenance"]["schemaVersion"], "measure.v1")
 
-        # symbolic extraction should be queued for the symbolic worker — NOT
+        # pitch/note translation should be queued for the pitch/note translation worker — NOT
         # pre-populated from measurement output (no laundering)
-        self.assertEqual(snapshot["stages"]["symbolicExtraction"]["status"], "queued")
-        self.assertIsNone(snapshot["stages"]["symbolicExtraction"]["result"])
-        self.assertEqual(len(snapshot["stages"]["symbolicExtraction"]["attemptsSummary"]), 1)
+        self.assertEqual(snapshot["stages"]["pitchNoteTranslation"]["status"], "queued")
+        self.assertIsNone(snapshot["stages"]["pitchNoteTranslation"]["result"])
+        self.assertEqual(len(snapshot["stages"]["pitchNoteTranslation"]["attemptsSummary"]), 1)
         self.assertEqual(
-            snapshot["stages"]["symbolicExtraction"]["attemptsSummary"][0]["status"],
+            snapshot["stages"]["pitchNoteTranslation"]["attemptsSummary"][0]["status"],
             "queued",
         )
 
@@ -129,8 +129,8 @@ class AnalysisRuntimeTests(unittest.TestCase):
             filename="track.mp3",
             content=b"fake-audio",
             mime_type="audio/mpeg",
-            symbolic_mode="off",
-            symbolic_backend="auto",
+            pitch_note_mode="off",
+            pitch_note_backend="auto",
             interpretation_mode="off",
             interpretation_profile="producer_summary",
             interpretation_model=None,
@@ -151,8 +151,8 @@ class AnalysisRuntimeTests(unittest.TestCase):
             filename="track.mp3",
             content=b"fake-audio",
             mime_type="audio/mpeg",
-            symbolic_mode="stem_notes",
-            symbolic_backend="auto",
+            pitch_note_mode="stem_notes",
+            pitch_note_backend="auto",
             interpretation_mode="async",
             interpretation_profile="producer_summary",
             interpretation_model="gemini-2.5-flash",
@@ -183,22 +183,22 @@ class AnalysisRuntimeTests(unittest.TestCase):
             diagnostics={"backendDurationMs": 1000},
         )
 
-        symbolic_attempt = runtime.reserve_next_symbolic_attempt()
-        self.assertIsNotNone(symbolic_attempt)
-        symbolic_attempt_id = str(symbolic_attempt["attemptId"])
-        progress = runtime.update_symbolic_attempt_progress(
-            symbolic_attempt_id,
+        pitch_note_attempt = runtime.reserve_next_pitch_note_attempt()
+        self.assertIsNotNone(pitch_note_attempt)
+        pitch_note_attempt_id = str(pitch_note_attempt["attemptId"])
+        progress = runtime.update_pitch_note_attempt_progress(
+            pitch_note_attempt_id,
             step_key="run_backend",
-            message="Running symbolic transcription backend.",
+            message="Running pitch/note translation backend.",
         )
         self.assertIsNotNone(progress)
         snapshot = runtime.get_run(created["runId"])
         self.assertEqual(
-            snapshot["stages"]["symbolicExtraction"]["diagnostics"]["progress"]["stepKey"],
+            snapshot["stages"]["pitchNoteTranslation"]["diagnostics"]["progress"]["stepKey"],
             "run_backend",
         )
         self.assertEqual(
-            snapshot["stages"]["symbolicExtraction"]["diagnostics"]["progress"]["seq"],
+            snapshot["stages"]["pitchNoteTranslation"]["diagnostics"]["progress"]["seq"],
             1,
         )
 
@@ -229,8 +229,8 @@ class AnalysisRuntimeTests(unittest.TestCase):
             filename="track.mp3",
             content=b"fake-audio",
             mime_type="audio/mpeg",
-            symbolic_mode="stem_notes",
-            symbolic_backend="auto",
+            pitch_note_mode="stem_notes",
+            pitch_note_backend="auto",
             interpretation_mode="off",
             interpretation_profile="producer_summary",
             interpretation_model=None,
@@ -311,8 +311,8 @@ class AnalysisRuntimeTests(unittest.TestCase):
             filename="track.mp3",
             content=b"fake-audio",
             mime_type="audio/mpeg",
-            symbolic_mode="stem_notes",
-            symbolic_backend="auto",
+            pitch_note_mode="stem_notes",
+            pitch_note_backend="auto",
             interpretation_mode="async",
             interpretation_profile="producer_summary",
             interpretation_model="gemini-2.5-flash",
@@ -322,17 +322,17 @@ class AnalysisRuntimeTests(unittest.TestCase):
 
         self.assertIsNotNone(job)
         self.assertEqual(job["runId"], created["runId"])
-        self.assertEqual(job["requestedSymbolicMode"], "stem_notes")
-        self.assertEqual(job["requestedSymbolicBackend"], "auto")
+        self.assertEqual(job["requestedPitchNoteMode"], "stem_notes")
+        self.assertEqual(job["requestedPitchNoteBackend"], "auto")
 
-    def test_reserve_next_measurement_run_returns_off_when_symbolic_disabled(self) -> None:
+    def test_reserve_next_measurement_run_returns_off_when_pitch_note_disabled(self) -> None:
         runtime = self._runtime()
         runtime.create_run(
             filename="track.mp3",
             content=b"fake-audio",
             mime_type="audio/mpeg",
-            symbolic_mode="off",
-            symbolic_backend="auto",
+            pitch_note_mode="off",
+            pitch_note_backend="auto",
             interpretation_mode="off",
             interpretation_profile="producer_summary",
             interpretation_model=None,
@@ -341,23 +341,23 @@ class AnalysisRuntimeTests(unittest.TestCase):
         job = runtime.reserve_next_measurement_run()
 
         self.assertIsNotNone(job)
-        self.assertEqual(job["requestedSymbolicMode"], "off")
+        self.assertEqual(job["requestedPitchNoteMode"], "off")
 
-    def test_recover_interrupted_attempts_requeues_measurement_and_symbolic_only(self) -> None:
+    def test_recover_interrupted_attempts_requeues_measurement_and_pitch_note_only(self) -> None:
         runtime = self._runtime()
         created = runtime.create_run(
             filename="track.mp3",
             content=b"fake-audio",
             mime_type="audio/mpeg",
-            symbolic_mode="stem_notes",
-            symbolic_backend="auto",
+            pitch_note_mode="stem_notes",
+            pitch_note_backend="auto",
             interpretation_mode="async",
             interpretation_profile="producer_summary",
             interpretation_model="gemini-2.5-flash",
         )
 
         runtime.mark_measurement_running(created["runId"])
-        runtime.create_symbolic_attempt(
+        runtime.create_pitch_note_attempt(
             created["runId"],
             backend_id="auto",
             mode="stem_notes",
@@ -374,7 +374,7 @@ class AnalysisRuntimeTests(unittest.TestCase):
         snapshot = runtime.get_run(created["runId"])
 
         self.assertEqual(snapshot["stages"]["measurement"]["status"], "interrupted")
-        self.assertEqual(snapshot["stages"]["symbolicExtraction"]["status"], "interrupted")
+        self.assertEqual(snapshot["stages"]["pitchNoteTranslation"]["status"], "interrupted")
         self.assertEqual(snapshot["stages"]["interpretation"]["status"], "interrupted")
 
     def test_interpretation_attempts_store_grounding_columns(self) -> None:
@@ -383,8 +383,8 @@ class AnalysisRuntimeTests(unittest.TestCase):
             filename="track.mp3",
             content=b"fake-audio",
             mime_type="audio/mpeg",
-            symbolic_mode="stem_notes",
-            symbolic_backend="auto",
+            pitch_note_mode="stem_notes",
+            pitch_note_backend="auto",
             interpretation_mode="async",
             interpretation_profile="producer_summary",
             interpretation_model="gemini-2.5-flash",
@@ -395,7 +395,7 @@ class AnalysisRuntimeTests(unittest.TestCase):
             provenance={"schemaVersion": "measurement.v1"},
             diagnostics={"backendDurationMs": 1000},
         )
-        symbolic_attempt_id = runtime.create_symbolic_attempt(
+        pitch_note_attempt_id = runtime.create_pitch_note_attempt(
             created["runId"],
             backend_id="auto",
             mode="stem_notes",
@@ -431,17 +431,17 @@ class AnalysisRuntimeTests(unittest.TestCase):
             result={"trackCharacter": "Grounded summary"},
             provenance={
                 "groundedMeasurementOutputId": grounding["measurementOutputId"],
-                "groundedSymbolicAttemptId": grounding["symbolicAttemptId"],
+                "groundedPitchNoteAttemptId": grounding["pitchNoteAttemptId"],
             },
             diagnostics={"backendDurationMs": 250},
             grounded_measurement_output_id=grounding["measurementOutputId"],
-            grounded_symbolic_attempt_id=grounding["symbolicAttemptId"],
+            grounded_pitch_note_attempt_id=grounding["pitchNoteAttemptId"],
         )
 
         with runtime._connect() as conn:
             row = conn.execute(
                 """
-                SELECT grounded_measurement_output_id, grounded_symbolic_attempt_id
+                SELECT grounded_measurement_output_id, grounded_pitch_note_attempt_id
                 FROM interpretation_attempts
                 WHERE id = ?
                 """,
@@ -449,4 +449,4 @@ class AnalysisRuntimeTests(unittest.TestCase):
             ).fetchone()
 
         self.assertEqual(row["grounded_measurement_output_id"], grounding["measurementOutputId"])
-        self.assertEqual(row["grounded_symbolic_attempt_id"], symbolic_attempt_id)
+        self.assertEqual(row["grounded_pitch_note_attempt_id"], pitch_note_attempt_id)

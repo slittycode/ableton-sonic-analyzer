@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Phase1Result, Phase2Result } from '../types';
+import { Phase1Result, Phase2Result, SpectralArtifacts } from '../types';
 import {
   Activity,
   ChevronDown,
@@ -36,6 +36,9 @@ export interface AnalysisResultsProps {
   phase2: Phase2Result | null;
   phase2StatusMessage?: string | null;
   sourceFileName?: string | null;
+  spectralArtifacts?: SpectralArtifacts | null;
+  apiBaseUrl?: string;
+  runId?: string;
 }
 
 export function toggleOpenKeySet(previous: ReadonlySet<string>, id: string): Set<string> {
@@ -167,6 +170,9 @@ export function AnalysisResults({
   phase2,
   phase2StatusMessage = null,
   sourceFileName = null,
+  spectralArtifacts = null,
+  apiBaseUrl,
+  runId,
 }: AnalysisResultsProps) {
   const [openArrangement, setOpenArrangement] = useState<Record<string, boolean>>({});
   const [openSonic, setOpenSonic] = useState<Set<string>>(new Set());
@@ -408,7 +414,12 @@ export function AnalysisResults({
         </div>
       </div>
 
-      <MeasurementDashboard phase1={phase1} />
+      <MeasurementDashboard
+        phase1={phase1}
+        spectralArtifacts={spectralArtifacts}
+        apiBaseUrl={apiBaseUrl}
+        runId={runId}
+      />
 
       <div className="space-y-2">
         <div className="flex items-center justify-between border-b border-border pb-2">

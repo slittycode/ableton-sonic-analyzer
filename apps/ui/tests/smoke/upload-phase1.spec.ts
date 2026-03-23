@@ -57,8 +57,8 @@ test('upload + backend phase1 success renders analysis results', async ({ page }
       body: JSON.stringify({
         runId: 'run_smoke_001',
         requestedStages: {
-          symbolicMode: 'off',
-          symbolicBackend: 'auto',
+          pitchNoteMode: 'off',
+          pitchNoteBackend: 'auto',
           interpretationMode: 'async',
           interpretationProfile: 'producer_summary',
           interpretationModel: 'gemini-3.1-pro-preview',
@@ -82,7 +82,7 @@ test('upload + backend phase1 success renders analysis results', async ({ page }
             diagnostics: null,
             error: null,
           },
-          symbolicExtraction: {
+          pitchNoteTranslation: {
             status: 'not_requested',
             authoritative: false,
             preferredAttemptId: null,
@@ -114,8 +114,8 @@ test('upload + backend phase1 success renders analysis results', async ({ page }
       body: JSON.stringify({
         runId: 'run_smoke_001',
         requestedStages: {
-          symbolicMode: 'off',
-          symbolicBackend: 'auto',
+          pitchNoteMode: 'off',
+          pitchNoteBackend: 'auto',
           interpretationMode: 'async',
           interpretationProfile: 'producer_summary',
           interpretationModel: 'gemini-3.1-pro-preview',
@@ -159,7 +159,7 @@ test('upload + backend phase1 success renders analysis results', async ({ page }
             diagnostics: { timings: { totalMs: 980, analysisMs: 900, serverOverheadMs: 80, flagsUsed: [], fileSizeBytes: 2048, fileDurationSeconds: 10, msPerSecondOfAudio: 98 } },
             error: null,
           },
-          symbolicExtraction: {
+          pitchNoteTranslation: {
             status: 'not_requested',
             authoritative: false,
             preferredAttemptId: null,

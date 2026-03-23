@@ -68,7 +68,7 @@ export function deriveTranscriptionProvenance(
   };
 }
 
-function formatSymbolicMethodLabel(transcriptionMethod: string | null | undefined): string {
+function formatPitchNoteMethodLabel(transcriptionMethod: string | null | undefined): string {
   const normalized = (transcriptionMethod ?? '').trim().toLowerCase();
   if (normalized === 'torchcrepe-viterbi' || normalized === 'torchcrepe') {
     return 'TORCHCREPE';
@@ -78,7 +78,7 @@ function formatSymbolicMethodLabel(transcriptionMethod: string | null | undefine
     return 'BASIC PITCH (LEGACY)';
   }
   if (!normalized) {
-    return 'SYMBOLIC EXTRACTION';
+    return 'PITCH/NOTE EXTRACTION';
   }
   return transcriptionMethod!.replace(/[_-]+/g, ' ').toUpperCase();
 }
@@ -330,7 +330,7 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
         : false;
   const sourceBadgeLabel =
     activeSource === 'polyphonic'
-      ? `SOURCE: ${formatSymbolicMethodLabel(transcriptionDetail?.transcriptionMethod)}`
+      ? `SOURCE: ${formatPitchNoteMethodLabel(transcriptionDetail?.transcriptionMethod)}`
       : activeSource === 'monophonic'
         ? 'SOURCE: ESSENTIA MELODY'
         : null;
@@ -353,7 +353,7 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
             </span>
           )}
         </h2>
-        <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">SYMBOLIC NOTES</span>
+        <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">PITCH/NOTE NOTES</span>
       </div>
 
       <div className="bg-bg-card border border-border rounded-sm p-4 space-y-4">
@@ -365,7 +365,7 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
             <div>
               <h3 className="text-sm font-semibold uppercase tracking-wider">SESSION MUSICIAN</h3>
               <p className="text-[10px] font-mono uppercase tracking-widest text-text-secondary opacity-70">
-                Symbolic notes and melody guide
+                Pitch/Note notes and melody guide
               </p>
             </div>
           </div>
@@ -399,7 +399,7 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
                       : 'text-text-secondary hover:text-text-primary'
                   }`}
                 >
-                  SYMBOLIC
+                  PITCH/NOTE
                 </button>
                 <button
                   onClick={() => setSourceMode('monophonic')}
@@ -429,10 +429,10 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
             {activeSource === 'none' && (
               <div className="border border-border rounded-sm px-3 py-2 bg-bg-panel/40 space-y-1">
                 <p className="text-[11px] font-mono text-text-secondary uppercase tracking-wide">
-                  SYMBOLIC NOTES UNAVAILABLE
+                  PITCH/NOTE NOTES UNAVAILABLE
                 </p>
                 <p className="text-[10px] font-mono text-text-secondary/80">
-                  Run with symbolic extraction enabled, or ensure melodyDetail is present in the DSP payload for a melody guide
+                  Run with pitch/note translation enabled, or ensure melodyDetail is present in the DSP payload for a melody guide
                 </p>
               </div>
             )}
@@ -584,10 +584,10 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
               <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
               <span title="Session musician transcription details">
                 {activeSource === 'polyphonic'
-                  ? `${formatSymbolicMethodLabel(transcriptionDetail?.transcriptionMethod)} symbolic notes. Adjust quantize before preview/export. Adjust confidence threshold to filter noise before export.`
+                  ? `${formatPitchNoteMethodLabel(transcriptionDetail?.transcriptionMethod)} pitch/note notes. Adjust quantize before preview/export. Adjust confidence threshold to filter noise before export.`
                   : activeSource === 'monophonic'
                     ? 'Monophonic melody guide via Essentia. Adjust quantize before preview/export. Per-note confidence not available in melody-guide mode.'
-                    : 'Symbolic notes unavailable until symbolic extraction or melodyDetail is present in the DSP payload.'}
+                    : 'Pitch/Note notes unavailable until pitch/note translation or melodyDetail is present in the DSP payload.'}
                 {isDraft ? ' Confidence is low, so treat this clip as a draft scaffold.' : ''}
               </span>
             </div>

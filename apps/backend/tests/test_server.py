@@ -123,7 +123,7 @@ def _valid_stem_summary_result() -> dict:
                 "scaleDegreeHypotheses": ["1"],
                 "rhythmicPattern": "Short off-beat bass pulses.",
                 "uncertaintyLevel": "LOW",
-                "uncertaintyReason": "Symbolic extraction and measured downbeats agree.",
+                "uncertaintyReason": "Pitch/note translation and measured downbeats agree.",
             }
         ],
         "globalPatterns": {
@@ -186,8 +186,8 @@ class ServerContractTests(unittest.TestCase):
         properties = self._request_body_properties("/api/analysis-runs")
 
         self.assertIn("track", properties)
-        self.assertIn("symbolic_mode", properties)
-        self.assertIn("symbolic_backend", properties)
+        self.assertIn("pitch_note_mode", properties)
+        self.assertIn("pitch_note_backend", properties)
         self.assertIn("interpretation_mode", properties)
         self.assertIn("interpretation_profile", properties)
         self.assertIn("interpretation_model", properties)
@@ -201,8 +201,8 @@ class ServerContractTests(unittest.TestCase):
                 response = asyncio.run(
                     server.create_analysis_run(
                         track=self._upload_file(),
-                        symbolic_mode="stem_notes",
-                        symbolic_backend="auto",
+                        pitch_note_mode="stem_notes",
+                        pitch_note_backend="auto",
                         interpretation_mode="async",
                         interpretation_profile="producer_summary",
                         interpretation_model="gemini-2.5-flash",
@@ -213,7 +213,7 @@ class ServerContractTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("runId", payload)
         self.assertEqual(payload["stages"]["measurement"]["status"], "queued")
-        self.assertEqual(payload["stages"]["symbolicExtraction"]["status"], "blocked")
+        self.assertEqual(payload["stages"]["pitchNoteTranslation"]["status"], "blocked")
         self.assertEqual(payload["stages"]["interpretation"]["status"], "blocked")
 
     def test_analysis_runs_endpoint_accepts_stem_summary_profile(self) -> None:
@@ -225,8 +225,8 @@ class ServerContractTests(unittest.TestCase):
                 response = asyncio.run(
                     server.create_analysis_run(
                         track=self._upload_file(),
-                        symbolic_mode="off",
-                        symbolic_backend="auto",
+                        pitch_note_mode="off",
+                        pitch_note_backend="auto",
                         interpretation_mode="async",
                         interpretation_profile="stem_summary",
                         interpretation_model="gemini-2.5-flash",
@@ -246,8 +246,8 @@ class ServerContractTests(unittest.TestCase):
                 filename="track.mp3",
                 content=b"fake-audio",
                 mime_type="audio/mpeg",
-                symbolic_mode="off",
-                symbolic_backend="auto",
+                pitch_note_mode="off",
+                pitch_note_backend="auto",
                 interpretation_mode="off",
                 interpretation_profile="producer_summary",
                 interpretation_model=None,
@@ -433,15 +433,21 @@ class ServerContractTests(unittest.TestCase):
                 "msPerSecondOfAudio": 0.93,
             },
         )
-        print_mock.assert_called_once()
-        self.assertIs(print_mock.call_args.kwargs["file"], server.sys.stderr)
+        timing_calls = [
+            c
+            for c in print_mock.call_args_list
+            if c.args and "[TIMING]" in str(c.args[0])
+        ]
+        self.assertEqual(len(timing_calls), 1)
+        timing_call = timing_calls[0]
+        self.assertIs(timing_call.kwargs["file"], server.sys.stderr)
         self.assertIn(
             "[TIMING] total=245.0ms analysis=200.0ms overhead=45.0ms",
-            print_mock.call_args.args[0],
+            timing_call.args[0],
         )
-        self.assertIn("flags=[--separate]", print_mock.call_args.args[0])
+        self.assertIn("flags=[--separate]", timing_call.args[0])
         self.assertIn(
-            "fileSize=0.0MB duration=214.6s ms/s=0.93", print_mock.call_args.args[0]
+            "fileSize=0.0MB duration=214.6s ms/s=0.93", timing_call.args[0]
         )
 
     def test_analyze_endpoint_openapi_exposes_fast_form_field(self) -> None:
@@ -1276,8 +1282,8 @@ class Phase2EndpointTests(unittest.TestCase):
             filename="track.mp3",
             content=b"server-owned-audio",
             mime_type="audio/mpeg",
-            symbolic_mode="off",
-            symbolic_backend="auto",
+            pitch_note_mode="off",
+            pitch_note_backend="auto",
             interpretation_mode="off",
             interpretation_profile="producer_summary",
             interpretation_model=None,
@@ -1370,8 +1376,8 @@ class Phase2EndpointTests(unittest.TestCase):
                 filename="track.mp3",
                 content=b"server-owned-audio",
                 mime_type="audio/mpeg",
-                symbolic_mode="off",
-                symbolic_backend="auto",
+                pitch_note_mode="off",
+                pitch_note_backend="auto",
                 interpretation_mode="off",
                 interpretation_profile="producer_summary",
                 interpretation_model=None,
@@ -1503,7 +1509,7 @@ class Phase2EndpointTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="asa_phase2_runtime_") as temp_dir:
             runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
             run_id = self._make_completed_run(runtime, legacy_request_id="legacy_req_1")
-            runtime.create_symbolic_attempt(
+            runtime.create_pitch_note_attempt(
                 run_id,
                 backend_id="auto",
                 mode="stem_notes",
@@ -1583,7 +1589,7 @@ class Phase2EndpointTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="asa_phase2_runtime_") as temp_dir:
             runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
             run_id = self._make_completed_run(runtime)
-            runtime.create_symbolic_attempt(
+            runtime.create_pitch_note_attempt(
                 run_id,
                 backend_id="torchcrepe-viterbi",
                 mode="stem_notes",
@@ -1872,12 +1878,12 @@ class AnalysisRunCompatibilityTests(unittest.TestCase):
             self.assertIn("transcriptionDetail", payload["phase1"])
             snapshot = runtime.get_run(payload["analysisRunId"])
             self.assertNotIn("transcriptionDetail", snapshot["stages"]["measurement"]["result"])
-            self.assertEqual(snapshot["stages"]["symbolicExtraction"]["status"], "queued")
-            self.assertIsNone(snapshot["stages"]["symbolicExtraction"]["result"])
+            self.assertEqual(snapshot["stages"]["pitchNoteTranslation"]["status"], "queued")
+            self.assertIsNone(snapshot["stages"]["pitchNoteTranslation"]["result"])
 
 
 class StageWorkerTests(unittest.TestCase):
-    def test_reserved_measurement_job_uses_runtime_symbolic_mode_resolution(self) -> None:
+    def test_reserved_measurement_job_uses_runtime_pitch_note_mode_resolution(self) -> None:
         from analysis_runtime import AnalysisRuntime
 
         with tempfile.TemporaryDirectory(prefix="asa_measurement_runtime_") as temp_dir:
@@ -1886,8 +1892,8 @@ class StageWorkerTests(unittest.TestCase):
                 filename="track.mp3",
                 content=b"fake-audio",
                 mime_type="audio/mpeg",
-                symbolic_mode="stem_notes",
-                symbolic_backend="auto",
+                pitch_note_mode="stem_notes",
+                pitch_note_backend="auto",
                 interpretation_mode="off",
                 interpretation_profile="producer_summary",
                 interpretation_model=None,
@@ -1910,7 +1916,7 @@ class StageWorkerTests(unittest.TestCase):
             run_fast=False,
         )
 
-    def test_reserved_measurement_job_fails_measurement_for_unsupported_symbolic_mode(self) -> None:
+    def test_reserved_measurement_job_fails_measurement_for_unsupported_pitch_note_mode(self) -> None:
         from analysis_runtime import AnalysisRuntime
 
         with tempfile.TemporaryDirectory(prefix="asa_measurement_runtime_") as temp_dir:
@@ -1919,8 +1925,8 @@ class StageWorkerTests(unittest.TestCase):
                 filename="track.mp3",
                 content=b"fake-audio",
                 mime_type="audio/mpeg",
-                symbolic_mode="melody_only",
-                symbolic_backend="auto",
+                pitch_note_mode="melody_only",
+                pitch_note_backend="auto",
                 interpretation_mode="off",
                 interpretation_profile="producer_summary",
                 interpretation_model=None,
@@ -1930,13 +1936,13 @@ class StageWorkerTests(unittest.TestCase):
             result = server._execute_reserved_measurement_job(runtime, job)
 
             self.assertFalse(result["ok"])
-            self.assertEqual(result["errorCode"], "SYMBOLIC_MODE_UNSUPPORTED")
+            self.assertEqual(result["errorCode"], "PITCH_NOTE_MODE_UNSUPPORTED")
             snapshot = runtime.get_run(created["runId"])
             self.assertEqual(snapshot["stages"]["measurement"]["status"], "failed")
-            self.assertEqual(snapshot["stages"]["measurement"]["error"]["code"], "SYMBOLIC_MODE_UNSUPPORTED")
+            self.assertEqual(snapshot["stages"]["measurement"]["error"]["code"], "PITCH_NOTE_MODE_UNSUPPORTED")
 
-    def test_symbolic_worker_runs_as_subprocess(self) -> None:
-        """Symbolic extraction runs analyze.py --symbolic-only as a subprocess."""
+    def test_pitch_note_worker_runs_as_subprocess(self) -> None:
+        """Pitch/note translation runs analyze.py --pitch-note-only as a subprocess."""
         from analysis_runtime import AnalysisRuntime
 
         mock_result = json.dumps({
@@ -1958,14 +1964,14 @@ class StageWorkerTests(unittest.TestCase):
             }
         })
 
-        with tempfile.TemporaryDirectory(prefix="asa_symbolic_runtime_") as temp_dir:
+        with tempfile.TemporaryDirectory(prefix="asa_pitch_note_runtime_") as temp_dir:
             runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
             created = runtime.create_run(
                 filename="track.mp3",
                 content=b"fake-audio",
                 mime_type="audio/mpeg",
-                symbolic_mode="stem_notes",
-                symbolic_backend="auto",
+                pitch_note_mode="stem_notes",
+                pitch_note_backend="auto",
                 interpretation_mode="off",
                 interpretation_profile="producer_summary",
                 interpretation_model=None,
@@ -1976,13 +1982,13 @@ class StageWorkerTests(unittest.TestCase):
                 provenance={"schemaVersion": "measurement.v1"},
                 diagnostics={"backendDurationMs": 1000},
             )
-            attempt_id = runtime.create_symbolic_attempt(
+            attempt_id = runtime.create_pitch_note_attempt(
                 created["runId"],
                 backend_id="auto",
                 mode="stem_notes",
                 status="queued",
             )
-            runtime.reserve_symbolic_attempt(attempt_id)
+            runtime.reserve_pitch_note_attempt(attempt_id)
 
             fake_proc = subprocess.CompletedProcess(
                 args=[], returncode=0, stdout=mock_result, stderr="",
@@ -1992,7 +1998,7 @@ class StageWorkerTests(unittest.TestCase):
                 "run",
                 return_value=fake_proc,
             ) as subprocess_mock:
-                server._execute_symbolic_attempt(
+                server._execute_pitch_note_attempt(
                     runtime,
                     {
                         "attemptId": attempt_id,
@@ -2005,11 +2011,11 @@ class StageWorkerTests(unittest.TestCase):
             subprocess_mock.assert_called_once()
             call_args = subprocess_mock.call_args
             cmd = call_args[0][0] if call_args[0] else call_args[1].get("args", [])
-            self.assertIn("--symbolic-only", cmd)
+            self.assertIn("--pitch-note-only", cmd)
             snapshot = runtime.get_run(created["runId"])
-            self.assertEqual(snapshot["stages"]["symbolicExtraction"]["status"], "completed")
+            self.assertEqual(snapshot["stages"]["pitchNoteTranslation"]["status"], "completed")
             self.assertEqual(
-                snapshot["stages"]["symbolicExtraction"]["result"]["transcriptionMethod"],
+                snapshot["stages"]["pitchNoteTranslation"]["result"]["transcriptionMethod"],
                 "torchcrepe-viterbi",
             )
 

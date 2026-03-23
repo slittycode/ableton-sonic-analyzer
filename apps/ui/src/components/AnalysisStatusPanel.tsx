@@ -10,7 +10,7 @@ interface AnalysisStatusPanelProps {
   isActive: boolean;
   onStopMonitoring?: () => void;
   onRetryMeasurement?: () => void;
-  onRetrySymbolic?: () => void;
+  onRetryPitchNote?: () => void;
   onRetryInterpretation?: () => void;
 }
 
@@ -39,11 +39,11 @@ function computeProgress(elapsedMs: number, estimate?: BackendAnalysisEstimate |
   };
 }
 
-type StageKey = 'measurement' | 'symbolicExtraction' | 'interpretation';
+type StageKey = 'measurement' | 'pitchNoteTranslation' | 'interpretation';
 
 const STAGE_LABELS: Record<StageKey, string> = {
   measurement: 'MEASURE',
-  symbolicExtraction: 'SYMBOLIC',
+  pitchNoteTranslation: 'PITCH/NOTE',
   interpretation: 'INTERPRET',
 };
 
@@ -102,14 +102,14 @@ export function AnalysisStatusPanel({
   isActive,
   onStopMonitoring,
   onRetryMeasurement,
-  onRetrySymbolic,
+  onRetryPitchNote,
   onRetryInterpretation,
 }: AnalysisStatusPanelProps) {
   const progress = computeProgress(elapsedMs, estimate);
 
   const stages: { key: StageKey; status: AnalysisStageStatus; onRetry?: () => void }[] = [
     { key: 'measurement', status: run?.stages.measurement.status ?? 'queued', onRetry: onRetryMeasurement },
-    { key: 'symbolicExtraction', status: run?.stages.symbolicExtraction.status ?? 'blocked', onRetry: onRetrySymbolic },
+    { key: 'pitchNoteTranslation', status: run?.stages.pitchNoteTranslation.status ?? 'blocked', onRetry: onRetryPitchNote },
     { key: 'interpretation', status: run?.stages.interpretation.status ?? 'blocked', onRetry: onRetryInterpretation },
   ];
 

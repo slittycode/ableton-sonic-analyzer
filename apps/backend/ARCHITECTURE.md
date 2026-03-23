@@ -7,7 +7,9 @@
 | `analyze.py` | Raw CLI analyzer. Loads audio, runs DSP, optionally separates stems and transcribes notes, then prints JSON to `stdout`. |
 | `server.py` | FastAPI wrapper. Accepts uploads, computes an estimate, shells out to `analyze.py`, normalizes the result into the HTTP `phase1` contract, and returns diagnostics or structured errors. |
 | `tests/test_server.py` | Contract tests for estimate, timeout, and success envelopes. |
+| `spectral_viz.py` | Librosa-based spectrogram generation and spectral time-series extraction. Produces mel/chroma PNG spectrograms and per-frame spectral evolution JSON. Called after successful measurement; failures are non-critical. |
 | `tests/test_analyze.py` | Structural snapshot tests for the raw analyzer JSON output. |
+| `tests/test_spectral_viz.py` | Unit tests for spectrogram generation, time-series computation, and artifact orchestration. |
 
 ## Separation of Responsibilities
 

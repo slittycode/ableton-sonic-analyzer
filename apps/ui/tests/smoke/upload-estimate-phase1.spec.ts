@@ -35,7 +35,7 @@ test('upload shows estimate and local DSP processing copy before phase1 complete
               },
               {
                 key: 'transcription_stems',
-                label: 'Symbolic extraction on stems',
+                label: 'Pitch/Note Translation on stems',
                 lowMs: 40000,
                 highMs: 75000,
               },
@@ -54,7 +54,7 @@ test('upload shows estimate and local DSP processing copy before phase1 complete
                 },
                 {
                   key: 'transcription_full_mix',
-                  label: 'Symbolic extraction on full mix',
+                  label: 'Pitch/Note Translation on full mix',
                   lowMs: 25000,
                   highMs: 75000,
                 },
@@ -120,8 +120,8 @@ test('upload shows estimate and local DSP processing copy before phase1 complete
       body: JSON.stringify({
         runId: 'run_smoke_002',
         requestedStages: {
-          symbolicMode: 'off',
-          symbolicBackend: 'auto',
+          pitchNoteMode: 'off',
+          pitchNoteBackend: 'auto',
           interpretationMode: 'async',
           interpretationProfile: 'producer_summary',
           interpretationModel: 'gemini-3.1-pro-preview',
@@ -145,7 +145,7 @@ test('upload shows estimate and local DSP processing copy before phase1 complete
             diagnostics: null,
             error: null,
           },
-          symbolicExtraction: {
+          pitchNoteTranslation: {
             status: 'not_requested',
             authoritative: false,
             preferredAttemptId: null,
@@ -179,8 +179,8 @@ test('upload shows estimate and local DSP processing copy before phase1 complete
       body: JSON.stringify({
         runId: 'run_smoke_002',
         requestedStages: {
-          symbolicMode: 'off',
-          symbolicBackend: 'auto',
+          pitchNoteMode: 'off',
+          pitchNoteBackend: 'auto',
           interpretationMode: 'async',
           interpretationProfile: 'producer_summary',
           interpretationModel: 'gemini-3.1-pro-preview',
@@ -226,7 +226,7 @@ test('upload shows estimate and local DSP processing copy before phase1 complete
             diagnostics: completed ? { timings: { totalMs: 980, analysisMs: 900, serverOverheadMs: 80, flagsUsed: [], fileSizeBytes: 2048, fileDurationSeconds: 10, msPerSecondOfAudio: 98 } } : null,
             error: null,
           },
-          symbolicExtraction: {
+          pitchNoteTranslation: {
             status: 'not_requested',
             authoritative: false,
             preferredAttemptId: null,
@@ -279,12 +279,12 @@ test('upload shows estimate and local DSP processing copy before phase1 complete
   await expect(page.getByText(/Estimated local analysis/i)).toBeVisible();
   await expect(page.getByText('107s-203s')).toBeVisible();
 
-  const symbolicToggle = page.getByLabel('SYMBOLIC EXTRACTION');
+  const pitchNoteToggle = page.getByLabel("PITCH/NOTE TRANSLATION");
 
-  await expect(symbolicToggle).toBeChecked();
+  await expect(pitchNoteToggle).toBeChecked();
   await expect(page.getByText('107s-203s')).toBeVisible();
 
-  await symbolicToggle.uncheck();
+  await pitchNoteToggle.uncheck();
   await expect(page.getByText('22s-38s')).toBeVisible();
 
   await page.getByRole('button', { name: /Initiate Analysis/i }).click();

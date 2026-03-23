@@ -12,7 +12,7 @@ This document is not a specification. It is a record of *why* the architecture i
 
 ASA's hybrid architecture (deterministic local DSP → AI interpretation) is not a transitional design waiting to be replaced by end-to-end AI. As of early 2026, multiple music-focused AI benchmarks confirm that frontier audio-language models including Gemini degrade on measurement tasks: BPM estimation drifts toward genre-assumed values, keys are sometimes omitted, and meter accuracy falls on complex material. The internal audio downsampling Gemini applies (merged to mono) is a structural ceiling on sub-bass nuance regardless of prompt quality.
 
-This means the split is correct and should be maintained: **measure locally, extract symbolically where honest, interpret with AI grounded in measurements**.
+This means the split is correct and should be maintained: **measure locally, translate pitch/notes where honest, interpret with AI grounded in measurements**.
 
 ---
 
@@ -29,7 +29,7 @@ This means the split is correct and should be maintained: **measure locally, ext
 └─────────────────────────────────────────────────────────────┘
                           ↓
 ┌─────────────────────────────────────────────────────────────┐
-│  LAYER 2 — SYMBOLIC EXTRACTION (torchcrepe / PENN)          │
+│  LAYER 2 — PITCH/NOTE TRANSLATION (torchcrepe / PENN)          │
 │  Best-effort. Honest about uncertainty.                     │
 │  Monophonic pitch contour → note segmentation               │
 │  Runs on Demucs-separated stems only (bass + other)         │
@@ -56,7 +56,8 @@ This means the split is correct and should be maintained: **measure locally, ext
 | Demucs 4.0.1 | 🟡 Frozen — Meta archived Jan 1 2025, adefossez fork is bug-fix only | Stay. Models are excellent and stable. No better alternative at comparable quality. Monitor adefossez fork for compatibility drift. |
 | torchcrepe 0.0.24 | ✅ Active — sole transcription backend, installed and tested | Stay. Replaced basic-pitch (removed). |
 | PENN 1.0.0 | 🔬 Alternative candidate — research-driven, pitch + periodicity co-output | Adds 6 new packages including `huggingface_hub` (downloads models at runtime from HuggingFace). Try only if torchcrepe produces insufficient quality. |
-| librosa 0.11.0 | Ghost dep — confirmed unused in analyze.py, still in requirements.txt | Remove on next venv rebuild. |
+| librosa 0.11.0 | ✅ Active — spectrogram + time-series visualization via spectral_viz.py | Stay. Visualization layer only; not authoritative for measurements. |
+| matplotlib 3.10.8 | ✅ Active — rendering backend for librosa spectrogram PNGs | Stay. Used via Agg backend (thread-safe, non-interactive). |
 | PyTorch 2.10, FastAPI, Pydantic | ✅ Healthy | Stay. |
 
 ---
@@ -100,6 +101,23 @@ Both outputs are honest about what they are. Neither pretends to be Ableton's au
 
 ---
 
+## Librosa visualization layer
+
+Librosa generates spectrogram images and per-frame spectral time-series data for frontend visualization. It does not replace Essentia for measurement — Essentia remains the sole authoritative source for scalar spectral metrics.
+
+**Boundary:** `spectralDetail` (Essentia, authoritative scalars) vs spectrogram/time-series artifacts (librosa, for display). If a librosa time-series disagrees with an Essentia mean, the Essentia value is the measurement.
+
+**What librosa produces:**
+- Mel spectrogram PNG (128 mels, magma colormap)
+- Chroma-over-time PNG (12 pitch classes, CQT-based)
+- Spectral evolution JSON (centroid, rolloff, bandwidth, flatness per frame, downsampled to ~500 points)
+
+**Where it runs:** `spectral_viz.py` is called after successful measurement in the same background thread. Artifacts are stored via `AnalysisRuntime.record_artifact()` and served through the artifact download API. Failures are logged but do not fail the measurement run.
+
+**Why not Essentia for spectrograms?** Essentia computes frame-by-frame spectral data (bark bands, MFCC, HPCP) but does not provide the perceptually-weighted spectrogram representations (mel, CQT) that producers expect as a "look at your audio" visualization. Librosa fills exactly that gap.
+
+---
+
 ## Architecture hardening — relationship to this strategy
 
 The Codex architecture hardening plan (SQLite + job queue + async Phase 2) is the correct next major infrastructure work. It addresses:
@@ -107,7 +125,7 @@ The Codex architecture hardening plan (SQLite + job queue + async Phase 2) is th
 - Client-supplied `phase1_json` trust gap (client can tamper with measurements Gemini interprets)
 - Blocking request model unsuitability for Demucs + transcription runtimes
 
-**Ordering constraint (resolved):** Basic Pitch was removed and torchcrepe is the sole transcription backend. The hardening infrastructure does not carry any legacy symbolic dependencies.
+**Ordering constraint (resolved):** Basic Pitch was removed and torchcrepe is the sole transcription backend. The hardening infrastructure does not carry any legacy pitch/note translation dependencies.
 
 **Ordering constraint:** The Gemini stem-listening experiment (Experiment B) requires server-owned artifact storage to exist first. The hardening plan creates that. Do not attempt Experiment B before the hardening is in place.
 

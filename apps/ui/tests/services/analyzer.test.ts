@@ -141,8 +141,8 @@ function makeRunSnapshot(overrides?: Partial<AnalysisRunSnapshot>): AnalysisRunS
   return {
     runId: 'run_123',
     requestedStages: {
-      symbolicMode: 'stem_notes',
-      symbolicBackend: 'auto',
+      pitchNoteMode: 'stem_notes',
+      pitchNoteBackend: 'auto',
       interpretationMode: 'async',
       interpretationProfile: 'producer_summary',
       interpretationModel: 'gemini-2.5-pro',
@@ -177,7 +177,7 @@ function makeRunSnapshot(overrides?: Partial<AnalysisRunSnapshot>): AnalysisRunS
         },
         error: null,
       },
-      symbolicExtraction: {
+      pitchNoteTranslation: {
         status: 'completed',
         authoritative: false,
         preferredAttemptId: 'sym_123',
@@ -228,7 +228,7 @@ describe('analyzeAudio', () => {
           diagnostics: null,
           error: null,
         },
-        symbolicExtraction: {
+        pitchNoteTranslation: {
           status: 'blocked',
           authoritative: false,
           preferredAttemptId: null,
@@ -261,7 +261,7 @@ describe('analyzeAudio', () => {
             diagnostics: null,
             error: null,
           },
-          symbolicExtraction: {
+          pitchNoteTranslation: {
             status: 'blocked',
             authoritative: false,
             preferredAttemptId: null,
@@ -301,7 +301,7 @@ describe('analyzeAudio', () => {
         throw error;
       },
       {
-        symbolicRequested: true,
+        pitchNoteRequested: true,
         interpretationRequested: true,
         interpretationConfigEnabled: true,
         onRunUpdate,
@@ -312,8 +312,8 @@ describe('analyzeAudio', () => {
     expect(createAnalysisRunMock).toHaveBeenCalledWith(
       file,
       expect.objectContaining({
-        symbolicMode: 'stem_notes',
-        symbolicBackend: 'auto',
+        pitchNoteMode: 'stem_notes',
+        pitchNoteBackend: 'auto',
         interpretationMode: 'async',
         interpretationProfile: 'producer_summary',
         interpretationModel: 'gemini-2.5-pro',
@@ -341,7 +341,7 @@ describe('analyzeAudio', () => {
         throw error;
       },
       {
-        symbolicRequested: true,
+        pitchNoteRequested: true,
         interpretationRequested: true,
         interpretationConfigEnabled: true,
         pollIntervalMs: 0,
@@ -367,8 +367,8 @@ describe('analyzeAudio', () => {
   it('skips interpretation cleanly when it is disabled in the UI', async () => {
     createAnalysisRunMock.mockResolvedValue(makeRunSnapshot({
       requestedStages: {
-        symbolicMode: 'stem_notes',
-        symbolicBackend: 'auto',
+        pitchNoteMode: 'stem_notes',
+        pitchNoteBackend: 'auto',
         interpretationMode: 'off',
         interpretationProfile: 'producer_summary',
         interpretationModel: null,
@@ -382,7 +382,7 @@ describe('analyzeAudio', () => {
           diagnostics: null,
           error: null,
         },
-        symbolicExtraction: {
+        pitchNoteTranslation: {
           status: 'completed',
           authoritative: false,
           preferredAttemptId: 'sym_123',
@@ -406,8 +406,8 @@ describe('analyzeAudio', () => {
     }));
     getAnalysisRunMock.mockResolvedValue(makeRunSnapshot({
       requestedStages: {
-        symbolicMode: 'stem_notes',
-        symbolicBackend: 'auto',
+        pitchNoteMode: 'stem_notes',
+        pitchNoteBackend: 'auto',
         interpretationMode: 'off',
         interpretationProfile: 'producer_summary',
         interpretationModel: null,
@@ -421,7 +421,7 @@ describe('analyzeAudio', () => {
           diagnostics: null,
           error: null,
         },
-        symbolicExtraction: {
+        pitchNoteTranslation: {
           status: 'completed',
           authoritative: false,
           preferredAttemptId: 'sym_123',
@@ -456,7 +456,7 @@ describe('analyzeAudio', () => {
         throw error;
       },
       {
-        symbolicRequested: true,
+        pitchNoteRequested: true,
         interpretationRequested: false,
         interpretationConfigEnabled: true,
         pollIntervalMs: 0,
@@ -483,7 +483,7 @@ describe('analyzeAudio', () => {
           diagnostics: null,
           error: null,
         },
-        symbolicExtraction: {
+        pitchNoteTranslation: {
           status: 'blocked',
           authoritative: false,
           preferredAttemptId: null,
@@ -526,7 +526,7 @@ describe('analyzeAudio', () => {
       onPhase2Complete,
       onError,
       {
-        symbolicRequested: true,
+        pitchNoteRequested: true,
         interpretationRequested: true,
         interpretationConfigEnabled: true,
         signal: controller.signal,
@@ -581,7 +581,7 @@ describe('analyzeAudio', () => {
         throw error;
       },
       {
-        symbolicRequested: true,
+        pitchNoteRequested: true,
         interpretationRequested: true,
         interpretationConfigEnabled: true,
         pollIntervalMs: 0,
@@ -617,7 +617,7 @@ describe('analyzeAudio', () => {
       onPhase2Complete,
       onError,
       {
-        symbolicRequested: true,
+        pitchNoteRequested: true,
         interpretationRequested: true,
         interpretationConfigEnabled: true,
         pollIntervalMs: 0,

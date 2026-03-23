@@ -143,8 +143,8 @@ test('phase1 dual-source session musician panel toggles between polyphonic and m
       return;
     }
     const body = route.request().postData() ?? '';
-    expect(hasMultipartTextField(body, 'symbolic_mode', 'stem_notes')).toBe(true);
-    expect(hasMultipartTextField(body, 'symbolic_backend', 'auto')).toBe(true);
+    expect(hasMultipartTextField(body, 'pitch_note_mode', 'stem_notes')).toBe(true);
+    expect(hasMultipartTextField(body, 'pitch_note_backend', 'auto')).toBe(true);
 
     await route.fulfill({
       status: 200,
@@ -152,8 +152,8 @@ test('phase1 dual-source session musician panel toggles between polyphonic and m
       body: JSON.stringify({
         runId: 'run_smoke_midi_001',
         requestedStages: {
-          symbolicMode: 'stem_notes',
-          symbolicBackend: 'auto',
+          pitchNoteMode: 'stem_notes',
+          pitchNoteBackend: 'auto',
           interpretationMode: 'async',
           interpretationProfile: 'producer_summary',
           interpretationModel: 'gemini-3.1-pro-preview',
@@ -177,7 +177,7 @@ test('phase1 dual-source session musician panel toggles between polyphonic and m
             diagnostics: null,
             error: null,
           },
-          symbolicExtraction: {
+          pitchNoteTranslation: {
             status: 'blocked',
             authoritative: false,
             preferredAttemptId: null,
@@ -209,8 +209,8 @@ test('phase1 dual-source session musician panel toggles between polyphonic and m
       body: JSON.stringify({
         runId: 'run_smoke_midi_001',
         requestedStages: {
-          symbolicMode: 'stem_notes',
-          symbolicBackend: 'auto',
+          pitchNoteMode: 'stem_notes',
+          pitchNoteBackend: 'auto',
           interpretationMode: 'async',
           interpretationProfile: 'producer_summary',
           interpretationModel: 'gemini-3.1-pro-preview',
@@ -271,7 +271,7 @@ test('phase1 dual-source session musician panel toggles between polyphonic and m
             diagnostics: { timings: { totalMs: 980, analysisMs: 900, serverOverheadMs: 80, flagsUsed: ['--transcribe', '--separate'], fileSizeBytes: 2048, fileDurationSeconds: 10, msPerSecondOfAudio: 98 } },
             error: null,
           },
-          symbolicExtraction: {
+          pitchNoteTranslation: {
             status: 'completed',
             authoritative: false,
             preferredAttemptId: 'sym_smoke_midi_001',
@@ -357,15 +357,15 @@ test('phase1 dual-source session musician panel toggles between polyphonic and m
   await page.goto('/', { waitUntil: 'networkidle' });
   const fixturePath = path.resolve(testDir, './fixtures/silence.wav');
   await page.setInputFiles('#audio-upload', fixturePath);
-  await expect(page.getByLabel('SYMBOLIC EXTRACTION')).toBeChecked();
+  await expect(page.getByLabel('PITCH/NOTE EXTRACTION')).toBeChecked();
   await page.getByRole('button', { name: /Initiate Analysis/i }).click();
 
   const panel = page.locator('section').filter({ hasText: /SESSION MUSICIAN/i }).first();
 
   await expect(page.getByText('Analysis Results')).toBeVisible();
   await expect(panel.getByRole('heading', { name: /SESSION MUSICIAN/i }).first()).toBeVisible();
-  await expect(panel.getByText('Symbolic notes and melody guide')).toBeVisible();
-  await expect(panel.getByRole('button', { name: 'SYMBOLIC' })).toBeVisible();
+  await expect(panel.getByText('Pitch/Note notes and melody guide')).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'PITCH/NOTE' })).toBeVisible();
   await expect(panel.getByRole('button', { name: 'MELODY' })).toBeVisible();
   await expect(panel.getByText('SOURCE: BASIC PITCH LEGACY').first()).toBeVisible();
   await expect(panel.getByText('Range: C3 - G4')).toHaveCount(1);
@@ -373,7 +373,7 @@ test('phase1 dual-source session musician panel toggles between polyphonic and m
   await expect(panel.getByText('2 / 2 NOTES')).toBeVisible();
   await expect(panel.getByText('STEM-AWARE')).toBeVisible();
   await expect(panel.getByText('STEMS: bass, other')).toBeVisible();
-  await expect(panel.getByText('BASIC PITCH LEGACY symbolic notes')).toBeVisible();
+  await expect(panel.getByText('BASIC PITCH LEGACY pitch/note notes')).toBeVisible();
   const previewButton = panel.getByRole('button', { name: /Preview/i });
   const downloadButton = panel.getByRole('button', { name: /Download \.mid/i });
   await expect(previewButton).toBeVisible();
@@ -414,9 +414,9 @@ test('phase1 dual-source session musician panel toggles between polyphonic and m
   await expect(confidenceSlider).toBeDisabled();
   await expect(confidenceSlider).toHaveValue('0.8');
 
-  await panel.getByRole('button', { name: 'SYMBOLIC' }).click();
+  await panel.getByRole('button', { name: 'PITCH/NOTE' }).click();
   await expect(panel.getByText('SOURCE: BASIC PITCH LEGACY').first()).toBeVisible();
-  await expect(panel.getByText('BASIC PITCH LEGACY symbolic notes')).toBeVisible();
+  await expect(panel.getByText('BASIC PITCH LEGACY pitch/note notes')).toBeVisible();
   await expect(panel.getByText('STEM-AWARE')).toBeVisible();
   await expect(panel.getByText('STEMS: bass, other')).toBeVisible();
   await expect(panel.getByText('1 / 2 NOTES')).toBeVisible();
@@ -459,8 +459,8 @@ test('missing melodyDetail shows MIDI unavailable state', async ({ page }) => {
       body: JSON.stringify({
         runId: 'run_smoke_midi_awaiting_001',
         requestedStages: {
-          symbolicMode: 'off',
-          symbolicBackend: 'auto',
+          pitchNoteMode: 'off',
+          pitchNoteBackend: 'auto',
           interpretationMode: 'async',
           interpretationProfile: 'producer_summary',
           interpretationModel: 'gemini-3.1-pro-preview',
@@ -484,7 +484,7 @@ test('missing melodyDetail shows MIDI unavailable state', async ({ page }) => {
             diagnostics: null,
             error: null,
           },
-          symbolicExtraction: {
+          pitchNoteTranslation: {
             status: 'not_requested',
             authoritative: false,
             preferredAttemptId: null,
@@ -516,8 +516,8 @@ test('missing melodyDetail shows MIDI unavailable state', async ({ page }) => {
       body: JSON.stringify({
         runId: 'run_smoke_midi_awaiting_001',
         requestedStages: {
-          symbolicMode: 'off',
-          symbolicBackend: 'auto',
+          pitchNoteMode: 'off',
+          pitchNoteBackend: 'auto',
           interpretationMode: 'async',
           interpretationProfile: 'producer_summary',
           interpretationModel: 'gemini-3.1-pro-preview',
@@ -561,7 +561,7 @@ test('missing melodyDetail shows MIDI unavailable state', async ({ page }) => {
             diagnostics: { timings: { totalMs: 980, analysisMs: 900, serverOverheadMs: 80, flagsUsed: [], fileSizeBytes: 2048, fileDurationSeconds: 10, msPerSecondOfAudio: 98 } },
             error: null,
           },
-          symbolicExtraction: {
+          pitchNoteTranslation: {
             status: 'not_requested',
             authoritative: false,
             preferredAttemptId: null,
@@ -613,9 +613,9 @@ test('missing melodyDetail shows MIDI unavailable state', async ({ page }) => {
   await page.getByRole('button', { name: /Initiate Analysis/i }).click();
 
   const panel = page.locator('section').filter({ hasText: /SESSION MUSICIAN/i }).first();
-  await expect(panel.locator('p').filter({ hasText: 'SYMBOLIC NOTES UNAVAILABLE' })).toBeVisible();
+  await expect(panel.locator('p').filter({ hasText: 'PITCH/NOTE NOTES UNAVAILABLE' })).toBeVisible();
   await expect(
-    panel.getByText('Run with symbolic extraction enabled, or ensure melodyDetail is present in the DSP payload for a melody guide'),
+    panel.getByText('Run with pitch/note translation enabled, or ensure melodyDetail is present in the DSP payload for a melody guide'),
   ).toBeVisible();
   await expect(panel.getByRole('button', { name: /Preview/i })).toBeDisabled();
   await expect(panel.getByRole('button', { name: /Download \.mid/i })).toBeDisabled();

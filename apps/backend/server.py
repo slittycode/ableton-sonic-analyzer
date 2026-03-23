@@ -28,9 +28,9 @@ except ImportError:
 
 from fastapi import FastAPI, File, Form, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
-from analysis_runtime import AnalysisRuntime, UnsupportedSymbolicModeError
+from analysis_runtime import AnalysisRuntime, UnsupportedPitchNoteModeError
 from analyze import (
     build_analysis_estimate,
     get_audio_duration_seconds,
@@ -338,7 +338,7 @@ async def _start_cache_eviction() -> None:
             [
                 asyncio.create_task(_evict_loop()),
                 asyncio.create_task(_measurement_worker_loop()),
-                asyncio.create_task(_symbolic_worker_loop()),
+                asyncio.create_task(_pitch_note_worker_loop()),
                 asyncio.create_task(_interpretation_worker_loop()),
             ]
         )
@@ -431,13 +431,18 @@ def _elapsed_ms(started_at: datetime | None, ended_at: datetime | None) -> float
     return max((ended_at - started_at).total_seconds() * 1000, 0.0)
 
 
-def _normalize_run_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
+def _normalize_run_snapshot(
+    snapshot: dict[str, Any], runtime: AnalysisRuntime | None = None
+) -> dict[str, Any]:
     """Apply _build_phase1 normalization to a run snapshot's measurement result.
 
     The analysis-run pathway stores raw analyze.py output in the DB, but the
     frontend parser (parsePhase1Result) expects the same normalized shape that
     _build_phase1 produces for the legacy /api/analyze endpoint — notably,
     top-level stereoWidth/stereoCorrelation extracted from stereoDetail.
+
+    When *runtime* is provided, spectral visualization artifacts (spectrogram
+    PNGs and time-series JSON) are attached under ``artifacts.spectral``.
     """
     stages = snapshot.get("stages")
     if not isinstance(stages, dict):
@@ -452,7 +457,52 @@ def _normalize_run_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
     snapshot["stages"] = dict(stages)
     snapshot["stages"]["measurement"] = dict(measurement)
     snapshot["stages"]["measurement"]["result"] = _build_phase1(raw_result)
+
+    if runtime is not None:
+        run_id = snapshot.get("runId")
+        if run_id:
+            snapshot = dict(snapshot)
+            snapshot["artifacts"] = dict(snapshot.get("artifacts") or {})
+            spectral_artifacts = runtime.get_artifacts_by_kind(run_id, "spectrogram")
+            ts_artifacts = runtime.get_artifacts_by_kind(run_id, "spectral_time_series")
+            _strip_internal = lambda a: {
+                "artifactId": a["artifactId"],
+                "kind": a["kind"],
+                "filename": a["filename"],
+                "mimeType": a["mimeType"],
+                "sizeBytes": a["sizeBytes"],
+            }
+            onset_artifacts = runtime.get_artifacts_by_kind(run_id, "onset_strength")
+            chroma_artifacts = runtime.get_artifacts_by_kind(run_id, "chroma_interactive")
+            snapshot["artifacts"]["spectral"] = {
+                "spectrograms": [_strip_internal(a) for a in spectral_artifacts],
+                "timeSeries": _strip_internal(ts_artifacts[0]) if ts_artifacts else None,
+                "onsetStrength": _strip_internal(onset_artifacts[0]) if onset_artifacts else None,
+                "chromaInteractive": _strip_internal(chroma_artifacts[0]) if chroma_artifacts else None,
+            }
+
     return snapshot
+
+
+def _normalize_spectral_detail(detail: Any) -> dict[str, Any] | None:
+    """Map analyzer field names to the frontend-expected SpectralDetail contract.
+
+    The analyzer emits ``spectralCentroid`` / ``spectralRolloff`` (singular) but
+    the frontend ``SpectralDetail`` interface expects ``spectralCentroidMean`` /
+    ``spectralRolloffMean``.
+    """
+    if not isinstance(detail, dict):
+        return None
+    out = dict(detail)
+    if "spectralCentroid" in out and "spectralCentroidMean" not in out:
+        out["spectralCentroidMean"] = out.pop("spectralCentroid")
+    if "spectralRolloff" in out and "spectralRolloffMean" not in out:
+        out["spectralRolloffMean"] = out.pop("spectralRolloff")
+    if "spectralBandwidth" in out and "spectralBandwidthMean" not in out:
+        out["spectralBandwidthMean"] = out.pop("spectralBandwidth")
+    if "spectralFlatness" in out and "spectralFlatnessMean" not in out:
+        out["spectralFlatnessMean"] = out.pop("spectralFlatness")
+    return out
 
 
 def _build_phase1(payload: dict[str, Any]) -> dict[str, Any]:
@@ -514,7 +564,7 @@ def _build_phase1(payload: dict[str, Any]) -> dict[str, Any]:
             "highs": _coerce_number(spectral_balance.get("highs")),
             "brilliance": _coerce_number(spectral_balance.get("brilliance")),
         },
-        "spectralDetail": payload.get("spectralDetail"),
+        "spectralDetail": _normalize_spectral_detail(payload.get("spectralDetail")),
         "rhythmDetail": payload.get("rhythmDetail"),
         "melodyDetail": payload.get("melodyDetail"),
         "transcriptionDetail": payload.get("transcriptionDetail"),
@@ -569,8 +619,8 @@ def _cleanup_temp_path(temp_path: str | None) -> None:
 async def _create_analysis_run_record(
     *,
     track: UploadFile,
-    symbolic_mode: str,
-    symbolic_backend: str,
+    pitch_note_mode: str,
+    pitch_note_backend: str,
     interpretation_mode: str,
     interpretation_profile: str,
     interpretation_model: str | None,
@@ -584,8 +634,8 @@ async def _create_analysis_run_record(
         filename=track.filename or "upload.bin",
         content=content,
         mime_type=track.content_type or _get_audio_mime_type(track.filename or "upload.bin"),
-        symbolic_mode=symbolic_mode,
-        symbolic_backend=symbolic_backend,
+        pitch_note_mode=pitch_note_mode,
+        pitch_note_backend=pitch_note_backend,
         interpretation_mode=interpretation_mode,
         interpretation_profile=interpretation_profile,
         interpretation_model=interpretation_model,
@@ -611,7 +661,7 @@ def _build_measurement_provenance(
     }
 
 
-def _resolve_symbolic_mode_for_legacy(transcribe: bool) -> str:
+def _resolve_pitch_note_mode_for_legacy(transcribe: bool) -> str:
     return "stem_notes" if transcribe else "off"
 
 
@@ -865,6 +915,42 @@ def _run_measurement_subprocess(
     }
 
 
+def _generate_spectral_artifacts(runtime: AnalysisRuntime, run_id: str) -> None:
+    """Generate librosa-based spectrogram PNGs and spectral time-series JSON.
+
+    Runs after successful measurement. Failures are logged but do not fail
+    the measurement — spectral visualizations are additive, not critical.
+    """
+    try:
+        from spectral_viz import generate_all_artifacts
+
+        source = runtime.get_source_artifact(run_id)
+        with tempfile.TemporaryDirectory(prefix="spectral_viz_") as tmp_dir:
+            artifacts = generate_all_artifacts(source["path"], tmp_dir)
+            _MIME_TYPES = {
+                "spectrogram_mel": "image/png",
+                "spectral_time_series": "application/json",
+            }
+            _FILENAMES = {
+                "spectrogram_mel": "mel_spectrogram.png",
+                "spectral_time_series": "spectral_time_series.json",
+            }
+            for kind, path in artifacts.items():
+                runtime.record_artifact(
+                    run_id,
+                    kind=kind,
+                    source_path=path,
+                    filename=_FILENAMES.get(kind, os.path.basename(path)),
+                    mime_type=_MIME_TYPES.get(kind, "application/octet-stream"),
+                    provenance={"generator": "spectral_viz", "schemaVersion": "spectral.v1"},
+                )
+    except Exception as exc:
+        print(
+            f"[warn] spectral artifact generation failed for run {run_id}: {exc}",
+            file=sys.stderr,
+        )
+
+
 def _execute_measurement_run(
     runtime: AnalysisRuntime,
     run_id: str,
@@ -896,6 +982,7 @@ def _execute_measurement_run(
             provenance=provenance,
             diagnostics=execution["diagnostics"],
         )
+        _generate_spectral_artifacts(runtime, run_id)
         return execution
 
     runtime.fail_measurement(
@@ -917,16 +1004,16 @@ def _execute_reserved_measurement_job(
     job: dict[str, Any],
 ) -> dict[str, Any]:
     run_id = str(job["runId"])
-    requested_symbolic_mode = str(job.get("requestedSymbolicMode", "off"))
+    requested_pitch_note_mode = str(job.get("requestedPitchNoteMode", "off"))
     try:
         run_separation, run_transcribe = runtime.resolve_measurement_flags(
-            requested_symbolic_mode,
+            requested_pitch_note_mode,
         )
-    except UnsupportedSymbolicModeError as exc:
+    except UnsupportedPitchNoteModeError as exc:
         runtime.fail_measurement(
             run_id,
             error={
-                "code": "SYMBOLIC_MODE_UNSUPPORTED",
+                "code": "PITCH_NOTE_MODE_UNSUPPORTED",
                 "message": str(exc),
                 "retryable": False,
                 "phase": ERROR_PHASE_LOCAL_DSP,
@@ -935,14 +1022,14 @@ def _execute_reserved_measurement_job(
                 "schemaVersion": "measurement.v1",
                 "engineVersion": ENGINE_VERSION,
                 "requestOptions": {
-                    "symbolicMode": requested_symbolic_mode,
+                    "pitchNoteMode": requested_pitch_note_mode,
                 },
             },
         )
         return {
             "ok": False,
             "statusCode": 400,
-            "errorCode": "SYMBOLIC_MODE_UNSUPPORTED",
+            "errorCode": "PITCH_NOTE_MODE_UNSUPPORTED",
             "message": str(exc),
             "retryable": False,
             "diagnostics": None,
@@ -957,11 +1044,11 @@ def _execute_reserved_measurement_job(
     )
 
 
-def _execute_symbolic_attempt(
+def _execute_pitch_note_attempt(
     runtime: AnalysisRuntime,
     attempt: dict[str, Any],
 ) -> None:
-    """Run symbolic extraction as a subprocess to isolate memory usage.
+    """Run pitch/note translation as a subprocess to isolate memory usage.
 
     Demucs + torchcrepe load ~2-4GB of models and tensors. Running them
     in-process causes the server to retain that memory for its entire
@@ -972,7 +1059,7 @@ def _execute_symbolic_attempt(
     run_id = str(attempt["runId"])
     source_artifact = runtime.get_source_artifact(run_id)
     provenance: dict[str, Any] = {
-        "schemaVersion": "symbolic.v1",
+        "schemaVersion": "pitch_note_translation.v1",
         "backendId": attempt["backendId"],
         "mode": attempt["mode"],
     }
@@ -981,7 +1068,7 @@ def _execute_symbolic_attempt(
         command = [
             "./venv/bin/python", "analyze.py",
             source_artifact["path"],
-            "--symbolic-only",
+            "--pitch-note-only",
             "--yes",
         ]
 
@@ -1015,14 +1102,14 @@ def _execute_symbolic_attempt(
 
         if result.returncode != 0:
             raise RuntimeError(
-                f"Symbolic subprocess failed (exit {result.returncode}): "
+                f"Pitch/note translation subprocess failed (exit {result.returncode}): "
                 f"{result.stderr[-500:] if result.stderr else 'no stderr'}"
             )
 
-        symbolic_payload = json.loads(result.stdout)
+        pitch_note_payload = json.loads(result.stdout)
         transcription_detail = None
-        if isinstance(symbolic_payload, dict):
-            transcription_detail = symbolic_payload.get("transcriptionDetail")
+        if isinstance(pitch_note_payload, dict):
+            transcription_detail = pitch_note_payload.get("transcriptionDetail")
 
         # If subprocess ran separation, record new stem artifacts
         if stem_dir is None and attempt["mode"] == "stem_notes":
@@ -1039,20 +1126,20 @@ def _execute_symbolic_attempt(
         }
         if isinstance(transcription_detail, dict):
             provenance["resolvedBackendId"] = transcription_detail.get("transcriptionMethod")
-        runtime.complete_symbolic_attempt(
+        runtime.complete_pitch_note_attempt(
             str(attempt["attemptId"]),
             result=transcription_detail if isinstance(transcription_detail, dict) else None,
             provenance=provenance,
             diagnostics=diagnostics,
         )
     except Exception as exc:
-        runtime.fail_symbolic_attempt(
+        runtime.fail_pitch_note_attempt(
             str(attempt["attemptId"]),
             error={
-                "code": "SYMBOLIC_EXTRACTION_FAILED",
+                "code": "PITCH_NOTE_TRANSLATION_FAILED",
                 "message": str(exc),
                 "retryable": True,
-                "phase": "symbolic_extraction",
+                "phase": "pitch_note_translation",
             },
             provenance=provenance,
             diagnostics={
@@ -1069,7 +1156,7 @@ def _run_interpretation_request(
     file_size_bytes: int,
     profile_id: str,
     measurement_result: dict[str, Any],
-    symbolic_result: dict[str, Any] | None,
+    pitch_note_result: dict[str, Any] | None,
     grounding_metadata: dict[str, Any],
     model_name: str,
     request_id: str,
@@ -1124,7 +1211,7 @@ def _run_interpretation_request(
 
     prompt = profile_config["buildPrompt"](
         measurement_result=measurement_result,
-        symbolic_result=symbolic_result,
+        pitch_note_result=pitch_note_result,
         grounding_metadata=grounding_metadata,
         descriptor_hooks=descriptor_hooks,
     )
@@ -1264,13 +1351,13 @@ def _execute_interpretation_attempt(
     source_artifact = runtime.get_source_artifact(run_id)
     grounding = runtime.get_interpretation_grounding(run_id)
     measurement_result = grounding["measurementResult"] or {}
-    symbolic_result = grounding["symbolicResult"]
+    pitch_note_result = grounding["pitchNoteResult"]
     grounding_metadata = {
         "measurementIsAuthoritative": True,
-        "symbolicExtractionIsBestEffort": True,
+        "pitchNoteTranslationIsBestEffort": True,
         "measurementOutputId": grounding["measurementOutputId"],
-        "symbolicAttemptId": grounding["symbolicAttemptId"],
-        "doNotPromoteSymbolicToMeasurement": True,
+        "pitchNoteAttemptId": grounding["pitchNoteAttemptId"],
+        "doNotPromotePitchNoteToMeasurement": True,
         "profileId": profile_id,
     }
     model_name = _coerce_string(attempt.get("modelName"), "gemini-2.5-flash")
@@ -1280,7 +1367,7 @@ def _execute_interpretation_attempt(
         file_size_bytes=source_artifact["sizeBytes"],
         profile_id=profile_id,
         measurement_result=measurement_result,
-        symbolic_result=symbolic_result,
+        pitch_note_result=pitch_note_result,
         grounding_metadata=grounding_metadata,
         model_name=model_name,
         request_id=str(attempt["attemptId"]),
@@ -1291,7 +1378,7 @@ def _execute_interpretation_attempt(
         "modelName": model_name,
         "groundedMeasurementRunId": run_id,
         "groundedMeasurementOutputId": grounding["measurementOutputId"],
-        "groundedSymbolicAttemptId": grounding["symbolicAttemptId"],
+        "groundedPitchNoteAttemptId": grounding["pitchNoteAttemptId"],
     }
     if execution["ok"]:
         runtime.complete_interpretation_attempt(
@@ -1300,7 +1387,7 @@ def _execute_interpretation_attempt(
             provenance=provenance,
             diagnostics=execution["diagnostics"],
             grounded_measurement_output_id=grounding["measurementOutputId"],
-            grounded_symbolic_attempt_id=grounding["symbolicAttemptId"],
+            grounded_pitch_note_attempt_id=grounding["pitchNoteAttemptId"],
         )
         return execution
 
@@ -1315,7 +1402,7 @@ def _execute_interpretation_attempt(
         provenance=provenance,
         diagnostics=execution["diagnostics"],
         grounded_measurement_output_id=grounding["measurementOutputId"],
-        grounded_symbolic_attempt_id=grounding["symbolicAttemptId"],
+        grounded_pitch_note_attempt_id=grounding["pitchNoteAttemptId"],
     )
     return execution
 
@@ -1353,22 +1440,22 @@ async def _measurement_worker_loop() -> None:
             await asyncio.sleep(WORKER_IDLE_SECONDS)
 
 
-async def _symbolic_worker_loop() -> None:
+async def _pitch_note_worker_loop() -> None:
     while True:
         try:
-            attempt = await asyncio.to_thread(get_analysis_runtime().reserve_next_symbolic_attempt)
+            attempt = await asyncio.to_thread(get_analysis_runtime().reserve_next_pitch_note_attempt)
             if attempt is None:
                 await asyncio.sleep(WORKER_IDLE_SECONDS)
                 continue
             await asyncio.to_thread(
-                _execute_symbolic_attempt,
+                _execute_pitch_note_attempt,
                 get_analysis_runtime(),
                 attempt,
             )
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            print(f"[warn] symbolic worker loop failed: {exc}", file=sys.stderr)
+            print(f"[warn] pitch/note translation worker loop failed: {exc}", file=sys.stderr)
             await asyncio.sleep(WORKER_IDLE_SECONDS)
 
 
@@ -1394,8 +1481,8 @@ async def _interpretation_worker_loop() -> None:
 @app.post("/api/analysis-runs")
 async def create_analysis_run(
     track: UploadFile = File(...),
-    symbolic_mode: str = Form("off"),
-    symbolic_backend: str = Form("auto"),
+    pitch_note_mode: str = Form("off"),
+    pitch_note_backend: str = Form("auto"),
     interpretation_mode: str = Form("off"),
     interpretation_profile: str = Form("producer_summary"),
     interpretation_model: str | None = Form(None),
@@ -1403,13 +1490,13 @@ async def create_analysis_run(
     try:
         runtime, run_id = await _create_analysis_run_record(
             track=track,
-            symbolic_mode=symbolic_mode,
-            symbolic_backend=symbolic_backend,
+            pitch_note_mode=pitch_note_mode,
+            pitch_note_backend=pitch_note_backend,
             interpretation_mode=interpretation_mode,
             interpretation_profile=interpretation_profile,
             interpretation_model=interpretation_model,
         )
-        return JSONResponse(content=_normalize_run_snapshot(runtime.get_run(run_id)))
+        return JSONResponse(content=_normalize_run_snapshot(runtime.get_run(run_id), runtime))
     except ValueError as exc:
         return JSONResponse(
             status_code=400,
@@ -1438,7 +1525,7 @@ async def create_analysis_run(
 async def get_analysis_run(run_id: str) -> JSONResponse:
     runtime = get_analysis_runtime()
     try:
-        return JSONResponse(content=_normalize_run_snapshot(runtime.get_run(run_id)))
+        return JSONResponse(content=_normalize_run_snapshot(runtime.get_run(run_id), runtime))
     except KeyError:
         return JSONResponse(
             status_code=404,
@@ -1451,11 +1538,175 @@ async def get_analysis_run(run_id: str) -> JSONResponse:
         )
 
 
-@app.post("/api/analysis-runs/{run_id}/symbolic-extractions")
-async def create_symbolic_extraction_attempt(
+@app.get("/api/analysis-runs/{run_id}/artifacts")
+async def list_run_artifacts(
     run_id: str,
-    symbolic_mode: str = Form("stem_notes"),
-    symbolic_backend: str = Form("auto"),
+    kind: str = Query("", description="Filter by kind prefix"),
+) -> JSONResponse:
+    runtime = get_analysis_runtime()
+    try:
+        runtime.get_run(run_id)
+    except KeyError:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": {
+                    "code": "RUN_NOT_FOUND",
+                    "message": f"Analysis run '{run_id}' was not found.",
+                }
+            },
+        )
+    prefix = kind if kind else ""
+    artifacts = runtime.get_artifacts_by_kind(run_id, prefix)
+    return JSONResponse(content=artifacts)
+
+
+@app.get("/api/analysis-runs/{run_id}/artifacts/{artifact_id}", response_model=None)
+async def get_run_artifact(run_id: str, artifact_id: str) -> FileResponse | JSONResponse:
+    runtime = get_analysis_runtime()
+    try:
+        runtime.get_run(run_id)
+    except KeyError:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": {
+                    "code": "RUN_NOT_FOUND",
+                    "message": f"Analysis run '{run_id}' was not found.",
+                }
+            },
+        )
+    artifacts = runtime.get_artifacts_by_kind(run_id, "")
+    match = next((a for a in artifacts if a["artifactId"] == artifact_id), None)
+    if match is None:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": {
+                    "code": "ARTIFACT_NOT_FOUND",
+                    "message": f"Artifact '{artifact_id}' not found in run '{run_id}'.",
+                }
+            },
+        )
+    artifact_path = match.get("path", "")
+    if not artifact_path or not Path(artifact_path).is_file():
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": {
+                    "code": "ARTIFACT_FILE_MISSING",
+                    "message": "Artifact file is no longer available on disk.",
+                }
+            },
+        )
+    return FileResponse(
+        path=artifact_path,
+        media_type=match.get("mimeType", "application/octet-stream"),
+        filename=match.get("filename", os.path.basename(artifact_path)),
+    )
+
+
+_ENHANCEMENT_GENERATORS = {
+    "cqt": ("generate_cqt_spectrogram", ["spectrogram_cqt"], True),
+    "hpss": ("generate_hpss_spectrograms", ["spectrogram_harmonic", "spectrogram_percussive"], True),
+    "onset": ("generate_onset_enhancement", ["spectrogram_onset", "onset_strength"], True),
+    "chroma_interactive": ("generate_chroma_enhancement", ["spectrogram_chroma", "chroma_interactive"], True),
+}
+
+
+@app.post("/api/analysis-runs/{run_id}/spectral-enhancements/{kind}")
+async def generate_spectral_enhancement(run_id: str, kind: str) -> JSONResponse:
+    if kind not in _ENHANCEMENT_GENERATORS:
+        return JSONResponse(
+            status_code=400,
+            content={"error": {"code": "INVALID_KIND", "message": f"Unknown enhancement kind: '{kind}'. Valid: {', '.join(_ENHANCEMENT_GENERATORS)}"}},
+        )
+
+    runtime = get_analysis_runtime()
+    try:
+        run = runtime.get_run(run_id)
+    except KeyError:
+        return JSONResponse(
+            status_code=404,
+            content={"error": {"code": "RUN_NOT_FOUND", "message": f"Analysis run '{run_id}' was not found."}},
+        )
+
+    stages = run.get("stages", {})
+    meas_status = stages.get("measurement", {}).get("status")
+    if meas_status != "completed":
+        return JSONResponse(
+            status_code=409,
+            content={"error": {"code": "MEASUREMENT_NOT_COMPLETED", "message": "Measurement stage must complete before generating enhancements."}},
+        )
+
+    func_name, artifact_kinds, is_image = _ENHANCEMENT_GENERATORS[kind]
+
+    # Idempotent: skip if already generated
+    existing = []
+    for ak in artifact_kinds:
+        existing.extend(runtime.get_artifacts_by_kind(run_id, ak))
+    if existing:
+        strip = lambda a: {"artifactId": a["artifactId"], "kind": a["kind"], "filename": a["filename"], "mimeType": a["mimeType"], "sizeBytes": a["sizeBytes"]}
+        return JSONResponse(content={"artifacts": [strip(a) for a in existing]})
+
+    try:
+        import spectral_viz
+        gen_func = getattr(spectral_viz, func_name)
+        source = runtime.get_source_artifact(run_id)
+
+        _MIME_TYPES = {
+            "spectrogram_cqt": "image/png",
+            "spectrogram_harmonic": "image/png",
+            "spectrogram_percussive": "image/png",
+            "spectrogram_onset": "image/png",
+            "spectrogram_chroma": "image/png",
+            "onset_strength": "application/json",
+            "chroma_interactive": "application/json",
+        }
+
+        with tempfile.TemporaryDirectory(prefix="spectral_enh_") as tmp_dir:
+            if is_image:
+                result = gen_func(source["path"], tmp_dir)
+            else:
+                data = gen_func(source["path"])
+                # Write JSON to file for artifact storage
+                import json as json_mod
+                for ak in artifact_kinds:
+                    json_path = os.path.join(tmp_dir, f"{ak}.json")
+                    Path(json_path).write_text(json_mod.dumps(data), encoding="utf-8")
+                    result = {ak: json_path}
+
+            created = []
+            for ak, file_path in result.items():
+                art = runtime.record_artifact(
+                    run_id,
+                    kind=ak,
+                    source_path=file_path,
+                    filename=os.path.basename(file_path),
+                    mime_type=_MIME_TYPES.get(ak, "application/octet-stream"),
+                    provenance={"generator": "spectral_viz", "enhancement": kind},
+                )
+                created.append({
+                    "artifactId": art["artifactId"],
+                    "kind": art["kind"],
+                    "filename": art["filename"],
+                    "mimeType": art["mimeType"],
+                    "sizeBytes": art["sizeBytes"],
+                })
+            return JSONResponse(content={"artifacts": created})
+
+    except Exception as exc:
+        return JSONResponse(
+            status_code=500,
+            content={"error": {"code": "ENHANCEMENT_FAILED", "message": str(exc)}},
+        )
+
+
+@app.post("/api/analysis-runs/{run_id}/pitch-note-translations")
+async def create_pitch_note_translation_attempt(
+    run_id: str,
+    pitch_note_mode: str = Form("stem_notes"),
+    pitch_note_backend: str = Form("auto"),
 ) -> JSONResponse:
     runtime = get_analysis_runtime()
     try:
@@ -1465,23 +1716,23 @@ async def create_symbolic_extraction_attempt(
                 content={
                     "error": {
                         "code": "MEASUREMENT_NOT_READY",
-                        "message": "Measurement must complete before symbolic extraction can run.",
+                        "message": "Measurement must complete before pitch/note translation can run.",
                     }
                 },
             )
-        runtime.create_symbolic_attempt(
+        runtime.create_pitch_note_attempt(
             run_id,
-            backend_id=symbolic_backend,
-            mode=symbolic_mode,
+            backend_id=pitch_note_backend,
+            mode=pitch_note_mode,
             status="queued",
             provenance={
-                "schemaVersion": "symbolic.v1",
-                "backendId": symbolic_backend,
-                "mode": symbolic_mode,
+                "schemaVersion": "pitch_note_translation.v1",
+                "backendId": pitch_note_backend,
+                "mode": pitch_note_mode,
                 "requestedViaApi": True,
             },
         )
-        return JSONResponse(status_code=202, content=_normalize_run_snapshot(runtime.get_run(run_id)))
+        return JSONResponse(status_code=202, content=_normalize_run_snapshot(runtime.get_run(run_id), runtime))
     except KeyError:
         return JSONResponse(
             status_code=404,
@@ -1525,7 +1776,7 @@ async def create_interpretation_attempt(
                 "requestedViaApi": True,
             },
         )
-        return JSONResponse(status_code=202, content=_normalize_run_snapshot(runtime.get_run(run_id)))
+        return JSONResponse(status_code=202, content=_normalize_run_snapshot(runtime.get_run(run_id), runtime))
     except ValueError as exc:
         return JSONResponse(
             status_code=400,
@@ -1683,7 +1934,7 @@ async def _gemini_with_retry(
 def _build_phase2_prompt(
     *,
     measurement_result: dict[str, Any],
-    symbolic_result: dict[str, Any] | None,
+    pitch_note_result: dict[str, Any] | None,
     grounding_metadata: dict[str, Any],
     descriptor_hooks: dict[str, Any] | None = None,
 ) -> str:
@@ -1691,8 +1942,8 @@ def _build_phase2_prompt(
         PRODUCER_SUMMARY_PROMPT_TEMPLATE.rstrip(),
         "\n\nAUTHORITATIVE_MEASUREMENT_RESULT_JSON:\n",
         json.dumps(measurement_result, indent=2),
-        "\n\nOPTIONAL_SYMBOLIC_EXTRACTION_RESULT_JSON:\n",
-        json.dumps(symbolic_result, indent=2),
+        "\n\nOPTIONAL_PITCH_NOTE_TRANSLATION_RESULT_JSON:\n",
+        json.dumps(pitch_note_result, indent=2),
         "\n\nGROUNDING_METADATA:\n",
         json.dumps(grounding_metadata, indent=2),
     ]
@@ -1709,7 +1960,7 @@ def _build_phase2_prompt(
 def _build_stem_summary_prompt(
     *,
     measurement_result: dict[str, Any],
-    symbolic_result: dict[str, Any] | None,
+    pitch_note_result: dict[str, Any] | None,
     grounding_metadata: dict[str, Any],
     descriptor_hooks: dict[str, Any],
 ) -> str:
@@ -1717,8 +1968,8 @@ def _build_stem_summary_prompt(
         STEM_SUMMARY_PROMPT_TEMPLATE.rstrip(),
         "\n\nAUTHORITATIVE_MEASUREMENT_RESULT_JSON:\n",
         json.dumps(measurement_result, indent=2),
-        "\n\nOPTIONAL_SYMBOLIC_EXTRACTION_RESULT_JSON:\n",
-        json.dumps(symbolic_result, indent=2),
+        "\n\nOPTIONAL_PITCH_NOTE_TRANSLATION_RESULT_JSON:\n",
+        json.dumps(pitch_note_result, indent=2),
         "\n\nMEASUREMENT_DERIVED_DESCRIPTOR_HOOKS:\n",
         json.dumps(descriptor_hooks, indent=2),
         "\n\nGROUNDING_METADATA:\n",
@@ -2398,11 +2649,11 @@ async def analyze_audio(
     logger.warning("Legacy compatibility endpoint hit: /api/analyze request_id=%s", request_id)
     try:
         _ = dsp_json_override
-        requested_symbolic_mode = _resolve_symbolic_mode_for_legacy(transcribe)
+        requested_pitch_note_mode = _resolve_pitch_note_mode_for_legacy(transcribe)
         runtime, run_id = await _create_analysis_run_record(
             track=track,
-            symbolic_mode=requested_symbolic_mode,
-            symbolic_backend="auto",
+            pitch_note_mode=requested_pitch_note_mode,
+            pitch_note_backend="auto",
             interpretation_mode="off",
             interpretation_profile="producer_summary",
             interpretation_model=None,
@@ -2410,7 +2661,7 @@ async def analyze_audio(
         )
         runtime.reserve_measurement_run(run_id)
         resolved_run_separation, resolved_run_transcribe = runtime.resolve_measurement_flags(
-            requested_symbolic_mode,
+            requested_pitch_note_mode,
         )
         execution = await asyncio.to_thread(
             _execute_measurement_run,

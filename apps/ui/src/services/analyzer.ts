@@ -21,7 +21,7 @@ export interface AnalyzeAudioUpdate {
 }
 
 export interface AnalyzeAudioOptions {
-  symbolicRequested?: boolean;
+  pitchNoteRequested?: boolean;
   interpretationRequested?: boolean;
   interpretationConfigEnabled?: boolean;
   timeoutMs?: number;
@@ -136,14 +136,14 @@ function isRunTerminal(snapshot: AnalysisRunSnapshot): boolean {
     return false;
   }
 
-  const symbolicDone = ['completed', 'failed', 'interrupted', 'not_requested'].includes(
-    snapshot.stages.symbolicExtraction.status,
+  const pitchNoteDone = ['completed', 'failed', 'interrupted', 'not_requested'].includes(
+    snapshot.stages.pitchNoteTranslation.status,
   );
   const interpretationDone = ['completed', 'failed', 'interrupted', 'not_requested'].includes(
     snapshot.stages.interpretation.status,
   );
 
-  return symbolicDone && interpretationDone;
+  return pitchNoteDone && interpretationDone;
 }
 
 export async function analyzeAudio(
@@ -161,8 +161,8 @@ export async function analyzeAudio(
     const initialRun = await createAnalysisRun(file, {
       apiBaseUrl: appConfig.apiBaseUrl,
       signal: analysisOptions?.signal,
-      symbolicMode: resolveSymbolicRequested(analysisOptions) ? 'stem_notes' : 'off',
-      symbolicBackend: 'auto',
+      pitchNoteMode: resolvePitchNoteRequested(analysisOptions) ? 'stem_notes' : 'off',
+      pitchNoteBackend: 'auto',
       interpretationMode: resolveInterpretationMode(analysisOptions),
       interpretationProfile: 'producer_summary',
       interpretationModel: resolveInterpretationMode(analysisOptions) === 'off' ? null : modelName,
@@ -260,8 +260,8 @@ export async function monitorAnalysisRun(
   }
 }
 
-function resolveSymbolicRequested(options?: AnalyzeAudioOptions): boolean {
-  return options?.symbolicRequested ?? options?.transcribe ?? false;
+function resolvePitchNoteRequested(options?: AnalyzeAudioOptions): boolean {
+  return options?.pitchNoteRequested ?? options?.transcribe ?? false;
 }
 
 function resolveInterpretationRequested(options?: AnalyzeAudioOptions): boolean {

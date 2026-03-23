@@ -50,7 +50,7 @@ const measurement: MeasurementResult = {
   },
 };
 
-const symbolic: TranscriptionDetail = {
+const pitchNote: TranscriptionDetail = {
   transcriptionMethod: 'torchcrepe-viterbi',
   noteCount: 6,
   averageConfidence: 0.83,
@@ -292,7 +292,7 @@ describe('analysisResultsViewModel helpers', () => {
     const cards = buildPatchCards(
       {
         ...measurement,
-        transcriptionDetail: symbolic,
+        transcriptionDetail: pitchNote,
       },
       phase2,
     );
@@ -307,7 +307,7 @@ describe('analysisResultsViewModel helpers', () => {
   it('builds melody insights from phase1 transcription payload', () => {
     const insights = buildMelodyInsights({
       ...measurement,
-      transcriptionDetail: symbolic,
+      transcriptionDetail: pitchNote,
     });
 
     expect(insights).not.toBeNull();

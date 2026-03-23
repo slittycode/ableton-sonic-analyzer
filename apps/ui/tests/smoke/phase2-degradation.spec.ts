@@ -63,8 +63,8 @@ function stubAnalyzeRoute(page: import('@playwright/test').Page, requestId = 're
       body: JSON.stringify({
         runId: requestId,
         requestedStages: {
-          symbolicMode: 'off',
-          symbolicBackend: 'auto',
+          pitchNoteMode: 'off',
+          pitchNoteBackend: 'auto',
           interpretationMode: 'off',
           interpretationProfile: 'producer_summary',
           interpretationModel: null,
@@ -88,7 +88,7 @@ function stubAnalyzeRoute(page: import('@playwright/test').Page, requestId = 're
             diagnostics: null,
             error: null,
           },
-          symbolicExtraction: {
+          pitchNoteTranslation: {
             status: 'not_requested',
             authoritative: false,
             preferredAttemptId: null,
@@ -131,8 +131,8 @@ function stubRunPoll(
       body: JSON.stringify({
         runId,
         requestedStages: {
-          symbolicMode: 'off',
-          symbolicBackend: 'auto',
+          pitchNoteMode: 'off',
+          pitchNoteBackend: 'auto',
           interpretationMode: options.interpretationMode,
           interpretationProfile: 'producer_summary',
           interpretationModel: options.interpretationMode === 'off' ? null : 'gemini-3.1-pro-preview',
@@ -156,7 +156,7 @@ function stubRunPoll(
             diagnostics: { timings: { totalMs: 400, analysisMs: 360, serverOverheadMs: 40, flagsUsed: [], fileSizeBytes: 2048, fileDurationSeconds: 10, msPerSecondOfAudio: 40 } },
             error: null,
           },
-          symbolicExtraction: {
+          pitchNoteTranslation: {
             status: 'not_requested',
             authoritative: false,
             preferredAttemptId: null,
