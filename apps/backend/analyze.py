@@ -4154,8 +4154,23 @@ TRANSCRIPTION_NOTE_CAP = 500
 FULL_MIX_TRANSCRIPTION_NOTE_CAP = 200
 TRANSCRIPTION_MIN_ACTIVE_WINDOW_SECONDS = 0.1
 TRANSCRIPTION_NEAR_DUPLICATE_SECONDS = 0.03
+DEFAULT_TRANSCRIPTION_BACKEND = "torchcrepe-viterbi"
+SUPPORTED_TRANSCRIPTION_BACKEND_IDS = {
+    "auto": DEFAULT_TRANSCRIPTION_BACKEND,
+    "default": DEFAULT_TRANSCRIPTION_BACKEND,
+    "": DEFAULT_TRANSCRIPTION_BACKEND,
+    "torchcrepe": "torchcrepe-viterbi",
+    "torchcrepe-viterbi": "torchcrepe-viterbi",
+}
 
 from typing import Protocol, runtime_checkable
+
+
+def resolve_transcription_backend_id(requested_backend: str | None) -> str:
+    normalized = str(requested_backend or "").strip().lower()
+    if normalized not in SUPPORTED_TRANSCRIPTION_BACKEND_IDS:
+        raise ValueError(f"Unsupported transcription backend '{normalized}'.")
+    return SUPPORTED_TRANSCRIPTION_BACKEND_IDS[normalized]
 
 
 @runtime_checkable
@@ -4379,6 +4394,117 @@ def _deduplicate_transcription_notes(notes: list[dict]) -> list[dict]:
     return sorted(cleaned_notes, key=lambda note: note["onsetSeconds"])
 
 
+def _extract_contour_notes(
+    pitch_hz: np.ndarray,
+    periodicity_values: np.ndarray,
+    *,
+    stem_source: str,
+    frame_duration: float,
+    periodicity_threshold: float,
+    min_note_seconds: float,
+    pitch_jump_split_semitones: float,
+) -> tuple[list[dict], list[int], list[float]]:
+    pitch = np.nan_to_num(
+        np.asarray(pitch_hz, dtype=np.float64),
+        nan=0.0,
+        posinf=0.0,
+        neginf=0.0,
+    )
+    periodicity = np.nan_to_num(
+        np.asarray(periodicity_values, dtype=np.float64),
+        nan=0.0,
+        posinf=0.0,
+        neginf=0.0,
+    )
+    voiced = (pitch > 0.0) & (periodicity >= periodicity_threshold)
+    notes: list[dict] = []
+    midi_values: list[int] = []
+    confidence_values: list[float] = []
+
+    start_idx: int | None = None
+    midi_track: list[float] = []
+    confidence_track: list[float] = []
+    last_midi: float | None = None
+
+    def flush(end_idx: int) -> None:
+        nonlocal start_idx, midi_track, confidence_track, last_midi
+        if start_idx is None or len(midi_track) == 0:
+            start_idx = None
+            midi_track = []
+            confidence_track = []
+            last_midi = None
+            return
+
+        onset_seconds = start_idx * frame_duration
+        duration_seconds = max(0.0, (end_idx - start_idx) * frame_duration)
+        if duration_seconds < min_note_seconds:
+            start_idx = None
+            midi_track = []
+            confidence_track = []
+            last_midi = None
+            return
+
+        pitch_midi = int(np.clip(int(round(float(np.median(midi_track)))), 0, 127))
+        confidence = _normalize_confidence(
+            float(np.mean(np.asarray(confidence_track, dtype=np.float64)))
+        )
+        if confidence < TRANSCRIPTION_CONFIDENCE_FLOOR:
+            start_idx = None
+            midi_track = []
+            confidence_track = []
+            last_midi = None
+            return
+
+        note_obj = {
+            "pitchMidi": pitch_midi,
+            "pitchName": midi_to_note_name(pitch_midi),
+            "onsetSeconds": round(float(onset_seconds), 4),
+            "durationSeconds": round(float(duration_seconds), 4),
+            "confidence": confidence,
+            "stemSource": stem_source,
+        }
+        notes.append(note_obj)
+        midi_values.append(pitch_midi)
+        confidence_values.append(confidence)
+
+        start_idx = None
+        midi_track = []
+        confidence_track = []
+        last_midi = None
+
+    for idx in range(len(pitch)):
+        if not voiced[idx]:
+            flush(idx)
+            continue
+
+        current_midi = float(69.0 + 12.0 * np.log2(max(pitch[idx], 1e-9) / 440.0))
+
+        if start_idx is None:
+            start_idx = idx
+            midi_track = [current_midi]
+            confidence_track = [float(periodicity[idx])]
+            last_midi = current_midi
+            continue
+
+        if (
+            last_midi is not None
+            and abs(current_midi - last_midi) > pitch_jump_split_semitones
+        ):
+            flush(idx)
+            start_idx = idx
+            midi_track = [current_midi]
+            confidence_track = [float(periodicity[idx])]
+            last_midi = current_midi
+            continue
+
+        midi_track.append(current_midi)
+        confidence_track.append(float(periodicity[idx]))
+        last_midi = current_midi
+
+    flush(len(pitch))
+    return notes, midi_values, confidence_values
+
+
 TORCHCREPE_SAMPLE_RATE = 16000
 TORCHCREPE_HOP_LENGTH = 160
 TORCHCREPE_FMIN = 50.0
@@ -4430,99 +4556,16 @@ def _extract_torchcrepe_notes(
     # return memory to the OS otherwise.
     del audio, pitch_hz, periodicity
     import gc; gc.collect()
-    pitch = np.nan_to_num(pitch, nan=0.0, posinf=0.0, neginf=0.0)
-    periodicity_values = np.nan_to_num(
-        periodicity_values, nan=0.0, posinf=0.0, neginf=0.0
-    )
-
-    voiced = (pitch > 0.0) & (periodicity_values >= TORCHCREPE_PERIODICITY_THRESHOLD)
     frame_duration = TORCHCREPE_HOP_LENGTH / float(TORCHCREPE_SAMPLE_RATE)
-    notes: list[dict] = []
-    midi_values: list[int] = []
-    confidence_values: list[float] = []
-
-    start_idx: int | None = None
-    midi_track: list[float] = []
-    confidence_track: list[float] = []
-    last_midi: float | None = None
-
-    def flush(end_idx: int) -> None:
-        nonlocal start_idx, midi_track, confidence_track, last_midi
-        if start_idx is None or len(midi_track) == 0:
-            start_idx = None
-            midi_track = []
-            confidence_track = []
-            last_midi = None
-            return
-
-        onset_seconds = start_idx * frame_duration
-        duration_seconds = max(0.0, (end_idx - start_idx) * frame_duration)
-        if duration_seconds < TORCHCREPE_MIN_NOTE_SECONDS:
-            start_idx = None
-            midi_track = []
-            confidence_track = []
-            last_midi = None
-            return
-
-        pitch_midi = int(np.clip(int(round(float(np.median(midi_track)))), 0, 127))
-        confidence = _normalize_confidence(
-            float(np.mean(np.asarray(confidence_track, dtype=np.float64)))
-        )
-        if confidence < TRANSCRIPTION_CONFIDENCE_FLOOR:
-            start_idx = None
-            midi_track = []
-            confidence_track = []
-            last_midi = None
-            return
-
-        note_obj = {
-            "pitchMidi": pitch_midi,
-            "pitchName": midi_to_note_name(pitch_midi),
-            "onsetSeconds": round(float(onset_seconds), 4),
-            "durationSeconds": round(float(duration_seconds), 4),
-            "confidence": confidence,
-            "stemSource": stem_source,
-        }
-        notes.append(note_obj)
-        midi_values.append(pitch_midi)
-        confidence_values.append(confidence)
-
-        start_idx = None
-        midi_track = []
-        confidence_track = []
-        last_midi = None
-
-    for idx in range(len(pitch)):
-        if not voiced[idx]:
-            flush(idx)
-            continue
-
-        current_midi = float(69.0 + 12.0 * np.log2(max(pitch[idx], 1e-9) / 440.0))
-
-        if start_idx is None:
-            start_idx = idx
-            midi_track = [current_midi]
-            confidence_track = [float(periodicity_values[idx])]
-            last_midi = current_midi
-            continue
-
-        if (
-            last_midi is not None
-            and abs(current_midi - last_midi) > TORCHCREPE_PITCH_JUMP_SPLIT_SEMITONES
-        ):
-            flush(idx)
-            start_idx = idx
-            midi_track = [current_midi]
-            confidence_track = [float(periodicity_values[idx])]
-            last_midi = current_midi
-            continue
-
-        midi_track.append(current_midi)
-        confidence_track.append(float(periodicity_values[idx]))
-        last_midi = current_midi
-
-    flush(len(pitch))
-    return notes, midi_values, confidence_values
+    return _extract_contour_notes(
+        pitch,
+        periodicity_values,
+        stem_source=stem_source,
+        frame_duration=frame_duration,
+        periodicity_threshold=TORCHCREPE_PERIODICITY_THRESHOLD,
+        min_note_seconds=TORCHCREPE_MIN_NOTE_SECONDS,
+        pitch_jump_split_semitones=TORCHCREPE_PITCH_JUMP_SPLIT_SEMITONES,
+    )
 
 
 class TorchcrepeBackend:
@@ -4679,6 +4722,7 @@ def analyze_transcription(
     stem_paths: dict | None = None,
     backend: TranscriptionBackend | None = None,
     emit_progress_markers: bool = False,
+    backend_id: str | None = None,
 ) -> dict:
     """Run transcription via the specified backend (torchcrepe by default)."""
     def _invoke_backend(candidate: TranscriptionBackend) -> dict:
@@ -4694,14 +4738,22 @@ def analyze_transcription(
             return candidate.transcribe(audio_path, stem_paths)
 
     if backend is None:
-        requested_backend = str(
-            os.getenv(TRANSCRIPTION_BACKEND_ENV, "auto")
-        ).strip().lower()
-        if requested_backend not in ("torchcrepe", "torchcrepe-viterbi", "auto", "", "default"):
-            print(
-                f"[warn] Unknown {TRANSCRIPTION_BACKEND_ENV}='{requested_backend}', defaulting to torchcrepe-viterbi",
-                file=sys.stderr,
-            )
+        requested_backend = (
+            backend_id
+            if backend_id is not None
+            else os.getenv(TRANSCRIPTION_BACKEND_ENV, "auto")
+        )
+        if backend_id is not None:
+            resolve_transcription_backend_id(requested_backend)
+        else:
+            try:
+                resolve_transcription_backend_id(requested_backend)
+            except ValueError:
+                print(
+                    f"[warn] Unknown {TRANSCRIPTION_BACKEND_ENV}='{requested_backend}', defaulting to {DEFAULT_TRANSCRIPTION_BACKEND}",
+                    file=sys.stderr,
+                )
+
         backend = TorchcrepeBackend()
 
     return _invoke_backend(backend)
@@ -4710,7 +4762,11 @@ def analyze_transcription(
 # ── Main ───────────────────────────────────────────────────────────────────
 
 
-def _run_pitch_note_translation(audio_path: str, stem_dir: str | None = None):
+def _run_pitch_note_translation(
+    audio_path: str,
+    stem_dir: str | None = None,
+    backend_id: str | None = None,
+):
     """Run pitch/note translation only and print JSON to stdout.
 
     Used by server.py to run pitch/note translation work in a subprocess so that
@@ -4742,6 +4798,7 @@ def _run_pitch_note_translation(audio_path: str, stem_dir: str | None = None):
         result = analyze_transcription(
             audio_path,
             stem_paths=stem_paths,
+            backend_id=backend_id,
         )
         json.dump(result, sys.stdout, indent=2)
         sys.stdout.write("\n")
@@ -4753,7 +4810,7 @@ def _run_pitch_note_translation(audio_path: str, stem_dir: str | None = None):
 def main():
     if len(sys.argv) < 2:
         print(
-            "Usage: ./venv/bin/python analyze.py <audio_file> [--separate] [--fast] [--standard] [--transcribe] [--yes] [--pitch-note-only] [--stem-dir DIR]",
+            "Usage: ./venv/bin/python analyze.py <audio_file> [--separate] [--fast] [--standard] [--transcribe] [--yes] [--pitch-note-only] [--stem-dir DIR] [--pitch-note-backend BACKEND]",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -4771,11 +4828,16 @@ def main():
     # --pitch-note-only: run pitch/note translation, print JSON, exit
     if pitch_note_only:
         stem_dir = None
+        backend_id = None
         if "--stem-dir" in optional_args:
             idx = optional_args.index("--stem-dir")
             if idx + 1 < len(optional_args):
                 stem_dir = optional_args[idx + 1]
-        _run_pitch_note_translation(audio_path, stem_dir=stem_dir)
+        if "--pitch-note-backend" in optional_args:
+            idx = optional_args.index("--pitch-note-backend")
+            if idx + 1 < len(optional_args):
+                backend_id = optional_args[idx + 1]
+        _run_pitch_note_translation(audio_path, stem_dir=stem_dir, backend_id=backend_id)
         sys.exit(0)
     stems = None
 

@@ -35,12 +35,13 @@ The current repo should be judged against two intended outputs:
 | Pitch/note translation worker integration point | `apps/backend/server.py` pitch/note translation worker calls `analyze_transcription()` rather than importing Basic Pitch directly. | `Aligned` | The `TranscriptionBackend` slot is real. |
 | Measurement authority | Canonical measurement strips `transcriptionDetail` before persistence. | `Aligned` | Layer 1 is no longer silently polluted by Layer 2 output. |
 | Legacy wrappers | `/api/analyze`, `/api/phase2`, `Phase1Result.transcriptionDetail`, and display projections still preserve the old flat blob. | `Misaligned but compatibility-only` | Acceptable during migration. Do not expand this surface. |
-| Session Musician UI wording | The panel existed in a “MIDI transcription / polyphonic vs monophonic” frame. | `Misaligned and needs migration` | Updated in this pass toward pitch/note notes vs melody guide wording. |
-| Producer-summary Gemini prompt | `apps/backend/prompts/phase2_system.txt` still treated `transcriptionDetail` as polyphonic truth and blurred pitch/note vs measurement authority. | `Misaligned and needs migration` | Updated in this pass. |
-| Basic Pitch framing | Core docs and runtime strings still presented Basic Pitch as a normal/default backend. | `Misaligned and needs migration` | Updated in this pass to `legacy` framing. |
+| Session Musician UI wording | The panel now uses `pitch/note` vs `melody guide` wording instead of the old “polyphonic vs monophonic” frame. | `Aligned` | This matches the actual product promise: draft note extraction plus a separate melody guide. |
+| Producer-summary Gemini prompt | `apps/backend/prompts/phase2_system.txt` now treats `transcriptionDetail` as best-effort note context rather than polyphonic truth. | `Aligned` | Measurement authority and interpretation authority are separated correctly. |
+| Basic Pitch framing | Core docs and runtime strings now treat Basic Pitch as a removed legacy experiment, not a current backend. | `Aligned` | This closes the previous doc drift. |
+| Polyphonic full-track evaluation path | Research-only evaluation now lives in `apps/backend/polyphonic_evaluation.py` and `apps/backend/scripts/evaluate_polyphonic.py`. | `Aligned` | The repo has an offline comparison path without polluting the product backend or UI. |
 | Experiment B profile | No dedicated `stem_summary` interpretation profile existed. | `Misaligned and needs migration` | Added in this pass as a distinct Layer 3 profile. |
 | Descriptor hooks for experiments | Measurement had the raw data (`rhythmDetail.downbeats`, `segmentLoudness`, `sidechainDetail`) but no explicit experiment-oriented hook bundle. | `Misaligned and needs migration` | Added in this pass through prompt grounding hooks, not a broad MIR expansion. |
-| Torchcrepe readiness | Strategy doc implied torchcrepe was effectively ready; the backend venv currently does **not** have `torchcrepe` or `penn` installed. | `Misaligned and needs migration` | This is a hard repo-state mismatch, not a theoretical one. |
+| Torchcrepe readiness | Strategy doc implied torchcrepe was effectively ready; the backend venv was missing transcription dependencies when this audit was written. | `Misaligned and needs migration` | The later PENN experiment did not change the product conclusion: torchcrepe remains the only adopted Layer 2 backend. |
 | Experiment A evaluation pack | No checked-in Vtss bass stem or equivalent three-case evaluation pack is present in the repo. | `Misaligned and needs migration` | The experiment rubric exists in strategy, but the asset pack does not. |
 | Ableton / blueprint horizon | The repo does not implement a reconstruction blueprint system. | `Aligned` | This is correct; report `(2)` should remain horizon guidance only. |
 
@@ -89,14 +90,16 @@ Status:
 
 Relevant to this repo now:
 
-- torchcrepe and PENN are the right Layer 2 experiment set
+- torchcrepe was the right adopted Layer 2 backend, and PENN was a reasonable experiment to test once
 - Gemini stem listening is a Layer 3 interpretation path, not a transcription backend
 - polyphonic electronic-music transcription remains the wrong bet
 
 Repo consequence:
 - keep `TranscriptionBackend`
 - quarantine Basic Pitch
+- record that PENN was assessed and not adopted
 - add `stem_summary` as a separate interpretation profile
+- keep polyphonic full-track experiments out of the live product path
 
 ### `deep-research-report (1).md`
 
@@ -121,14 +124,10 @@ Repo consequence:
 
 ## Immediate Next Steps After This Audit
 
-1. Run Experiment A with a real evaluation pack:
-   - one clean bass stem
-   - one glide-heavy bass stem
-   - one ambiguous melodic/other stem
-2. Install and test `torchcrepe` before discussing output quality.
-3. Try `PENN` only if torchcrepe fails the quality bar.
-4. Keep `BasicPitchBackend` available only as a legacy comparison backend during the experiment window.
-5. Evaluate `stem_summary` independently of local MIDI quality.
+1. Keep the product backend on `torchcrepe-viterbi`.
+2. Validate torchcrepe on a broader real producer corpus instead of adding more Layer 2 backend churn.
+3. If polyphonic full-track transcription is revisited, run it only through the offline research harness with `basic-pitch` and optional `MT3`.
+4. Evaluate `stem_summary` independently of local MIDI quality.
 
 ## Decision Gates
 
@@ -153,11 +152,11 @@ The runtime architecture is ahead of the product language. The repo already has 
 - pluggable pitch/note translation slot
 - grounded interpretation slot
 
-What it lacked was honesty at the edges:
+What it now needs is discipline at the edges:
 
-- Basic Pitch still looked current instead of legacy
-- Session Musician still implied a stronger transcription promise than the strategy supports
-- Gemini had no distinct stem-listening profile
-- the experiment inputs described in strategy were not actually present in the repo
+- keep Basic Pitch and MT3 in the research harness, not the product path
+- keep Session Musician framed as pitch/note draft output plus melody guide
+- keep Gemini stem listening separate from note extraction claims
+- keep evaluation grounded in real producer clips instead of theoretical backend swaps
 
-This pass fixes the language, the interpretation profile boundary, and the audit trail. The next pass should be a real backend bakeoff, not more theory.
+The repo now has the right boundaries. The next pass should be corpus-driven evaluation, not more dependency churn.

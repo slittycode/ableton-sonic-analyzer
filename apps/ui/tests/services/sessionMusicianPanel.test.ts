@@ -91,7 +91,7 @@ describe('SessionMusicianPanel confidence helpers', () => {
     expect(html).not.toContain('title="Low confidence — treat this as approximate."');
   });
 
-  it('renders monophonic stats without a filtered prefix and disables the confidence slider', () => {
+  it('renders melody-guide stats without a filtered prefix and disables the confidence slider', () => {
     const html = renderToStaticMarkup(
       React.createElement(SessionMusicianPanel, {
         phase1: {
@@ -199,7 +199,7 @@ describe('SessionMusicianPanel confidence helpers', () => {
     expect(formatFilteredNoteCount(3, 3, 0)).toBe('3 NOTES');
   });
 
-  it('derives transcription provenance only for the active polyphonic source', () => {
+  it('derives transcription provenance only for the active pitch-note source', () => {
     const mixedSourceTranscriptionDetail: TranscriptionDetail = {
       transcriptionMethod: 'torchcrepe-viterbi',
       noteCount: 4,
@@ -229,11 +229,11 @@ describe('SessionMusicianPanel confidence helpers', () => {
       ],
     };
 
-    expect(deriveTranscriptionProvenance('polyphonic', mixedSourceTranscriptionDetail)).toEqual({
+    expect(deriveTranscriptionProvenance('pitchNote', mixedSourceTranscriptionDetail)).toEqual({
       transcriptionPathLabel: 'STEM-AWARE',
       stemSourcesLabel: 'bass, other',
     });
-    expect(deriveTranscriptionProvenance('monophonic', mixedSourceTranscriptionDetail)).toEqual({
+    expect(deriveTranscriptionProvenance('melodyGuide', mixedSourceTranscriptionDetail)).toEqual({
       transcriptionPathLabel: null,
       stemSourcesLabel: null,
     });
@@ -242,7 +242,7 @@ describe('SessionMusicianPanel confidence helpers', () => {
       stemSourcesLabel: null,
     });
     expect(
-      deriveTranscriptionProvenance('polyphonic', {
+      deriveTranscriptionProvenance('pitchNote', {
         ...mixedSourceTranscriptionDetail,
         stemSeparationUsed: false,
         stemsTranscribed: ['full_mix'],
@@ -253,7 +253,7 @@ describe('SessionMusicianPanel confidence helpers', () => {
     });
   });
 
-  it('shows a quality-limited badge for polyphonic full-mix fallback results', () => {
+  it('shows a quality-limited badge for pitch-note full-mix fallback results', () => {
     const html = renderToStaticMarkup(
       React.createElement(SessionMusicianPanel, {
         phase1: {
@@ -299,7 +299,7 @@ describe('SessionMusicianPanel confidence helpers', () => {
     expect(html).toContain('FULL MIX — quality limited');
   });
 
-  it('hides polyphonic provenance badges and updates helper copy in monophonic mixed-source mode', async () => {
+  it('hides pitch-note provenance badges and updates helper copy in melody-guide mixed-source mode', async () => {
     vi.resetModules();
     vi.doMock('react', async () => {
       const actual = await vi.importActual<typeof import('react')>('react');
@@ -311,7 +311,7 @@ describe('SessionMusicianPanel confidence helpers', () => {
         useState<T>(initialState: T | (() => T)) {
           useStateCallCount += 1;
           if (useStateCallCount === 3) {
-            return actual.useState('monophonic' as T);
+            return actual.useState('melodyGuide' as T);
           }
           return actual.useState(initialState);
         },
@@ -378,5 +378,6 @@ describe('SessionMusicianPanel confidence helpers', () => {
     expect(html).not.toContain('STEMS: bass, other');
     expect(html).toContain('Per-note confidence not available in melody-guide mode');
     expect(html).not.toContain('Adjust confidence threshold to filter noise before export.');
+    expect(html).toContain('Essentia melody guide. Adjust quantize before preview/export.');
   });
 });

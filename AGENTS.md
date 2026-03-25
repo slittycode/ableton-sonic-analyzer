@@ -16,6 +16,8 @@ The system follows a **three-layer hybrid architecture** that separates determin
 
 This split exists because frontier audio-language models (as of early 2026) still degrade on measurement tasks like BPM estimation and key detection. The hybrid approach leverages the strengths of each layer.
 
+In plain English: ASA can give you a usable pitch-note sketch and a melody guide, but it does not currently promise reliable full-track polyphonic audio-to-MIDI from dense mixed songs.
+
 ### System Architecture
 
 ```
@@ -26,7 +28,7 @@ This split exists because frontier audio-language models (as of early 2026) stil
 └─────────────────────────────────────────────────────────────────┘
                               ↓
 ┌─────────────────────────────────────────────────────────────────┐
-│  LAYER 2 — PITCH/NOTE TRANSLATION (torchcrepe/PENN)            │
+│  LAYER 2 — PITCH/NOTE TRANSLATION (torchcrepe)                 │
 │  Best-effort monophonic pitch on Demucs stems                  │
 │  Bass + Other stems → MIDI notes with confidence               │
 └─────────────────────────────────────────────────────────────────┘
@@ -94,9 +96,11 @@ asa/
 │       ├── analyze.py         # CLI analyzer (DSP engine)
 │       ├── server.py          # FastAPI HTTP server
 │       ├── analysis_runtime.py # SQLite persistence layer
+│       ├── polyphonic_evaluation.py # Research-only polyphonic spike harness
 │       ├── requirements.txt   # Python dependencies
 │       ├── scripts/
-│       │   └── bootstrap.sh   # Environment setup
+│       │   ├── bootstrap.sh   # Environment setup
+│       │   └── evaluate_polyphonic.py # Research-only evaluator entry point
 │       ├── tests/             # unittest suite
 │       └── prompts/           # Gemini system prompts
 ├── scripts/

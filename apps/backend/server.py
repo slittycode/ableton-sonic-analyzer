@@ -30,7 +30,11 @@ from fastapi import FastAPI, File, Form, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
-from analysis_runtime import AnalysisRuntime, UnsupportedPitchNoteModeError
+from analysis_runtime import (
+    AnalysisRuntime,
+    UnsupportedPitchNoteBackendError,
+    UnsupportedPitchNoteModeError,
+)
 from analyze import (
     build_analysis_estimate,
     get_audio_duration_seconds,
@@ -692,7 +696,7 @@ async def _estimate_analysis_run(
             _resolve_interpretation_profile_config(interpretation_profile)
 
         temp_path, _file_size_bytes = _persist_upload(track)
-        _ = pitch_note_backend
+        _ = AnalysisRuntime._resolve_pitch_note_backend(pitch_note_backend)
         _ = interpretation_model
 
         resolved_run_separation, resolved_run_transcribe = _resolve_estimate_flags_for_stage_request(
@@ -1124,6 +1128,8 @@ def _execute_pitch_note_attempt(
             "./venv/bin/python", "analyze.py",
             source_artifact["path"],
             "--pitch-note-only",
+            "--pitch-note-backend",
+            attempt["backendId"],
             "--yes",
         ]
 
@@ -1552,6 +1558,16 @@ async def create_analysis_run(
             interpretation_model=interpretation_model,
         )
         return JSONResponse(content=_normalize_run_snapshot(runtime.get_run(run_id), runtime))
+    except UnsupportedPitchNoteBackendError as exc:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "code": "PITCH_NOTE_BACKEND_UNSUPPORTED",
+                    "message": str(exc),
+                }
+            },
+        )
     except ValueError as exc:
         return JSONResponse(
             status_code=400,
@@ -1600,6 +1616,16 @@ async def estimate_analysis_run(
             content={
                 "error": {
                     "code": "PITCH_NOTE_MODE_UNSUPPORTED",
+                    "message": str(exc),
+                }
+            },
+        )
+    except UnsupportedPitchNoteBackendError as exc:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "code": "PITCH_NOTE_BACKEND_UNSUPPORTED",
                     "message": str(exc),
                 }
             },
@@ -1805,6 +1831,7 @@ async def create_pitch_note_translation_attempt(
 ) -> JSONResponse:
     runtime = get_analysis_runtime()
     try:
+        resolved_backend = runtime._resolve_pitch_note_backend(pitch_note_backend)
         if runtime.get_measurement_status(run_id) != "completed":
             return JSONResponse(
                 status_code=409,
@@ -1817,12 +1844,12 @@ async def create_pitch_note_translation_attempt(
             )
         runtime.create_pitch_note_attempt(
             run_id,
-            backend_id=pitch_note_backend,
+            backend_id=resolved_backend,
             mode=pitch_note_mode,
             status="queued",
             provenance={
                 "schemaVersion": "pitch_note_translation.v1",
-                "backendId": pitch_note_backend,
+                "backendId": resolved_backend,
                 "mode": pitch_note_mode,
                 "requestedViaApi": True,
             },
@@ -1835,6 +1862,16 @@ async def create_pitch_note_translation_attempt(
                 "error": {
                     "code": "RUN_NOT_FOUND",
                     "message": f"Analysis run '{run_id}' was not found.",
+                }
+            },
+        )
+    except UnsupportedPitchNoteBackendError as exc:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "code": "PITCH_NOTE_BACKEND_UNSUPPORTED",
+                    "message": str(exc),
                 }
             },
         )

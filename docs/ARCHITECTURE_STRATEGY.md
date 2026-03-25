@@ -29,7 +29,7 @@ This means the split is correct and should be maintained: **measure locally, tra
 └─────────────────────────────────────────────────────────────┘
                           ↓
 ┌─────────────────────────────────────────────────────────────┐
-│  LAYER 2 — PITCH/NOTE TRANSLATION (torchcrepe / PENN)          │
+│  LAYER 2 — PITCH/NOTE TRANSLATION (torchcrepe)                 │
 │  Best-effort. Honest about uncertainty.                     │
 │  Monophonic pitch contour → note segmentation               │
 │  Runs on Demucs-separated stems only (bass + other)         │
@@ -54,8 +54,8 @@ This means the split is correct and should be maintained: **measure locally, tra
 |---|---|---|
 | Essentia 2.1b6.dev1389 | ✅ Healthy — MTG-maintained, July 2025 wheels, Python 3.9–3.13 | Stay. Irreplaceable for measurement. |
 | Demucs 4.0.1 | 🟡 Frozen — Meta archived Jan 1 2025, adefossez fork is bug-fix only | Stay. Models are excellent and stable. No better alternative at comparable quality. Monitor adefossez fork for compatibility drift. |
-| torchcrepe 0.0.24 | ✅ Active — sole transcription backend, installed and tested | Stay. Replaced basic-pitch (removed). |
-| PENN 1.0.0 | 🔬 Alternative candidate — research-driven, pitch + periodicity co-output | Adds 6 new packages including `huggingface_hub` (downloads models at runtime from HuggingFace). Try only if torchcrepe produces insufficient quality. |
+| torchcrepe 0.0.24 | ✅ Active — default transcription backend, installed and tested | Stay as the `auto` default. Current local benchmark evidence still favors it. |
+| PENN 1.0.0 | ❌ Evaluated and rejected for now | March 2026 stem-aware benchmarks showed no useful quality win over torchcrepe, while adding latency, setup weight, and first-run model-download cost. Do not ship it in ASA unless a future corpus proves a clear advantage. |
 | librosa 0.11.0 | ✅ Active — spectrogram + time-series visualization via spectral_viz.py | Stay. Visualization layer only; not authoritative for measurements. |
 | matplotlib 3.10.8 | ✅ Active — rendering backend for librosa spectrogram PNGs | Stay. Used via Agg backend (thread-safe, non-interactive). |
 | PyTorch 2.10, FastAPI, Pydantic | ✅ Healthy | Stay. |
@@ -72,6 +72,7 @@ The Session Musician piano roll was built assuming polyphonic transcription of e
 
 **What is not achievable right now:**
 - Polyphonic synth transcription. Not a 12-18 month horizon problem. Don't build infrastructure for it.
+- Productized full-track polyphonic audio-to-MIDI for dense mixed producer songs. If this is explored at all, keep it inside the offline research harness documented in `docs/POLYPHONIC_TRANSCRIPTION_SPIKE.md`, not inside the live backend or UI.
 
 **The two-path design:**
 
@@ -125,7 +126,7 @@ The Codex architecture hardening plan (SQLite + job queue + async Phase 2) is th
 - Client-supplied `phase1_json` trust gap (client can tamper with measurements Gemini interprets)
 - Blocking request model unsuitability for Demucs + transcription runtimes
 
-**Ordering constraint (resolved):** Basic Pitch was removed and torchcrepe is the sole transcription backend. The hardening infrastructure does not carry any legacy pitch/note translation dependencies.
+**Ordering constraint (resolved):** Basic Pitch was removed and Layer 2 currently standardizes on `torchcrepe-viterbi`. PENN was benchmarked and then removed after failing to justify its operational cost. The hardening infrastructure does not carry any legacy pitch/note translation dependencies.
 
 **Ordering constraint:** The Gemini stem-listening experiment (Experiment B) requires server-owned artifact storage to exist first. The hardening plan creates that. Do not attempt Experiment B before the hardening is in place.
 
@@ -135,13 +136,14 @@ The Codex architecture hardening plan (SQLite + job queue + async Phase 2) is th
 
 | Timeframe | Work | Why |
 |---|---|---|
-| Done | basic-pitch removed, torchcrepe is sole backend, venv cleaned | Clean foundation before adding anything |
+| Done | basic-pitch removed, transcription protocol hardened, PENN benchmarked and rejected | Clean foundation before quality comparison |
 | Now | Architecture hardening (SQLite + jobs + async Phase 2) | Makes the tool restart-safe and trust-correct |
-| Next | Experiment A — torchcrepe vs PENN on Vtss bass stem | Closes the question on local monophonic quality |
+| Next | Experiment A replacement — gather a broader real producer corpus for torchcrepe validation | The PENN question is closed for now; quality work should focus on real target material instead of more backend churn |
+| Next | Polyphonic full-track research spike stays offline-only | Compare `basic-pitch` and optional `MT3` through `apps/backend/scripts/evaluate_polyphonic.py`; do not expose a product backend unless the corpus clears the manual usefulness gates |
 | Next | Experiment B — Gemini stem listening with Structured Outputs | Only after artifact storage exists |
 | +1 month | Backport genreProfiles, abletonDevices, mixDoctor from sonic-architect-app | Grounds Phase 2 Gemini in spectral targets rather than freeform inference |
 | +3 months | Ship Session Musician v2 — whichever path(s) produced usable output, honestly labelled | Product decision based on experiment results |
-| +6 months | Re-evaluate polyphonic transcription landscape | The field is moving. TranscriptionBackend Protocol means a new model is a single class swap. |
+| +6 months | Re-evaluate polyphonic transcription landscape | The field is moving, but new candidates should first go through the offline research harness instead of going straight into the product path. |
 
 ---
 

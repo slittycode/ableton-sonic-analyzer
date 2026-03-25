@@ -18,7 +18,7 @@ The app uploads a track to the local DSP backend, shows the estimate and executi
 - analysis result dashboard with arrangement, sonic, mix-chain, patch, and secret-sauce sections
 - Session Musician panel with:
   - pitch/note view when `transcriptionDetail` exists
-  - monophonic Essentia melody guide when `melodyDetail` exists
+  - Essentia melody guide when `melodyDetail` exists
   - source toggle when both are available
   - confidence threshold slider (pitch/note mode only; disabled in melody-guide mode with tooltip)
   - quantize grid and swing controls

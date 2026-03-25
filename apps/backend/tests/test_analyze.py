@@ -7,7 +7,6 @@ import tempfile
 import unittest
 import wave
 from pathlib import Path
-from types import SimpleNamespace
 from unittest import mock
 
 import numpy as np
@@ -445,6 +444,59 @@ class TranscriptionBackendAbstractionTests(unittest.TestCase):
         stub = _StubBackend()
         result = self.analyze.analyze_transcription("nonexistent.wav", backend=stub)
         self.assertEqual(result, {"transcriptionDetail": None})
+
+    def test_resolve_transcription_backend_id_maps_supported_aliases(self) -> None:
+        self.assertEqual(
+            self.analyze.resolve_transcription_backend_id("auto"),
+            "torchcrepe-viterbi",
+        )
+        self.assertEqual(
+            self.analyze.resolve_transcription_backend_id("torchcrepe"),
+            "torchcrepe-viterbi",
+        )
+
+    def test_resolve_transcription_backend_id_rejects_unknown_backend(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Unsupported transcription backend 'mystery'"):
+            self.analyze.resolve_transcription_backend_id("mystery")
+
+    def test_resolve_transcription_backend_id_rejects_penn(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Unsupported transcription backend 'penn'"):
+            self.analyze.resolve_transcription_backend_id("penn")
+
+    def test_analyze_transcription_rejects_explicit_unknown_backend_id(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Unsupported transcription backend 'mystery'"):
+            self.analyze.analyze_transcription(
+                "nonexistent.wav",
+                backend_id="mystery",
+            )
+
+    def test_main_forwards_pitch_note_backend_to_pitch_note_only_runner(self) -> None:
+        with (
+            mock.patch.object(
+                self.analyze,
+                "_run_pitch_note_translation",
+            ) as run_pitch_note_translation_mock,
+            mock.patch.object(
+                self.analyze.sys,
+                "argv",
+                [
+                    "analyze.py",
+                    "track.wav",
+                    "--pitch-note-only",
+                    "--pitch-note-backend",
+                    "torchcrepe-viterbi",
+                ],
+            ),
+        ):
+            with self.assertRaises(SystemExit) as exit_ctx:
+                self.analyze.main()
+
+        self.assertEqual(exit_ctx.exception.code, 0)
+        run_pitch_note_translation_mock.assert_called_once_with(
+            "track.wav",
+            stem_dir=None,
+            backend_id="torchcrepe-viterbi",
+        )
 
 
 class AcidDetailTests(unittest.TestCase):

@@ -81,7 +81,7 @@ async function pressSliderKey(locator: import('@playwright/test').Locator, key: 
   }
 }
 
-test('phase1 dual-source session musician panel toggles between polyphonic and monophonic views', async ({ page }) => {
+test('phase1 dual-source session musician panel toggles between pitch-note and melody-guide views', async ({ page }) => {
   await stubGeminiPhase2(page);
   await page.route('**/api/analysis-runs/estimate', async (route) => {
     const body = route.request().postData() ?? '';
@@ -399,7 +399,7 @@ test('phase1 dual-source session musician panel toggles between polyphonic and m
 
   await panel.getByRole('button', { name: 'MELODY' }).click();
   await expect(panel.getByText('MELODY GUIDE: ESSENTIA').first()).toBeVisible();
-  await expect(panel.getByText(/Monophonic melody guide via Essentia/)).toBeVisible();
+  await expect(panel.getByText(/Essentia melody guide\./)).toBeVisible();
   await expect(panel.getByText('STEM-AWARE')).toHaveCount(0);
   await expect(panel.getByText('STEMS:')).toHaveCount(0);
   await expect(panel.getByText('3 NOTES')).toBeVisible();

@@ -296,6 +296,40 @@ class ServerContractTests(unittest.TestCase):
         self.assertEqual(payload["error"]["code"], "PITCH_NOTE_MODE_UNSUPPORTED")
         self.assertIn("invalid_mode", payload["error"]["message"])
 
+    def test_analysis_runs_estimate_rejects_unknown_pitch_note_backend(self) -> None:
+        response = asyncio.run(
+            server.estimate_analysis_run(
+                track=self._upload_file(),
+                pitch_note_mode="stem_notes",
+                pitch_note_backend="mystery-backend",
+                interpretation_mode="off",
+                interpretation_profile="producer_summary",
+                interpretation_model=None,
+            )
+        )
+
+        self.assertEqual(response.status_code, 400)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["error"]["code"], "PITCH_NOTE_BACKEND_UNSUPPORTED")
+        self.assertIn("mystery-backend", payload["error"]["message"])
+
+    def test_analysis_runs_endpoint_rejects_unknown_pitch_note_backend(self) -> None:
+        response = asyncio.run(
+            server.create_analysis_run(
+                track=self._upload_file(),
+                pitch_note_mode="stem_notes",
+                pitch_note_backend="mystery-backend",
+                interpretation_mode="off",
+                interpretation_profile="producer_summary",
+                interpretation_model=None,
+            )
+        )
+
+        self.assertEqual(response.status_code, 400)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["error"]["code"], "PITCH_NOTE_BACKEND_UNSUPPORTED")
+        self.assertIn("mystery-backend", payload["error"]["message"])
+
     def test_analysis_runs_estimate_rejects_unknown_interpretation_profile(self) -> None:
         response = asyncio.run(
             server.estimate_analysis_run(
@@ -2158,6 +2192,53 @@ class StageWorkerTests(unittest.TestCase):
                 snapshot["stages"]["pitchNoteTranslation"]["result"]["transcriptionMethod"],
                 "torchcrepe-viterbi",
             )
+
+    def test_pitch_note_worker_passes_backend_flag_to_subprocess(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+
+        mock_result = json.dumps({"transcriptionDetail": None})
+
+        with tempfile.TemporaryDirectory(prefix="asa_pitch_note_runtime_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            created = runtime.create_run(
+                filename="track.mp3",
+                content=b"fake-audio",
+                mime_type="audio/mpeg",
+                pitch_note_mode="stem_notes",
+                pitch_note_backend="torchcrepe-viterbi",
+                interpretation_mode="off",
+                interpretation_profile="producer_summary",
+                interpretation_model=None,
+            )
+            attempt_id = runtime.create_pitch_note_attempt(
+                created["runId"],
+                backend_id="torchcrepe-viterbi",
+                mode="stem_notes",
+                status="queued",
+            )
+            runtime.reserve_pitch_note_attempt(attempt_id)
+
+            fake_proc = subprocess.CompletedProcess(
+                args=[],
+                returncode=0,
+                stdout=mock_result,
+                stderr="",
+            )
+            with patch.object(server.subprocess, "run", return_value=fake_proc) as subprocess_mock:
+                server._execute_pitch_note_attempt(
+                    runtime,
+                    {
+                        "attemptId": attempt_id,
+                        "runId": created["runId"],
+                        "backendId": "torchcrepe-viterbi",
+                        "mode": "stem_notes",
+                    },
+                )
+
+        subprocess_mock.assert_called_once()
+        cmd = subprocess_mock.call_args[0][0]
+        self.assertIn("--pitch-note-backend", cmd)
+        self.assertIn("torchcrepe-viterbi", cmd)
 
 
 if __name__ == "__main__":

@@ -209,7 +209,7 @@ test('Phase 2 controls show config-disabled state when the env kill-switch is of
   await page.getByRole('button', { name: /Run Analysis/i }).click();
 
   await expectAnalysisResultsVisible(page);
-  await expect(page.getByText('126')).toBeVisible();
+  await expect(page.getByText('126', { exact: true }).first()).toBeVisible();
   await expect(
     page.getByText('AI interpretation skipped because it was disabled by configuration.', { exact: true }).first(),
   ).toBeVisible();
@@ -293,7 +293,7 @@ test('malformed Gemini Phase 2 response degrades gracefully to skipped', async (
   await page.getByRole('button', { name: /Run Analysis/i }).click();
 
   await expectAnalysisResultsVisible(page);
-  await expect(page.getByText('126')).toBeVisible();
+  await expect(page.getByText('126', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('System Diagnostics')).toBeVisible();
   await expect(
     page.getByText('Gemini returned invalid JSON.', { exact: true }).first(),

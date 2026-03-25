@@ -32,6 +32,7 @@ const NOTE_COLORS = {
 };
 
 const LOW_CONFIDENCE_TITLE = "Low confidence — treat this as approximate.";
+type SessionMusicianSource = 'pitchNote' | 'melodyGuide' | 'none';
 
 export function filterNotesByConfidence(notes: MidiDisplayNote[], confidenceThreshold: number): MidiDisplayNote[] {
   return notes.filter((note) => note.confidence >= confidenceThreshold);
@@ -49,10 +50,10 @@ export function formatFilteredNoteCount(
 }
 
 export function deriveTranscriptionProvenance(
-  activeSource: 'polyphonic' | 'monophonic' | 'none',
+  activeSource: SessionMusicianSource,
   transcriptionDetail: Phase1Result['transcriptionDetail'] | null | undefined,
 ): { transcriptionPathLabel: string | null; stemSourcesLabel: string | null } {
-  if (activeSource !== 'polyphonic' || !transcriptionDetail) {
+  if (activeSource !== 'pitchNote' || !transcriptionDetail) {
     return {
       transcriptionPathLabel: null,
       stemSourcesLabel: null,
@@ -184,7 +185,7 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
   const previewRef = useRef<PreviewHandle | null>(null);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [expanded, setExpanded] = useState(true);
-  const [sourceMode, setSourceMode] = useState<"polyphonic" | "monophonic">("polyphonic");
+  const [sourceMode, setSourceMode] = useState<'pitchNote' | 'melodyGuide'>('pitchNote');
   const [confidenceThreshold, setConfidenceThreshold] = useState(0.2);
   const [quantizeOptions, setQuantizeOptions] = useState<QuantizeOptions>({ grid: 'off', swing: 0 });
   const [activeStemFilter, setActiveStemFilter] = useState<string | null>(null);
@@ -194,19 +195,19 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
   const activeSource = canToggle
     ? sourceMode
     : hasTranscription
-      ? 'polyphonic'
+      ? 'pitchNote'
       : hasMelody
-        ? 'monophonic'
+        ? 'melodyGuide'
         : 'none';
 
   useEffect(() => {
-    if (activeSource !== 'polyphonic') {
+    if (activeSource !== 'pitchNote') {
       setActiveStemFilter(null);
     }
   }, [activeSource]);
 
   const activeNotes = useMemo<MidiDisplayNote[]>(() => {
-    if (activeSource === 'polyphonic' && transcriptionDetail?.notes?.length) {
+    if (activeSource === 'pitchNote' && transcriptionDetail?.notes?.length) {
       let notes = transcriptionDetail.notes;
       if (activeStemFilter) {
         notes = notes.filter((note) => note.stemSource === activeStemFilter);
@@ -221,7 +222,7 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
       }));
     }
 
-    if (activeSource === 'monophonic' && melodyDetail?.notes?.length) {
+    if (activeSource === 'melodyGuide' && melodyDetail?.notes?.length) {
       return melodyDetail.notes.map((note) => ({
         midi: note.midi,
         name: midiToNoteName(note.midi),
@@ -236,7 +237,7 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
   }, [activeSource, activeStemFilter, melodyDetail, transcriptionDetail]);
 
   const filteredNotes = useMemo(() => {
-    if (activeSource === 'polyphonic') {
+    if (activeSource === 'pitchNote') {
       return filterNotesByConfidence(activeNotes, confidenceThreshold);
     }
     return activeNotes;
@@ -298,12 +299,12 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
     const minMidi = midiValues.length ? Math.min(...midiValues) : null;
     const maxMidi = midiValues.length ? Math.max(...midiValues) : null;
     const avgConfidence = Math.round(
-      (activeSource === 'polyphonic'
+      (activeSource === 'pitchNote'
         ? transcriptionDetail?.averageConfidence ?? 0
         : melodyDetail?.pitchConfidence ?? 0) * 100,
     );
     const totalDuration = displayNotes.reduce((sum, note) => sum + note.duration, 0).toFixed(1);
-    const countThreshold = activeSource === 'polyphonic' ? confidenceThreshold : 0;
+    const countThreshold = activeSource === 'pitchNote' ? confidenceThreshold : 0;
 
     return {
       countLabel: formatFilteredNoteCount(filteredNotes.length, activeNotes.length, countThreshold),
@@ -316,11 +317,11 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
   const hasNotes = displayNotes.length > 0;
   const confidenceThresholdPercent = Math.round(confidenceThreshold * 100);
   const dominantNoteNames =
-    activeSource === 'polyphonic'
+    activeSource === 'pitchNote'
       ? transcriptionDetail?.dominantPitches.map((note) => note.pitchName) ?? []
       : melodyDetail?.dominantNotes.map((note) => midiToNoteName(note)) ?? [];
   const rangeLabel =
-    activeSource === 'polyphonic'
+    activeSource === 'pitchNote'
       ? transcriptionDetail?.pitchRange.minName && transcriptionDetail?.pitchRange.maxName
         ? `${transcriptionDetail.pitchRange.minName} - ${transcriptionDetail.pitchRange.maxName}`
         : 'n/a'
@@ -328,21 +329,21 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
         ? 'n/a'
         : `${midiToNoteName(melodyDetail.pitchRange.min)} - ${midiToNoteName(melodyDetail.pitchRange.max)}`;
   const confidencePercent =
-    activeSource === 'polyphonic'
+    activeSource === 'pitchNote'
       ? Math.round((transcriptionDetail?.averageConfidence ?? 0) * 100)
-      : activeSource === 'monophonic'
+      : activeSource === 'melodyGuide'
         ? Math.round((melodyDetail?.pitchConfidence ?? 0) * 100)
         : 0;
   const isDraft =
-    activeSource === 'polyphonic'
+    activeSource === 'pitchNote'
       ? (transcriptionDetail?.averageConfidence ?? 0) < 0.15
-      : activeSource === 'monophonic'
+      : activeSource === 'melodyGuide'
         ? (melodyDetail?.pitchConfidence ?? 0) < 0.15
         : false;
   const sourceBadgeLabel =
-    activeSource === 'polyphonic'
+    activeSource === 'pitchNote'
       ? `PITCH/NOTE: ${formatPitchNoteMethodLabel(transcriptionDetail?.transcriptionMethod)}`
-      : activeSource === 'monophonic'
+      : activeSource === 'melodyGuide'
         ? 'MELODY GUIDE: ESSENTIA'
         : null;
   const { transcriptionPathLabel, stemSourcesLabel } = deriveTranscriptionProvenance(activeSource, transcriptionDetail);
@@ -403,9 +404,9 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
             {canToggle && (
               <div className="inline-flex items-center rounded-sm border border-border bg-bg-panel/40 p-0.5">
                 <button
-                  onClick={() => setSourceMode('polyphonic')}
+                  onClick={() => setSourceMode('pitchNote')}
                   className={`px-2 py-1 rounded-sm text-[10px] font-mono uppercase transition-colors ${
-                    activeSource === 'polyphonic'
+                    activeSource === 'pitchNote'
                       ? 'bg-accent text-bg-app'
                       : 'text-text-secondary hover:text-text-primary'
                   }`}
@@ -413,9 +414,9 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
                   PITCH/NOTE
                 </button>
                 <button
-                  onClick={() => setSourceMode('monophonic')}
+                  onClick={() => setSourceMode('melodyGuide')}
                   className={`px-2 py-1 rounded-sm text-[10px] font-mono uppercase transition-colors ${
-                    activeSource === 'monophonic'
+                    activeSource === 'melodyGuide'
                       ? 'bg-accent text-bg-app'
                       : 'text-text-secondary hover:text-text-primary'
                   }`}
@@ -516,7 +517,7 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
                 {!stats && (
                   <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono uppercase tracking-wide text-text-secondary">
                     <span className="px-2 py-1 rounded border border-border bg-bg-panel/40">
-                      {activeSource === 'polyphonic' ? transcriptionDetail?.noteCount ?? 0 : melodyDetail?.noteCount ?? 0} notes
+                      {activeSource === 'pitchNote' ? transcriptionDetail?.noteCount ?? 0 : melodyDetail?.noteCount ?? 0} notes
                     </span>
                     <span className="px-2 py-1 rounded border border-border bg-bg-panel/40">Range: {rangeLabel}</span>
                     <span className="px-2 py-1 rounded border border-border bg-bg-panel/40">Confidence: {confidencePercent}%</span>
@@ -575,7 +576,7 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
 
               <div
                 className="flex items-center gap-2 px-2 py-1 rounded border border-border bg-bg-card"
-                title={activeSource === 'monophonic' ? 'Per-note confidence not available in melody-guide mode' : undefined}
+                title={activeSource === 'melodyGuide' ? 'Per-note confidence not available in melody-guide mode' : undefined}
               >
                 <span className="text-[10px] font-mono uppercase text-text-secondary">CONFIDENCE</span>
                 <input
@@ -585,7 +586,7 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
                   step={0.05}
                   value={confidenceThreshold}
                   onChange={(event) => setConfidenceThreshold(Number(event.target.value))}
-                  disabled={!hasSourceNotes || activeSource === 'monophonic'}
+                  disabled={!hasSourceNotes || activeSource === 'melodyGuide'}
                   className="w-20 h-1 accent-accent disabled:opacity-30"
                 />
                 <span className="text-[10px] font-mono text-text-secondary w-8 text-right">{confidenceThresholdPercent}%</span>
@@ -615,10 +616,10 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
             <div className="flex items-start gap-2 text-[10px] font-mono text-text-secondary/80">
               <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
               <span title="Session musician transcription details">
-                {activeSource === 'polyphonic'
+                {activeSource === 'pitchNote'
                   ? `${formatPitchNoteMethodLabel(transcriptionDetail?.transcriptionMethod)} pitch detection. Adjust quantize before preview/export. Adjust confidence threshold to filter noise before export.`
-                  : activeSource === 'monophonic'
-                    ? 'Monophonic melody guide via Essentia. Adjust quantize before preview/export. Per-note confidence not available in melody-guide mode.'
+                  : activeSource === 'melodyGuide'
+                    ? 'Essentia melody guide. Adjust quantize before preview/export. Per-note confidence not available in melody-guide mode.'
                     : 'Pitch detection unavailable until pitch/note translation or melodyDetail is present in the DSP payload.'}
                 {isDraft ? ' Confidence is low, so treat this clip as a draft scaffold.' : ''}
               </span>

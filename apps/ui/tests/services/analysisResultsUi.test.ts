@@ -410,7 +410,7 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).not.toContain('PITCH/NOTE: TORCHCREPE');
     expect(html).not.toContain('TORCHCREPE pitch detection');
     expect(html).toContain('MELODY GUIDE: ESSENTIA');
-    expect(html).toContain('Monophonic melody guide via Essentia');
+    expect(html).toContain('Essentia melody guide.');
   });
 
   it('renders full-mix provenance when transcription did not use Demucs stems', () => {

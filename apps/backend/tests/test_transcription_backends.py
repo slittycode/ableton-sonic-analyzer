@@ -1,7 +1,7 @@
 """Transcription backend evaluation harness.
 
 Generates synthetic audio test cases and runs TorchcrepeBackend
-to verify note extraction quality.
+to verify best-effort note extraction behavior.
 """
 
 import importlib
@@ -78,8 +78,12 @@ class TranscriptionBackendEvaluationTests(unittest.TestCase):
         notes = result.get("notes", [])
         self.assertGreater(len(notes), 0, "Should detect at least one note")
 
-    def test_polyphonic_two_simultaneous_notes(self):
-        """Two simultaneous tones — tests how backend handles polyphony."""
+    def test_two_simultaneous_notes_return_best_effort_output(self):
+        """Two simultaneous tones should not crash the monophonic backend.
+
+        In plain English: this is only a resilience check. It is not evidence
+        that ASA can recover accurate polyphonic notes from dense material.
+        """
         sr = self.sr
         a = _sine_tone(220.0, 1.0, sr)
         b = _sine_tone(330.0, 1.0, sr)

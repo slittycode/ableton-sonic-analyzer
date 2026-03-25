@@ -29,6 +29,36 @@ class AnalysisRuntimeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Unsupported pitch/note mode 'melody_only'"):
             runtime.resolve_measurement_flags("melody_only")
 
+    def test_resolve_pitch_note_backend_resolves_auto_and_aliases(self) -> None:
+        runtime = self._runtime()
+
+        self.assertEqual(
+            runtime._resolve_pitch_note_backend("auto"),
+            "torchcrepe-viterbi",
+        )
+        self.assertEqual(
+            runtime._resolve_pitch_note_backend("torchcrepe"),
+            "torchcrepe-viterbi",
+        )
+
+    def test_resolve_pitch_note_backend_rejects_unknown_backend(self) -> None:
+        runtime = self._runtime()
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Unsupported pitch/note backend 'mystery-backend'",
+        ):
+            runtime._resolve_pitch_note_backend("mystery-backend")
+
+    def test_resolve_pitch_note_backend_rejects_penn(self) -> None:
+        runtime = self._runtime()
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Unsupported pitch/note backend 'penn'",
+        ):
+            runtime._resolve_pitch_note_backend("penn")
+
     def test_runtime_initializes_sqlite_for_poll_heavy_local_access(self) -> None:
         runtime = self._runtime()
 

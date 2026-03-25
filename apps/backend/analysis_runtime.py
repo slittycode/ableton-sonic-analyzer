@@ -34,6 +34,12 @@ class UnsupportedPitchNoteModeError(ValueError):
         super().__init__(f"Unsupported pitch/note mode '{pitch_note_mode}'.")
 
 
+class UnsupportedPitchNoteBackendError(ValueError):
+    def __init__(self, pitch_note_backend: str):
+        self.pitch_note_backend = pitch_note_backend
+        super().__init__(f"Unsupported pitch/note backend '{pitch_note_backend}'.")
+
+
 class AnalysisRuntime:
     def __init__(self, runtime_dir: Path, max_pending_per_stage: int = 4):
         self.runtime_dir = Path(runtime_dir)
@@ -170,6 +176,7 @@ class AnalysisRuntime:
     ) -> dict[str, Any]:
         if self._count_active_measurement_runs() >= self.max_pending_per_stage:
             raise RuntimeError("Measurement queue is full.")
+        self._resolve_pitch_note_backend(pitch_note_backend)
         run_id = str(uuid4())
         artifact_id = str(uuid4())
         created_at = _utc_now_iso()
@@ -1260,9 +1267,10 @@ class AnalysisRuntime:
 
     @staticmethod
     def _resolve_pitch_note_backend(requested_backend: str) -> str:
-        if requested_backend == "auto":
-            return "auto"
-        return requested_backend
+        normalized = str(requested_backend or "").strip().lower()
+        if normalized in ("auto", "", "default", "torchcrepe", "torchcrepe-viterbi"):
+            return "torchcrepe-viterbi"
+        raise UnsupportedPitchNoteBackendError(normalized)
 
     @staticmethod
     def resolve_measurement_flags(

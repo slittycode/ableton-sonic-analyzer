@@ -4,7 +4,7 @@
 
 | Component | Role |
 | --- | --- |
-| `analyze.py` | Raw CLI analyzer. Loads audio, runs DSP, optionally separates stems and transcribes notes, then prints JSON to `stdout`. |
+| `analyze.py` | Raw CLI analyzer. Loads audio, runs DSP, optionally separates stems and transcribes notes through torchcrepe, then prints JSON to `stdout`. |
 | `server.py` | FastAPI wrapper. Accepts uploads, computes an estimate, shells out to `analyze.py`, normalizes the result into the HTTP `phase1` contract, and returns diagnostics or structured errors. |
 | `tests/test_server.py` | Contract tests for estimate, timeout, and success envelopes. |
 | `spectral_viz.py` | Librosa-based spectrogram generation and spectral time-series extraction. Produces mel/chroma PNG spectrograms and per-frame spectral evolution JSON. Called after successful measurement; failures are non-critical. |
@@ -20,7 +20,7 @@ Responsibilities:
 - read the input file
 - optionally run Demucs separation
 - run the Phase 1 DSP analysis functions
-- optionally run torchcrepe transcription
+- optionally run pitch/note transcription through torchcrepe
 - emit the raw analyzer JSON
 
 Interface:
@@ -254,7 +254,7 @@ When the analyzer never produces a valid JSON object, `timings.fileDurationSecon
 
 Flow:
 
-1. Import the torchcrepe transcription backend.
+1. Resolve the requested pitch backend and import the torchcrepe transcription backend.
 2. Choose transcription sources:
    - `bass` and `other` stems when Demucs succeeded
    - otherwise `full_mix`

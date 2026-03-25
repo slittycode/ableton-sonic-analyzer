@@ -36,7 +36,8 @@ python3.11 -m venv venv
 
 - Main runtime dependencies are pinned in `requirements.txt`.
 - Python `3.12+` is not a supported full-feature local bootstrap target on macOS arm64 because Essentia 2.1b6 wheels are only published for 3.11 on arm64.
-- Basic Pitch has been removed. The canonical Layer 2 backend is `TorchcrepeBackend` via the `TranscriptionBackend` protocol. New experiments should land as protocol implementations rather than one-off integrations.
+- Basic Pitch has been removed. `TorchcrepeBackend` is the canonical Layer 2 backend. PENN was assessed and removed after local benchmarks showed no meaningful win over torchcrepe for ASA's stem-aware note workflow.
+- Do not add Basic Pitch or MT3 as production backends in `analyze.py` or `server.py`. If you need to investigate polyphonic full-track transcription, use `polyphonic_evaluation.py` and `scripts/evaluate_polyphonic.py` as a research-only harness.
 - If audio/DSP imports fail, check local native dependencies before editing code.
 
 ## Main Commands

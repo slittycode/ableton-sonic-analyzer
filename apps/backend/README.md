@@ -62,7 +62,7 @@ Bootstrap contract for this monorepo `v1.0.0` cut:
 ### Command
 
 ```bash
-./venv/bin/python analyze.py <audio_file> [--separate] [--transcribe] [--fast] [--yes]
+./venv/bin/python analyze.py <audio_file> [--separate] [--transcribe] [--fast] [--yes] [--pitch-note-backend BACKEND]
 ```
 
 ### Flags
@@ -70,8 +70,9 @@ Bootstrap contract for this monorepo `v1.0.0` cut:
 | Flag | Current behavior |
 | --- | --- |
 | `<audio_file>` | Required input path. |
-| `--separate` | Runs Demucs before melody analysis. If `--transcribe` is also enabled, the torchcrepe backend uses the `bass` and `other` stems when they exist. |
-| `--transcribe` | Runs the torchcrepe backend and returns `transcriptionDetail`. Without Demucs it transcribes the full mix; with Demucs it transcribes `bass` and `other` separately and merges the notes. |
+| `--separate` | Runs Demucs before melody analysis. If `--transcribe` is also enabled, the selected pitch backend uses the `bass` and `other` stems when they exist. |
+| `--transcribe` | Runs the selected pitch backend and returns `transcriptionDetail`. Without Demucs it transcribes the full mix; with Demucs it transcribes `bass` and `other` separately and merges the notes. |
+| `--pitch-note-backend BACKEND` | Selects the Layer 2 backend for `--pitch-note-only`. Supported values are `auto`, `torchcrepe-viterbi`, and alias `torchcrepe`. |
 | `--fast` | Accepted, but currently a no-op parser stub. |
 | `--yes` | Skips the interactive confirmation prompt after the CLI prints its runtime estimate. |
 
@@ -88,8 +89,33 @@ Bootstrap contract for this monorepo `v1.0.0` cut:
 ./venv/bin/python analyze.py track.wav
 ./venv/bin/python analyze.py track.wav --separate --yes
 ./venv/bin/python analyze.py track.wav --transcribe --yes
+./venv/bin/python analyze.py track.wav --pitch-note-only --pitch-note-backend torchcrepe-viterbi --yes
 ./venv/bin/python analyze.py track.wav --separate --transcribe --yes > analysis.json
 ```
+
+### PENN assessment outcome
+
+PENN was evaluated as an alternative Layer 2 backend and then removed.
+
+In plain English: it did not produce a useful quality win over the existing stem-aware torchcrepe path, it was slower in local benchmarks, and it added extra setup cost and first-run model downloads. ASA stays on `torchcrepe-viterbi` for pitch/note translation.
+
+### Polyphonic full-track research spike
+
+ASA does not ship a production polyphonic full-track transcription backend.
+
+In plain English: for dense mixed songs, current public models still do not clear the quality bar needed for a reliable producer feature. If you want to compare research candidates anyway, use the offline harness:
+
+```bash
+./venv/bin/python scripts/evaluate_polyphonic.py --manifest /absolute/path/to/polyphonic_manifest.json
+```
+
+That harness is isolated from the product runtime. It writes MIDI or note-event artifacts plus a JSON report, and it supports:
+
+- `basic-pitch` as the lightweight baseline when installed in the active environment
+- `MT3` through an explicit `--mt3-command` template when you have a local runner or Colab-exported wrapper
+- optional Demucs stem exports for diagnostics only
+
+See [docs/POLYPHONIC_TRANSCRIPTION_SPIKE.md](../../docs/POLYPHONIC_TRANSCRIPTION_SPIKE.md) for the manifest format, command examples, and the manual usefulness gates.
 
 ## Raw CLI Output
 
@@ -171,7 +197,7 @@ Multipart form fields:
 
 - `track` required file upload
 - `pitch_note_mode` optional string; `stem_notes` includes Demucs plus pitch/note translation time
-- `pitch_note_backend` optional string
+- `pitch_note_backend` optional string; supported values are `auto`, `torchcrepe-viterbi`, and `torchcrepe`
 - `interpretation_mode` optional string
 - `interpretation_profile` optional string
 - `interpretation_model` optional string
