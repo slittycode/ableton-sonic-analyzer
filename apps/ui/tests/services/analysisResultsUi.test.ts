@@ -300,7 +300,7 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).not.toContain('title="Low confidence — treat this as approximate."');
   });
 
-  it('renders a danceability section when backend danceability data is present', () => {
+  it('renders danceability metrics in the rhythm section when backend danceability data is present', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
         phase1: {
@@ -315,10 +315,10 @@ describe('AnalysisResults UI wiring', () => {
       }),
     );
 
-    expect(html).toContain('Danceability');
-    expect(html).toContain('DFA');
+    expect(html).toContain('Rhythm &amp; Groove');
     expect(html).toContain('1.24');
-    expect(html).toContain('0.87');
+    expect(html).toContain('DFA (Rhythmic Complexity)');
+    expect(html).toContain('0.870');
   });
 
   it('uses normalized midi download filename', () => {
