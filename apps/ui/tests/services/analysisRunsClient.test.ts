@@ -6,6 +6,7 @@ import {
   createInterpretationAttempt,
   createSymbolicExtractionAttempt,
   getAnalysisRun,
+  interruptAnalysisRun,
   projectPhase1FromRun,
   projectPhase2FromRun,
   projectStemSummaryFromRun,
@@ -14,6 +15,7 @@ import {
 const baseRunSnapshot: AnalysisRunSnapshot = {
   runId: 'run_123',
   requestedStages: {
+    analysisMode: 'full',
     symbolicMode: 'stem_notes',
     symbolicBackend: 'auto',
     interpretationMode: 'async',
@@ -152,6 +154,7 @@ describe('analysisRunsClient', () => {
     const file = new File(['audio-data'], 'track.mp3', { type: 'audio/mpeg' });
     const snapshot = await createAnalysisRun(file, {
       apiBaseUrl: 'http://127.0.0.1:8100',
+      analysisMode: 'standard',
       symbolicMode: 'stem_notes',
       symbolicBackend: 'auto',
       interpretationMode: 'async',
@@ -164,6 +167,7 @@ describe('analysisRunsClient', () => {
     const request = fetchSpy.mock.calls[0];
     expect(request[0]).toBe('http://127.0.0.1:8100/api/analysis-runs');
     const body = request[1].body as FormData;
+    expect(body.get('analysis_mode')).toBe('standard');
     expect(body.get('symbolic_mode')).toBe('stem_notes');
     expect(body.get('symbolic_backend')).toBe('auto');
     expect(body.get('interpretation_mode')).toBe('async');
@@ -343,5 +347,24 @@ describe('analysisRunsClient', () => {
     });
 
     expect(fetchSpy.mock.calls[0]?.[0]).toBe('http://127.0.0.1:8100/api/analysis-runs/run_123/interpretations');
+  });
+
+  it('interrupts an analysis run through the canonical endpoint', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 202,
+      statusText: 'Accepted',
+      json: () => Promise.resolve(baseRunSnapshot),
+    } as Response);
+    vi.stubGlobal('fetch', fetchSpy);
+
+    await interruptAnalysisRun('run_123', {
+      apiBaseUrl: 'http://127.0.0.1:8100',
+    });
+
+    expect(fetchSpy.mock.calls[0]?.[0]).toBe('http://127.0.0.1:8100/api/analysis-runs/run_123/interrupt');
+    expect(fetchSpy.mock.calls[0]?.[1]).toMatchObject({
+      method: 'POST',
+    });
   });
 });

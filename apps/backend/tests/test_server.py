@@ -177,6 +177,7 @@ class ServerContractTests(unittest.TestCase):
         properties = self._request_body_properties("/api/analyze/estimate")
 
         self.assertIn("track", properties)
+        self.assertIn("analysis_mode", properties)
         self.assertIn("transcribe", properties)
         self.assertIn("separate", properties)
 
@@ -186,6 +187,7 @@ class ServerContractTests(unittest.TestCase):
         properties = self._request_body_properties("/api/analysis-runs")
 
         self.assertIn("track", properties)
+        self.assertIn("analysis_mode", properties)
         self.assertIn("symbolic_mode", properties)
         self.assertIn("symbolic_backend", properties)
         self.assertIn("interpretation_mode", properties)
@@ -201,6 +203,7 @@ class ServerContractTests(unittest.TestCase):
                 response = asyncio.run(
                     server.create_analysis_run(
                         track=self._upload_file(),
+                        analysis_mode="standard",
                         symbolic_mode="stem_notes",
                         symbolic_backend="auto",
                         interpretation_mode="async",
@@ -212,6 +215,7 @@ class ServerContractTests(unittest.TestCase):
         payload = self._decode_json_response(response)
         self.assertEqual(response.status_code, 200)
         self.assertIn("runId", payload)
+        self.assertEqual(payload["requestedStages"]["analysisMode"], "standard")
         self.assertEqual(payload["stages"]["measurement"]["status"], "queued")
         self.assertEqual(payload["stages"]["symbolicExtraction"]["status"], "blocked")
         self.assertEqual(payload["stages"]["interpretation"]["status"], "blocked")
@@ -225,6 +229,7 @@ class ServerContractTests(unittest.TestCase):
                 response = asyncio.run(
                     server.create_analysis_run(
                         track=self._upload_file(),
+                        analysis_mode="full",
                         symbolic_mode="off",
                         symbolic_backend="auto",
                         interpretation_mode="async",
@@ -246,6 +251,7 @@ class ServerContractTests(unittest.TestCase):
                 filename="track.mp3",
                 content=b"fake-audio",
                 mime_type="audio/mpeg",
+                analysis_mode="full",
                 symbolic_mode="off",
                 symbolic_backend="auto",
                 interpretation_mode="off",
@@ -259,6 +265,39 @@ class ServerContractTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(payload["runId"], created["runId"])
         self.assertIn("artifacts", payload)
+
+    def test_interrupt_analysis_run_marks_stages_interrupted_and_reports_terminated_children(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_server_runtime_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            created = runtime.create_run(
+                filename="track.mp3",
+                content=b"fake-audio",
+                mime_type="audio/mpeg",
+                analysis_mode="full",
+                symbolic_mode="stem_notes",
+                symbolic_backend="auto",
+                interpretation_mode="async",
+                interpretation_profile="producer_summary",
+                interpretation_model="gemini-2.5-flash",
+            )
+            with patch.object(server, "get_analysis_runtime", return_value=runtime), patch.object(
+                server,
+                "_interrupt_active_child_processes",
+                return_value=["measurement", "symbolicExtraction"],
+            ):
+                response = asyncio.run(server.interrupt_analysis_run(created["runId"]))
+
+        payload = self._decode_json_response(response)
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(payload["stages"]["measurement"]["status"], "interrupted")
+        self.assertEqual(payload["stages"]["symbolicExtraction"]["status"], "interrupted")
+        self.assertEqual(payload["stages"]["interpretation"]["status"], "interrupted")
+        self.assertEqual(
+            payload["interrupt"]["stagesTerminated"],
+            ["measurement", "symbolicExtraction"],
+        )
 
     @patch.object(server, "get_audio_duration_seconds", return_value=214.6, create=True)
     @patch.object(
@@ -1277,6 +1316,7 @@ class Phase2EndpointTests(unittest.TestCase):
             filename="track.mp3",
             content=b"server-owned-audio",
             mime_type="audio/mpeg",
+            analysis_mode="full",
             symbolic_mode="off",
             symbolic_backend="auto",
             interpretation_mode="off",
@@ -1371,6 +1411,7 @@ class Phase2EndpointTests(unittest.TestCase):
                 filename="track.mp3",
                 content=b"server-owned-audio",
                 mime_type="audio/mpeg",
+                analysis_mode="full",
                 symbolic_mode="off",
                 symbolic_backend="auto",
                 interpretation_mode="off",
@@ -1887,6 +1928,7 @@ class StageWorkerTests(unittest.TestCase):
                 filename="track.mp3",
                 content=b"fake-audio",
                 mime_type="audio/mpeg",
+                analysis_mode="standard",
                 symbolic_mode="stem_notes",
                 symbolic_backend="auto",
                 interpretation_mode="off",
@@ -1906,9 +1948,10 @@ class StageWorkerTests(unittest.TestCase):
             runtime,
             created["runId"],
             request_id=created["runId"],
-            run_separation=True,
-            run_transcribe=True,
+            run_separation=False,
+            run_transcribe=False,
             run_fast=False,
+            run_standard=True,
         )
 
     def test_reserved_measurement_job_fails_measurement_for_unsupported_symbolic_mode(self) -> None:
@@ -1920,6 +1963,7 @@ class StageWorkerTests(unittest.TestCase):
                 filename="track.mp3",
                 content=b"fake-audio",
                 mime_type="audio/mpeg",
+                analysis_mode="full",
                 symbolic_mode="melody_only",
                 symbolic_backend="auto",
                 interpretation_mode="off",
@@ -1936,7 +1980,7 @@ class StageWorkerTests(unittest.TestCase):
             self.assertEqual(snapshot["stages"]["measurement"]["status"], "failed")
             self.assertEqual(snapshot["stages"]["measurement"]["error"]["code"], "SYMBOLIC_MODE_UNSUPPORTED")
 
-    def test_symbolic_worker_uses_analyze_transcription_protocol_entry_point(self) -> None:
+    def test_symbolic_worker_consumes_symbolic_subprocess_result(self) -> None:
         from analysis_runtime import AnalysisRuntime
 
         with tempfile.TemporaryDirectory(prefix="asa_symbolic_runtime_") as temp_dir:
@@ -1945,6 +1989,7 @@ class StageWorkerTests(unittest.TestCase):
                 filename="track.mp3",
                 content=b"fake-audio",
                 mime_type="audio/mpeg",
+                analysis_mode="full",
                 symbolic_mode="stem_notes",
                 symbolic_backend="auto",
                 interpretation_mode="off",
@@ -1975,13 +2020,9 @@ class StageWorkerTests(unittest.TestCase):
             with (
                 patch.object(
                     server,
-                    "separate_stems",
-                    return_value={"bass": str(bass_path), "other": str(other_path)},
-                ),
-                patch.object(
-                    server,
-                    "analyze_transcription",
+                    "_run_symbolic_subprocess",
                     return_value={
+                        "ok": True,
                         "transcriptionDetail": {
                             "transcriptionMethod": "stub-backend",
                             "noteCount": 1,
@@ -1997,9 +2038,20 @@ class StageWorkerTests(unittest.TestCase):
                             "fullMixFallback": False,
                             "stemsTranscribed": ["bass", "other"],
                             "notes": [],
-                        }
+                        },
+                        "provenance": {
+                            "schemaVersion": "symbolic.v1",
+                            "backendId": "auto",
+                            "resolvedBackendId": "stub-backend",
+                            "mode": "stem_notes",
+                        },
+                        "diagnostics": {
+                            "backendDurationMs": 100.0,
+                            "sourceArtifactId": created["runId"],
+                        },
+                        "stemPaths": {"bass": str(bass_path), "other": str(other_path)},
                     },
-                ) as analyze_transcription_mock,
+                ) as run_symbolic_subprocess_mock,
             ):
                 server._execute_symbolic_attempt(
                     runtime,
@@ -2011,10 +2063,7 @@ class StageWorkerTests(unittest.TestCase):
                     },
                 )
 
-            analyze_transcription_mock.assert_called_once()
-            kwargs = analyze_transcription_mock.call_args.kwargs
-            self.assertIn("stem_paths", kwargs)
-            self.assertEqual(set(kwargs["stem_paths"].keys()), {"bass", "other"})
+            run_symbolic_subprocess_mock.assert_called_once()
             snapshot = runtime.get_run(created["runId"])
             self.assertEqual(snapshot["stages"]["symbolicExtraction"]["status"], "completed")
             self.assertEqual(

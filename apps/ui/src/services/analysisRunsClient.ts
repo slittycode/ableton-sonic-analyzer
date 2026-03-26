@@ -22,6 +22,7 @@ interface AnalysisRunsClientOptions {
 }
 
 interface CreateAnalysisRunOptions extends AnalysisRunsClientOptions {
+  analysisMode: 'full' | 'standard';
   symbolicMode: string;
   symbolicBackend: string;
   interpretationMode: string;
@@ -56,6 +57,7 @@ export async function createAnalysisRun(
 ): Promise<AnalysisRunSnapshot> {
   const body = new FormData();
   body.append('track', file);
+  body.append('analysis_mode', options.analysisMode);
   body.append('symbolic_mode', options.symbolicMode);
   body.append('symbolic_backend', options.symbolicBackend);
   body.append('interpretation_mode', options.interpretationMode);
@@ -69,6 +71,21 @@ export async function createAnalysisRun(
     {
       method: 'POST',
       body,
+      signal: options.signal,
+    },
+  );
+
+  return parseAnalysisRunSnapshot(response);
+}
+
+export async function interruptAnalysisRun(
+  runId: string,
+  options: AnalysisRunsClientOptions,
+): Promise<AnalysisRunSnapshot> {
+  const response = await fetchJson(
+    `${options.apiBaseUrl}/api/analysis-runs/${runId}/interrupt`,
+    {
+      method: 'POST',
       signal: options.signal,
     },
   );
@@ -250,6 +267,7 @@ function parseCanonicalMeasurementResult(value: unknown): MeasurementResult {
 function parseRequestedStages(value: unknown): AnalysisRunRequestedStages {
   const requested = expectRecord(value, 'requestedStages');
   return {
+    analysisMode: expectAnalysisMode(requested.analysisMode),
     symbolicMode: expectString(requested.symbolicMode, 'requestedStages.symbolicMode'),
     symbolicBackend: expectString(requested.symbolicBackend, 'requestedStages.symbolicBackend'),
     interpretationMode: expectString(requested.interpretationMode, 'requestedStages.interpretationMode'),
@@ -396,6 +414,13 @@ function parseNullableRecord(value: unknown): Record<string, unknown> | null {
     return null;
   }
   return expectRecord(value, 'record');
+}
+
+function expectAnalysisMode(value: unknown): 'full' | 'standard' {
+  if (value === 'full' || value === 'standard') {
+    return value;
+  }
+  throw new Error(`analysisMode must be 'full' or 'standard'; received ${String(value)}`);
 }
 
 function parseNullableError(value: unknown): AnalysisStageError | null {

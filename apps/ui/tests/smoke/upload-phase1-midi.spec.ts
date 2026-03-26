@@ -152,6 +152,7 @@ test('phase1 dual-source session musician panel toggles between polyphonic and m
       body: JSON.stringify({
         runId: 'run_smoke_midi_001',
         requestedStages: {
+          analysisMode: 'full',
           symbolicMode: 'stem_notes',
           symbolicBackend: 'auto',
           interpretationMode: 'async',
@@ -209,6 +210,7 @@ test('phase1 dual-source session musician panel toggles between polyphonic and m
       body: JSON.stringify({
         runId: 'run_smoke_midi_001',
         requestedStages: {
+          analysisMode: 'full',
           symbolicMode: 'stem_notes',
           symbolicBackend: 'auto',
           interpretationMode: 'async',
@@ -357,7 +359,8 @@ test('phase1 dual-source session musician panel toggles between polyphonic and m
   await page.goto('/', { waitUntil: 'networkidle' });
   const fixturePath = path.resolve(testDir, './fixtures/silence.wav');
   await page.setInputFiles('#audio-upload', fixturePath);
-  await expect(page.getByLabel('SYMBOLIC EXTRACTION')).toBeChecked();
+  await expect(page.getByLabel('SYMBOLIC EXTRACTION')).not.toBeChecked();
+  await page.getByLabel('SYMBOLIC EXTRACTION').check();
   await page.getByRole('button', { name: /Initiate Analysis/i }).click();
 
   const panel = page.locator('section').filter({ hasText: /SESSION MUSICIAN/i }).first();
@@ -459,6 +462,7 @@ test('missing melodyDetail shows MIDI unavailable state', async ({ page }) => {
       body: JSON.stringify({
         runId: 'run_smoke_midi_awaiting_001',
         requestedStages: {
+          analysisMode: 'full',
           symbolicMode: 'off',
           symbolicBackend: 'auto',
           interpretationMode: 'async',
@@ -516,6 +520,7 @@ test('missing melodyDetail shows MIDI unavailable state', async ({ page }) => {
       body: JSON.stringify({
         runId: 'run_smoke_midi_awaiting_001',
         requestedStages: {
+          analysisMode: 'full',
           symbolicMode: 'off',
           symbolicBackend: 'auto',
           interpretationMode: 'async',

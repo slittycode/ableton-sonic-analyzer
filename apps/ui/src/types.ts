@@ -477,6 +477,7 @@ export interface AnalysisRunArtifact {
 }
 
 export interface AnalysisRunRequestedStages {
+  analysisMode: 'full' | 'standard';
   symbolicMode: string;
   symbolicBackend: string;
   interpretationMode: string;

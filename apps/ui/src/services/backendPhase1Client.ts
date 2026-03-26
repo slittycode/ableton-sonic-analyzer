@@ -75,6 +75,7 @@ export function createUserCancelledError(message = "Analysis was cancelled by th
 export interface AnalyzePhase1Options {
   apiBaseUrl: string;
   timeoutMs?: number;
+  analysisMode?: 'full' | 'standard';
   transcribe?: boolean;
   separate?: boolean;
   signal?: AbortSignal;
@@ -109,7 +110,13 @@ export async function estimatePhase1WithBackend(
   try {
     const response = await postBackendMultipart(
       `${options.apiBaseUrl}/api/analyze/estimate`,
-      buildTrackFormData(file, null, options.transcribe ?? false, options.separate ?? false),
+      buildTrackFormData(
+        file,
+        null,
+        options.transcribe ?? false,
+        options.separate ?? false,
+        options.analysisMode ?? 'full',
+      ),
       options.timeoutMs ?? DEFAULT_ESTIMATE_TIMEOUT_MS,
     );
 
@@ -432,11 +439,13 @@ function buildTrackFormData(
   dspJsonOverride: string | null,
   transcribe = false,
   separate = false,
+  analysisMode: 'full' | 'standard' = 'full',
 ): FormData {
   const formData = new FormData();
   formData.append("track", file);
   formData.append("transcribe", transcribe ? "true" : "false");
   formData.append("separate", separate ? "true" : "false");
+  formData.append("analysis_mode", analysisMode);
   if (dspJsonOverride?.trim()) {
     formData.append("dsp_json_override", dspJsonOverride);
   }

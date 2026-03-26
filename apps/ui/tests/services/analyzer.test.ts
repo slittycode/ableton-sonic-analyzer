@@ -141,6 +141,7 @@ function makeRunSnapshot(overrides?: Partial<AnalysisRunSnapshot>): AnalysisRunS
   return {
     runId: 'run_123',
     requestedStages: {
+      analysisMode: 'full',
       symbolicMode: 'stem_notes',
       symbolicBackend: 'auto',
       interpretationMode: 'async',
@@ -312,6 +313,7 @@ describe('analyzeAudio', () => {
     expect(createAnalysisRunMock).toHaveBeenCalledWith(
       file,
       expect.objectContaining({
+        analysisMode: 'full',
         symbolicMode: 'stem_notes',
         symbolicBackend: 'auto',
         interpretationMode: 'async',
@@ -367,6 +369,7 @@ describe('analyzeAudio', () => {
   it('skips interpretation cleanly when it is disabled in the UI', async () => {
     createAnalysisRunMock.mockResolvedValue(makeRunSnapshot({
       requestedStages: {
+        analysisMode: 'full',
         symbolicMode: 'stem_notes',
         symbolicBackend: 'auto',
         interpretationMode: 'off',
@@ -406,6 +409,7 @@ describe('analyzeAudio', () => {
     }));
     getAnalysisRunMock.mockResolvedValue(makeRunSnapshot({
       requestedStages: {
+        analysisMode: 'full',
         symbolicMode: 'stem_notes',
         symbolicBackend: 'auto',
         interpretationMode: 'off',
@@ -472,7 +476,7 @@ describe('analyzeAudio', () => {
     );
   });
 
-  it('treats stop-monitoring as user-cancelled and suppresses later results', async () => {
+  it('treats stop-monitoring as user-cancelled and suppresses later poll results', async () => {
     createAnalysisRunMock.mockResolvedValue(makeRunSnapshot({
       stages: {
         measurement: {
@@ -540,7 +544,14 @@ describe('analyzeAudio', () => {
 
     await promise;
 
-    expect(onRunUpdate).not.toHaveBeenCalled();
+    expect(onRunUpdate).toHaveBeenCalledTimes(1);
+    expect(onRunUpdate.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        runId: 'run_123',
+        displayPhase1: null,
+        displayPhase2: null,
+      }),
+    );
     expect(onPhase2Complete).not.toHaveBeenCalled();
     expect(onError).toHaveBeenCalledTimes(1);
     expect(onError.mock.calls[0]?.[0]).toBeInstanceOf(BackendClientError);

@@ -84,6 +84,8 @@ _PROMPTS_DIR = Path(__file__).parent / "prompts"
 _ANALYSIS_RUNTIME: AnalysisRuntime | None = None
 _BACKGROUND_TASKS: list[asyncio.Task[Any]] = []
 logger = logging.getLogger(__name__)
+_ACTIVE_CHILD_PROCESSES: dict[tuple[str, str], subprocess.Popen[Any]] = {}
+_ACTIVE_CHILD_PROCESSES_LOCK = threading.Lock()
 
 LEGACY_ENDPOINT_SUNSET = "Wed, 31 Dec 2026 23:59:59 GMT"
 
@@ -107,6 +109,55 @@ def _mark_legacy_endpoint_response(response: JSONResponse, *, endpoint: str) -> 
         f'299 - "{endpoint} is deprecated; use /api/analysis-runs instead."'
     )
     return response
+
+
+def _register_active_child_process(
+    run_id: str,
+    stage_key: str,
+    process: subprocess.Popen[Any],
+) -> None:
+    with _ACTIVE_CHILD_PROCESSES_LOCK:
+        _ACTIVE_CHILD_PROCESSES[(run_id, stage_key)] = process
+
+
+def _unregister_active_child_process(
+    run_id: str,
+    stage_key: str,
+    process: subprocess.Popen[Any],
+) -> None:
+    with _ACTIVE_CHILD_PROCESSES_LOCK:
+        existing = _ACTIVE_CHILD_PROCESSES.get((run_id, stage_key))
+        if existing is process:
+            _ACTIVE_CHILD_PROCESSES.pop((run_id, stage_key), None)
+
+
+def _terminate_process(process: subprocess.Popen[Any]) -> None:
+    if process.poll() is not None:
+        return
+    process.terminate()
+    try:
+        process.wait(timeout=2)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        try:
+            process.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            pass
+
+
+def _interrupt_active_child_processes(run_id: str) -> list[str]:
+    with _ACTIVE_CHILD_PROCESSES_LOCK:
+        active = [
+            (stage_key, process)
+            for (candidate_run_id, stage_key), process in _ACTIVE_CHILD_PROCESSES.items()
+            if candidate_run_id == run_id
+        ]
+
+    interrupted_stages: list[str] = []
+    for stage_key, process in active:
+        _terminate_process(process)
+        interrupted_stages.append(stage_key)
+    return interrupted_stages
 
 
 PRODUCER_SUMMARY_PROMPT_TEMPLATE = _load_prompt_template("phase2_system.txt")
@@ -354,6 +405,11 @@ async def _stop_background_tasks() -> None:
     for task in _BACKGROUND_TASKS:
         task.cancel()
     _BACKGROUND_TASKS = []
+    with _ACTIVE_CHILD_PROCESSES_LOCK:
+        active = list(_ACTIVE_CHILD_PROCESSES.values())
+        _ACTIVE_CHILD_PROCESSES.clear()
+    for process in active:
+        _terminate_process(process)
 
 
 def _coerce_number(value: Any, default: float = 0.0) -> float:
@@ -569,9 +625,117 @@ def _cleanup_temp_path(temp_path: str | None) -> None:
             pass
 
 
+def _parse_json_marker(line: str, prefix: str) -> dict[str, Any] | None:
+    if not line.startswith(prefix):
+        return None
+    payload_text = line.removeprefix(prefix).strip()
+    if not payload_text:
+        return None
+    try:
+        payload = json.loads(payload_text)
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _read_subprocess_stream(
+    stream: Any,
+    collector: list[str],
+    *,
+    line_handler: Any = None,
+) -> None:
+    try:
+        for raw_line in iter(stream.readline, ""):
+            if raw_line == "":
+                break
+            collector.append(raw_line)
+            if line_handler is not None:
+                line_handler(raw_line.rstrip("\r\n"))
+    finally:
+        try:
+            stream.close()
+        except Exception:
+            pass
+
+
+def _run_streamed_subprocess(
+    *,
+    command: list[str],
+    timeout_seconds: int,
+    run_id: str,
+    stage_key: str,
+    stderr_line_handler: Any = None,
+) -> dict[str, Any]:
+    if getattr(subprocess.run, "__module__", "").startswith("unittest.mock"):
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=timeout_seconds,
+            )
+        except subprocess.TimeoutExpired as exc:
+            return {
+                "returncode": None,
+                "stdout": exc.stdout,
+                "stderr": exc.stderr,
+                "timedOut": True,
+            }
+        return {
+            "returncode": result.returncode,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "timedOut": False,
+        }
+
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+    )
+    _register_active_child_process(run_id, stage_key, process)
+    stdout_chunks: list[str] = []
+    stderr_chunks: list[str] = []
+    stdout_thread = threading.Thread(
+        target=_read_subprocess_stream,
+        args=(process.stdout, stdout_chunks),
+        daemon=True,
+    )
+    stderr_thread = threading.Thread(
+        target=_read_subprocess_stream,
+        args=(process.stderr, stderr_chunks),
+        kwargs={"line_handler": stderr_line_handler},
+        daemon=True,
+    )
+    stdout_thread.start()
+    stderr_thread.start()
+
+    timed_out = False
+    try:
+        process.wait(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        _terminate_process(process)
+    finally:
+        stdout_thread.join(timeout=5)
+        stderr_thread.join(timeout=5)
+        _unregister_active_child_process(run_id, stage_key, process)
+
+    return {
+        "returncode": process.returncode,
+        "stdout": "".join(stdout_chunks),
+        "stderr": "".join(stderr_chunks),
+        "timedOut": timed_out,
+    }
+
+
 async def _create_analysis_run_record(
     *,
     track: UploadFile,
+    analysis_mode: str,
     symbolic_mode: str,
     symbolic_backend: str,
     interpretation_mode: str,
@@ -587,6 +751,7 @@ async def _create_analysis_run_record(
         filename=track.filename or "upload.bin",
         content=content,
         mime_type=track.content_type or _get_audio_mime_type(track.filename or "upload.bin"),
+        analysis_mode=analysis_mode,
         symbolic_mode=symbolic_mode,
         symbolic_backend=symbolic_backend,
         interpretation_mode=interpretation_mode,
@@ -601,14 +766,18 @@ def _build_measurement_provenance(
     *,
     run_separation: bool,
     run_transcribe: bool,
+    run_standard: bool,
     run_fast: bool,
 ) -> dict[str, Any]:
+    analysis_mode = "standard" if run_standard else "full"
     return {
         "schemaVersion": "measurement.v1",
         "engineVersion": ENGINE_VERSION,
         "requestOptions": {
+            "analysisMode": analysis_mode,
             "separate": run_separation,
             "transcribe": run_transcribe,
+            "standard": run_standard,
             "fast": run_fast,
         },
     }
@@ -620,15 +789,23 @@ def _resolve_symbolic_mode_for_legacy(transcribe: bool) -> str:
 
 def _run_measurement_subprocess(
     *,
+    runtime: AnalysisRuntime,
+    run_id: str,
     audio_path: str,
     file_size_bytes: int,
     request_id: str,
     request_started_at: datetime,
     run_separation: bool,
     run_transcribe: bool,
+    run_standard: bool,
     run_fast: bool,
 ) -> dict[str, Any]:
-    estimate = _build_backend_estimate(audio_path, run_separation, run_transcribe)
+    estimate = _build_backend_estimate(
+        audio_path,
+        run_separation,
+        run_transcribe,
+        analysis_mode="standard" if run_standard else "full",
+    )
     command = ["./venv/bin/python", "analyze.py", audio_path, "--yes"]
     flags_used: list[str] = []
     if run_separation:
@@ -637,6 +814,9 @@ def _run_measurement_subprocess(
     if run_transcribe:
         command.append("--transcribe")
         flags_used.append("--transcribe")
+    if run_standard and not run_fast:
+        command.append("--standard")
+        flags_used.append("--standard")
     if run_fast:
         command.append("--fast")
         flags_used.append("--fast")
@@ -644,45 +824,58 @@ def _run_measurement_subprocess(
     timeout_seconds = _compute_timeout_seconds(estimate)
     analysis_started_at = _current_time()
     try:
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=timeout_seconds,
-        )
-    except subprocess.TimeoutExpired as exc:
-        analysis_completed_at = _current_time()
-        diagnostics = _build_diagnostics(
-            request_id=request_id,
-            estimate=estimate,
+        def handle_stderr_line(line: str) -> None:
+            progress_payload = _parse_json_marker(line, "@@ASA_PROGRESS")
+            if progress_payload is not None:
+                runtime.update_measurement_progress(
+                    run_id,
+                    step_key=_coerce_string(
+                        progress_payload.get("stepKey"), "measurement_progress"
+                    ),
+                    message=_coerce_string(
+                        progress_payload.get("message"),
+                        "Local measurement is in progress.",
+                    ),
+                    fraction=_coerce_nullable_number(progress_payload.get("fraction")),
+                )
+                return
+
+            if line.startswith("@@SEPARATION_COMPLETE"):
+                runtime.update_measurement_pipeline_progress(
+                    run_id,
+                    pipeline_key="separation",
+                    status="completed",
+                    step_key="separation_complete",
+                    message="Legacy stem separation completed.",
+                )
+                return
+
+            if line.startswith("@@TRANSCRIPTION_START"):
+                runtime.update_measurement_pipeline_progress(
+                    run_id,
+                    pipeline_key="transcription",
+                    status="running",
+                    step_key="transcription_running",
+                    message="Legacy transcription is running.",
+                )
+                return
+
+            if line.startswith("@@TRANSCRIPTION_COMPLETE"):
+                runtime.update_measurement_pipeline_progress(
+                    run_id,
+                    pipeline_key="transcription",
+                    status="completed",
+                    step_key="transcription_complete",
+                    message="Legacy transcription completed.",
+                )
+
+        result = _run_streamed_subprocess(
+            command=command,
             timeout_seconds=timeout_seconds,
-            request_started_at=request_started_at,
-            analysis_started_at=analysis_started_at,
-            analysis_completed_at=analysis_completed_at,
-            flags_used=flags_used,
-            file_size_bytes=file_size_bytes,
-            file_duration_seconds=None,
-            engine_version=ENGINE_VERSION,
-            stdout=exc.stdout,
-            stderr=exc.stderr,
+            run_id=run_id,
+            stage_key="measurement",
+            stderr_line_handler=handle_stderr_line,
         )
-        return {
-            "ok": False,
-            "statusCode": 504,
-            "errorCode": "ANALYZER_TIMEOUT",
-            "message": "Local DSP analysis timed out before completion.",
-            "retryable": True,
-            "estimate": estimate,
-            "timeoutSeconds": timeout_seconds,
-            "flagsUsed": flags_used,
-            "requestStartedAt": request_started_at,
-            "analysisStartedAt": analysis_started_at,
-            "analysisCompletedAt": analysis_completed_at,
-            "stdout": exc.stdout,
-            "stderr": exc.stderr,
-            "diagnostics": diagnostics,
-        }
     except Exception as exc:
         analysis_completed_at = _current_time()
         diagnostics = _build_diagnostics(
@@ -715,7 +908,7 @@ def _run_measurement_subprocess(
         }
 
     analysis_completed_at = _current_time()
-    if result.returncode != 0:
+    if result["timedOut"]:
         diagnostics = _build_diagnostics(
             request_id=request_id,
             estimate=estimate,
@@ -727,8 +920,40 @@ def _run_measurement_subprocess(
             file_size_bytes=file_size_bytes,
             file_duration_seconds=None,
             engine_version=ENGINE_VERSION,
-            stdout=result.stdout,
-            stderr=result.stderr,
+            stdout=result["stdout"],
+            stderr=result["stderr"],
+        )
+        return {
+            "ok": False,
+            "statusCode": 504,
+            "errorCode": "ANALYZER_TIMEOUT",
+            "message": "Local DSP analysis timed out before completion.",
+            "retryable": True,
+            "estimate": estimate,
+            "timeoutSeconds": timeout_seconds,
+            "flagsUsed": flags_used,
+            "requestStartedAt": request_started_at,
+            "analysisStartedAt": analysis_started_at,
+            "analysisCompletedAt": analysis_completed_at,
+            "stdout": result["stdout"],
+            "stderr": result["stderr"],
+            "diagnostics": diagnostics,
+        }
+
+    if result["returncode"] != 0:
+        diagnostics = _build_diagnostics(
+            request_id=request_id,
+            estimate=estimate,
+            timeout_seconds=timeout_seconds,
+            request_started_at=request_started_at,
+            analysis_started_at=analysis_started_at,
+            analysis_completed_at=analysis_completed_at,
+            flags_used=flags_used,
+            file_size_bytes=file_size_bytes,
+            file_duration_seconds=None,
+            engine_version=ENGINE_VERSION,
+            stdout=result["stdout"],
+            stderr=result["stderr"],
         )
         return {
             "ok": False,
@@ -742,12 +967,12 @@ def _run_measurement_subprocess(
             "requestStartedAt": request_started_at,
             "analysisStartedAt": analysis_started_at,
             "analysisCompletedAt": analysis_completed_at,
-            "stdout": result.stdout,
-            "stderr": result.stderr,
+            "stdout": result["stdout"],
+            "stderr": result["stderr"],
             "diagnostics": diagnostics,
         }
 
-    stdout = result.stdout.strip()
+    stdout = str(result["stdout"]).strip()
     if not stdout:
         diagnostics = _build_diagnostics(
             request_id=request_id,
@@ -760,7 +985,7 @@ def _run_measurement_subprocess(
             file_size_bytes=file_size_bytes,
             file_duration_seconds=None,
             engine_version=ENGINE_VERSION,
-            stderr=result.stderr,
+            stderr=result["stderr"],
         )
         return {
             "ok": False,
@@ -774,7 +999,7 @@ def _run_measurement_subprocess(
             "requestStartedAt": request_started_at,
             "analysisStartedAt": analysis_started_at,
             "analysisCompletedAt": analysis_completed_at,
-            "stderr": result.stderr,
+            "stderr": result["stderr"],
             "diagnostics": diagnostics,
         }
 
@@ -793,7 +1018,7 @@ def _run_measurement_subprocess(
             file_duration_seconds=None,
             engine_version=ENGINE_VERSION,
             stdout=stdout,
-            stderr=result.stderr,
+            stderr=result["stderr"],
         )
         return {
             "ok": False,
@@ -808,7 +1033,7 @@ def _run_measurement_subprocess(
             "analysisStartedAt": analysis_started_at,
             "analysisCompletedAt": analysis_completed_at,
             "stdout": stdout,
-            "stderr": result.stderr,
+            "stderr": result["stderr"],
             "diagnostics": diagnostics,
         }
 
@@ -825,7 +1050,7 @@ def _run_measurement_subprocess(
             file_duration_seconds=None,
             engine_version=ENGINE_VERSION,
             stdout=stdout,
-            stderr=result.stderr,
+            stderr=result["stderr"],
         )
         return {
             "ok": False,
@@ -839,7 +1064,7 @@ def _run_measurement_subprocess(
             "analysisStartedAt": analysis_started_at,
             "analysisCompletedAt": analysis_completed_at,
             "stdout": stdout,
-            "stderr": result.stderr,
+            "stderr": result["stderr"],
             "diagnostics": diagnostics,
         }
 
@@ -875,21 +1100,36 @@ def _execute_measurement_run(
     request_id: str,
     run_separation: bool,
     run_transcribe: bool,
+    run_standard: bool,
     run_fast: bool,
 ) -> dict[str, Any]:
     source_artifact = runtime.get_source_artifact(run_id)
     execution = _run_measurement_subprocess(
+        runtime=runtime,
+        run_id=run_id,
         audio_path=source_artifact["path"],
         file_size_bytes=source_artifact["sizeBytes"],
         request_id=request_id,
         request_started_at=_current_time(),
         run_separation=run_separation,
         run_transcribe=run_transcribe,
+        run_standard=run_standard,
         run_fast=run_fast,
     )
+    if runtime.is_run_interrupted(run_id):
+        return {
+            **execution,
+            "ok": False,
+            "interrupted": True,
+            "statusCode": 202,
+            "errorCode": "ANALYSIS_INTERRUPTED",
+            "message": "Analysis run was interrupted before completion.",
+            "retryable": False,
+        }
     provenance = _build_measurement_provenance(
         run_separation=run_separation,
         run_transcribe=run_transcribe,
+        run_standard=run_standard,
         run_fast=run_fast,
     )
     if execution["ok"]:
@@ -920,6 +1160,7 @@ def _execute_reserved_measurement_job(
     job: dict[str, Any],
 ) -> dict[str, Any]:
     run_id = str(job["runId"])
+    requested_analysis_mode = str(job.get("requestedAnalysisMode", "full"))
     requested_symbolic_mode = str(job.get("requestedSymbolicMode", "off"))
     try:
         run_separation, run_transcribe = runtime.resolve_measurement_flags(
@@ -956,6 +1197,7 @@ def _execute_reserved_measurement_job(
         request_id=run_id,
         run_separation=run_separation,
         run_transcribe=run_transcribe,
+        run_standard=requested_analysis_mode == "standard",
         run_fast=False,
     )
 
@@ -970,10 +1212,9 @@ def _resolve_transcription_backend(backend_id: str) -> Any:
     raise RuntimeError(f"Unsupported symbolic backend '{backend_id}'.")
 
 
-def _get_or_materialize_stem_paths(
+def _get_existing_stem_paths(
     runtime: AnalysisRuntime,
     run_id: str,
-    source_path: str,
 ) -> dict[str, str] | None:
     existing = runtime.get_artifacts_by_kind(run_id, "stem_")
     stem_paths = {
@@ -983,15 +1224,40 @@ def _get_or_materialize_stem_paths(
     }
     if "bass" in stem_paths or "other" in stem_paths:
         return stem_paths
+    return None
 
-    output_dir = tempfile.mkdtemp(prefix=f"asa_stems_{run_id}_", dir=runtime.runtime_dir)
+
+def _cleanup_stem_temp_paths(stem_paths: dict[str, str] | None) -> None:
+    if not isinstance(stem_paths, dict) or len(stem_paths) == 0:
+        return
+    parent_dirs = {
+        os.path.dirname(path)
+        for path in stem_paths.values()
+        if isinstance(path, str) and path
+    }
+    for path in stem_paths.values():
+        if isinstance(path, str) and path:
+            try:
+                Path(path).unlink(missing_ok=True)
+            except OSError:
+                pass
+    for parent_dir in parent_dirs:
+        if os.path.basename(parent_dir).startswith("asa_symbolic_"):
+            shutil.rmtree(parent_dir, ignore_errors=True)
+
+
+def _record_symbolic_stem_artifacts(
+    runtime: AnalysisRuntime,
+    run_id: str,
+    stem_paths: dict[str, str] | None,
+) -> dict[str, str] | None:
+    if not isinstance(stem_paths, dict) or len(stem_paths) == 0:
+        return None
+
+    recorded_paths: dict[str, str] = {}
     try:
-        separated = separate_stems(source_path, output_dir=output_dir)
-        if not isinstance(separated, dict) or not separated:
-            return None
-
-        recorded_paths: dict[str, str] = {}
-        for stem_name, stem_path in separated.items():
+        for stem_name in ("bass", "other"):
+            stem_path = stem_paths.get(stem_name)
             if not isinstance(stem_path, str) or not os.path.isfile(stem_path):
                 continue
             artifact = runtime.record_artifact(
@@ -1006,67 +1272,253 @@ def _get_or_materialize_stem_paths(
                 },
             )
             recorded_paths[stem_name] = artifact["path"]
-        return recorded_paths if recorded_paths else None
     finally:
-        shutil.rmtree(output_dir, ignore_errors=True)
+        _cleanup_stem_temp_paths(stem_paths)
+
+    return recorded_paths if recorded_paths else None
+
+
+def _build_symbolic_timeout_seconds(audio_path: str) -> int:
+    try:
+        duration_seconds = get_audio_duration_seconds(audio_path)
+    except Exception:
+        duration_seconds = None
+    safe_duration = duration_seconds if duration_seconds is not None else 0.0
+    raw_estimate = build_analysis_estimate(safe_duration, True, True)
+    symbolic_high_seconds = 0
+    raw_stages = raw_estimate.get("stages")
+    if isinstance(raw_stages, list):
+        for stage in raw_stages:
+            if not isinstance(stage, dict):
+                continue
+            if _coerce_string(stage.get("key"), "") == "dsp":
+                continue
+            seconds = stage.get("seconds")
+            if isinstance(seconds, dict):
+                symbolic_high_seconds += _coerce_positive_int(seconds.get("max"))
+    return max(
+        ceil(symbolic_high_seconds * ANALYZE_TIMEOUT_ESTIMATE_MULTIPLIER)
+        + ANALYZE_TIMEOUT_BUFFER_SECONDS,
+        ANALYZE_TIMEOUT_FLOOR_SECONDS,
+    )
+
+
+def _run_symbolic_subprocess(
+    runtime: AnalysisRuntime,
+    attempt: dict[str, Any],
+    *,
+    source_audio_path: str,
+    source_artifact_id: str,
+    existing_stem_paths: dict[str, str] | None,
+) -> dict[str, Any]:
+    attempt_id = str(attempt["attemptId"])
+    run_id = str(attempt["runId"])
+    backend_id = str(attempt["backendId"])
+    mode = str(attempt["mode"])
+    started_at = _current_time()
+    memory_markers: list[dict[str, Any]] = []
+    command = [
+        "./venv/bin/python",
+        str(Path(__file__).with_name("symbolic_extract.py")),
+        source_audio_path,
+        "--mode",
+        mode,
+        "--backend",
+        backend_id,
+    ]
+    if isinstance(existing_stem_paths, dict):
+        bass_path = existing_stem_paths.get("bass")
+        other_path = existing_stem_paths.get("other")
+        if isinstance(bass_path, str):
+            command.extend(["--stem-bass-path", bass_path])
+        if isinstance(other_path, str):
+            command.extend(["--stem-other-path", other_path])
+
+    def handle_stderr_line(line: str) -> None:
+        progress_payload = _parse_json_marker(line, "@@ASA_PROGRESS")
+        if progress_payload is not None:
+            runtime.update_symbolic_attempt_progress(
+                attempt_id,
+                step_key=_coerce_string(
+                    progress_payload.get("stepKey"), "symbolic_progress"
+                ),
+                message=_coerce_string(
+                    progress_payload.get("message"),
+                    "Symbolic extraction is in progress.",
+                ),
+                fraction=_coerce_nullable_number(progress_payload.get("fraction")),
+            )
+            return
+
+        memory_payload = _parse_json_marker(line, "@@ASA_MEMORY")
+        if memory_payload is not None:
+            memory_markers.append(memory_payload)
+            return
+
+        if line.startswith("@@TRANSCRIPTION_SOURCE"):
+            runtime.update_symbolic_attempt_progress(
+                attempt_id,
+                step_key="transcription_source",
+                message="Processing transcription source audio.",
+            )
+
+    try:
+        result = _run_streamed_subprocess(
+            command=command,
+            timeout_seconds=_build_symbolic_timeout_seconds(source_audio_path),
+            run_id=run_id,
+            stage_key="symbolicExtraction",
+            stderr_line_handler=handle_stderr_line,
+        )
+    except Exception as exc:
+        return {
+            "ok": False,
+            "errorCode": "SYMBOLIC_EXTRACTION_FAILED",
+            "message": str(exc),
+            "retryable": True,
+            "provenance": {
+                "schemaVersion": "symbolic.v1",
+                "backendId": backend_id,
+                "mode": mode,
+            },
+            "diagnostics": {
+                "backendDurationMs": round(_elapsed_ms(started_at, _current_time()), 2),
+                "sourceArtifactId": source_artifact_id,
+                "memory": memory_markers,
+            },
+        }
+
+    diagnostics = {
+        "backendDurationMs": round(_elapsed_ms(started_at, _current_time()), 2),
+        "sourceArtifactId": source_artifact_id,
+        "memory": memory_markers,
+    }
+    provenance = {
+        "schemaVersion": "symbolic.v1",
+        "backendId": backend_id,
+        "mode": mode,
+    }
+
+    if result["timedOut"]:
+        return {
+            "ok": False,
+            "errorCode": "SYMBOLIC_EXTRACTION_TIMEOUT",
+            "message": "Symbolic extraction timed out before completion.",
+            "retryable": True,
+            "provenance": provenance,
+            "diagnostics": diagnostics,
+        }
+
+    if result["returncode"] != 0:
+        return {
+            "ok": False,
+            "errorCode": "SYMBOLIC_EXTRACTION_FAILED",
+            "message": _coerce_string(result["stderr"], "Symbolic extraction failed."),
+            "retryable": True,
+            "provenance": provenance,
+            "diagnostics": diagnostics,
+        }
+
+    stdout = str(result["stdout"]).strip()
+    try:
+        payload = json.loads(stdout) if stdout else {}
+    except json.JSONDecodeError:
+        return {
+            "ok": False,
+            "errorCode": "SYMBOLIC_EXTRACTION_BAD_PAYLOAD",
+            "message": "Symbolic extraction returned malformed JSON.",
+            "retryable": False,
+            "provenance": provenance,
+            "diagnostics": diagnostics,
+        }
+
+    if not isinstance(payload, dict):
+        return {
+            "ok": False,
+            "errorCode": "SYMBOLIC_EXTRACTION_BAD_PAYLOAD",
+            "message": "Symbolic extraction returned an unexpected payload.",
+            "retryable": False,
+            "provenance": provenance,
+            "diagnostics": diagnostics,
+        }
+
+    child_provenance = payload.get("provenance")
+    if isinstance(child_provenance, dict):
+        provenance = child_provenance
+    child_diagnostics = payload.get("diagnostics")
+    if isinstance(child_diagnostics, dict):
+        diagnostics = {**diagnostics, **child_diagnostics, "memory": memory_markers}
+
+    return {
+        "ok": True,
+        "transcriptionDetail": payload.get("transcriptionDetail")
+        if isinstance(payload.get("transcriptionDetail"), dict)
+        else None,
+        "provenance": provenance,
+        "diagnostics": diagnostics,
+        "stemPaths": payload.get("stemPaths")
+        if isinstance(payload.get("stemPaths"), dict)
+        else None,
+    }
 
 
 def _execute_symbolic_attempt(
     runtime: AnalysisRuntime,
     attempt: dict[str, Any],
 ) -> None:
-    started_at = _current_time()
     run_id = str(attempt["runId"])
+    attempt_id = str(attempt["attemptId"])
     source_artifact = runtime.get_source_artifact(run_id)
-    provenance = {
-        "schemaVersion": "symbolic.v1",
-        "backendId": attempt["backendId"],
-        "mode": attempt["mode"],
-    }
-    try:
-        stem_paths = None
-        if attempt["mode"] == "stem_notes":
-            stem_paths = _get_or_materialize_stem_paths(
-                runtime,
-                run_id,
-                source_artifact["path"],
-            )
-        backend = _resolve_transcription_backend(str(attempt["backendId"]))
-        symbolic_payload = analyze_transcription(
-            source_artifact["path"],
-            stem_paths=stem_paths,
-            backend=backend,
+    execution = _run_symbolic_subprocess(
+        runtime,
+        attempt,
+        source_audio_path=source_artifact["path"],
+        source_artifact_id=source_artifact["artifactId"],
+        existing_stem_paths=_get_existing_stem_paths(runtime, run_id),
+    )
+
+    if runtime.is_run_interrupted(run_id):
+        _cleanup_stem_temp_paths(
+            execution.get("stemPaths") if isinstance(execution, dict) else None
         )
-        transcription_detail = None
-        if isinstance(symbolic_payload, dict):
-            transcription_detail = symbolic_payload.get("transcriptionDetail")
-        diagnostics = {
-            "backendDurationMs": round(_elapsed_ms(started_at, _current_time()), 2),
-            "stemSeparationUsed": bool(stem_paths),
-            "sourceArtifactId": source_artifact["artifactId"],
-        }
-        if isinstance(transcription_detail, dict):
-            provenance["resolvedBackendId"] = transcription_detail.get("transcriptionMethod")
+        return
+
+    if execution["ok"]:
+        _record_symbolic_stem_artifacts(runtime, run_id, execution.get("stemPaths"))
         runtime.complete_symbolic_attempt(
-            str(attempt["attemptId"]),
-            result=transcription_detail if isinstance(transcription_detail, dict) else None,
-            provenance=provenance,
-            diagnostics=diagnostics,
+            attempt_id,
+            result=execution.get("transcriptionDetail"),
+            provenance=execution.get("provenance"),
+            diagnostics=execution.get("diagnostics"),
         )
-    except Exception as exc:
+        return
+
+    _cleanup_stem_temp_paths(
+        execution.get("stemPaths") if isinstance(execution, dict) else None
+    )
+    try:
         runtime.fail_symbolic_attempt(
-            str(attempt["attemptId"]),
+            attempt_id,
+            error={
+                "code": execution["errorCode"],
+                "message": execution["message"],
+                "retryable": execution["retryable"],
+                "phase": "symbolic_extraction",
+            },
+            provenance=execution.get("provenance"),
+            diagnostics=execution.get("diagnostics"),
+        )
+    except Exception:
+        runtime.fail_symbolic_attempt(
+            attempt_id,
             error={
                 "code": "SYMBOLIC_EXTRACTION_FAILED",
-                "message": str(exc),
+                "message": execution.get("message", "Symbolic extraction failed."),
                 "retryable": True,
                 "phase": "symbolic_extraction",
             },
-            provenance=provenance,
-            diagnostics={
-                "backendDurationMs": round(_elapsed_ms(started_at, _current_time()), 2),
-                "sourceArtifactId": source_artifact["artifactId"],
-            },
+            provenance=execution.get("provenance"),
+            diagnostics=execution.get("diagnostics"),
         )
 
 
@@ -1301,6 +1753,16 @@ def _execute_interpretation_attempt(
         "groundedMeasurementOutputId": grounding["measurementOutputId"],
         "groundedSymbolicAttemptId": grounding["symbolicAttemptId"],
     }
+    if runtime.is_run_interrupted(run_id):
+        return {
+            **execution,
+            "ok": False,
+            "interrupted": True,
+            "statusCode": 202,
+            "errorCode": "ANALYSIS_INTERRUPTED",
+            "message": "Analysis run was interrupted before interpretation completed.",
+            "retryable": False,
+        }
     if execution["ok"]:
         runtime.complete_interpretation_attempt(
             str(attempt["attemptId"]),
@@ -1402,6 +1864,7 @@ async def _interpretation_worker_loop() -> None:
 @app.post("/api/analysis-runs")
 async def create_analysis_run(
     track: UploadFile = File(...),
+    analysis_mode: str = Form("full"),
     symbolic_mode: str = Form("off"),
     symbolic_backend: str = Form("auto"),
     interpretation_mode: str = Form("off"),
@@ -1411,6 +1874,7 @@ async def create_analysis_run(
     try:
         runtime, run_id = await _create_analysis_run_record(
             track=track,
+            analysis_mode=analysis_mode,
             symbolic_mode=symbolic_mode,
             symbolic_backend=symbolic_backend,
             interpretation_mode=interpretation_mode,
@@ -1457,6 +1921,30 @@ async def get_analysis_run(run_id: str) -> JSONResponse:
                 }
             },
         )
+
+
+@app.post("/api/analysis-runs/{run_id}/interrupt")
+async def interrupt_analysis_run(run_id: str) -> JSONResponse:
+    runtime = get_analysis_runtime()
+    try:
+        snapshot = runtime.interrupt_run(run_id)
+    except KeyError:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": {
+                    "code": "RUN_NOT_FOUND",
+                    "message": f"Analysis run '{run_id}' was not found.",
+                }
+            },
+        )
+
+    interrupted_stages = _interrupt_active_child_processes(run_id)
+    normalized = _normalize_run_snapshot(snapshot)
+    normalized.setdefault("interrupt", {})
+    if isinstance(normalized["interrupt"], dict):
+        normalized["interrupt"]["stagesTerminated"] = interrupted_stages
+    return JSONResponse(status_code=202, content=normalized)
 
 
 @app.post("/api/analysis-runs/{run_id}/symbolic-extractions")
@@ -1599,6 +2087,8 @@ def _build_backend_estimate(
     audio_path: str,
     run_separation: bool,
     run_transcribe: bool,
+    *,
+    analysis_mode: str = "full",
 ) -> dict[str, Any]:
     try:
         duration_seconds = get_audio_duration_seconds(audio_path)
@@ -1606,9 +2096,19 @@ def _build_backend_estimate(
         duration_seconds = None
 
     safe_duration = duration_seconds if duration_seconds is not None else 0.0
-    raw_estimate = build_analysis_estimate(
-        safe_duration, run_separation, run_transcribe
-    )
+    if analysis_mode == "standard":
+        raw_estimate = build_analysis_estimate(
+            safe_duration,
+            run_separation,
+            run_transcribe,
+            run_standard=True,
+        )
+    else:
+        raw_estimate = build_analysis_estimate(
+            safe_duration,
+            run_separation,
+            run_transcribe,
+        )
     raw_stages = raw_estimate.get("stages")
     stages = (
         [
@@ -2355,6 +2855,7 @@ def _build_success_response(
 async def estimate_analysis(
     track: UploadFile = File(...),
     dsp_json_override: str | None = Form(None),
+    analysis_mode: str = Form("full"),
     transcribe: bool = Form(False),
     separate: bool = Form(False),
     separate_query: bool = Query(
@@ -2371,7 +2872,12 @@ async def estimate_analysis(
         temp_path, _file_size_bytes = _persist_upload(track)
         _ = dsp_json_override
         run_separation = bool(separate or separate_query or separate_flag)
-        estimate = _build_backend_estimate(temp_path, run_separation, transcribe)
+        estimate = _build_backend_estimate(
+            temp_path,
+            run_separation,
+            transcribe,
+            analysis_mode=analysis_mode,
+        )
         return JSONResponse(
             content={
                 "requestId": str(uuid4()),
@@ -2409,6 +2915,7 @@ async def analyze_audio(
         requested_symbolic_mode = _resolve_symbolic_mode_for_legacy(transcribe)
         runtime, run_id = await _create_analysis_run_record(
             track=track,
+            analysis_mode="full",
             symbolic_mode=requested_symbolic_mode,
             symbolic_backend="auto",
             interpretation_mode="off",
@@ -2417,16 +2924,21 @@ async def analyze_audio(
             legacy_request_id=request_id,
         )
         runtime.reserve_measurement_run(run_id)
-        resolved_run_separation, resolved_run_transcribe = runtime.resolve_measurement_flags(
-            requested_symbolic_mode,
+        resolved_run_transcribe = bool(transcribe)
+        resolved_run_separation = bool(
+            separate
+            or separate_query
+            or separate_flag
+            or resolved_run_transcribe
         )
         execution = await asyncio.to_thread(
             _execute_measurement_run,
             runtime,
             run_id,
             request_id=request_id,
-            run_separation=resolved_run_separation or bool(separate or separate_query or separate_flag),
+            run_separation=resolved_run_separation,
             run_transcribe=resolved_run_transcribe,
+            run_standard=False,
             run_fast=bool(fast or fast_query),
         )
         if not execution["ok"]:

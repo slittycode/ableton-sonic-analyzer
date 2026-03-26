@@ -120,6 +120,7 @@ test('upload shows estimate and local DSP processing copy before phase1 complete
       body: JSON.stringify({
         runId: 'run_smoke_002',
         requestedStages: {
+          analysisMode: 'full',
           symbolicMode: 'off',
           symbolicBackend: 'auto',
           interpretationMode: 'async',
@@ -179,6 +180,7 @@ test('upload shows estimate and local DSP processing copy before phase1 complete
       body: JSON.stringify({
         runId: 'run_smoke_002',
         requestedStages: {
+          analysisMode: 'full',
           symbolicMode: 'off',
           symbolicBackend: 'auto',
           interpretationMode: 'async',
@@ -277,15 +279,15 @@ test('upload shows estimate and local DSP processing copy before phase1 complete
 
   await expect(page.getByTestId('phase2-model-desktop')).toBeVisible();
   await expect(page.getByText(/Estimated local analysis/i)).toBeVisible();
-  await expect(page.getByText('107s-203s')).toBeVisible();
+  await expect(page.getByText('22s-38s')).toBeVisible();
 
   const symbolicToggle = page.getByLabel('SYMBOLIC EXTRACTION');
 
-  await expect(symbolicToggle).toBeChecked();
-  await expect(page.getByText('107s-203s')).toBeVisible();
-
-  await symbolicToggle.uncheck();
+  await expect(symbolicToggle).not.toBeChecked();
   await expect(page.getByText('22s-38s')).toBeVisible();
+
+  await symbolicToggle.check();
+  await expect(page.getByText('107s-203s')).toBeVisible();
 
   await page.getByRole('button', { name: /Initiate Analysis/i }).click();
 

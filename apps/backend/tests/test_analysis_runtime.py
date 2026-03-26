@@ -19,7 +19,7 @@ class AnalysisRuntimeTests(unittest.TestCase):
         runtime = self._runtime()
 
         self.assertEqual(runtime.resolve_measurement_flags("off"), (False, False))
-        self.assertEqual(runtime.resolve_measurement_flags("stem_notes"), (True, True))
+        self.assertEqual(runtime.resolve_measurement_flags("stem_notes"), (False, False))
 
     def test_resolve_measurement_flags_rejects_unknown_symbolic_mode(self) -> None:
         runtime = self._runtime()
@@ -44,6 +44,7 @@ class AnalysisRuntimeTests(unittest.TestCase):
             filename="track.mp3",
             content=b"fake-audio",
             mime_type="audio/mpeg",
+            analysis_mode="standard",
             symbolic_mode="stem_notes",
             symbolic_backend="auto",
             interpretation_mode="async",
@@ -60,6 +61,7 @@ class AnalysisRuntimeTests(unittest.TestCase):
         self.assertEqual(snapshot["stages"]["symbolicExtraction"]["status"], "blocked")
         self.assertFalse(snapshot["stages"]["symbolicExtraction"]["authoritative"])
         self.assertEqual(snapshot["stages"]["interpretation"]["status"], "blocked")
+        self.assertEqual(snapshot["requestedStages"]["analysisMode"], "standard")
         self.assertEqual(snapshot["requestedStages"]["symbolicMode"], "stem_notes")
         self.assertEqual(snapshot["requestedStages"]["interpretationMode"], "async")
 
@@ -71,6 +73,7 @@ class AnalysisRuntimeTests(unittest.TestCase):
             filename="track.mp3",
             content=b"fake-audio",
             mime_type="audio/mpeg",
+            analysis_mode="full",
             symbolic_mode="stem_notes",
             symbolic_backend="auto",
             interpretation_mode="off",
@@ -127,6 +130,7 @@ class AnalysisRuntimeTests(unittest.TestCase):
             filename="track.mp3",
             content=b"fake-audio",
             mime_type="audio/mpeg",
+            analysis_mode="full",
             symbolic_mode="off",
             symbolic_backend="auto",
             interpretation_mode="off",
@@ -149,6 +153,7 @@ class AnalysisRuntimeTests(unittest.TestCase):
             filename="track.mp3",
             content=b"fake-audio",
             mime_type="audio/mpeg",
+            analysis_mode="full",
             symbolic_mode="stem_notes",
             symbolic_backend="auto",
             interpretation_mode="async",
@@ -227,6 +232,7 @@ class AnalysisRuntimeTests(unittest.TestCase):
             filename="track.mp3",
             content=b"fake-audio",
             mime_type="audio/mpeg",
+            analysis_mode="full",
             symbolic_mode="stem_notes",
             symbolic_backend="auto",
             interpretation_mode="off",
@@ -309,6 +315,7 @@ class AnalysisRuntimeTests(unittest.TestCase):
             filename="track.mp3",
             content=b"fake-audio",
             mime_type="audio/mpeg",
+            analysis_mode="standard",
             symbolic_mode="stem_notes",
             symbolic_backend="auto",
             interpretation_mode="async",
@@ -329,6 +336,7 @@ class AnalysisRuntimeTests(unittest.TestCase):
             filename="track.mp3",
             content=b"fake-audio",
             mime_type="audio/mpeg",
+            analysis_mode="full",
             symbolic_mode="off",
             symbolic_backend="auto",
             interpretation_mode="off",
@@ -347,6 +355,7 @@ class AnalysisRuntimeTests(unittest.TestCase):
             filename="track.mp3",
             content=b"fake-audio",
             mime_type="audio/mpeg",
+            analysis_mode="full",
             symbolic_mode="stem_notes",
             symbolic_backend="auto",
             interpretation_mode="async",
@@ -381,6 +390,7 @@ class AnalysisRuntimeTests(unittest.TestCase):
             filename="track.mp3",
             content=b"fake-audio",
             mime_type="audio/mpeg",
+            analysis_mode="full",
             symbolic_mode="stem_notes",
             symbolic_backend="auto",
             interpretation_mode="async",

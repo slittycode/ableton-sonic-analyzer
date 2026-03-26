@@ -13,7 +13,11 @@ import {
 } from './config';
 import { getAudioMimeTypeOrDefault, isSupportedAudioFile } from './services/audioFile';
 import { analyzeAudio, monitorAnalysisRun } from './services/analyzer';
-import { createInterpretationAttempt, createSymbolicExtractionAttempt } from './services/analysisRunsClient';
+import {
+  createInterpretationAttempt,
+  createSymbolicExtractionAttempt,
+  interruptAnalysisRun,
+} from './services/analysisRunsClient';
 import {
   BackendClientError,
   deriveAnalyzeTimeoutMs,
@@ -223,10 +227,13 @@ export default function App() {
   const [estimateError, setEstimateError] = useState<string | null>(null);
   const [estimateWrongService, setEstimateWrongService] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
-  const [symbolicExtractionRequested, setSymbolicExtractionRequested] = useState(true);
+  const [symbolicExtractionRequested, setSymbolicExtractionRequested] = useState(false);
+  const [analysisMode, setAnalysisMode] = useState<'full' | 'standard'>('full');
 
   const analysisStartedAtRef = useRef<number | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const currentRunIdRef = useRef<string | null>(null);
+  const ignoredRunIdsRef = useRef<Set<string>>(new Set());
   const phase2ConfigEnabled = isGeminiPhase2ConfigEnabled();
   const interpretationWillRun = interpretationRequested && phase2ConfigEnabled;
   const phase2StatusBadge = getInterpretationStatusBadge(phase2ConfigEnabled, interpretationRequested);
@@ -262,6 +269,7 @@ export default function App() {
     // Legacy estimate route — retained pending canonicalization into analysis-runs API.
     estimatePhase1WithBackend(audioFile, {
       apiBaseUrl: appConfig.apiBaseUrl,
+      analysisMode,
       transcribe: symbolicExtractionRequested,
       separate: symbolicExtractionRequested,
     })
@@ -284,7 +292,27 @@ export default function App() {
     return () => {
       isCancelled = true;
     };
-  }, [audioFile, symbolicExtractionRequested]);
+  }, [analysisMode, audioFile, symbolicExtractionRequested]);
+
+  const clearActiveRunState = useCallback(() => {
+    setMeasurementResult(null);
+    setSymbolicResult(null);
+    setPhase2Result(null);
+    setPhase2StatusMessage(null);
+    setLogs([]);
+    setAnalysisRun(null);
+    setActiveRunId(null);
+    previousRunRef.current = null;
+    completionRef.current = { measurement: false, interpretation: false };
+    analysisStartedAtRef.current = null;
+    abortControllerRef.current = null;
+    currentRunIdRef.current = null;
+    setElapsedMs(0);
+  }, []);
+
+  const shouldIgnoreRun = useCallback((runId: string | null | undefined) => {
+    return Boolean(runId && ignoredRunIdsRef.current.has(runId));
+  }, []);
 
   useEffect(() => {
     if (!isAnalyzing || analysisStartedAtRef.current === null) {
@@ -304,15 +332,11 @@ export default function App() {
 
   const handleFileSelect = useCallback((file: File) => {
     if (audioUrl) URL.revokeObjectURL(audioUrl);
+    ignoredRunIdsRef.current.clear();
     setAudioFile(file);
     setAudioUrl(URL.createObjectURL(file));
-    setMeasurementResult(null);
-    setSymbolicResult(null);
-    setPhase2Result(null);
-    setPhase2StatusMessage(null);
-    setLogs([]);
-    setAnalysisRun(null);
-    setActiveRunId(null);
+    clearActiveRunState();
+    setIsAnalyzing(false);
     setError(null);
     previousRunRef.current = null;
     completionRef.current = { measurement: false, interpretation: false };
@@ -320,19 +344,15 @@ export default function App() {
     setElapsedMs(0);
     setEstimateWrongService(false);
     setIsDemoLoading(false);
-  }, [audioUrl]);
+  }, [audioUrl, clearActiveRunState]);
 
   const handleFileClear = useCallback(() => {
+    ignoredRunIdsRef.current.clear();
     setAudioFile(null);
     if (audioUrl) URL.revokeObjectURL(audioUrl);
     setAudioUrl(null);
-    setMeasurementResult(null);
-    setSymbolicResult(null);
-    setPhase2Result(null);
-    setPhase2StatusMessage(null);
-    setLogs([]);
-    setAnalysisRun(null);
-    setActiveRunId(null);
+    clearActiveRunState();
+    setIsAnalyzing(false);
     setError(null);
     setAnalysisEstimate(null);
     setEstimateError(null);
@@ -343,7 +363,7 @@ export default function App() {
     analysisStartedAtRef.current = null;
     setElapsedMs(0);
     setIsDemoLoading(false);
-  }, [audioUrl]);
+  }, [audioUrl, clearActiveRunState]);
 
   const handleGlobalFilesDrop = useCallback(
     (files: File[]) => {
@@ -470,9 +490,11 @@ export default function App() {
     const audioMetadata = buildAudioMetadata(activeFile);
 
     startRenderBenchmarkCycle(window);
+    ignoredRunIdsRef.current.clear();
 
     const ac = new AbortController();
     abortControllerRef.current = ac;
+    currentRunIdRef.current = null;
 
     setIsAnalyzing(true);
     setError(null);
@@ -508,6 +530,9 @@ export default function App() {
         activeModel,
         null,
         (result, log) => {
+          if (shouldIgnoreRun(currentRunIdRef.current)) {
+            return;
+          }
           setLogs((prev) => {
             const nextLogs = replaceRunningLog(prev, 'measurement', {
               ...log,
@@ -549,6 +574,9 @@ export default function App() {
           }
         },
         (result, log) => {
+          if (shouldIgnoreRun(currentRunIdRef.current)) {
+            return;
+          }
           setPhase2Result(result);
           setPhase2StatusMessage(log.message ?? null);
           setLogs((prev) => {
@@ -580,6 +608,10 @@ export default function App() {
           const err = rawError instanceof Error ? rawError : new Error(String(rawError));
           const backendError = err instanceof BackendClientError ? err : null;
           const isCancelled = backendError?.code === 'USER_CANCELLED';
+
+          if (shouldIgnoreRun(currentRunIdRef.current)) {
+            return;
+          }
 
           setLogs((prev) => [
             ...prev.filter(
@@ -615,12 +647,17 @@ export default function App() {
           }
         },
         {
+          analysisMode,
           symbolicRequested: symbolicExtractionRequested,
           timeoutMs: activeTimeoutMs,
           signal: ac.signal,
           interpretationRequested,
           interpretationConfigEnabled: phase2ConfigEnabled,
           onRunUpdate: (update) => {
+            if (shouldIgnoreRun(update.runId)) {
+              return;
+            }
+            currentRunIdRef.current = update.runId;
             setActiveRunId(update.runId);
             setAnalysisRun(update.snapshot);
             const p1 = update.displayPhase1;
@@ -705,9 +742,25 @@ export default function App() {
     }
   };
 
-  const handleStopMonitoring = () => {
+  const handleStopAnalysis = useCallback(async () => {
+    const runId = currentRunIdRef.current ?? activeRunId;
+    if (runId) {
+      ignoredRunIdsRef.current.add(runId);
+      try {
+        await interruptAnalysisRun(runId, {
+          apiBaseUrl: appConfig.apiBaseUrl,
+        });
+      } catch {
+        // Intentionally suppress interrupt failures; the UI clears the cancelled run immediately.
+      }
+    }
+
     abortControllerRef.current?.abort();
-  };
+    clearActiveRunState();
+    setIsAnalyzing(false);
+    setError(null);
+    setErrorRetryable(false);
+  }, [activeRunId, clearActiveRunState]);
 
   const handleRetrySymbolicExtraction = useCallback(async () => {
     if (!audioFile || !activeRunId) return;
@@ -731,6 +784,9 @@ export default function App() {
         audioFile,
         selectedModel,
         (result, log) => {
+          if (shouldIgnoreRun(currentRunIdRef.current)) {
+            return;
+          }
           completionRef.current.measurement = true;
           if (result) {
             const { transcriptionDetail, ...measurement } = result;
@@ -743,12 +799,18 @@ export default function App() {
           setLogs((prev) => replaceRunningLog(prev, 'measurement', { ...log, status: 'success' }));
         },
         (result, log) => {
+          if (shouldIgnoreRun(currentRunIdRef.current)) {
+            return;
+          }
           setPhase2Result(result);
           setPhase2StatusMessage(log.message ?? null);
           setLogs((prev) => replaceRunningLog(prev, 'interpretation', { ...log, status: log.status ?? 'success' }));
         },
         (rawError) => {
           const err = rawError instanceof Error ? rawError : new Error(String(rawError));
+          if (shouldIgnoreRun(currentRunIdRef.current)) {
+            return;
+          }
           if (!(err instanceof BackendClientError && err.code === 'USER_CANCELLED')) {
             setError(err.message);
           }
@@ -759,6 +821,10 @@ export default function App() {
           interpretationConfigEnabled: phase2ConfigEnabled,
           signal: controller.signal,
           onRunUpdate: (update) => {
+            if (shouldIgnoreRun(update.runId)) {
+              return;
+            }
+            currentRunIdRef.current = update.runId;
             setActiveRunId(update.runId);
             setAnalysisRun(update.snapshot);
             const p1 = update.displayPhase1;
@@ -781,7 +847,7 @@ export default function App() {
       analysisStartedAtRef.current = null;
       setElapsedMs(0);
     }
-  }, [activeRunId, audioFile, interpretationRequested, phase2ConfigEnabled, selectedModel, symbolicExtractionRequested]);
+  }, [activeRunId, audioFile, interpretationRequested, phase2ConfigEnabled, selectedModel, shouldIgnoreRun, symbolicExtractionRequested]);
 
   const handleRetryInterpretation = useCallback(async () => {
     if (!audioFile || !activeRunId) return;
@@ -806,6 +872,9 @@ export default function App() {
         audioFile,
         selectedModel,
         (result, log) => {
+          if (shouldIgnoreRun(currentRunIdRef.current)) {
+            return;
+          }
           completionRef.current.measurement = true;
           if (result) {
             const { transcriptionDetail, ...measurement } = result;
@@ -818,12 +887,18 @@ export default function App() {
           setLogs((prev) => replaceRunningLog(prev, 'measurement', { ...log, status: 'success' }));
         },
         (result, log) => {
+          if (shouldIgnoreRun(currentRunIdRef.current)) {
+            return;
+          }
           setPhase2Result(result);
           setPhase2StatusMessage(log.message ?? null);
           setLogs((prev) => replaceRunningLog(prev, 'interpretation', { ...log, status: log.status ?? 'success' }));
         },
         (rawError) => {
           const err = rawError instanceof Error ? rawError : new Error(String(rawError));
+          if (shouldIgnoreRun(currentRunIdRef.current)) {
+            return;
+          }
           if (!(err instanceof BackendClientError && err.code === 'USER_CANCELLED')) {
             setError(err.message);
           }
@@ -834,6 +909,10 @@ export default function App() {
           interpretationConfigEnabled: phase2ConfigEnabled,
           signal: controller.signal,
           onRunUpdate: (update) => {
+            if (shouldIgnoreRun(update.runId)) {
+              return;
+            }
+            currentRunIdRef.current = update.runId;
             setActiveRunId(update.runId);
             setAnalysisRun(update.snapshot);
             const p1 = update.displayPhase1;
@@ -856,7 +935,7 @@ export default function App() {
       analysisStartedAtRef.current = null;
       setElapsedMs(0);
     }
-  }, [activeRunId, audioFile, interpretationRequested, phase2ConfigEnabled, selectedModel, symbolicExtractionRequested]);
+  }, [activeRunId, audioFile, interpretationRequested, phase2ConfigEnabled, selectedModel, shouldIgnoreRun, symbolicExtractionRequested]);
 
   const handleAudioElement = useCallback((el: HTMLAudioElement) => {
     audioElementRef.current = el;
@@ -964,8 +1043,28 @@ export default function App() {
                       isDemoLoading={isDemoLoading}
                       selectedFile={audioFile}
                     />
+                    <div className="mt-4 rounded-sm border border-border bg-bg-panel px-3 py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="space-y-1">
+                          <p className="text-[10px] font-mono uppercase tracking-wider text-text-secondary">ANALYSIS MODE</p>
+                          <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary/80">
+                            Full keeps every measurement. Standard is faster and skips advanced Tier 3 detail.
+                          </p>
+                        </div>
+                        <select
+                          aria-label="ANALYSIS MODE"
+                          value={analysisMode}
+                          onChange={(e) => setAnalysisMode(e.target.value as 'full' | 'standard')}
+                          disabled={isAnalyzing}
+                          className="appearance-none bg-bg-card border border-border text-text-primary text-[10px] font-mono py-1.5 pl-2 pr-6 rounded-sm focus:outline-none focus:border-accent cursor-pointer disabled:opacity-50"
+                        >
+                          <option value="full">Full</option>
+                          <option value="standard">Standard</option>
+                        </select>
+                      </div>
+                    </div>
                     <label
-                      className={`mt-4 rounded-sm border px-3 py-3 transition-colors cursor-pointer ${
+                      className={`mt-3 rounded-sm border px-3 py-3 transition-colors cursor-pointer ${
                         symbolicExtractionRequested
                           ? 'border-accent bg-accent/10 text-accent'
                           : 'border-border bg-bg-panel text-text-secondary'
@@ -983,7 +1082,7 @@ export default function App() {
                         <div className="space-y-1">
                           <p className="text-[10px] font-mono uppercase tracking-wider">SYMBOLIC EXTRACTION</p>
                           <p className="text-[10px] font-mono uppercase tracking-wide opacity-80">
-                            Best-effort local note extraction from separated stems
+                            Optional. Slower and heavier. Best-effort local note extraction from separated stems.
                           </p>
                         </div>
                       </div>
@@ -1115,7 +1214,7 @@ export default function App() {
                           elapsedMs={elapsedMs}
                           estimate={analysisEstimate}
                           isActive={isAnalyzing}
-                          onStopMonitoring={handleStopMonitoring}
+                          onStopAnalysis={handleStopAnalysis}
                           onRetryMeasurement={audioFile ? handleStartAnalysis : undefined}
                           onRetrySymbolic={analysisRun && ['failed', 'interrupted'].includes(analysisRun.stages.symbolicExtraction.status) ? handleRetrySymbolicExtraction : undefined}
                           onRetryInterpretation={analysisRun && ['failed', 'interrupted'].includes(analysisRun.stages.interpretation.status) ? handleRetryInterpretation : undefined}

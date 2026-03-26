@@ -8,7 +8,7 @@ interface AnalysisStatusPanelProps {
   elapsedMs: number;
   estimate?: BackendAnalysisEstimate | null;
   isActive: boolean;
-  onStopMonitoring?: () => void;
+  onStopAnalysis?: () => void;
   onRetryMeasurement?: () => void;
   onRetrySymbolic?: () => void;
   onRetryInterpretation?: () => void;
@@ -32,17 +32,103 @@ function formatEstimateRange(estimate: BackendAnalysisEstimate): string {
   return `${formatSecondsLabel(estimate.totalLowMs / 1000)}-${formatSecondsLabel(estimate.totalHighMs / 1000)}`;
 }
 
-function computeProgress(elapsedMs: number, estimate?: BackendAnalysisEstimate | null): { percent: number; indeterminate: boolean } {
-  if (!estimate) return { percent: 0, indeterminate: true };
+function computeEstimateProgress(
+  elapsedMs: number,
+  estimate?: BackendAnalysisEstimate | null,
+): { percent: number; indeterminate: boolean; message: string } {
+  if (!estimate) return { percent: 0, indeterminate: true, message: 'Estimating progress...' };
   const midpointMs = (estimate.totalLowMs + estimate.totalHighMs) / 2;
-  if (midpointMs <= 0) return { percent: 0, indeterminate: true };
+  if (midpointMs <= 0) return { percent: 0, indeterminate: true, message: 'Estimating progress...' };
   return {
     percent: Math.min((elapsedMs / midpointMs) * 100, 95),
     indeterminate: false,
+    message: 'Estimating progress from elapsed time.',
   };
 }
 
-function stageDisplayName(stageKey: 'measurement' | 'symbolicExtraction' | 'interpretation'): string {
+type StageKey = 'measurement' | 'symbolicExtraction' | 'interpretation';
+
+function getStageSnapshot(run: AnalysisRunSnapshot, stageKey: StageKey) {
+  switch (stageKey) {
+    case 'measurement':
+      return run.stages.measurement;
+    case 'symbolicExtraction':
+      return run.stages.symbolicExtraction;
+    case 'interpretation':
+      return run.stages.interpretation;
+    default:
+      return run.stages.measurement;
+  }
+}
+
+function getStageProgressDetails(run: AnalysisRunSnapshot | null, stageKey: StageKey): { fraction: number | null; message: string | null } {
+  if (!run) {
+    return { fraction: null, message: null };
+  }
+
+  const diagnostics = getStageSnapshot(run, stageKey).diagnostics;
+  const progress = diagnostics && typeof diagnostics === 'object' && diagnostics !== null && 'progress' in diagnostics
+    ? diagnostics.progress
+    : null;
+
+  if (!progress || typeof progress !== 'object') {
+    return { fraction: null, message: null };
+  }
+
+  const fraction = typeof progress.fraction === 'number' ? progress.fraction : null;
+  const message = typeof progress.message === 'string' ? progress.message : null;
+  return { fraction, message };
+}
+
+function getTrackedStageKeys(run: AnalysisRunSnapshot | null): StageKey[] {
+  if (!run) {
+    return ['measurement'];
+  }
+
+  const tracked: StageKey[] = ['measurement'];
+  if (run.requestedStages.symbolicMode !== 'off') {
+    tracked.push('symbolicExtraction');
+  }
+  if (run.requestedStages.interpretationMode !== 'off') {
+    tracked.push('interpretation');
+  }
+  return tracked;
+}
+
+function isStageTerminal(status: AnalysisStageStatus): boolean {
+  return ['completed', 'failed', 'interrupted', 'not_requested'].includes(status);
+}
+
+function computeLiveProgress(
+  run: AnalysisRunSnapshot | null,
+): { percent: number; indeterminate: boolean; message: string } | null {
+  if (!run) {
+    return null;
+  }
+
+  const trackedStageKeys = getTrackedStageKeys(run);
+  const activeStageKey = trackedStageKeys.find((stageKey) => !isStageTerminal(getStageSnapshot(run, stageKey).status));
+  const totalStages = Math.max(trackedStageKeys.length, 1);
+
+  if (!activeStageKey) {
+    return { percent: 100, indeterminate: false, message: 'Analysis complete.' };
+  }
+
+  const activeStage = getStageSnapshot(run, activeStageKey);
+  const progressDetails = getStageProgressDetails(run, activeStageKey);
+  const completedBeforeActive = trackedStageKeys.indexOf(activeStageKey);
+  const stageFraction = progressDetails.fraction ?? 0;
+  const percent = Math.min(((completedBeforeActive + stageFraction) / totalStages) * 100, 100);
+  const message = progressDetails.message ?? stageSummary(run, activeStageKey);
+
+  return {
+    percent,
+    indeterminate: activeStage.status === 'running' && progressDetails.fraction == null,
+    message,
+  };
+}
+
+function stageDisplayName(stageKey: StageKey): string {
   switch (stageKey) {
     case 'measurement':
       return 'Measurement';
@@ -76,17 +162,13 @@ function statusClass(status: AnalysisStageStatus): string {
   }
 }
 
-function stageSummary(run: AnalysisRunSnapshot | null, stageKey: 'measurement' | 'symbolicExtraction' | 'interpretation'): string {
+function stageSummary(run: AnalysisRunSnapshot | null, stageKey: StageKey): string {
   if (!run) {
     return 'Awaiting run state.';
   }
 
-  const stage =
-    stageKey === 'measurement'
-      ? run.stages.measurement
-      : stageKey === 'symbolicExtraction'
-        ? run.stages.symbolicExtraction
-        : run.stages.interpretation;
+  const stage = getStageSnapshot(run, stageKey);
+  const progressDetails = getStageProgressDetails(run, stageKey);
 
   if (stage.error?.message) {
     return stage.error.message;
@@ -96,7 +178,7 @@ function stageSummary(run: AnalysisRunSnapshot | null, stageKey: 'measurement' |
     case 'queued':
       return 'Queued locally.';
     case 'running':
-      return 'Currently processing.';
+      return progressDetails.message ?? 'Currently processing.';
     case 'blocked':
       return 'Waiting for measurement to finish.';
     case 'ready':
@@ -123,12 +205,12 @@ export function AnalysisStatusPanel({
   elapsedMs,
   estimate,
   isActive,
-  onStopMonitoring,
+  onStopAnalysis,
   onRetryMeasurement,
   onRetrySymbolic,
   onRetryInterpretation,
 }: AnalysisStatusPanelProps) {
-  const progress = computeProgress(elapsedMs, estimate);
+  const progress = computeLiveProgress(run) ?? computeEstimateProgress(elapsedMs, estimate);
 
   const stageCards = [
     {
@@ -167,12 +249,12 @@ export function AnalysisStatusPanel({
               <Activity className="w-4 h-4" />
               <span className="text-[10px] font-mono uppercase tracking-[0.24em]">{isActive ? 'Monitoring' : 'Idle'}</span>
             </div>
-            {onStopMonitoring && isActive && (
+            {onStopAnalysis && isActive && (
               <button
-                onClick={onStopMonitoring}
+                onClick={onStopAnalysis}
                 className="flex items-center gap-1.5 rounded-sm border border-error/30 bg-error/10 px-3 py-2 text-error hover:bg-error/20 transition-colors"
-                title="Stop monitoring"
-                aria-label="Stop monitoring"
+                title="Stop analysis"
+                aria-label="Stop analysis"
               >
                 <XCircle className="w-4 h-4" />
                 <span className="text-[10px] font-mono uppercase tracking-[0.24em]">Stop</span>
@@ -215,7 +297,7 @@ export function AnalysisStatusPanel({
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-mono uppercase tracking-wider text-text-secondary">Progress</span>
             <span className="text-[10px] font-mono tracking-wider text-text-primary">
-              {progress.indeterminate ? 'Estimating...' : `${Math.round(progress.percent)}%`}
+              {progress.indeterminate ? 'Live update...' : `${Math.round(progress.percent)}%`}
             </span>
           </div>
           <div className="w-full h-2 bg-bg-app border border-border/30 rounded-sm overflow-hidden">
@@ -228,6 +310,9 @@ export function AnalysisStatusPanel({
               />
             )}
           </div>
+          <p className="text-[10px] font-mono uppercase tracking-wider text-text-secondary">
+            {progress.message}
+          </p>
         </div>
       </div>
 
