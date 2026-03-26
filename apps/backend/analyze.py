@@ -429,10 +429,22 @@ def build_analysis_estimate(
     run_separation: bool,
     run_transcribe: bool,
     run_fast: bool = False,
+    run_standard: bool = False,
 ) -> dict:
     stages = []
 
-    dsp_seconds = _estimate_stage_seconds(duration_seconds, 0.06, 0.14, 20.0, 45.0)
+    if run_fast:
+        dsp_seconds = _estimate_stage_seconds(
+            duration_seconds, 0.01, 0.03, 3.0, 10.0
+        )
+    elif run_standard:
+        dsp_seconds = _estimate_stage_seconds(
+            duration_seconds, 0.03, 0.08, 10.0, 25.0
+        )
+    else:
+        dsp_seconds = _estimate_stage_seconds(
+            duration_seconds, 0.06, 0.14, 20.0, 45.0
+        )
     stages.append(
         {
             "key": "dsp",
@@ -507,6 +519,20 @@ def print_analysis_estimate(audio_path: str, estimate: dict) -> None:
 
 def should_prompt_for_confirmation(is_tty: bool, auto_yes: bool) -> bool:
     return bool(is_tty) and not auto_yes
+
+
+def _emit_progress_marker(
+    step_key: str,
+    message: str,
+    fraction: float | None = None,
+) -> None:
+    payload: dict[str, object] = {
+        "stepKey": step_key,
+        "message": message,
+    }
+    if isinstance(fraction, (int, float)):
+        payload["fraction"] = min(max(float(fraction), 0.0), 1.0)
+    print(f"@@ASA_PROGRESS {json.dumps(payload)}", file=sys.stderr, flush=True)
 
 
 def prompt_to_continue() -> bool:
@@ -5300,7 +5326,11 @@ def main():
     analysis_estimate = get_audio_duration_seconds(audio_path)
     if analysis_estimate is not None:
         estimate = build_analysis_estimate(
-            analysis_estimate, run_separation, run_transcribe
+            analysis_estimate,
+            run_separation,
+            run_transcribe,
+            run_fast=run_fast,
+            run_standard=run_standard,
         )
         if sys.stdin.isatty():
             print_analysis_estimate(audio_path, estimate)
@@ -5311,6 +5341,11 @@ def main():
 
     # Load audio
     print(f"Loading: {audio_path}", file=sys.stderr)
+    _emit_progress_marker(
+        "loading_audio",
+        "Loading and validating uploaded audio for local analysis.",
+        0.05,
+    )
 
     try:
         mono = load_mono(audio_path, sample_rate)
@@ -5323,6 +5358,11 @@ def main():
             print("Error: analyze_fast module not available.", file=sys.stderr)
             sys.exit(1)
         print("Running fast analysis...", file=sys.stderr)
+        _emit_progress_marker(
+            "fast_analysis",
+            "Running the reduced fast-analysis preset.",
+            0.5,
+        )
         result = analyze_fast(mono, sample_rate)
         fast_stereo_detail = result.get("stereoDetail")
         fast_mono_compatible = (
@@ -5382,6 +5422,7 @@ def main():
             "perceptual": result.get("perceptual"),
             "essentiaFeatures": result.get("essentiaFeatures"),
         }
+        _emit_progress_marker("complete", "Analysis complete.", 1.0)
         print("Done.", file=sys.stderr)
         print(json.dumps(output, indent=2))
         return
@@ -5396,6 +5437,11 @@ def main():
         stereo = None
 
     if run_separation:
+        _emit_progress_marker(
+            "legacy_stem_separation",
+            "Running legacy stem separation before DSP analysis.",
+            0.12,
+        )
         print(
             "Running source separation (this may take 30-60 seconds)...",
             file=sys.stderr,
@@ -5414,6 +5460,11 @@ def main():
     print("Analyzing...", file=sys.stderr)
 
     # Run RhythmExtractor2013 once, share across BPM / time sig / rhythm detail
+    _emit_progress_marker(
+        "core_measurements",
+        "Measuring tempo, key, loudness, and dynamics.",
+        0.2,
+    )
     rhythm_data = extract_rhythm(mono)
 
     # Run all analyses — each is self-contained and error-safe
@@ -5601,6 +5652,11 @@ def main():
         transcription_mode = (
             "stems" if transcription_stem_paths is not None else "full_mix"
         )
+        _emit_progress_marker(
+            "legacy_transcription",
+            "Running the legacy transcription pass.",
+            0.94 if not run_standard else 0.86,
+        )
         print(f"@@TRANSCRIPTION_START mode={transcription_mode}", file=sys.stderr)
         result.update(
             analyze_transcription(
@@ -5677,6 +5733,7 @@ def main():
         "essentiaFeatures": result.get("essentiaFeatures"),
     }
 
+    _emit_progress_marker("complete", "Analysis complete.", 1.0)
     print("Done.", file=sys.stderr)
     print(json.dumps(output, indent=2))
 

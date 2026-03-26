@@ -550,8 +550,11 @@ export interface SpectralTimeSeriesData {
 }
 
 export interface AnalysisRunRequestedStages {
+  analysisMode: 'full' | 'standard';
   pitchNoteMode: string;
   pitchNoteBackend: string;
+  symbolicMode: string;
+  symbolicBackend: string;
   interpretationMode: string;
   interpretationProfile: string;
   interpretationModel: string | null;

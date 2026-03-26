@@ -21,6 +21,7 @@ export interface AnalyzeAudioUpdate {
 }
 
 export interface AnalyzeAudioOptions {
+  analysisMode?: 'full' | 'standard';
   pitchNoteRequested?: boolean;
   interpretationRequested?: boolean;
   interpretationConfigEnabled?: boolean;
@@ -161,11 +162,21 @@ export async function analyzeAudio(
     const initialRun = await createAnalysisRun(file, {
       apiBaseUrl: appConfig.apiBaseUrl,
       signal: analysisOptions?.signal,
+      analysisMode: analysisOptions?.analysisMode ?? 'full',
       pitchNoteMode: resolvePitchNoteRequested(analysisOptions) ? 'stem_notes' : 'off',
       pitchNoteBackend: 'auto',
+      symbolicMode: resolvePitchNoteRequested(analysisOptions) ? 'stem_notes' : 'off',
+      symbolicBackend: 'auto',
       interpretationMode: resolveInterpretationMode(analysisOptions),
       interpretationProfile: 'producer_summary',
       interpretationModel: resolveInterpretationMode(analysisOptions) === 'off' ? null : modelName,
+    });
+
+    analysisOptions?.onRunUpdate?.({
+      runId: initialRun.runId,
+      snapshot: initialRun,
+      displayPhase1: projectPhase1FromRun(initialRun),
+      displayPhase2: projectPhase2FromRun(initialRun),
     });
 
     await monitorAnalysisRun(

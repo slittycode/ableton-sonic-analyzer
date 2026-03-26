@@ -238,7 +238,7 @@ test('upload shows estimate and local DSP processing copy before phase1 complete
 
   await expect(page.getByTestId('phase2-model-desktop')).toBeVisible();
   await expect(page.getByText(/Estimated local analysis/i)).toBeVisible();
-  await expect(page.getByText('107s-203s')).toBeVisible();
+  await expect(page.getByText('22s-38s')).toBeVisible();
 
   const pitchNoteToggle = page.getByLabel("PITCH/NOTE TRANSLATION");
 

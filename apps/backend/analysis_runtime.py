@@ -135,6 +135,19 @@ class AnalysisRuntime:
             )
             self._ensure_column(
                 conn,
+                "analysis_runs",
+                "requested_analysis_mode",
+                "TEXT",
+            )
+            conn.execute(
+                """
+                UPDATE analysis_runs
+                SET requested_analysis_mode = 'full'
+                WHERE requested_analysis_mode IS NULL
+                """
+            )
+            self._ensure_column(
+                conn,
                 "interpretation_attempts",
                 "grounded_measurement_output_id",
                 "TEXT",
@@ -173,9 +186,11 @@ class AnalysisRuntime:
         interpretation_profile: str,
         interpretation_model: str | None,
         legacy_request_id: str | None = None,
+        analysis_mode: str = "full",
     ) -> dict[str, Any]:
         if self._count_active_measurement_runs() >= self.max_pending_per_stage:
             raise RuntimeError("Measurement queue is full.")
+        resolved_analysis_mode = self._resolve_analysis_mode(analysis_mode)
         self._resolve_pitch_note_backend(pitch_note_backend)
         run_id = str(uuid4())
         artifact_id = str(uuid4())
@@ -191,6 +206,7 @@ class AnalysisRuntime:
                 INSERT INTO analysis_runs (
                     id,
                     source_artifact_id,
+                    requested_analysis_mode,
                     requested_pitch_note_mode,
                     requested_pitch_note_backend,
                     requested_interpretation_mode,
@@ -199,11 +215,12 @@ class AnalysisRuntime:
                     legacy_request_id,
                     created_at,
                     updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     run_id,
                     artifact_id,
+                    resolved_analysis_mode,
                     pitch_note_mode,
                     pitch_note_backend,
                     interpretation_mode,
@@ -335,6 +352,9 @@ class AnalysisRuntime:
             raise KeyError(f"Unknown run {run_id}")
         return str(row["status"])
 
+    def is_run_interrupted(self, run_id: str) -> bool:
+        return self.get_measurement_status(run_id) == "interrupted"
+
     def get_interpretation_grounding(self, run_id: str) -> dict[str, Any]:
         with self._connect() as conn:
             run_row = conn.execute(
@@ -413,6 +433,7 @@ class AnalysisRuntime:
         return {
             "runId": run_id,
             "requestedStages": {
+                "analysisMode": run_row["requested_analysis_mode"],
                 "pitchNoteMode": run_row["requested_pitch_note_mode"],
                 "pitchNoteBackend": run_row["requested_pitch_note_backend"],
                 "interpretationMode": run_row["requested_interpretation_mode"],
@@ -475,6 +496,7 @@ class AnalysisRuntime:
             row = conn.execute(
                 """
                 SELECT mo.id AS measurement_id, mo.run_id,
+                       ar.requested_analysis_mode,
                        ar.requested_pitch_note_mode, ar.requested_pitch_note_backend
                 FROM measurement_outputs mo
                 JOIN analysis_runs ar ON ar.id = mo.run_id
@@ -497,6 +519,7 @@ class AnalysisRuntime:
                 return None
         return {
             "runId": row["run_id"],
+            "requestedAnalysisMode": row["requested_analysis_mode"],
             "requestedPitchNoteMode": row["requested_pitch_note_mode"],
             "requestedPitchNoteBackend": row["requested_pitch_note_backend"],
         }
@@ -987,12 +1010,91 @@ class AnalysisRuntime:
                 (now,),
             )
 
+    def interrupt_run(self, run_id: str) -> dict[str, Any]:
+        now = _utc_now_iso()
+        with self._connect() as conn:
+            run_row = conn.execute(
+                "SELECT id FROM analysis_runs WHERE id = ?",
+                (run_id,),
+            ).fetchone()
+            if run_row is None:
+                raise KeyError(f"Unknown run {run_id}")
+
+            artifact_rows = conn.execute(
+                """
+                SELECT path FROM run_artifacts
+                WHERE run_id = ? AND kind IN ('source_audio', 'stem_bass', 'stem_other')
+                """,
+                (run_id,),
+            ).fetchall()
+
+            interruption_diagnostics = _json_dumps({"interruptedAt": now})
+            conn.execute(
+                """
+                UPDATE measurement_outputs
+                SET status = 'interrupted',
+                    result_json = NULL,
+                    provenance_json = NULL,
+                    diagnostics_json = ?,
+                    error_json = NULL,
+                    updated_at = ?
+                WHERE run_id = ?
+                """,
+                (interruption_diagnostics, now, run_id),
+            )
+            conn.execute(
+                """
+                UPDATE pitch_note_translation_attempts
+                SET status = 'interrupted',
+                    result_json = NULL,
+                    provenance_json = NULL,
+                    diagnostics_json = ?,
+                    error_json = NULL,
+                    updated_at = ?
+                WHERE run_id = ? AND status IN ('queued', 'running', 'completed', 'failed')
+                """,
+                (interruption_diagnostics, now, run_id),
+            )
+            conn.execute(
+                """
+                UPDATE interpretation_attempts
+                SET status = 'interrupted',
+                    result_json = NULL,
+                    diagnostics_json = ?,
+                    error_json = NULL,
+                    updated_at = ?
+                WHERE run_id = ? AND status IN ('queued', 'running', 'completed', 'failed')
+                """,
+                (interruption_diagnostics, now, run_id),
+            )
+            conn.execute(
+                """
+                UPDATE analysis_runs
+                SET preferred_pitch_note_attempt_id = NULL,
+                    preferred_interpretation_attempt_id = NULL,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (now, run_id),
+            )
+
+        for row in artifact_rows:
+            artifact_path = row["path"]
+            if isinstance(artifact_path, str) and artifact_path:
+                try:
+                    Path(artifact_path).unlink(missing_ok=True)
+                except OSError:
+                    pass
+
+        return self.get_run(run_id)
+
     def update_measurement_progress(
         self,
         run_id: str,
         *,
         step_key: str,
         message: str,
+        fraction: float | None = None,
     ) -> dict[str, Any] | None:
         return self._update_stage_progress(
             table="measurement_outputs",
@@ -1000,6 +1102,7 @@ class AnalysisRuntime:
             identifier=run_id,
             step_key=step_key,
             message=message,
+            fraction=fraction,
         )
 
     def update_measurement_pipeline_progress(
@@ -1071,6 +1174,7 @@ class AnalysisRuntime:
         *,
         step_key: str,
         message: str,
+        fraction: float | None = None,
     ) -> dict[str, Any] | None:
         return self._update_stage_progress(
             table="pitch_note_translation_attempts",
@@ -1078,6 +1182,7 @@ class AnalysisRuntime:
             identifier=attempt_id,
             step_key=step_key,
             message=message,
+            fraction=fraction,
         )
 
     def update_interpretation_attempt_progress(
@@ -1086,6 +1191,7 @@ class AnalysisRuntime:
         *,
         step_key: str,
         message: str,
+        fraction: float | None = None,
     ) -> dict[str, Any] | None:
         return self._update_stage_progress(
             table="interpretation_attempts",
@@ -1093,6 +1199,7 @@ class AnalysisRuntime:
             identifier=attempt_id,
             step_key=step_key,
             message=message,
+            fraction=fraction,
         )
 
     def _update_measurement_row(
@@ -1160,6 +1267,7 @@ class AnalysisRuntime:
         identifier: str,
         step_key: str,
         message: str,
+        fraction: float | None = None,
     ) -> dict[str, Any] | None:
         now = _utc_now_iso()
         with self._connect() as conn:
@@ -1189,6 +1297,8 @@ class AnalysisRuntime:
                 "updatedAt": now,
                 "seq": seq,
             }
+            if isinstance(fraction, (int, float)):
+                progress_payload["fraction"] = min(max(float(fraction), 0.0), 1.0)
             diagnostics["progress"] = progress_payload
             conn.execute(
                 f"""
@@ -1273,6 +1383,12 @@ class AnalysisRuntime:
         raise UnsupportedPitchNoteBackendError(normalized)
 
     @staticmethod
+    def _resolve_analysis_mode(requested_mode: str) -> str:
+        if requested_mode in {"full", "standard"}:
+            return requested_mode
+        raise ValueError(f"Unsupported analysis mode '{requested_mode}'.")
+
+    @staticmethod
     def resolve_measurement_flags(
         requested_pitch_note_mode: str,
     ) -> tuple[bool, bool]:
@@ -1317,6 +1433,8 @@ class AnalysisRuntime:
             status = preferred_row["status"]
         elif requested_mode == "off":
             status = "not_requested"
+        elif measurement_status == "interrupted":
+            status = "interrupted"
         elif measurement_status == "completed":
             status = "ready"
         else:
@@ -1352,6 +1470,8 @@ class AnalysisRuntime:
             status = preferred_row["status"]
         elif requested_mode == "off":
             status = "not_requested"
+        elif measurement_status == "interrupted":
+            status = "interrupted"
         elif measurement_status == "completed":
             status = "ready"
         else:

@@ -178,6 +178,7 @@ class ServerContractTests(unittest.TestCase):
         properties = self._request_body_properties("/api/analyze/estimate")
 
         self.assertIn("track", properties)
+        self.assertIn("analysis_mode", properties)
         self.assertIn("transcribe", properties)
         self.assertIn("separate", properties)
 
@@ -187,6 +188,7 @@ class ServerContractTests(unittest.TestCase):
         properties = self._request_body_properties("/api/analysis-runs")
 
         self.assertIn("track", properties)
+        self.assertIn("analysis_mode", properties)
         self.assertIn("pitch_note_mode", properties)
         self.assertIn("pitch_note_backend", properties)
         self.assertIn("interpretation_mode", properties)
@@ -199,6 +201,7 @@ class ServerContractTests(unittest.TestCase):
         properties = self._request_body_properties("/api/analysis-runs/estimate")
 
         self.assertIn("track", properties)
+        self.assertIn("analysis_mode", properties)
         self.assertIn("pitch_note_mode", properties)
         self.assertIn("pitch_note_backend", properties)
         self.assertIn("interpretation_mode", properties)
@@ -214,6 +217,7 @@ class ServerContractTests(unittest.TestCase):
                 response = asyncio.run(
                     server.create_analysis_run(
                         track=self._upload_file(),
+                        analysis_mode="standard",
                         pitch_note_mode="stem_notes",
                         pitch_note_backend="auto",
                         interpretation_mode="async",
@@ -225,6 +229,7 @@ class ServerContractTests(unittest.TestCase):
         payload = self._decode_json_response(response)
         self.assertEqual(response.status_code, 200)
         self.assertIn("runId", payload)
+        self.assertEqual(payload["requestedStages"]["analysisMode"], "standard")
         self.assertEqual(payload["stages"]["measurement"]["status"], "queued")
         self.assertEqual(payload["stages"]["pitchNoteTranslation"]["status"], "blocked")
         self.assertEqual(payload["stages"]["interpretation"]["status"], "blocked")
@@ -262,6 +267,7 @@ class ServerContractTests(unittest.TestCase):
         response = asyncio.run(
             server.estimate_analysis_run(
                 track=self._upload_file(),
+                analysis_mode="standard",
                 pitch_note_mode="stem_notes",
                 pitch_note_backend="auto",
                 interpretation_mode="async",
@@ -277,7 +283,7 @@ class ServerContractTests(unittest.TestCase):
             [stage["key"] for stage in payload["estimate"]["stages"]],
             ["local_dsp", "demucs_separation", "transcription_stems"],
         )
-        build_estimate_mock.assert_called_once_with(214.6, True, True)
+        build_estimate_mock.assert_called_once_with(214.6, True, True, run_standard=True)
 
     def test_analysis_runs_estimate_rejects_unknown_pitch_note_mode(self) -> None:
         response = asyncio.run(
@@ -390,6 +396,39 @@ class ServerContractTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(payload["runId"], created["runId"])
         self.assertIn("artifacts", payload)
+
+    def test_interrupt_analysis_run_marks_stages_interrupted_and_reports_terminated_children(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_server_runtime_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            created = runtime.create_run(
+                filename="track.mp3",
+                content=b"fake-audio",
+                mime_type="audio/mpeg",
+                analysis_mode="full",
+                pitch_note_mode="stem_notes",
+                pitch_note_backend="auto",
+                interpretation_mode="async",
+                interpretation_profile="producer_summary",
+                interpretation_model="gemini-2.5-flash",
+            )
+            with patch.object(server, "get_analysis_runtime", return_value=runtime), patch.object(
+                server,
+                "_interrupt_active_child_processes",
+                return_value=["measurement", "pitchNoteTranslation"],
+            ):
+                response = asyncio.run(server.interrupt_analysis_run(created["runId"]))
+
+        payload = self._decode_json_response(response)
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(payload["stages"]["measurement"]["status"], "interrupted")
+        self.assertEqual(payload["stages"]["pitchNoteTranslation"]["status"], "interrupted")
+        self.assertEqual(payload["stages"]["interpretation"]["status"], "interrupted")
+        self.assertEqual(
+            payload["interrupt"]["stagesTerminated"],
+            ["measurement", "pitchNoteTranslation"],
+        )
 
     @patch.object(server, "get_audio_duration_seconds", return_value=214.6, create=True)
     @patch.object(
@@ -2223,6 +2262,7 @@ class StageWorkerTests(unittest.TestCase):
             run_separation=False,
             run_transcribe=False,
             run_fast=False,
+            run_standard=False,
         )
 
     def test_reserved_measurement_job_fails_measurement_for_unsupported_pitch_note_mode(self) -> None:

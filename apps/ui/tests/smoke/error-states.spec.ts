@@ -531,11 +531,11 @@ test('stop monitoring during interpretation preserves completed measurement with
   await playButton.click();
   await expect(playButton).toBeEnabled();
 
-  const stopButton = page.getByRole('button', { name: /Stop monitoring/i });
+  const stopButton = page.getByRole('button', { name: /Stop analysis/i });
   await expect(stopButton).toBeVisible();
   await stopButton.click();
 
   await expect(page.locator('div.p-3.bg-error\\/10')).toHaveCount(0);
-  await expect(page.getByText('Analysis Results')).toBeVisible();
-  await expect(page.getByText('Monitoring stopped.')).toBeVisible();
+  await expect(page.getByText('Analysis Results')).toHaveCount(0);
+  await expect(page.getByText(/Estimated local analysis/i)).toBeVisible();
 });

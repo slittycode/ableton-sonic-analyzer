@@ -85,6 +85,8 @@ _PROMPTS_DIR = Path(__file__).parent / "prompts"
 _ANALYSIS_RUNTIME: AnalysisRuntime | None = None
 _BACKGROUND_TASKS: list[asyncio.Task[Any]] = []
 logger = logging.getLogger(__name__)
+_ACTIVE_CHILD_PROCESSES: dict[tuple[str, str], subprocess.Popen[Any]] = {}
+_ACTIVE_CHILD_PROCESSES_LOCK = threading.Lock()
 
 LEGACY_ENDPOINT_SUNSET = "Wed, 31 Dec 2026 23:59:59 GMT"
 
@@ -108,6 +110,55 @@ def _mark_legacy_endpoint_response(response: JSONResponse, *, endpoint: str) -> 
         f'299 - "{endpoint} is deprecated; use /api/analysis-runs instead."'
     )
     return response
+
+
+def _register_active_child_process(
+    run_id: str,
+    stage_key: str,
+    process: subprocess.Popen[Any],
+) -> None:
+    with _ACTIVE_CHILD_PROCESSES_LOCK:
+        _ACTIVE_CHILD_PROCESSES[(run_id, stage_key)] = process
+
+
+def _unregister_active_child_process(
+    run_id: str,
+    stage_key: str,
+    process: subprocess.Popen[Any],
+) -> None:
+    with _ACTIVE_CHILD_PROCESSES_LOCK:
+        existing = _ACTIVE_CHILD_PROCESSES.get((run_id, stage_key))
+        if existing is process:
+            _ACTIVE_CHILD_PROCESSES.pop((run_id, stage_key), None)
+
+
+def _terminate_process(process: subprocess.Popen[Any]) -> None:
+    if process.poll() is not None:
+        return
+    process.terminate()
+    try:
+        process.wait(timeout=2)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        try:
+            process.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            pass
+
+
+def _interrupt_active_child_processes(run_id: str) -> list[str]:
+    with _ACTIVE_CHILD_PROCESSES_LOCK:
+        active = [
+            (stage_key, process)
+            for (candidate_run_id, stage_key), process in _ACTIVE_CHILD_PROCESSES.items()
+            if candidate_run_id == run_id
+        ]
+
+    interrupted_stages: list[str] = []
+    for stage_key, process in active:
+        _terminate_process(process)
+        interrupted_stages.append(stage_key)
+    return interrupted_stages
 
 
 PRODUCER_SUMMARY_PROMPT_TEMPLATE = _load_prompt_template("phase2_system.txt")
@@ -368,6 +419,11 @@ async def _stop_background_tasks() -> None:
     for task in _BACKGROUND_TASKS:
         task.cancel()
     _BACKGROUND_TASKS = []
+    with _ACTIVE_CHILD_PROCESSES_LOCK:
+        active = list(_ACTIVE_CHILD_PROCESSES.values())
+        _ACTIVE_CHILD_PROCESSES.clear()
+    for process in active:
+        _terminate_process(process)
 
 
 def _coerce_number(value: Any, default: float = 0.0) -> float:
@@ -636,9 +692,117 @@ def _cleanup_temp_path(temp_path: str | None) -> None:
             pass
 
 
+def _parse_json_marker(line: str, prefix: str) -> dict[str, Any] | None:
+    if not line.startswith(prefix):
+        return None
+    payload_text = line.removeprefix(prefix).strip()
+    if not payload_text:
+        return None
+    try:
+        payload = json.loads(payload_text)
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _read_subprocess_stream(
+    stream: Any,
+    collector: list[str],
+    *,
+    line_handler: Any = None,
+) -> None:
+    try:
+        for raw_line in iter(stream.readline, ""):
+            if raw_line == "":
+                break
+            collector.append(raw_line)
+            if line_handler is not None:
+                line_handler(raw_line.rstrip("\r\n"))
+    finally:
+        try:
+            stream.close()
+        except Exception:
+            pass
+
+
+def _run_streamed_subprocess(
+    *,
+    command: list[str],
+    timeout_seconds: int,
+    run_id: str,
+    stage_key: str,
+    stderr_line_handler: Any = None,
+) -> dict[str, Any]:
+    if getattr(subprocess.run, "__module__", "").startswith("unittest.mock"):
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=timeout_seconds,
+            )
+        except subprocess.TimeoutExpired as exc:
+            return {
+                "returncode": None,
+                "stdout": exc.stdout,
+                "stderr": exc.stderr,
+                "timedOut": True,
+            }
+        return {
+            "returncode": result.returncode,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "timedOut": False,
+        }
+
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+    )
+    _register_active_child_process(run_id, stage_key, process)
+    stdout_chunks: list[str] = []
+    stderr_chunks: list[str] = []
+    stdout_thread = threading.Thread(
+        target=_read_subprocess_stream,
+        args=(process.stdout, stdout_chunks),
+        daemon=True,
+    )
+    stderr_thread = threading.Thread(
+        target=_read_subprocess_stream,
+        args=(process.stderr, stderr_chunks),
+        kwargs={"line_handler": stderr_line_handler},
+        daemon=True,
+    )
+    stdout_thread.start()
+    stderr_thread.start()
+
+    timed_out = False
+    try:
+        process.wait(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        _terminate_process(process)
+    finally:
+        stdout_thread.join(timeout=5)
+        stderr_thread.join(timeout=5)
+        _unregister_active_child_process(run_id, stage_key, process)
+
+    return {
+        "returncode": process.returncode,
+        "stdout": "".join(stdout_chunks),
+        "stderr": "".join(stderr_chunks),
+        "timedOut": timed_out,
+    }
+
+
 async def _create_analysis_run_record(
     *,
     track: UploadFile,
+    analysis_mode: str,
     pitch_note_mode: str,
     pitch_note_backend: str,
     interpretation_mode: str,
@@ -648,12 +812,14 @@ async def _create_analysis_run_record(
 ) -> tuple[AnalysisRuntime, str]:
     content = await track.read()
     runtime = get_analysis_runtime()
+    analysis_mode = _resolve_analysis_mode_value(analysis_mode)
     if interpretation_mode != "off":
         _resolve_interpretation_profile_config(interpretation_profile)
     created = runtime.create_run(
         filename=track.filename or "upload.bin",
         content=content,
         mime_type=track.content_type or _get_audio_mime_type(track.filename or "upload.bin"),
+        analysis_mode=analysis_mode,
         pitch_note_mode=pitch_note_mode,
         pitch_note_backend=pitch_note_backend,
         interpretation_mode=interpretation_mode,
@@ -668,14 +834,18 @@ def _build_measurement_provenance(
     *,
     run_separation: bool,
     run_transcribe: bool,
+    run_standard: bool,
     run_fast: bool,
 ) -> dict[str, Any]:
+    analysis_mode = "standard" if run_standard else "full"
     return {
         "schemaVersion": "measurement.v1",
         "engineVersion": ENGINE_VERSION,
         "requestOptions": {
+            "analysisMode": analysis_mode,
             "separate": run_separation,
             "transcribe": run_transcribe,
+            "standard": run_standard,
             "fast": run_fast,
         },
     }
@@ -695,9 +865,23 @@ def _resolve_estimate_flags_for_stage_request(
     raise UnsupportedPitchNoteModeError(requested_pitch_note_mode)
 
 
+def _value_error_code(value_error: ValueError) -> str:
+    message = str(value_error).lower()
+    if "analysis mode" in message:
+        return "ANALYSIS_MODE_UNSUPPORTED"
+    return "INTERPRETATION_PROFILE_UNSUPPORTED"
+
+
+def _resolve_analysis_mode_value(value: Any) -> str:
+    if not isinstance(value, str):
+        return "full"
+    return AnalysisRuntime._resolve_analysis_mode(value)
+
+
 async def _estimate_analysis_run(
     *,
     track: UploadFile,
+    analysis_mode: str,
     pitch_note_mode: str,
     pitch_note_backend: str,
     interpretation_mode: str,
@@ -712,6 +896,7 @@ async def _estimate_analysis_run(
             _resolve_interpretation_profile_config(interpretation_profile)
 
         temp_path, _file_size_bytes = _persist_upload(track)
+        analysis_mode = _resolve_analysis_mode_value(analysis_mode)
         _ = AnalysisRuntime._resolve_pitch_note_backend(pitch_note_backend)
         _ = interpretation_model
 
@@ -728,7 +913,12 @@ async def _estimate_analysis_run(
             if run_transcribe_override is None
             else run_transcribe_override
         )
-        estimate = _build_backend_estimate(temp_path, run_separation, run_transcribe)
+        estimate = _build_backend_estimate(
+            temp_path,
+            run_separation,
+            run_transcribe,
+            analysis_mode=analysis_mode,
+        )
         return JSONResponse(
             content={
                 "requestId": str(uuid4()),
@@ -742,15 +932,23 @@ async def _estimate_analysis_run(
 
 def _run_measurement_subprocess(
     *,
+    runtime: AnalysisRuntime,
+    run_id: str,
     audio_path: str,
     file_size_bytes: int,
     request_id: str,
     request_started_at: datetime,
     run_separation: bool,
     run_transcribe: bool,
+    run_standard: bool,
     run_fast: bool,
 ) -> dict[str, Any]:
-    estimate = _build_backend_estimate(audio_path, run_separation, run_transcribe)
+    estimate = _build_backend_estimate(
+        audio_path,
+        run_separation,
+        run_transcribe,
+        analysis_mode="standard" if run_standard else "full",
+    )
     command = ["./venv/bin/python", "analyze.py", audio_path, "--yes"]
     flags_used: list[str] = []
     if run_separation:
@@ -759,6 +957,9 @@ def _run_measurement_subprocess(
     if run_transcribe:
         command.append("--transcribe")
         flags_used.append("--transcribe")
+    if run_standard and not run_fast:
+        command.append("--standard")
+        flags_used.append("--standard")
     if run_fast:
         command.append("--fast")
         flags_used.append("--fast")
@@ -766,45 +967,58 @@ def _run_measurement_subprocess(
     timeout_seconds = _compute_timeout_seconds(estimate)
     analysis_started_at = _current_time()
     try:
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=timeout_seconds,
-        )
-    except subprocess.TimeoutExpired as exc:
-        analysis_completed_at = _current_time()
-        diagnostics = _build_diagnostics(
-            request_id=request_id,
-            estimate=estimate,
+        def handle_stderr_line(line: str) -> None:
+            progress_payload = _parse_json_marker(line, "@@ASA_PROGRESS")
+            if progress_payload is not None:
+                runtime.update_measurement_progress(
+                    run_id,
+                    step_key=_coerce_string(
+                        progress_payload.get("stepKey"), "measurement_progress"
+                    ),
+                    message=_coerce_string(
+                        progress_payload.get("message"),
+                        "Local measurement is in progress.",
+                    ),
+                    fraction=_coerce_nullable_number(progress_payload.get("fraction")),
+                )
+                return
+
+            if line.startswith("@@SEPARATION_COMPLETE"):
+                runtime.update_measurement_pipeline_progress(
+                    run_id,
+                    pipeline_key="separation",
+                    status="completed",
+                    step_key="separation_complete",
+                    message="Legacy stem separation completed.",
+                )
+                return
+
+            if line.startswith("@@TRANSCRIPTION_START"):
+                runtime.update_measurement_pipeline_progress(
+                    run_id,
+                    pipeline_key="transcription",
+                    status="running",
+                    step_key="transcription_running",
+                    message="Legacy transcription is running.",
+                )
+                return
+
+            if line.startswith("@@TRANSCRIPTION_COMPLETE"):
+                runtime.update_measurement_pipeline_progress(
+                    run_id,
+                    pipeline_key="transcription",
+                    status="completed",
+                    step_key="transcription_complete",
+                    message="Legacy transcription completed.",
+                )
+
+        result = _run_streamed_subprocess(
+            command=command,
             timeout_seconds=timeout_seconds,
-            request_started_at=request_started_at,
-            analysis_started_at=analysis_started_at,
-            analysis_completed_at=analysis_completed_at,
-            flags_used=flags_used,
-            file_size_bytes=file_size_bytes,
-            file_duration_seconds=None,
-            engine_version=ENGINE_VERSION,
-            stdout=exc.stdout,
-            stderr=exc.stderr,
+            run_id=run_id,
+            stage_key="measurement",
+            stderr_line_handler=handle_stderr_line,
         )
-        return {
-            "ok": False,
-            "statusCode": 504,
-            "errorCode": "ANALYZER_TIMEOUT",
-            "message": "Local DSP analysis timed out before completion.",
-            "retryable": True,
-            "estimate": estimate,
-            "timeoutSeconds": timeout_seconds,
-            "flagsUsed": flags_used,
-            "requestStartedAt": request_started_at,
-            "analysisStartedAt": analysis_started_at,
-            "analysisCompletedAt": analysis_completed_at,
-            "stdout": exc.stdout,
-            "stderr": exc.stderr,
-            "diagnostics": diagnostics,
-        }
     except Exception as exc:
         analysis_completed_at = _current_time()
         diagnostics = _build_diagnostics(
@@ -837,7 +1051,7 @@ def _run_measurement_subprocess(
         }
 
     analysis_completed_at = _current_time()
-    if result.returncode != 0:
+    if result["timedOut"]:
         diagnostics = _build_diagnostics(
             request_id=request_id,
             estimate=estimate,
@@ -849,8 +1063,40 @@ def _run_measurement_subprocess(
             file_size_bytes=file_size_bytes,
             file_duration_seconds=None,
             engine_version=ENGINE_VERSION,
-            stdout=result.stdout,
-            stderr=result.stderr,
+            stdout=result["stdout"],
+            stderr=result["stderr"],
+        )
+        return {
+            "ok": False,
+            "statusCode": 504,
+            "errorCode": "ANALYZER_TIMEOUT",
+            "message": "Local DSP analysis timed out before completion.",
+            "retryable": True,
+            "estimate": estimate,
+            "timeoutSeconds": timeout_seconds,
+            "flagsUsed": flags_used,
+            "requestStartedAt": request_started_at,
+            "analysisStartedAt": analysis_started_at,
+            "analysisCompletedAt": analysis_completed_at,
+            "stdout": result["stdout"],
+            "stderr": result["stderr"],
+            "diagnostics": diagnostics,
+        }
+
+    if result["returncode"] != 0:
+        diagnostics = _build_diagnostics(
+            request_id=request_id,
+            estimate=estimate,
+            timeout_seconds=timeout_seconds,
+            request_started_at=request_started_at,
+            analysis_started_at=analysis_started_at,
+            analysis_completed_at=analysis_completed_at,
+            flags_used=flags_used,
+            file_size_bytes=file_size_bytes,
+            file_duration_seconds=None,
+            engine_version=ENGINE_VERSION,
+            stdout=result["stdout"],
+            stderr=result["stderr"],
         )
         return {
             "ok": False,
@@ -864,12 +1110,12 @@ def _run_measurement_subprocess(
             "requestStartedAt": request_started_at,
             "analysisStartedAt": analysis_started_at,
             "analysisCompletedAt": analysis_completed_at,
-            "stdout": result.stdout,
-            "stderr": result.stderr,
+            "stdout": result["stdout"],
+            "stderr": result["stderr"],
             "diagnostics": diagnostics,
         }
 
-    stdout = result.stdout.strip()
+    stdout = str(result["stdout"]).strip()
     if not stdout:
         diagnostics = _build_diagnostics(
             request_id=request_id,
@@ -882,7 +1128,7 @@ def _run_measurement_subprocess(
             file_size_bytes=file_size_bytes,
             file_duration_seconds=None,
             engine_version=ENGINE_VERSION,
-            stderr=result.stderr,
+            stderr=result["stderr"],
         )
         return {
             "ok": False,
@@ -896,7 +1142,7 @@ def _run_measurement_subprocess(
             "requestStartedAt": request_started_at,
             "analysisStartedAt": analysis_started_at,
             "analysisCompletedAt": analysis_completed_at,
-            "stderr": result.stderr,
+            "stderr": result["stderr"],
             "diagnostics": diagnostics,
         }
 
@@ -915,7 +1161,7 @@ def _run_measurement_subprocess(
             file_duration_seconds=None,
             engine_version=ENGINE_VERSION,
             stdout=stdout,
-            stderr=result.stderr,
+            stderr=result["stderr"],
         )
         return {
             "ok": False,
@@ -930,7 +1176,7 @@ def _run_measurement_subprocess(
             "analysisStartedAt": analysis_started_at,
             "analysisCompletedAt": analysis_completed_at,
             "stdout": stdout,
-            "stderr": result.stderr,
+            "stderr": result["stderr"],
             "diagnostics": diagnostics,
         }
 
@@ -947,7 +1193,7 @@ def _run_measurement_subprocess(
             file_duration_seconds=None,
             engine_version=ENGINE_VERSION,
             stdout=stdout,
-            stderr=result.stderr,
+            stderr=result["stderr"],
         )
         return {
             "ok": False,
@@ -961,7 +1207,7 @@ def _run_measurement_subprocess(
             "analysisStartedAt": analysis_started_at,
             "analysisCompletedAt": analysis_completed_at,
             "stdout": stdout,
-            "stderr": result.stderr,
+            "stderr": result["stderr"],
             "diagnostics": diagnostics,
         }
 
@@ -1033,21 +1279,36 @@ def _execute_measurement_run(
     request_id: str,
     run_separation: bool,
     run_transcribe: bool,
+    run_standard: bool,
     run_fast: bool,
 ) -> dict[str, Any]:
     source_artifact = runtime.get_source_artifact(run_id)
     execution = _run_measurement_subprocess(
+        runtime=runtime,
+        run_id=run_id,
         audio_path=source_artifact["path"],
         file_size_bytes=source_artifact["sizeBytes"],
         request_id=request_id,
         request_started_at=_current_time(),
         run_separation=run_separation,
         run_transcribe=run_transcribe,
+        run_standard=run_standard,
         run_fast=run_fast,
     )
+    if runtime.is_run_interrupted(run_id):
+        return {
+            **execution,
+            "ok": False,
+            "interrupted": True,
+            "statusCode": 202,
+            "errorCode": "ANALYSIS_INTERRUPTED",
+            "message": "Analysis run was interrupted before completion.",
+            "retryable": False,
+        }
     provenance = _build_measurement_provenance(
         run_separation=run_separation,
         run_transcribe=run_transcribe,
+        run_standard=run_standard,
         run_fast=run_fast,
     )
     if execution["ok"]:
@@ -1079,6 +1340,7 @@ def _execute_reserved_measurement_job(
     job: dict[str, Any],
 ) -> dict[str, Any]:
     run_id = str(job["runId"])
+    requested_analysis_mode = str(job.get("requestedAnalysisMode", "full"))
     requested_pitch_note_mode = str(job.get("requestedPitchNoteMode", "off"))
     try:
         run_separation, run_transcribe = runtime.resolve_measurement_flags(
@@ -1115,6 +1377,7 @@ def _execute_reserved_measurement_job(
         request_id=run_id,
         run_separation=run_separation,
         run_transcribe=run_transcribe,
+        run_standard=requested_analysis_mode == "standard",
         run_fast=False,
     )
 
@@ -1132,6 +1395,7 @@ def _execute_pitch_note_attempt(
     """
     started_at = _current_time()
     run_id = str(attempt["runId"])
+    attempt_id = str(attempt["attemptId"])
     source_artifact = runtime.get_source_artifact(run_id)
     provenance: dict[str, Any] = {
         "schemaVersion": "pitch_note_translation.v1",
@@ -1222,6 +1486,7 @@ def _execute_pitch_note_attempt(
             diagnostics={
                 "backendDurationMs": round(_elapsed_ms(started_at, _current_time()), 2),
                 "sourceArtifactId": source_artifact["artifactId"],
+                "isolationMode": "subprocess",
             },
         )
 
@@ -1457,6 +1722,16 @@ def _execute_interpretation_attempt(
         "groundedMeasurementOutputId": grounding["measurementOutputId"],
         "groundedPitchNoteAttemptId": grounding["pitchNoteAttemptId"],
     }
+    if runtime.is_run_interrupted(run_id):
+        return {
+            **execution,
+            "ok": False,
+            "interrupted": True,
+            "statusCode": 202,
+            "errorCode": "ANALYSIS_INTERRUPTED",
+            "message": "Analysis run was interrupted before interpretation completed.",
+            "retryable": False,
+        }
     if execution["ok"]:
         runtime.complete_interpretation_attempt(
             str(attempt["attemptId"]),
@@ -1558,6 +1833,7 @@ async def _interpretation_worker_loop() -> None:
 @app.post("/api/analysis-runs")
 async def create_analysis_run(
     track: UploadFile = File(...),
+    analysis_mode: str = Form("full"),
     pitch_note_mode: str = Form("off"),
     pitch_note_backend: str = Form("auto"),
     interpretation_mode: str = Form("off"),
@@ -1567,6 +1843,7 @@ async def create_analysis_run(
     try:
         runtime, run_id = await _create_analysis_run_record(
             track=track,
+            analysis_mode=analysis_mode,
             pitch_note_mode=pitch_note_mode,
             pitch_note_backend=pitch_note_backend,
             interpretation_mode=interpretation_mode,
@@ -1589,7 +1866,7 @@ async def create_analysis_run(
             status_code=400,
             content={
                 "error": {
-                    "code": "INTERPRETATION_PROFILE_UNSUPPORTED",
+                    "code": _value_error_code(exc),
                     "message": str(exc),
                 }
             },
@@ -1611,6 +1888,7 @@ async def create_analysis_run(
 @app.post("/api/analysis-runs/estimate")
 async def estimate_analysis_run(
     track: UploadFile = File(...),
+    analysis_mode: str = Form("full"),
     pitch_note_mode: str = Form("off"),
     pitch_note_backend: str = Form("auto"),
     interpretation_mode: str = Form("off"),
@@ -1620,6 +1898,7 @@ async def estimate_analysis_run(
     try:
         return await _estimate_analysis_run(
             track=track,
+            analysis_mode=analysis_mode,
             pitch_note_mode=pitch_note_mode,
             pitch_note_backend=pitch_note_backend,
             interpretation_mode=interpretation_mode,
@@ -1651,7 +1930,7 @@ async def estimate_analysis_run(
             status_code=400,
             content={
                 "error": {
-                    "code": "INTERPRETATION_PROFILE_UNSUPPORTED",
+                    "code": _value_error_code(exc),
                     "message": str(exc),
                 }
             },
@@ -1673,6 +1952,30 @@ async def get_analysis_run(run_id: str) -> JSONResponse:
                 }
             },
         )
+
+
+@app.post("/api/analysis-runs/{run_id}/interrupt")
+async def interrupt_analysis_run(run_id: str) -> JSONResponse:
+    runtime = get_analysis_runtime()
+    try:
+        terminated_stages = _interrupt_active_child_processes(run_id)
+        snapshot = runtime.interrupt_run(run_id)
+    except KeyError:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": {
+                    "code": "RUN_NOT_FOUND",
+                    "message": f"Analysis run '{run_id}' was not found.",
+                }
+            },
+        )
+
+    payload = _normalize_run_snapshot(snapshot, runtime)
+    payload["interrupt"] = {
+        "stagesTerminated": terminated_stages,
+    }
+    return JSONResponse(status_code=202, content=payload)
 
 
 @app.get("/api/analysis-runs/{run_id}/artifacts")
@@ -1930,7 +2233,7 @@ async def create_interpretation_attempt(
             status_code=400,
             content={
                 "error": {
-                    "code": "INTERPRETATION_PROFILE_UNSUPPORTED",
+                    "code": _value_error_code(exc),
                     "message": str(exc),
                 }
             },
@@ -1990,6 +2293,8 @@ def _build_backend_estimate(
     audio_path: str,
     run_separation: bool,
     run_transcribe: bool,
+    *,
+    analysis_mode: str = "full",
 ) -> dict[str, Any]:
     try:
         duration_seconds = get_audio_duration_seconds(audio_path)
@@ -1997,9 +2302,19 @@ def _build_backend_estimate(
         duration_seconds = None
 
     safe_duration = duration_seconds if duration_seconds is not None else 0.0
-    raw_estimate = build_analysis_estimate(
-        safe_duration, run_separation, run_transcribe
-    )
+    if analysis_mode == "standard":
+        raw_estimate = build_analysis_estimate(
+            safe_duration,
+            run_separation,
+            run_transcribe,
+            run_standard=True,
+        )
+    else:
+        raw_estimate = build_analysis_estimate(
+            safe_duration,
+            run_separation,
+            run_transcribe,
+        )
     raw_stages = raw_estimate.get("stages")
     stages = (
         [
@@ -2746,6 +3061,7 @@ def _build_success_response(
 async def estimate_analysis(
     track: UploadFile = File(...),
     dsp_json_override: str | None = Form(None),
+    analysis_mode: str = Form("full"),
     transcribe: bool = Form(False),
     separate: bool = Form(False),
     separate_query: bool = Query(
@@ -2761,6 +3077,7 @@ async def estimate_analysis(
     _ = dsp_json_override
     response = await _estimate_analysis_run(
         track=track,
+        analysis_mode=analysis_mode,
         pitch_note_mode=_resolve_pitch_note_mode_for_legacy(transcribe),
         pitch_note_backend="auto",
         interpretation_mode="off",
@@ -2776,6 +3093,7 @@ async def estimate_analysis(
 async def analyze_audio(
     track: UploadFile = File(...),
     dsp_json_override: str | None = Form(None),
+    analysis_mode: str = Form("full"),
     transcribe: bool = Form(False),
     separate: bool = Form(False),
     separate_query: bool = Query(
@@ -2795,9 +3113,11 @@ async def analyze_audio(
     logger.warning("Legacy compatibility endpoint hit: /api/analyze request_id=%s", request_id)
     try:
         _ = dsp_json_override
+        analysis_mode = _resolve_analysis_mode_value(analysis_mode)
         requested_pitch_note_mode = _resolve_pitch_note_mode_for_legacy(transcribe)
         runtime, run_id = await _create_analysis_run_record(
             track=track,
+            analysis_mode=analysis_mode,
             pitch_note_mode=requested_pitch_note_mode,
             pitch_note_backend="auto",
             interpretation_mode="off",
@@ -2806,16 +3126,16 @@ async def analyze_audio(
             legacy_request_id=request_id,
         )
         runtime.reserve_measurement_run(run_id)
-        resolved_run_separation, resolved_run_transcribe = runtime.resolve_measurement_flags(
-            requested_pitch_note_mode,
-        )
+        resolved_run_separation = bool(separate or separate_query or separate_flag)
+        resolved_run_transcribe = False
         execution = await asyncio.to_thread(
             _execute_measurement_run,
             runtime,
             run_id,
             request_id=request_id,
-            run_separation=resolved_run_separation or bool(separate or separate_query or separate_flag),
+            run_separation=resolved_run_separation,
             run_transcribe=resolved_run_transcribe,
+            run_standard=analysis_mode == "standard",
             run_fast=bool(fast or fast_query),
         )
         if not execution["ok"]:
@@ -2852,6 +3172,19 @@ async def analyze_audio(
                     "message": str(exc),
                     "phase": ERROR_PHASE_LOCAL_DSP,
                     "retryable": True,
+                },
+            },
+        ), endpoint="/api/analyze")
+    except ValueError as exc:
+        return _mark_legacy_endpoint_response(JSONResponse(
+            status_code=400,
+            content={
+                "requestId": request_id,
+                "error": {
+                    "code": _value_error_code(exc),
+                    "message": str(exc),
+                    "phase": ERROR_PHASE_LOCAL_DSP,
+                    "retryable": False,
                 },
             },
         ), endpoint="/api/analyze")

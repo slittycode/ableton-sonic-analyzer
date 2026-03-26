@@ -26,8 +26,11 @@ interface AnalysisRunsClientOptions {
 }
 
 interface CreateAnalysisRunOptions extends AnalysisRunsClientOptions {
+  analysisMode?: 'full' | 'standard';
   pitchNoteMode: string;
   pitchNoteBackend: string;
+  symbolicMode?: string;
+  symbolicBackend?: string;
   interpretationMode: string;
   interpretationProfile: string;
   interpretationModel?: string | null;
@@ -62,8 +65,11 @@ export async function estimateAnalysisRun(
 ): Promise<BackendEstimateResponse> {
   const body = new FormData();
   body.append('track', file);
+  body.append('analysis_mode', options.analysisMode ?? 'full');
   body.append('pitch_note_mode', options.pitchNoteMode);
   body.append('pitch_note_backend', options.pitchNoteBackend);
+  body.append('symbolic_mode', options.symbolicMode ?? options.pitchNoteMode);
+  body.append('symbolic_backend', options.symbolicBackend ?? options.pitchNoteBackend);
   body.append('interpretation_mode', options.interpretationMode);
   body.append('interpretation_profile', options.interpretationProfile);
   if (options.interpretationModel) {
@@ -85,8 +91,11 @@ export async function createAnalysisRun(
 ): Promise<AnalysisRunSnapshot> {
   const body = new FormData();
   body.append('track', file);
+  body.append('analysis_mode', options.analysisMode ?? 'full');
   body.append('pitch_note_mode', options.pitchNoteMode);
   body.append('pitch_note_backend', options.pitchNoteBackend);
+  body.append('symbolic_mode', options.symbolicMode ?? options.pitchNoteMode);
+  body.append('symbolic_backend', options.symbolicBackend ?? options.pitchNoteBackend);
   body.append('interpretation_mode', options.interpretationMode);
   body.append('interpretation_profile', options.interpretationProfile);
   if (options.interpretationModel) {
@@ -98,6 +107,21 @@ export async function createAnalysisRun(
     {
       method: 'POST',
       body,
+      signal: options.signal,
+    },
+  );
+
+  return parseAnalysisRunSnapshot(response);
+}
+
+export async function interruptAnalysisRun(
+  runId: string,
+  options: AnalysisRunsClientOptions,
+): Promise<AnalysisRunSnapshot> {
+  const response = await fetchJson(
+    `${options.apiBaseUrl}/api/analysis-runs/${runId}/interrupt`,
+    {
+      method: 'POST',
       signal: options.signal,
     },
   );
@@ -282,8 +306,16 @@ function parseCanonicalMeasurementResult(value: unknown): MeasurementResult {
 function parseRequestedStages(value: unknown): AnalysisRunRequestedStages {
   const requested = expectRecord(value, 'requestedStages');
   return {
+    analysisMode:
+      requested.analysisMode == null ? 'full' : expectAnalysisMode(requested.analysisMode),
     pitchNoteMode: expectString(requested.pitchNoteMode, 'requestedStages.pitchNoteMode'),
     pitchNoteBackend: expectString(requested.pitchNoteBackend, 'requestedStages.pitchNoteBackend'),
+    symbolicMode:
+      asString(requested.symbolicMode) ??
+      expectString(requested.pitchNoteMode, 'requestedStages.pitchNoteMode'),
+    symbolicBackend:
+      asString(requested.symbolicBackend) ??
+      expectString(requested.pitchNoteBackend, 'requestedStages.pitchNoteBackend'),
     interpretationMode: expectString(requested.interpretationMode, 'requestedStages.interpretationMode'),
     interpretationProfile: expectString(requested.interpretationProfile, 'requestedStages.interpretationProfile'),
     interpretationModel: asString(requested.interpretationModel),
@@ -450,6 +482,13 @@ function parseNullableRecord(value: unknown): Record<string, unknown> | null {
     return null;
   }
   return expectRecord(value, 'record');
+}
+
+function expectAnalysisMode(value: unknown): 'full' | 'standard' {
+  if (value === 'full' || value === 'standard') {
+    return value;
+  }
+  throw new Error(`analysisMode must be 'full' or 'standard'; received ${String(value)}`);
 }
 
 function parseNullableError(value: unknown): AnalysisStageError | null {

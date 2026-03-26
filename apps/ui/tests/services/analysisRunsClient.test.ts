@@ -7,6 +7,7 @@ import {
   createInterpretationAttempt,
   createPitchNoteTranslationAttempt,
   getAnalysisRun,
+  interruptAnalysisRun,
   projectPhase1FromRun,
   projectPhase2FromRun,
   projectStemSummaryFromRun,
@@ -441,5 +442,24 @@ describe('analysisRunsClient', () => {
     });
 
     expect(fetchSpy.mock.calls[0]?.[0]).toBe('http://127.0.0.1:8100/api/analysis-runs/run_123/interpretations');
+  });
+
+  it('interrupts an analysis run through the canonical endpoint', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 202,
+      statusText: 'Accepted',
+      json: () => Promise.resolve(baseRunSnapshot),
+    } as Response);
+    vi.stubGlobal('fetch', fetchSpy);
+
+    await interruptAnalysisRun('run_123', {
+      apiBaseUrl: 'http://127.0.0.1:8100',
+    });
+
+    expect(fetchSpy.mock.calls[0]?.[0]).toBe('http://127.0.0.1:8100/api/analysis-runs/run_123/interrupt');
+    expect(fetchSpy.mock.calls[0]?.[1]).toMatchObject({
+      method: 'POST',
+    });
   });
 });

@@ -472,7 +472,7 @@ describe('analyzeAudio', () => {
     );
   });
 
-  it('treats stop-monitoring as user-cancelled and suppresses later results', async () => {
+  it('treats stop-monitoring as user-cancelled and suppresses later poll results', async () => {
     createAnalysisRunMock.mockResolvedValue(makeRunSnapshot({
       stages: {
         measurement: {
@@ -540,7 +540,14 @@ describe('analyzeAudio', () => {
 
     await promise;
 
-    expect(onRunUpdate).not.toHaveBeenCalled();
+    expect(onRunUpdate).toHaveBeenCalledTimes(1);
+    expect(onRunUpdate.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        runId: 'run_123',
+        displayPhase1: null,
+        displayPhase2: null,
+      }),
+    );
     expect(onPhase2Complete).not.toHaveBeenCalled();
     expect(onError).toHaveBeenCalledTimes(1);
     expect(onError.mock.calls[0]?.[0]).toBeInstanceOf(BackendClientError);
