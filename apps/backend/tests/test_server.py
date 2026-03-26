@@ -1543,7 +1543,13 @@ class Phase2EndpointTests(unittest.TestCase):
     def _run(self, coro):
         return asyncio.run(coro)
 
-    def _make_completed_run(self, runtime, *, legacy_request_id: str | None = None) -> str:
+    def _make_completed_run(
+        self,
+        runtime,
+        *,
+        legacy_request_id: str | None = None,
+        measurement_payload: dict | None = None,
+    ) -> str:
         created = runtime.create_run(
             filename="track.mp3",
             content=b"server-owned-audio",
@@ -1557,7 +1563,7 @@ class Phase2EndpointTests(unittest.TestCase):
         )
         runtime.complete_measurement(
             created["runId"],
-            payload={"bpm": 128, "key": "A minor", "durationSeconds": 60.0},
+            payload=measurement_payload or {"bpm": 128, "key": "A minor", "durationSeconds": 60.0},
             provenance={"schemaVersion": "measurement.v1", "engineVersion": "analyze.py"},
             diagnostics={"backendDurationMs": 1000},
         )
@@ -1822,6 +1828,43 @@ class Phase2EndpointTests(unittest.TestCase):
         self.assertIn('"bpm": 128', prompt)
         self.assertNotIn('"bpm": 999', prompt)
         self.assertIn('"transcriptionMethod": "stub-backend"', prompt)
+
+    def test_server_owned_measurement_prompt_includes_dynamic_character(self) -> None:
+        mock_client = self._mock_successful_gemini(json.dumps(_valid_phase2_result()))
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_phase2_runtime_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            run_id = self._make_completed_run(
+                runtime,
+                measurement_payload={
+                    "bpm": 128,
+                    "key": "A minor",
+                    "durationSeconds": 60.0,
+                    "dynamicCharacter": {
+                        "dynamicComplexity": 3.781,
+                        "loudnessVariation": -24.056,
+                        "spectralFlatness": 0.0131,
+                        "logAttackTime": -4.2565,
+                        "attackTimeStdDev": 0.0291,
+                    },
+                },
+            )
+            with (
+                patch.object(server, "get_analysis_runtime", return_value=runtime),
+                patch.object(server, "_GENAI_AVAILABLE", True),
+                patch.dict(server.os.environ, {"GEMINI_API_KEY": "fake-key"}),
+                patch.object(server, "_genai") as mock_genai,
+                patch.object(server, "_genai_types") as mock_genai_types,
+            ):
+                mock_genai.Client.return_value = mock_client
+                mock_genai_types.GenerateContentConfig.return_value = unittest.mock.MagicMock()
+                response = self._call(analysis_run_id=run_id)
+
+        self.assertEqual(response.status_code, 200)
+        prompt = mock_client.models.generate_content.call_args.kwargs["contents"][0]["parts"][1]["text"]
+        self.assertIn('"dynamicCharacter"', prompt)
+        self.assertIn('"dynamicComplexity": 3.781', prompt)
 
     def test_compatibility_wrapper_can_resolve_run_from_legacy_request_id(self) -> None:
         mock_client = self._mock_successful_gemini(json.dumps(_valid_phase2_result()))

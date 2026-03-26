@@ -635,4 +635,50 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).toContain('id="section-meas-spectral"');
     expect(html).toContain('Chroma (12 pitches)');
   });
+
+  it('surfaces track character, assumed meter state, truthful tempo score, authoritative total bars, and segment keys', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: {
+          ...baseMeasurement,
+          bpmConfidence: 1.88,
+          bpmSource: 'rhythm_extractor_confirmed',
+          timeSignatureSource: 'assumed_four_four',
+          timeSignatureConfidence: 0,
+          durationSeconds: 210.6,
+          rhythmDetail: {
+            onsetRate: 2.4,
+            beatGrid: [],
+            downbeats: [],
+            beatPositions: [],
+            grooveAmount: 0.22,
+            phraseGrid: {
+              phrases4Bar: [0, 4, 8, 12],
+              phrases8Bar: [0, 8],
+              phrases16Bar: [0],
+              totalBars: 257,
+              totalPhrases8Bar: 32,
+            },
+          },
+          segmentKey: [{ segmentIndex: 0, key: 'C Major (Bridge)', keyConfidence: 0.62 }],
+        },
+        phase2: {
+          ...basePhase2,
+          trackCharacter: 'Measured summary with explicit genre and dynamic language.',
+        },
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).toContain('Track Character');
+    expect(html).toContain('Measured summary with explicit genre and dynamic language.');
+    expect(html).toContain('ASSUMED');
+    expect(html).toContain('SCORE 1.88');
+    expect(html).toContain('rhythm extractor confirmed');
+    expect(html).not.toContain('CONF 188%');
+    expect(html).toContain('257 BARS');
+    expect(html).not.toContain('110 BARS');
+    expect(html).toContain('C Major (Bridge)');
+    expect(html).toMatch(/<td[^>]*>0<\/td>/);
+  });
 });

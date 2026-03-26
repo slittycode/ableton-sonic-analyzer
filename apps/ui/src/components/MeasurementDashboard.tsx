@@ -42,6 +42,22 @@ const formatDuration = (seconds: number): string => {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 };
 
+const formatBpmScore = (value: number): string => `SCORE ${formatNumber(value, 2)}`;
+
+const isAssumedMeter = (phase1: Phase1Result): boolean =>
+  phase1.timeSignatureSource === 'assumed_four_four' || (phase1.timeSignatureConfidence ?? 1) <= 0;
+
+const resolveBarCount = (phase1: Phase1Result): number => {
+  const phraseGridBars = phase1.rhythmDetail?.phraseGrid?.totalBars;
+  if (typeof phraseGridBars === 'number' && Number.isFinite(phraseGridBars) && phraseGridBars > 0) {
+    return phraseGridBars;
+  }
+
+  const beatsPerBar = parseInt(phase1.timeSignature?.split('/')[0] || '4', 10) || 4;
+  const totalBeats = (phase1.durationSeconds / 60) * phase1.bpm;
+  return Math.floor(totalBeats / beatsPerBar);
+};
+
 const lufsToPercent = (value: number, min = -60, max = 0): number =>
   Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
 
@@ -1245,17 +1261,9 @@ export function MeasurementDashboard({
               </span>
             )}
             <div className="mt-3 space-y-1">
-              <div className="w-full h-1 bg-bg-app border border-border/20 rounded-sm overflow-hidden">
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${phase1.bpmConfidence * 100}%` }}
-                  transition={{ duration: 0.6, ease: 'easeOut' }}
-                  className="h-full bg-accent shadow-[0_0_4px_var(--color-accent)]"
-                />
-              </div>
               <div className="flex items-center justify-between">
                 <span className="text-[8px] font-mono text-text-secondary/60 tabular-nums">
-                  CONF {Math.round(phase1.bpmConfidence * 100)}%
+                  {formatBpmScore(phase1.bpmConfidence)}
                 </span>
                 {phase1.bpmAgreement !== undefined && phase1.bpmAgreement !== null && (
                   <span className={`text-[8px] font-mono ${phase1.bpmAgreement ? 'text-success/70' : 'text-error/70'}`}>
@@ -1310,12 +1318,11 @@ export function MeasurementDashboard({
             {(() => {
               const mins = Math.floor(phase1.durationSeconds / 60);
               const secs = Math.floor(phase1.durationSeconds % 60);
-              const beatsPerBar = parseInt(phase1.timeSignature?.split('/')[0] || '4', 10) || 4;
-              const totalBeats = (phase1.durationSeconds / 60) * phase1.bpm;
-              const totalBars = Math.floor(totalBeats / beatsPerBar);
+              const totalBars = resolveBarCount(phase1);
               const gridSegments = Math.min(Math.ceil(totalBars / 4), 24);
               const fullSegments = Math.floor(totalBars / 4);
               const remainder = (totalBars % 4) / 4;
+              const meterStatus = isAssumedMeter(phase1) ? 'ASSUMED' : 'DETECTED';
               return (
                 <>
                   {/* Transport LCD */}
@@ -1328,6 +1335,7 @@ export function MeasurementDashboard({
                       {String(secs).padStart(2, '0')}
                     </span>
                     <span className="text-[9px] font-mono text-text-secondary/50 ml-2 self-end mb-0.5">{phase1.timeSignature}</span>
+                    <span className="text-[8px] font-mono text-text-secondary/50 ml-2 self-end mb-0.5">{meterStatus}</span>
                   </div>
                   {/* Bar count + grid */}
                   <div className="mt-3 space-y-1.5">
@@ -2285,9 +2293,13 @@ export function MeasurementDashboard({
                 {
                   key: 'segmentIndex',
                   label: 'Segment',
-                  format: (v) => String(v || '—'),
+                  format: (v) => (v === null || v === undefined ? '—' : String(v)),
                 },
-                { key: 'key', label: 'Key' },
+                {
+                  key: 'key',
+                  label: 'Key',
+                  format: (v) => (v === null || v === undefined || v === '' ? '—' : String(v)),
+                },
                 {
                   key: 'keyConfidence',
                   label: 'Confidence',

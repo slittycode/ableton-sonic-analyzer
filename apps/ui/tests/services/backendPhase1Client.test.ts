@@ -21,6 +21,8 @@ const validPayload = {
     tuningFrequency: 440.12,
     tuningCents: 0.05,
     timeSignature: '4/4',
+    timeSignatureSource: 'assumed_four_four',
+    timeSignatureConfidence: 0,
     durationSeconds: 184.2,
     sampleRate: 44100,
     lufsIntegrated: -8.4,
@@ -298,6 +300,8 @@ describe('parseBackendAnalyzeResponse', () => {
     expect(parsed.phase1.keyProfile).toBe('edma');
     expect(parsed.phase1.tuningFrequency).toBe(440.12);
     expect(parsed.phase1.tuningCents).toBe(0.05);
+    expect(parsed.phase1.timeSignatureSource).toBe('assumed_four_four');
+    expect(parsed.phase1.timeSignatureConfidence).toBe(0);
     expect(parsed.phase1.sampleRate).toBe(44100);
     expect(parsed.phase1.lufsMomentaryMax).toBe(-3.2);
     expect(parsed.phase1.lufsShortTermMax).toBe(-4.8);
@@ -353,6 +357,8 @@ describe('parseBackendAnalyzeResponse', () => {
     expect(parsed.phase1.bpmAgreement).toBeNull();
     expect(parsed.phase1.keyProfile).toBeNull();
     expect(parsed.phase1.tuningFrequency).toBeNull();
+    expect(parsed.phase1.timeSignatureSource).toBeNull();
+    expect(parsed.phase1.timeSignatureConfidence).toBeNull();
     expect(parsed.phase1.sampleRate).toBeNull();
     expect(parsed.phase1.lufsMomentaryMax).toBeNull();
     expect(parsed.phase1.lufsShortTermMax).toBeNull();

@@ -22,6 +22,7 @@ import {
   projectPhase1FromRun,
   projectPhase2FromRun,
 } from './services/analysisRunsClient';
+import { buildDisplayDiagnosticLogs } from './services/diagnosticLogs';
 import {
   BackendClientError,
   deriveAnalyzeTimeoutMs,
@@ -810,6 +811,17 @@ export default function App() {
     audioElementRef.current = el;
   }, []);
 
+  const diagnosticLogs = React.useMemo(
+    () =>
+      buildDisplayDiagnosticLogs({
+        logs,
+        analysisRun,
+        audioMetadata: audioFile ? buildAudioMetadata(audioFile) : null,
+        interpretationModel: selectedModel,
+      }),
+    [analysisRun, audioFile, logs, selectedModel],
+  );
+
   const handleSpectrogramSeek = useCallback((timeSeconds: number) => {
     if (audioElementRef.current) {
       audioElementRef.current.currentTime = timeSeconds;
@@ -1135,7 +1147,7 @@ export default function App() {
                 />
               </Suspense>
             ) : null}
-            <DiagnosticLog logs={logs} defaultExpanded={isAnalyzing} />
+            <DiagnosticLog logs={diagnosticLogs} defaultExpanded={isAnalyzing} />
           </main>
         </div>
       </div>

@@ -313,8 +313,9 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
       range: minMidi === null || maxMidi === null ? 'n/a' : `${midiToNoteName(minMidi)} - ${midiToNoteName(maxMidi)}`,
       avgConfidence,
       totalDuration,
+      trackDuration: phase1.durationSeconds.toFixed(1),
     };
-  }, [activeNotes.length, activeSource, confidenceThreshold, displayNotes, filteredNotes, melodyDetail, transcriptionDetail]);
+  }, [activeNotes.length, activeSource, confidenceThreshold, displayNotes, filteredNotes, melodyDetail, phase1.durationSeconds, transcriptionDetail]);
   const hasSourceNotes = activeNotes.length > 0;
   const hasNotes = displayNotes.length > 0;
   const confidenceThresholdPercent = Math.round(confidenceThreshold * 100);
@@ -351,6 +352,15 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
   const { transcriptionPathLabel, stemSourcesLabel } = deriveTranscriptionProvenance(activeSource, transcriptionDetail);
   const melodyIsApproximate =
     !!melodyDetail && (melodyDetail.pitchConfidence ?? 1) <= LOW_MELODY_CONFIDENCE_THRESHOLD;
+  const melodyMetadataSummary = melodyDetail
+    ? {
+        midiFile: melodyDetail.midiFile ? 'available' : 'none',
+        source: melodyDetail.sourceSeparated ? 'separated' : 'full mix',
+        vibrato: melodyDetail.vibratoPresent
+          ? `present (${melodyDetail.vibratoRate.toFixed(1)} Hz / ${melodyDetail.vibratoExtent.toFixed(2)} / ${Math.round(melodyDetail.vibratoConfidence * 100)}%)`
+          : `not detected (${Math.round(melodyDetail.vibratoConfidence * 100)}%)`,
+      }
+    : null;
 
   return (
     <section data-testid="session-musician-panel" className="space-y-4">
@@ -462,7 +472,9 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
                     <span className="opacity-50">|</span>
                     <span>Confidence: {stats.avgConfidence}%</span>
                     <span className="opacity-50">|</span>
-                    <span>Duration: {stats.totalDuration}s</span>
+                    <span>Total note time: {stats.totalDuration}s</span>
+                    <span className="opacity-50">|</span>
+                    <span>Track duration: {stats.trackDuration}s</span>
                     {sourceBadgeLabel && (
                       <>
                         <span className="opacity-50">|</span>
@@ -514,6 +526,16 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
                         FULL MIX — quality limited
                       </span>
                     )}
+                  </div>
+                )}
+
+                {activeSource === 'melodyGuide' && melodyMetadataSummary && (
+                  <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+                    <span>Melody MIDI: {melodyMetadataSummary.midiFile}</span>
+                    <span className="opacity-50">|</span>
+                    <span>Melody source: {melodyMetadataSummary.source}</span>
+                    <span className="opacity-50">|</span>
+                    <span>Vibrato: {melodyMetadataSummary.vibrato}</span>
                   </div>
                 )}
 

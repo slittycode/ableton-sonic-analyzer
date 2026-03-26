@@ -45,3 +45,4 @@ Source: active/sonic-architect-app (keep in active/ as reference)
 
 ## Contract Follow-Ups
 - ✅ `timeSignatureSource` / `timeSignatureConfidence` — surfaced through HTTP `phase1` via `server.py` (verified on live raw analyzer output before passthrough wiring)
+- Vibrato display follow-up — label `melodyDetail.vibratoExtent` with its real unit and resolve the contradiction where the UI can show `VIBRATO: PRESENT` while `vibratoConfidence` rounds to `0%`.

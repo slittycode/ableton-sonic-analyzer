@@ -167,6 +167,18 @@ function getChordStrength(phase1: Phase1Result): number | null {
   return toFiniteNumber((chordDetail as Record<string, unknown>).chordStrength);
 }
 
+function isAssumedMeter(phase1: Phase1Result): boolean {
+  return phase1.timeSignatureSource === 'assumed_four_four' || (phase1.timeSignatureConfidence ?? 1) <= 0;
+}
+
+function meterStatusLabel(phase1: Phase1Result): string {
+  return isAssumedMeter(phase1) ? 'ASSUMED' : 'DETECTED';
+}
+
+function formatBpmScore(value: number): string {
+  return `SCORE ${value.toFixed(2).replace(/\.?0+$/, '')}`;
+}
+
 export function AnalysisResults({
   phase1,
   phase2,
@@ -236,6 +248,7 @@ export function AnalysisResults({
   const chordsAreApproximate =
     chordStrength !== null && chordStrength <= LOW_CHORD_CONFIDENCE_THRESHOLD;
   const hasRenderablePhase2Content =
+    Boolean(phase2?.trackCharacter?.trim()) ||
     confidenceBadges.length > 0 ||
     characteristicPills.length > 0 ||
     arrangement !== null ||
@@ -314,16 +327,14 @@ export function AnalysisResults({
             <span className="text-xs font-mono text-text-secondary">BPM</span>
           </div>
           <div className="mt-auto space-y-1">
-            <div className="w-full h-1 bg-bg-app border border-border/20 rounded-sm overflow-hidden">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${phase1.bpmConfidence * 100}%` }}
-                className="h-full bg-accent shadow-[0_0_4px_var(--color-accent)]"
-              />
-            </div>
             <span className="text-[8px] font-mono text-text-secondary/60 tabular-nums">
-              CONF {Math.min(Math.round(phase1.bpmConfidence * 100), 100)}%
+              {formatBpmScore(phase1.bpmConfidence)}
             </span>
+            {phase1.bpmSource && (
+              <span className="text-[8px] font-mono text-text-secondary/50">
+                {phase1.bpmSource.replace(/_/g, ' ')}
+              </span>
+            )}
           </div>
         </div>
 
@@ -367,7 +378,7 @@ export function AnalysisResults({
           <div className="flex-1 flex items-center">
             <span className="text-3xl font-display font-bold text-text-primary">{phase1.timeSignature}</span>
           </div>
-          <span className="text-[8px] font-mono text-text-secondary/60 mt-auto">DETECTED</span>
+          <span className="text-[8px] font-mono text-text-secondary/60 mt-auto">{meterStatusLabel(phase1)}</span>
         </div>
 
         {/* CHARACTER — genre primary, characteristic pills secondary */}
@@ -461,6 +472,21 @@ export function AnalysisResults({
             </span>
           ))}
         </div>
+      )}
+
+      {phase2?.trackCharacter && (
+        <section className="space-y-3">
+          <div className="flex items-center justify-between border-b border-border pb-2">
+            <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
+              <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
+              Track Character
+            </h2>
+            <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">AI INTERP</span>
+          </div>
+          <p className="text-xs text-text-secondary font-mono leading-relaxed opacity-80">
+            {truncateAtSentenceBoundary(phase2.trackCharacter, 900)}
+          </p>
+        </section>
       )}
 
       {Array.isArray(phase2?.detectedCharacteristics) && phase2.detectedCharacteristics.length > 0 && (

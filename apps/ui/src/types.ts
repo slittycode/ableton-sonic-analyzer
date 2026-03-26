@@ -292,6 +292,8 @@ export interface Phase1Result {
   tuningFrequency?: number | null;
   tuningCents?: number | null;
   timeSignature: string;
+  timeSignatureSource?: string | null;
+  timeSignatureConfidence?: number | null;
   durationSeconds: number;
   sampleRate?: number | null;
   lufsIntegrated: number;

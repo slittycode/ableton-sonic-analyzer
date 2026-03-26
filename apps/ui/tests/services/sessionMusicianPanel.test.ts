@@ -380,4 +380,41 @@ describe('SessionMusicianPanel confidence helpers', () => {
     expect(html).not.toContain('Adjust confidence threshold to filter noise before export.');
     expect(html).toContain('Essentia melody guide. Adjust quantize before preview/export.');
   });
+
+  it('shows total note time separately from track duration and surfaces melody provenance fields', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(SessionMusicianPanel, {
+        phase1: {
+          ...baseMeasurement,
+          durationSeconds: 12,
+          melodyDetail: {
+            noteCount: 3,
+            notes: [
+              { midi: 60, onset: 0.2, duration: 0.3 },
+              { midi: 64, onset: 0.8, duration: 0.2 },
+              { midi: 67, onset: 1.2, duration: 0.4 },
+            ],
+            dominantNotes: [60, 64, 67],
+            pitchRange: { min: 60, max: 67 },
+            pitchConfidence: 0.72,
+            midiFile: '/tmp/melody-guide.mid',
+            sourceSeparated: true,
+            vibratoPresent: true,
+            vibratoExtent: 0.38,
+            vibratoRate: 5.2,
+            vibratoConfidence: 0.81,
+          },
+        },
+      }),
+    );
+
+    expect(html).toContain('Total note time: 0.9s');
+    expect(html).toContain('Track duration: 12.0s');
+    expect(html).toContain('Melody MIDI: available');
+    expect(html).toContain('Melody source: separated');
+    expect(html).toContain('Vibrato: present');
+    expect(html).toContain('5.2 Hz');
+    expect(html).toContain('0.38');
+    expect(html).toContain('81%');
+  });
 });

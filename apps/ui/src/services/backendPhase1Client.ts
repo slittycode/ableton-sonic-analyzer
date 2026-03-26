@@ -559,6 +559,8 @@ export function parsePhase1Result(value: unknown): Phase1Result {
     tuningFrequency: toNumber(phase1.tuningFrequency),
     tuningCents: toNumber(phase1.tuningCents),
     timeSignature: expectString(phase1, "timeSignature"),
+    timeSignatureSource: toOptionalStringOrNull(phase1.timeSignatureSource),
+    timeSignatureConfidence: toNumber(phase1.timeSignatureConfidence),
     durationSeconds: expectNumber(phase1, "durationSeconds"),
     sampleRate: toNumber(phase1.sampleRate),
     lufsIntegrated,
