@@ -6,6 +6,11 @@ All notable changes to `sonic-analyzer` are documented here in reverse chronolog
 
 - Standardized the canonical local backend port on `8100` so it stays in sync with the UI's `3100` local-dev convention and the new workspace launcher flow.
 - Added a tracked backend-owned `scripts/dev.sh` launcher that starts the full local stack, overrides stale UI backend env values at runtime, and deprecates the unversioned workspace-root launcher flow.
+- Reworked `analyze_structure()` to use matrix-based SBic feature input, replacing the ineffective direct PCM SBic path that was silently falling back in this environment.
+- Added `scripts/evaluate_structure_sweep.py` for offline structure-parameter sweeps, writing ranked diagnostics to `.runtime/reports/structure_sweep_results.json` and `.runtime/reports/structure_sweep_summary.md`.
+- Selected and hardcoded the sweep winner config for runtime structure analysis: `mfcc_z-cpw0.7-w3_default_windows` (score `69.7887`).
+- Documented winner stability for future retuning context: closest competitor was `mfcc_z-cpw0.5-w3_default_windows` (score `59.1888`, gap `10.5999`), while `mfcc_z-cpw0.9-w3_default_windows` scored `55.9244` (gap `13.8643`).
+- Added a novelty-assisted fallback path for coarse SBic outputs that reuses existing arrangement novelty peaks and still degrades to usable structure segments when boundaries are sparse.
 
 ## v0.10.0
 

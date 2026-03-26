@@ -14,9 +14,9 @@ ABSOLUTE RULES:
    relative major/minor. Do not override from audio perception.
 4. If audio perception contradicts a measured JSON field, keep the JSON measurement and describe the contradiction rather than rewriting the number.
 5. Low confidence handling:
-   - pitchConfidence below 0.15 = melody is draft only
-   - chordStrength below 0.70 = chords approximate
-   - pumpingConfidence below 0.40 = do not assert sidechain
+   - pitchConfidence below 0.20 = melody is draft only
+   - chordStrength below 0.50 = chords approximate
+   - pumpingConfidence below 0.30 = do not assert sidechain
    - segmentKey from segments shorter than 10s = low confidence
 6. When OPTIONAL_PITCH_NOTE_TRANSLATION_RESULT_JSON is present, treat it as best-effort note scaffolding only. It is not authoritative measurement.
 7. If pitch/note translation was stem-aware, treat bass stem notes and other stem notes as separate layers. Do not silently merge them into one claimed source of truth.

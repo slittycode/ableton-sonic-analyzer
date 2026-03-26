@@ -26,7 +26,8 @@ EXPECTED_SPECTRAL_BANDS = {
 EXPECTED_TOP_LEVEL_KEYS = {
     "bpm", "bpmConfidence", "bpmPercival", "bpmAgreement",
     "bpmDoubletime", "bpmSource", "bpmRawOriginal",
-    "key", "keyConfidence", "timeSignature", "durationSeconds", "sampleRate",
+    "key", "keyConfidence", "timeSignature", "timeSignatureSource",
+    "timeSignatureConfidence", "durationSeconds", "sampleRate",
     "lufsIntegrated", "lufsRange", "truePeak", "plr", "crestFactor",
     "dynamicSpread", "dynamicCharacter", "stereoDetail", "monoCompatible", "spectralBalance",
     "spectralDetail", "rhythmDetail", "melodyDetail", "transcriptionDetail",
@@ -42,7 +43,8 @@ EXPECTED_TOP_LEVEL_KEYS = {
 FAST_MODE_POPULATED_FIELDS = {
     "bpm", "bpmConfidence", "bpmPercival", "bpmAgreement",
     "bpmDoubletime", "bpmSource", "bpmRawOriginal",
-    "key", "keyConfidence", "timeSignature", "durationSeconds", "sampleRate",
+    "key", "keyConfidence", "timeSignature", "timeSignatureSource",
+    "timeSignatureConfidence", "durationSeconds", "sampleRate",
     "lufsIntegrated", "lufsRange", "truePeak", "plr", "crestFactor",
 }
 
@@ -66,6 +68,83 @@ def _write_test_fixture(path: Path, sample_rate: int = 44_100, duration_seconds:
         signal[start:stop] = burst
 
     stereo = np.stack([signal, signal], axis=1)
+    pcm = np.clip(stereo, -1.0, 1.0)
+    pcm = (pcm * 32767.0).astype(np.int16)
+
+    with wave.open(str(path), "wb") as wav_file:
+        wav_file.setnchannels(2)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(pcm.tobytes())
+
+
+def _write_click_fixture(
+    path: Path,
+    click_events: list[tuple[float, float]],
+    sample_rate: int = 44_100,
+    duration_seconds: float = 4.0,
+    click_ms: float = 12.0,
+) -> None:
+    """Write a deterministic click track with per-click amplitude control."""
+    total_samples = int(sample_rate * duration_seconds)
+    signal = np.zeros(total_samples, dtype=np.float32)
+    click_samples = max(8, int(round(sample_rate * click_ms / 1000.0)))
+    click_shape = np.hanning(click_samples).astype(np.float32)
+
+    for click_time, amplitude in click_events:
+        start = int(round(click_time * sample_rate))
+        if start >= total_samples:
+            continue
+        stop = min(total_samples, start + click_samples)
+        signal[start:stop] += amplitude * click_shape[: stop - start]
+
+    stereo = np.stack([signal, signal], axis=1)
+    pcm = np.clip(stereo, -1.0, 1.0)
+    pcm = (pcm * 32767.0).astype(np.int16)
+
+    with wave.open(str(path), "wb") as wav_file:
+        wav_file.setnchannels(2)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(pcm.tobytes())
+
+
+def _write_syncopated_click_fixture(
+    path: Path,
+    sample_rate: int = 44_100,
+    duration_seconds: float = 4.0,
+    bpm: float = 120.0,
+) -> None:
+    """Write quarter-note clicks with extra off-beat accents for onset-rate tests."""
+    beat_interval = 60.0 / bpm
+    click_events: list[tuple[float, float]] = []
+    time_cursor = 0.0
+    while time_cursor < duration_seconds:
+        click_events.append((time_cursor, 0.95))
+        offbeat_time = time_cursor + (beat_interval / 2.0)
+        if offbeat_time < duration_seconds:
+            click_events.append((offbeat_time, 0.6))
+        time_cursor += beat_interval
+    _write_click_fixture(path, click_events, sample_rate, duration_seconds)
+
+
+def _write_key_fixture(
+    path: Path,
+    sample_rate: int = 44_100,
+    duration_seconds: float = 6.0,
+) -> None:
+    """Write a stable A-minor harmonic bed for fast/full key-agreement tests."""
+    total_samples = int(sample_rate * duration_seconds)
+    time_axis = np.arange(total_samples, dtype=np.float32) / sample_rate
+    signal = (
+        0.45 * np.sin(2 * np.pi * 220.0 * time_axis)
+        + 0.3 * np.sin(2 * np.pi * 261.63 * time_axis)
+        + 0.3 * np.sin(2 * np.pi * 329.63 * time_axis)
+        + 0.18 * np.sin(2 * np.pi * 440.0 * time_axis)
+    ).astype(np.float32)
+    envelope = np.linspace(1.0, 0.8, total_samples, dtype=np.float32)
+
+    stereo = np.stack([signal * envelope, signal * envelope], axis=1)
     pcm = np.clip(stereo, -1.0, 1.0)
     pcm = (pcm * 32767.0).astype(np.int16)
 
@@ -133,6 +212,8 @@ class AnalyzeStructuralSnapshotTests(unittest.TestCase):
             "bpm",
             "key",
             "timeSignature",
+            "timeSignatureSource",
+            "timeSignatureConfidence",
             "durationSeconds",
             "sampleRate",
             "lufsIntegrated",
@@ -153,6 +234,8 @@ class AnalyzeStructuralSnapshotTests(unittest.TestCase):
         self.assertTrue(self.payload["key"].strip())
         self.assertIsInstance(self.payload["timeSignature"], str)
         self.assertTrue(self.payload["timeSignature"].strip())
+        self.assertEqual(self.payload["timeSignatureSource"], "assumed_four_four")
+        self.assertEqual(self.payload["timeSignatureConfidence"], 0.0)
         self.assertIsInstance(self.payload["sampleRate"], (int, float))
         self.assertGreater(self.payload["sampleRate"], 0)
         self.assertIsInstance(self.payload["lufsIntegrated"], (int, float))
@@ -279,6 +362,8 @@ class AnalyzeFastStructuralSnapshotTests(unittest.TestCase):
         self.assertTrue(self.payload["key"].strip(), "key should be a non-empty string")
         self.assertIsInstance(self.payload["timeSignature"], str)
         self.assertTrue(self.payload["timeSignature"].strip(), "timeSignature should be non-empty")
+        self.assertEqual(self.payload["timeSignatureSource"], "assumed_four_four")
+        self.assertEqual(self.payload["timeSignatureConfidence"], 0.0)
 
     def test_duration_matches_fixture(self) -> None:
         """Regression: audio must actually be loaded and measured correctly in fast mode."""
@@ -408,6 +493,199 @@ class AnalyzeTranscriptionHelperTests(unittest.TestCase):
         self.assertEqual(deduplicated[0]["confidence"], 0.81)
         self.assertEqual(deduplicated[0]["durationSeconds"], 0.25)
 
+
+
+class AnalyzeRhythmAndStructureTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        analyze_path = Path(__file__).resolve().parents[1] / "analyze.py"
+        spec = importlib.util.spec_from_file_location("analyze_rhythm_structure_test", analyze_path)
+        if spec is None or spec.loader is None:
+            raise AssertionError("Could not load analyze.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        cls.analyze = module
+
+    def test_syncopated_click_fixture_produces_onset_rate_above_beat_rate(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="asa_syncopated_click_") as temp_dir:
+            fixture_path = Path(temp_dir) / "syncopated.wav"
+            _write_syncopated_click_fixture(fixture_path)
+            mono = self.analyze.load_mono(str(fixture_path), 44_100)
+            rhythm_data = self.analyze.extract_rhythm(mono)
+            self.assertIsNotNone(rhythm_data, "Rhythm extraction should succeed on synthetic click audio")
+
+            detail = self.analyze.analyze_rhythm_detail(mono, 44_100, rhythm_data)["rhythmDetail"]
+            self.assertIsNotNone(detail)
+            beat_grid = detail["beatGrid"]
+            self.assertGreater(len(beat_grid), 1)
+            beat_rate = len(beat_grid) / (beat_grid[-1] - beat_grid[0])
+            self.assertGreater(
+                detail["onsetRate"],
+                beat_rate,
+                "Audio-derived onset rate should exceed the beat rate on syncopated material",
+            )
+
+    def test_structure_snaps_to_downbeats_and_merges_short_segments(self) -> None:
+        mono = np.zeros(40_000, dtype=np.float32)
+        rhythm_data = {
+            "ticks": np.asarray([float(i) for i in range(40)], dtype=np.float64),
+        }
+
+        with mock.patch.object(
+            self.analyze,
+            "_extract_structure_feature_matrix",
+            return_value=(np.ones((2, 8), dtype=np.float32), 1_000),
+        ), mock.patch.object(
+            self.analyze,
+            "_run_structure_sbic_boundaries",
+            return_value=np.asarray([4.2, 6.0, 12.4, 20.0], dtype=np.float64),
+        ):
+            result = self.analyze.analyze_structure(
+                mono,
+                sample_rate=1_000,
+                rhythm_data=rhythm_data,
+            )["structure"]
+
+        self.assertIsNotNone(result)
+        self.assertEqual(
+            result["segments"],
+            [
+                {"start": 0.0, "end": 6.0, "index": 0},
+                {"start": 6.0, "end": 12.0, "index": 1},
+                {"start": 12.0, "end": 20.0, "index": 2},
+                {"start": 20.0, "end": 40.0, "index": 3},
+            ],
+        )
+
+    def test_run_structure_sbic_boundaries_calls_sbic_with_matrix_input(self) -> None:
+        captured = {}
+
+        def _fake_sbic(**_kwargs):
+            def _runner(features):
+                features_arr = np.asarray(features, dtype=np.float64)
+                captured["ndim"] = int(features_arr.ndim)
+                captured["shape"] = tuple(features_arr.shape)
+                return [0.0, float(features_arr.shape[1] - 1)]
+
+            return _runner
+
+        with mock.patch.object(self.analyze.es, "SBic", side_effect=_fake_sbic):
+            boundaries = self.analyze._run_structure_sbic_boundaries(
+                np.ones((13, 24), dtype=np.float32),
+                sample_rate=1_000,
+                hop_size=100,
+            )
+
+        self.assertEqual(captured["ndim"], 2)
+        self.assertEqual(captured["shape"], (13, 24))
+        self.assertEqual(len(boundaries), 2)
+        self.assertAlmostEqual(float(boundaries[0]), 0.0, places=6)
+        self.assertAlmostEqual(float(boundaries[1]), 2.3, places=6)
+
+    def test_run_structure_sbic_boundaries_uses_default_winner_parameters(self) -> None:
+        with mock.patch.object(
+            self.analyze.es,
+            "SBic",
+            return_value=lambda _features: [0.0, 5.0],
+        ) as sbic_mock:
+            self.analyze._run_structure_sbic_boundaries(
+                np.ones((4, 6), dtype=np.float32),
+                sample_rate=1_000,
+                hop_size=100,
+            )
+
+        sbic_mock.assert_called_once_with(**self.analyze.STRUCTURE_SBIC_PARAMS)
+
+    def test_structure_uses_novelty_fallback_when_sbic_is_too_coarse(self) -> None:
+        mono = np.zeros(125_000, dtype=np.float32)
+        with mock.patch.object(
+            self.analyze,
+            "_extract_structure_feature_matrix",
+            return_value=(np.ones((2, 8), dtype=np.float32), 1_000),
+        ), mock.patch.object(
+            self.analyze,
+            "_run_structure_sbic_boundaries",
+            return_value=np.asarray([0.0, 125.0], dtype=np.float64),
+        ), mock.patch.object(
+            self.analyze,
+            "_compute_arrangement_novelty_summary",
+            return_value={
+                "noveltyCurve": [],
+                "noveltyMean": 0.0,
+                "noveltyStdDev": 0.0,
+                "noveltyPeaks": [
+                    {"time": 30.0, "strength": 0.7},
+                    {"time": 60.0, "strength": 0.8},
+                    {"time": 90.0, "strength": 0.75},
+                ],
+            },
+        ) as novelty_mock:
+            structure = self.analyze.analyze_structure(
+                mono,
+                sample_rate=1_000,
+                rhythm_data=None,
+            )["structure"]
+
+        self.assertIsNotNone(structure)
+        self.assertGreaterEqual(structure["segmentCount"], 4)
+        self.assertEqual(novelty_mock.call_count, 1)
+
+    def test_structure_returns_single_segment_when_all_detection_paths_fail(self) -> None:
+        mono = np.zeros(20_000, dtype=np.float32)
+        with mock.patch.object(
+            self.analyze,
+            "_extract_structure_feature_matrix",
+            return_value=None,
+        ), mock.patch.object(
+            self.analyze,
+            "_compute_arrangement_novelty_summary",
+            return_value=None,
+        ):
+            structure = self.analyze.analyze_structure(
+                mono,
+                sample_rate=1_000,
+                rhythm_data=None,
+            )["structure"]
+
+        self.assertIsNotNone(structure)
+        self.assertEqual(
+            structure["segments"],
+            [{"start": 0.0, "end": 20.0, "index": 0}],
+        )
+
+    def test_compute_structure_merge_floor_clamps_duration_term_to_target_range(self) -> None:
+        short_floor = self.analyze._compute_structure_merge_floor(
+            duration=30.0,
+            median_beat_interval=None,
+            policy="adaptive_clamped",
+        )
+        long_floor = self.analyze._compute_structure_merge_floor(
+            duration=600.0,
+            median_beat_interval=None,
+            policy="adaptive_clamped",
+        )
+
+        self.assertEqual(short_floor, 6.0)
+        self.assertEqual(long_floor, 18.0)
+
+
+class AnalyzeFastFullConsistencyTests(unittest.TestCase):
+    def test_fast_and_full_mode_agree_on_key_for_stable_fixture(self) -> None:
+        repo_root = Path(__file__).resolve().parent.parent
+        analyze_path = repo_root / "analyze.py"
+
+        with tempfile.TemporaryDirectory(prefix="asa_key_fixture_") as temp_dir:
+            fixture_path = Path(temp_dir) / "key_fixture.wav"
+            _write_key_fixture(fixture_path)
+
+            full_stdout, _ = _run_analyze(analyze_path, fixture_path, [])
+            fast_stdout, _ = _run_analyze(analyze_path, fixture_path, ["--fast"])
+
+        full_payload = json.loads(full_stdout)
+        fast_payload = json.loads(fast_stdout)
+
+        self.assertEqual(full_payload["key"], fast_payload["key"])
+        self.assertEqual(full_payload["timeSignatureSource"], fast_payload["timeSignatureSource"])
 
 
 class TranscriptionBackendAbstractionTests(unittest.TestCase):
@@ -839,6 +1117,26 @@ class BassDetailTests(unittest.TestCase):
         result = self.analyze.analyze_bass_detail(mono, sr, bpm=None)
         self.assertIn("bassDetail", result)
 
+    def test_prefers_bass_stem_when_available(self):
+        sr = 44_100
+        mono = np.zeros(int(sr * 3.0), dtype=np.float32)
+        time_axis = np.linspace(0, 3.0, int(sr * 3.0), endpoint=False, dtype=np.float32)
+        stem_signal = 0.5 * np.sin(2 * np.pi * 60.0 * time_axis).astype(np.float32)
+
+        with mock.patch.object(self.analyze.os.path, "isfile", return_value=True), mock.patch.object(
+            self.analyze,
+            "load_mono",
+            return_value=stem_signal,
+        ):
+            result = self.analyze.analyze_bass_detail(
+                mono,
+                sr,
+                bpm=128.0,
+                stems={"bass": "/tmp/bass.wav"},
+            )
+
+        self.assertGreater(result["bassDetail"]["fundamentalHz"], 50)
+
 
 class KickDetailTests(unittest.TestCase):
     """Tests for analyze_kick_detail — kick drum distortion and THD."""
@@ -904,6 +1202,111 @@ class KickDetailTests(unittest.TestCase):
         mono = 0.5 * np.sin(2 * np.pi * 60 * t).astype(np.float32)
         result = self.analyze.analyze_kick_detail(mono, sr, bpm=None)
         self.assertIn("kickDetail", result)
+
+    def test_prefers_drums_stem_when_available(self):
+        sr = 44_100
+        mono = np.zeros(int(sr * 4.0), dtype=np.float32)
+        stem_signal = np.zeros_like(mono)
+        beat_samples = int(sr * 0.5)
+
+        for i in range(8):
+            onset = i * beat_samples
+            if onset + 2_000 >= stem_signal.size:
+                break
+            burst = np.arange(2_000, dtype=np.float32)
+            stem_signal[onset:onset + 2_000] = (
+                0.8
+                * np.sin(2 * np.pi * 60 * burst / sr)
+                * np.exp(-burst / 500)
+            )
+
+        with mock.patch.object(self.analyze.os.path, "isfile", return_value=True), mock.patch.object(
+            self.analyze,
+            "load_mono",
+            return_value=stem_signal,
+        ):
+            result = self.analyze.analyze_kick_detail(
+                mono,
+                sr,
+                bpm=120.0,
+                stems={"drums": "/tmp/drums.wav"},
+            )
+
+        self.assertGreater(result["kickDetail"]["kickCount"], 1)
+
+
+class SidechainDetailTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        analyze_path = Path(__file__).resolve().parents[1] / "analyze.py"
+        spec = importlib.util.spec_from_file_location("analyze_sidechain_test", analyze_path)
+        if spec is None or spec.loader is None:
+            raise AssertionError("Could not load analyze.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        cls.analyze = module
+
+    def test_prefers_bass_stem_when_available(self):
+        sample_rate = 1_000
+        duration_seconds = 4.0
+        mono = np.zeros(int(sample_rate * duration_seconds), dtype=np.float32)
+        beats = np.asarray([0.0, 1.0, 2.0, 3.0, 4.0], dtype=np.float64)
+        low_band = np.asarray([1.0, 0.25, 1.0, 0.25, 1.0], dtype=np.float64)
+        beat_loudness = low_band + 0.4
+
+        sixteenth_times = []
+        for i in range(beats.size - 1):
+            start = float(beats[i])
+            step = float(beats[i + 1] - beats[i]) / 4.0
+            sixteenth_times.extend([start + j * step for j in range(4)])
+        sixteenth_times.append(float(beats[-1]))
+
+        centers = np.asarray(
+            [
+                (float(sixteenth_times[i]) + float(sixteenth_times[i + 1])) / 2.0
+                for i in range(len(sixteenth_times) - 1)
+            ],
+            dtype=np.float64,
+        )
+        kick_series = np.interp(centers, beats, low_band, left=low_band[0], right=low_band[-1])
+        amplitudes = np.clip(1.1 - kick_series, 0.08, 1.0)
+        bass_stem = np.zeros_like(mono)
+
+        for index, amplitude in enumerate(amplitudes):
+            start_idx = int(round(sixteenth_times[index] * sample_rate))
+            end_idx = int(round(sixteenth_times[index + 1] * sample_rate))
+            slot_time = np.arange(end_idx - start_idx, dtype=np.float32) / sample_rate
+            bass_stem[start_idx:end_idx] = (
+                amplitude * np.sin(2 * np.pi * 55.0 * slot_time)
+            ).astype(np.float32)
+
+        beat_data = {
+            "beats": beats,
+            "lowBand": low_band,
+            "beatLoudness": beat_loudness,
+        }
+
+        fallback = self.analyze.analyze_sidechain_detail(
+            mono,
+            sample_rate,
+            beat_data=beat_data,
+        )["sidechainDetail"]
+
+        with mock.patch.object(self.analyze.os.path, "isfile", return_value=True), mock.patch.object(
+            self.analyze,
+            "load_mono",
+            return_value=bass_stem,
+        ):
+            stem_result = self.analyze.analyze_sidechain_detail(
+                mono,
+                sample_rate,
+                beat_data=beat_data,
+                stems={"bass": "/tmp/bass.wav"},
+            )["sidechainDetail"]
+
+        self.assertIsNotNone(fallback)
+        self.assertIsNotNone(stem_result)
+        self.assertGreater(stem_result["pumpingStrength"], fallback["pumpingStrength"])
 
 
 class GenreDetailTests(unittest.TestCase):

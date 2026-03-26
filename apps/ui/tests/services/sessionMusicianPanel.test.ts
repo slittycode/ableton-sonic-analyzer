@@ -39,7 +39,7 @@ afterEach(() => {
 });
 
 describe('SessionMusicianPanel confidence helpers', () => {
-  it('shows the melody low-confidence warning at the inclusive 0.15 threshold', () => {
+  it('shows the melody low-confidence warning at the inclusive 0.20 threshold', () => {
     const html = renderToStaticMarkup(
       React.createElement(SessionMusicianPanel, {
         phase1: {
@@ -49,7 +49,7 @@ describe('SessionMusicianPanel confidence helpers', () => {
             notes: [{ midi: 60, onset: 0.2, duration: 0.3 }],
             dominantNotes: [60],
             pitchRange: { min: 60, max: 60 },
-            pitchConfidence: 0.15,
+            pitchConfidence: 0.2,
             midiFile: null,
             sourceSeparated: false,
             vibratoPresent: false,
@@ -76,7 +76,7 @@ describe('SessionMusicianPanel confidence helpers', () => {
             notes: [{ midi: 60, onset: 0.2, duration: 0.3 }],
             dominantNotes: [60],
             pitchRange: { min: 60, max: 60 },
-            pitchConfidence: 0.16,
+            pitchConfidence: 0.21,
             midiFile: null,
             sourceSeparated: false,
             vibratoPresent: false,

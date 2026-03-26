@@ -15,7 +15,7 @@ Conventions:
 
 Top-level keys:
 
-`bpm`, `bpmConfidence`, `bpmPercival`, `bpmAgreement`, `bpmDoubletime`, `bpmSource`, `bpmRawOriginal`, `key`, `keyConfidence`, `keyProfile`, `tuningFrequency`, `tuningCents`, `timeSignature`, `durationSeconds`, `sampleRate`, `lufsIntegrated`, `lufsRange`, `lufsMomentaryMax`, `lufsShortTermMax`, `truePeak`, `crestFactor`, `dynamicSpread`, `dynamicCharacter`, `stereoDetail`, `spectralBalance`, `spectralDetail`, `rhythmDetail`, `melodyDetail`, `transcriptionDetail`, `pitchDetail`, `grooveDetail`, `beatsLoudness`, `sidechainDetail`, `effectsDetail`, `synthesisCharacter`, `danceability`, `structure`, `arrangementDetail`, `segmentLoudness`, `segmentSpectral`, `segmentStereo`, `segmentKey`, `chordDetail`, `perceptual`, `essentiaFeatures`.
+`bpm`, `bpmConfidence`, `bpmPercival`, `bpmAgreement`, `bpmDoubletime`, `bpmSource`, `bpmRawOriginal`, `key`, `keyConfidence`, `keyProfile`, `tuningFrequency`, `tuningCents`, `timeSignature`, `timeSignatureSource`, `timeSignatureConfidence`, `durationSeconds`, `sampleRate`, `lufsIntegrated`, `lufsRange`, `lufsMomentaryMax`, `lufsShortTermMax`, `truePeak`, `crestFactor`, `dynamicSpread`, `dynamicCharacter`, `stereoDetail`, `spectralBalance`, `spectralDetail`, `rhythmDetail`, `melodyDetail`, `transcriptionDetail`, `pitchDetail`, `grooveDetail`, `beatsLoudness`, `sidechainDetail`, `effectsDetail`, `synthesisCharacter`, `danceability`, `structure`, `arrangementDetail`, `segmentLoudness`, `segmentSpectral`, `segmentStereo`, `segmentKey`, `chordDetail`, `perceptual`, `essentiaFeatures`.
 
 ## Relationship To `POST /api/analyze`
 
@@ -111,6 +111,8 @@ Compatibility note:
 - `keyProfile`
 - `tuningFrequency`
 - `tuningCents`
+- `timeSignatureSource`
+- `timeSignatureConfidence`
 - `sampleRate`
 - `lufsMomentaryMax`
 - `lufsShortTermMax`
@@ -119,7 +121,7 @@ Compatibility note:
 - `bpmSource`
 - `bpmRawOriginal`
 
-All raw `analyze.py` fields are now forwarded through the server `phase1` wrapper, including fields previously excluded: `bpmPercival`, `bpmAgreement`, `sampleRate`, `dynamicSpread`, `dynamicCharacter`, `segmentStereo`, `essentiaFeatures`.
+All raw `analyze.py` fields are now forwarded through the server `phase1` wrapper, including fields previously excluded: `bpmPercival`, `bpmAgreement`, `timeSignatureSource`, `timeSignatureConfidence`, `sampleRate`, `dynamicSpread`, `dynamicCharacter`, `segmentStereo`, `essentiaFeatures`.
 
 Two server-only convenience fields are derived from `stereoDetail`:
 
@@ -144,6 +146,8 @@ Current server behavior that affects schema expectations:
 | `key` | `string \| null` | Global key label from `KeyExtractor` (`edma` profile), e.g. `"A Minor"`. | categorical | Starting point for harmonic reconstruction; validate by ear against bass/chord roots. |
 | `keyConfidence` | `float \| null` | Confidence/strength of global key estimate. | 0-1 (approx) | Low values indicate ambiguous tonality or modal/atonal content. |
 | `timeSignature` | `string \| null` | Time signature estimate (currently defaults to `"4/4"` when rhythm exists). | string | Treat as prior; verify manually on odd-metre material. |
+| `timeSignatureSource` | `string \| null` | Provenance marker for the raw `timeSignature` value. Current analyzer emits `"assumed_four_four"` when rhythm data exists. | categorical | Forwarded through HTTP `phase1`; use it to distinguish measured vs assumed meter. |
+| `timeSignatureConfidence` | `float \| null` | Confidence attached to the raw `timeSignature` value. Current analyzer emits `0.0` for the assumed 4/4 fallback. | 0-1 | Forwarded through HTTP `phase1`; use low values to avoid overstating meter certainty. |
 | `durationSeconds` | `float \| null` | Track duration from sample count. | seconds | Useful for arrangement section planning and timeline mapping. |
 | `sampleRate` | `int \| null` | Effective analysis sample rate. | Hz | Ensures downstream feature interpretation uses correct temporal/frequency scaling. |
 | `keyProfile` | `string \| null` | Key profile used by `KeyExtractor` (e.g. `"edma"`). | categorical | Indicates which pitch template corpus was used for key detection. |

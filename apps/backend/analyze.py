@@ -43,6 +43,33 @@ except ImportError:
     analyze_fast = None
 
 
+STRUCTURE_FRAME_SIZE = 2048
+STRUCTURE_HOP_SIZE = 1024
+STRUCTURE_MFCC_COEFFICIENTS = 13
+STRUCTURE_MFCC_FEATURE_PRESET = "mfcc_z"
+STRUCTURE_SBIC_PARAMS = {
+    "cpw": 0.7,
+    "size1": 300,
+    "size2": 200,
+    "inc1": 60,
+    "inc2": 20,
+    "minLength": 24,
+}
+STRUCTURE_TARGET_DURATION_MIN_SECONDS = 90.0
+STRUCTURE_TARGET_DURATION_MAX_SECONDS = 360.0
+STRUCTURE_COARSE_MIN_SEGMENT_COUNT = 4
+STRUCTURE_COARSE_MEDIAN_SEGMENT_SECONDS = 35.0
+STRUCTURE_NOVELTY_EXCLUSION_SECONDS = 2.5
+STRUCTURE_SNAP_THRESHOLD_SECONDS = 0.75
+STRUCTURE_MERGE_POLICY = "adaptive_clamped"
+STRUCTURE_MERGE_BASELINE_SECONDS = 8.0
+STRUCTURE_MERGE_BASELINE_BEATS = 4.0
+STRUCTURE_MERGE_ADAPTIVE_SECONDS = 6.0
+STRUCTURE_MERGE_ADAPTIVE_BEATS = 2.0
+STRUCTURE_MERGE_ADAPTIVE_DURATION_FACTOR = 0.05
+STRUCTURE_MAX_SEGMENTS = 20
+
+
 def load_mono(path: str, sample_rate: int = 44100) -> np.ndarray:
     """Load audio as mono via MonoLoader."""
     loader = es.MonoLoader(filename=path, sampleRate=sample_rate)
@@ -54,6 +81,25 @@ def load_stereo(path: str):
     loader = es.AudioLoader(filename=path)
     audio, sr, num_channels, md5, bit_rate, codec = loader()
     return audio, sr, num_channels
+
+
+def _load_stem_mono(
+    stems: dict | None,
+    stem_name: str,
+    sample_rate: int = 44100,
+) -> np.ndarray | None:
+    """Load a preferred stem as mono when it exists."""
+    if not isinstance(stems, dict):
+        return None
+
+    stem_path = stems.get(stem_name)
+    if not isinstance(stem_path, str) or not os.path.isfile(stem_path):
+        return None
+
+    try:
+        return load_mono(stem_path, sample_rate=sample_rate)
+    except Exception:
+        return None
 
 
 def _write_wav_pcm16(path: str, audio: np.ndarray, sample_rate: int) -> None:
@@ -653,6 +699,337 @@ def _pick_novelty_peaks(
     ]
 
 
+def _compute_arrangement_novelty_summary(
+    mono: np.ndarray,
+    sample_rate: int,
+    frame_size: int = STRUCTURE_FRAME_SIZE,
+    hop_size: int = STRUCTURE_HOP_SIZE,
+    max_curve_points: int = 64,
+    max_peaks: int = 8,
+    min_spacing_sec: float = 2.0,
+) -> dict | None:
+    """Compute arrangement novelty curve and peaks from Bark-band change."""
+    try:
+        mono_arr = np.asarray(mono, dtype=np.float32)
+        if mono_arr.ndim != 1 or mono_arr.size == 0 or sample_rate <= 0:
+            return None
+
+        if mono_arr.size < frame_size:
+            mono_arr = np.pad(mono_arr, (0, frame_size - mono_arr.size))
+
+        window = es.Windowing(type="hann", size=frame_size)
+        spectrum = es.Spectrum(size=frame_size)
+        bark_bands = es.BarkBands(numberBands=24, sampleRate=sample_rate)
+
+        bark_matrix = []
+        for frame in es.FrameGenerator(
+            mono_arr,
+            frameSize=frame_size,
+            hopSize=hop_size,
+        ):
+            spec = spectrum(window(frame))
+            bands = np.asarray(bark_bands(spec), dtype=np.float32)
+            if bands.size == 24 and np.all(np.isfinite(bands)):
+                bark_matrix.append(bands)
+
+        if len(bark_matrix) < 2:
+            return {
+                "noveltyCurve": [],
+                "noveltyPeaks": [],
+                "noveltyMean": 0.0,
+                "noveltyStdDev": 0.0,
+            }
+
+        novelty_algo = es.NoveltyCurve(
+            frameRate=float(sample_rate) / float(hop_size),
+            normalize=True,
+        )
+        novelty = novelty_algo(np.asarray(bark_matrix, dtype=np.float32))
+        novelty = np.asarray(novelty, dtype=np.float64)
+        novelty = novelty[np.isfinite(novelty)]
+
+        if novelty.size == 0:
+            return {
+                "noveltyCurve": [],
+                "noveltyPeaks": [],
+                "noveltyMean": 0.0,
+                "noveltyStdDev": 0.0,
+            }
+
+        max_val = float(np.max(np.abs(novelty)))
+        if max_val > 0.0:
+            novelty = novelty / max_val
+
+        novelty_mean = float(np.mean(novelty))
+        novelty_std = float(np.std(novelty))
+        novelty_curve = _downsample_evenly(
+            novelty,
+            max_points=max_curve_points,
+            decimals=4,
+        )
+        novelty_peaks = _pick_novelty_peaks(
+            novelty,
+            sample_rate=sample_rate,
+            hop_size=hop_size,
+            max_peaks=max_peaks,
+            min_spacing_sec=min_spacing_sec,
+        )
+
+        return {
+            "noveltyCurve": novelty_curve,
+            "noveltyPeaks": novelty_peaks,
+            "noveltyMean": round(novelty_mean, 4),
+            "noveltyStdDev": round(novelty_std, 4),
+        }
+    except Exception:
+        return None
+
+
+def _zscore_feature_matrix(feature_matrix: np.ndarray) -> np.ndarray:
+    """Z-score normalize each feature row independently."""
+    matrix = np.asarray(feature_matrix, dtype=np.float64)
+    if matrix.ndim != 2 or matrix.size == 0:
+        return np.asarray([], dtype=np.float32)
+
+    means = np.mean(matrix, axis=1, keepdims=True)
+    stds = np.std(matrix, axis=1, keepdims=True)
+    stds = np.where(stds > 1e-8, stds, 1.0)
+    normalized = (matrix - means) / stds
+    return normalized.astype(np.float32)
+
+
+def _extract_structure_feature_matrix(
+    mono: np.ndarray,
+    sample_rate: int,
+    feature_preset: str = STRUCTURE_MFCC_FEATURE_PRESET,
+    frame_size: int = STRUCTURE_FRAME_SIZE,
+    hop_size: int = STRUCTURE_HOP_SIZE,
+) -> tuple[np.ndarray, int] | None:
+    """Create SBic input features as [feature, frame] matrix."""
+    if sample_rate <= 0:
+        return None
+
+    mono_arr = np.asarray(mono, dtype=np.float32)
+    if mono_arr.ndim != 1 or mono_arr.size == 0:
+        return None
+    if mono_arr.size < frame_size:
+        mono_arr = np.pad(mono_arr, (0, frame_size - mono_arr.size))
+
+    window = es.Windowing(type="hann", size=frame_size)
+    spectrum = es.Spectrum(size=frame_size)
+    mfcc = es.MFCC(
+        inputSize=frame_size // 2 + 1,
+        sampleRate=sample_rate,
+        numberCoefficients=STRUCTURE_MFCC_COEFFICIENTS,
+    )
+
+    feature_rows = []
+    for frame in es.FrameGenerator(
+        mono_arr,
+        frameSize=frame_size,
+        hopSize=hop_size,
+    ):
+        spec = spectrum(window(frame))
+        _bands, coeffs = mfcc(spec)
+        feature_rows.append(np.asarray(coeffs, dtype=np.float64))
+
+    if len(feature_rows) < 2:
+        return None
+
+    feature_matrix = np.asarray(feature_rows, dtype=np.float64).T
+    if feature_preset == "mfcc_z":
+        normalized = _zscore_feature_matrix(feature_matrix)
+    elif feature_preset == "mfcc_delta_z":
+        deltas = np.diff(feature_matrix, axis=1, prepend=feature_matrix[:, :1])
+        normalized = _zscore_feature_matrix(np.vstack((feature_matrix, deltas)))
+    else:
+        return None
+
+    if normalized.ndim != 2 or normalized.shape[1] < 2:
+        return None
+    return normalized, hop_size
+
+
+def _run_structure_sbic_boundaries(
+    feature_matrix: np.ndarray,
+    sample_rate: int,
+    hop_size: int,
+    sbic_params: dict | None = None,
+) -> np.ndarray:
+    """Run SBic on feature matrix and convert frame boundaries to seconds."""
+    if sample_rate <= 0 or hop_size <= 0:
+        return np.asarray([], dtype=np.float64)
+
+    params = dict(STRUCTURE_SBIC_PARAMS)
+    if isinstance(sbic_params, dict):
+        params.update(sbic_params)
+
+    boundary_frames = np.asarray(es.SBic(**params)(feature_matrix), dtype=np.float64)
+    if boundary_frames.size == 0:
+        return np.asarray([], dtype=np.float64)
+
+    return boundary_frames * (float(hop_size) / float(sample_rate))
+
+
+def _normalize_structure_boundaries(
+    boundaries_seconds: np.ndarray,
+    duration: float,
+) -> np.ndarray:
+    """Clamp, sort, and ensure segment boundaries include start/end."""
+    boundaries = np.asarray(boundaries_seconds, dtype=np.float64)
+    if boundaries.size == 0 or duration <= 0.0:
+        return np.asarray([], dtype=np.float64)
+
+    boundaries = boundaries[np.isfinite(boundaries)]
+    if boundaries.size == 0:
+        return np.asarray([], dtype=np.float64)
+
+    boundaries = np.clip(boundaries, 0.0, duration)
+    boundaries = np.unique(boundaries)
+    boundaries.sort()
+    if boundaries.size == 0:
+        return np.asarray([], dtype=np.float64)
+
+    if boundaries.size == 1:
+        only = float(boundaries[0])
+        if only > 0.0:
+            boundaries = np.array([0.0, only], dtype=np.float64)
+        else:
+            boundaries = np.array([0.0, duration], dtype=np.float64)
+
+    if boundaries[0] > 0.0:
+        boundaries = np.insert(boundaries, 0, 0.0)
+    if boundaries[-1] < duration:
+        boundaries = np.append(boundaries, duration)
+
+    boundaries = np.unique(boundaries)
+    boundaries.sort()
+    return boundaries
+
+
+def _is_structure_output_too_coarse(
+    boundaries_seconds: np.ndarray,
+    duration: float,
+) -> bool:
+    """Determine whether SBic boundaries are too coarse for target material."""
+    boundaries = np.asarray(boundaries_seconds, dtype=np.float64)
+    if boundaries.size < 2:
+        return True
+
+    if (
+        duration < STRUCTURE_TARGET_DURATION_MIN_SECONDS
+        or duration > STRUCTURE_TARGET_DURATION_MAX_SECONDS
+    ):
+        return False
+
+    segment_count = int(boundaries.size - 1)
+    if segment_count < STRUCTURE_COARSE_MIN_SEGMENT_COUNT:
+        return True
+
+    segment_lengths = np.diff(boundaries)
+    finite_lengths = segment_lengths[np.isfinite(segment_lengths) & (segment_lengths > 0)]
+    if finite_lengths.size == 0:
+        return True
+    return float(np.median(finite_lengths)) >= STRUCTURE_COARSE_MEDIAN_SEGMENT_SECONDS
+
+
+def _fuse_novelty_boundaries(
+    boundaries_seconds: np.ndarray,
+    novelty_peaks: list[dict] | None,
+    duration: float,
+    exclusion_seconds: float = STRUCTURE_NOVELTY_EXCLUSION_SECONDS,
+) -> np.ndarray:
+    """Fuse novelty peaks into boundaries while avoiding near-duplicates."""
+    boundaries = np.asarray(boundaries_seconds, dtype=np.float64)
+    if (
+        boundaries.size == 0
+        or duration <= 0.0
+        or not isinstance(novelty_peaks, list)
+        or len(novelty_peaks) == 0
+    ):
+        return boundaries
+
+    fused = list(float(v) for v in boundaries)
+    for peak in novelty_peaks:
+        if not isinstance(peak, dict):
+            continue
+        time_value = peak.get("time")
+        if time_value is None:
+            continue
+        candidate = float(time_value)
+        if not np.isfinite(candidate) or candidate <= 0.0 or candidate >= duration:
+            continue
+        if any(abs(existing - candidate) <= exclusion_seconds for existing in fused):
+            continue
+        fused.append(candidate)
+
+    fused_boundaries = np.unique(np.asarray(fused, dtype=np.float64))
+    fused_boundaries.sort()
+    return _normalize_structure_boundaries(fused_boundaries, duration)
+
+
+def _boundaries_to_structure_segments(boundaries_seconds: np.ndarray) -> list[dict[str, float | int]]:
+    """Convert sorted boundary times into segment objects."""
+    boundaries = np.asarray(boundaries_seconds, dtype=np.float64)
+    if boundaries.size < 2:
+        return []
+
+    segments = []
+    for i in range(len(boundaries) - 1):
+        start = float(boundaries[i])
+        end = float(boundaries[i + 1])
+        if end <= start:
+            continue
+        segments.append(
+            {
+                "start": round(start, 3),
+                "end": round(end, 3),
+                "index": int(i),
+            },
+        )
+    return segments
+
+
+def _compute_structure_merge_floor(
+    duration: float,
+    median_beat_interval: float | None,
+    policy: str | None = None,
+) -> float:
+    """Resolve minimum segment duration floor for merge pass."""
+    selected_policy = policy or STRUCTURE_MERGE_POLICY
+
+    baseline_floor = STRUCTURE_MERGE_BASELINE_SECONDS
+    if median_beat_interval is not None:
+        baseline_floor = max(
+            baseline_floor,
+            STRUCTURE_MERGE_BASELINE_BEATS * float(median_beat_interval),
+        )
+
+    clamped_duration = float(
+        min(
+            max(duration, STRUCTURE_TARGET_DURATION_MIN_SECONDS),
+            STRUCTURE_TARGET_DURATION_MAX_SECONDS,
+        )
+    )
+    adaptive_floor = max(
+        STRUCTURE_MERGE_ADAPTIVE_SECONDS,
+        STRUCTURE_MERGE_ADAPTIVE_DURATION_FACTOR * clamped_duration,
+    )
+    if median_beat_interval is not None:
+        adaptive_floor = max(
+            adaptive_floor,
+            STRUCTURE_MERGE_ADAPTIVE_BEATS * float(median_beat_interval),
+        )
+
+    if selected_policy == "baseline":
+        return float(baseline_floor)
+    if selected_policy == "adaptive_clamped":
+        return float(adaptive_floor)
+    if selected_policy == "min_of_baseline_adaptive":
+        return float(min(baseline_floor, adaptive_floor))
+    return float(baseline_floor)
+
+
 def _extract_beat_loudness_data(
     mono: np.ndarray,
     sample_rate: int = 44100,
@@ -721,6 +1098,121 @@ def _extract_beat_loudness_data(
         }
     except Exception:
         return None
+
+
+def _detect_onset_times(
+    mono: np.ndarray,
+    sample_rate: int,
+    frame_size: int = 1024,
+    hop_size: int = 512,
+) -> np.ndarray:
+    """Detect onset times from audio frames using Essentia onset tools."""
+    mono_arr = np.asarray(mono, dtype=np.float32)
+    if mono_arr.ndim != 1 or mono_arr.size < frame_size:
+        return np.asarray([], dtype=np.float64)
+
+    window = es.Windowing(type="hann", size=frame_size)
+    spectrum = es.Spectrum(size=frame_size)
+    onset_detection = es.OnsetDetection(method="hfc", sampleRate=sample_rate)
+    onset_values = []
+
+    for frame in es.FrameGenerator(
+        mono_arr,
+        frameSize=frame_size,
+        hopSize=hop_size,
+    ):
+        spec = spectrum(window(frame))
+        onset_value = None
+        try:
+            onset_value = float(onset_detection(spec))
+        except Exception:
+            try:
+                onset_value = float(
+                    onset_detection(spec, np.zeros_like(spec, dtype=np.float32)),
+                )
+            except Exception:
+                onset_value = None
+
+        if onset_value is not None and np.isfinite(onset_value):
+            onset_values.append(onset_value)
+
+    if len(onset_values) == 0:
+        return np.asarray([], dtype=np.float64)
+
+    onset_times = es.Onsets(
+        frameRate=float(sample_rate) / float(hop_size),
+    )(
+        np.asarray([onset_values], dtype=np.float32),
+        np.asarray([1.0], dtype=np.float32),
+    )
+    onset_times = np.asarray(onset_times, dtype=np.float64)
+    return onset_times[np.isfinite(onset_times)]
+
+
+def _resolve_downbeats_and_interval(
+    rhythm_data: dict | None,
+) -> tuple[np.ndarray, float | None]:
+    """Return assumed downbeats and the median beat interval when rhythm exists."""
+    if rhythm_data is None:
+        return np.asarray([], dtype=np.float64), None
+
+    ticks = np.asarray(rhythm_data.get("ticks", []), dtype=np.float64)
+    ticks = ticks[np.isfinite(ticks)]
+    if ticks.size == 0:
+        return np.asarray([], dtype=np.float64), None
+
+    median_beat_interval = None
+    if ticks.size >= 2:
+        beat_intervals = np.diff(ticks)
+        finite_intervals = beat_intervals[np.isfinite(beat_intervals) & (beat_intervals > 0)]
+        if finite_intervals.size > 0:
+            median_beat_interval = float(np.median(finite_intervals))
+
+    return ticks[::4], median_beat_interval
+
+
+def _merge_short_structure_segments(
+    segments: list[dict[str, float | int]],
+    minimum_duration_seconds: float,
+) -> list[dict[str, float | int]]:
+    """Merge short structure segments into neighbours deterministically."""
+    if len(segments) <= 1:
+        return segments
+
+    merged_segments = [
+        {
+            "start": float(segment["start"]),
+            "end": float(segment["end"]),
+        }
+        for segment in segments
+    ]
+
+    changed = True
+    while changed and len(merged_segments) > 1:
+        changed = False
+        for index, segment in enumerate(merged_segments):
+            duration = float(segment["end"] - segment["start"])
+            if duration >= minimum_duration_seconds:
+                continue
+
+            if index == 0 and len(merged_segments) > 1:
+                merged_segments[1]["start"] = float(segment["start"])
+                merged_segments.pop(index)
+            else:
+                merged_segments[index - 1]["end"] = float(segment["end"])
+                merged_segments.pop(index)
+            changed = True
+            break
+
+    return [
+        {
+            "start": round(float(segment["start"]), 3),
+            "end": round(float(segment["end"]), 3),
+            "index": int(index),
+        }
+        for index, segment in enumerate(merged_segments)
+        if float(segment["end"]) > float(segment["start"])
+    ]
 
 
 # ── Shared rhythm extraction (run once, reuse everywhere) ──────────────────
@@ -1551,7 +2043,11 @@ def analyze_stereo(stereo: np.ndarray, sample_rate: int = 44100) -> dict:
         }
 
 
-def analyze_rhythm_detail(rhythm_data: dict | None) -> dict:
+def analyze_rhythm_detail(
+    mono: np.ndarray,
+    sample_rate: int,
+    rhythm_data: dict | None,
+) -> dict:
     """Onset rate, beat positions, and groove amount from shared rhythm data."""
     try:
         if rhythm_data is None:
@@ -1559,18 +2055,17 @@ def analyze_rhythm_detail(rhythm_data: dict | None) -> dict:
 
         ticks = np.asarray(rhythm_data["ticks"], dtype=np.float64)
 
-        # OnsetRate
-        try:
-            onset_rate_algo = es.OnsetRate()
-            # OnsetRate not used here — we derive onset rate from ticks
-            # Actual OnsetRate needs the audio, so compute from ticks
-            if len(ticks) >= 2:
-                duration = float(ticks[-1] - ticks[0])
-                onset_rate = float(len(ticks)) / duration if duration > 0 else 0.0
-            else:
-                onset_rate = 0.0
-        except Exception:
-            onset_rate = 0.0
+        duration_seconds = (
+            float(len(np.asarray(mono, dtype=np.float32)) / sample_rate)
+            if sample_rate > 0
+            else 0.0
+        )
+        onset_times = _detect_onset_times(mono, sample_rate)
+        onset_rate = (
+            float(onset_times.size) / duration_seconds
+            if duration_seconds > 0 and onset_times.size > 0
+            else 0.0
+        )
 
         beat_grid = [round(float(t), 3) for t in ticks]
         beat_positions = [((index % 4) + 1) for index in range(len(beat_grid))]
@@ -1750,13 +2245,25 @@ def analyze_time_signature(rhythm_data: dict | None) -> dict:
     """Estimate time signature from shared rhythm data."""
     try:
         if rhythm_data is None:
-            return {"timeSignature": None}
+            return {
+                "timeSignature": None,
+                "timeSignatureSource": None,
+                "timeSignatureConfidence": None,
+            }
         # Essentia has no dedicated time signature algorithm.
         # Default to 4/4 (>90% of popular music).
-        return {"timeSignature": "4/4"}
+        return {
+            "timeSignature": "4/4",
+            "timeSignatureSource": "assumed_four_four",
+            "timeSignatureConfidence": 0.0,
+        }
     except Exception as e:
         print(f"[warn] Time signature estimation failed: {e}", file=sys.stderr)
-        return {"timeSignature": None}
+        return {
+            "timeSignature": None,
+            "timeSignatureSource": None,
+            "timeSignatureConfidence": None,
+        }
 
 
 def analyze_melody(
@@ -2143,6 +2650,7 @@ def analyze_sidechain_detail(
     sample_rate: int = 44100,
     rhythm_data: dict | None = None,
     beat_data: dict | None = None,
+    stems: dict | None = None,
 ) -> dict:
     """Detect sidechain-style pumping from RMS dips aligned to kick activity."""
     try:
@@ -2157,7 +2665,11 @@ def analyze_sidechain_detail(
         if beats.size < 2 or low_band.size < 2 or beat_loudness.size < 2:
             return {"sidechainDetail": None}
 
-        mono_arr = np.asarray(mono, dtype=np.float32)
+        source_mono = _load_stem_mono(stems, "bass", sample_rate=sample_rate)
+        if source_mono is None:
+            source_mono = mono
+
+        mono_arr = np.asarray(source_mono, dtype=np.float32)
         total_samples = int(mono_arr.size)
         if total_samples < 2:
             return {"sidechainDetail": None}
@@ -2972,6 +3484,7 @@ def analyze_bass_detail(
     mono: np.ndarray,
     sample_rate: int = 44100,
     bpm: float | None = None,
+    stems: dict | None = None,
 ) -> dict:
     """Analyze bass character: sub-bass decay time, transient ratio, fundamental Hz, swing.
 
@@ -2980,7 +3493,11 @@ def analyze_bass_detail(
     decay measurement to -6 dB, and ZCR fundamental estimation.
     """
     try:
-        mono_arr = np.asarray(mono, dtype=np.float32)
+        source_mono = _load_stem_mono(stems, "bass", sample_rate=sample_rate)
+        if source_mono is None:
+            source_mono = mono
+
+        mono_arr = np.asarray(source_mono, dtype=np.float32)
         if mono_arr.ndim != 1 or mono_arr.size < sample_rate:
             return {"bassDetail": None}
 
@@ -3146,6 +3663,7 @@ def analyze_kick_detail(
     mono: np.ndarray,
     sample_rate: int = 44100,
     bpm: float | None = None,
+    stems: dict | None = None,
 ) -> dict:
     """Analyze kick drum characteristics: onset sharpness, fundamental pitch, THD, harmonic ratio.
 
@@ -3154,7 +3672,11 @@ def analyze_kick_detail(
     OnsetDetection for transients, per-kick THD measurement up to 10th harmonic.
     """
     try:
-        mono_arr = np.asarray(mono, dtype=np.float32)
+        source_mono = _load_stem_mono(stems, "drums", sample_rate=sample_rate)
+        if source_mono is None:
+            source_mono = mono
+
+        mono_arr = np.asarray(source_mono, dtype=np.float32)
         if mono_arr.ndim != 1 or mono_arr.size < 4096:
             return {"kickDetail": None}
 
@@ -3519,78 +4041,8 @@ def analyze_genre_detail(result: dict) -> dict:
 def analyze_arrangement_detail(mono: np.ndarray, sample_rate: int = 44100) -> dict:
     """Novelty timeline from Bark bands to expose structural events."""
     try:
-        mono_arr = np.asarray(mono, dtype=np.float32)
-        if mono_arr.ndim != 1 or mono_arr.size == 0:
-            return {"arrangementDetail": None}
-
-        frame_size = 2048
-        hop_size = 1024
-        if mono_arr.size < frame_size:
-            mono_arr = np.pad(mono_arr, (0, frame_size - mono_arr.size))
-
-        window = es.Windowing(type="hann", size=frame_size)
-        spectrum = es.Spectrum(size=frame_size)
-        bark_bands = es.BarkBands(numberBands=24, sampleRate=sample_rate)
-
-        bark_matrix = []
-        for frame in es.FrameGenerator(
-            mono_arr, frameSize=frame_size, hopSize=hop_size
-        ):
-            spec = spectrum(window(frame))
-            bands = np.asarray(bark_bands(spec), dtype=np.float32)
-            if bands.size == 24 and np.all(np.isfinite(bands)):
-                bark_matrix.append(bands)
-
-        if len(bark_matrix) < 2:
-            return {
-                "arrangementDetail": {
-                    "noveltyCurve": [],
-                    "noveltyPeaks": [],
-                    "noveltyMean": 0.0,
-                    "noveltyStdDev": 0.0,
-                }
-            }
-
-        novelty_algo = es.NoveltyCurve(
-            frameRate=float(sample_rate) / float(hop_size), normalize=True
-        )
-        novelty = novelty_algo(np.asarray(bark_matrix, dtype=np.float32))
-        novelty = np.asarray(novelty, dtype=np.float64)
-        novelty = novelty[np.isfinite(novelty)]
-
-        if novelty.size == 0:
-            return {
-                "arrangementDetail": {
-                    "noveltyCurve": [],
-                    "noveltyPeaks": [],
-                    "noveltyMean": 0.0,
-                    "noveltyStdDev": 0.0,
-                }
-            }
-
-        max_val = float(np.max(np.abs(novelty)))
-        if max_val > 0.0:
-            novelty = novelty / max_val
-
-        novelty_mean = float(np.mean(novelty))
-        novelty_std = float(np.std(novelty))
-        novelty_curve = _downsample_evenly(novelty, max_points=64, decimals=4)
-        novelty_peaks = _pick_novelty_peaks(
-            novelty,
-            sample_rate=sample_rate,
-            hop_size=hop_size,
-            max_peaks=8,
-            min_spacing_sec=2.0,
-        )
-
-        return {
-            "arrangementDetail": {
-                "noveltyCurve": novelty_curve,
-                "noveltyPeaks": novelty_peaks,
-                "noveltyMean": round(novelty_mean, 4),
-                "noveltyStdDev": round(novelty_std, 4),
-            }
-        }
+        novelty_summary = _compute_arrangement_novelty_summary(mono, sample_rate)
+        return {"arrangementDetail": novelty_summary}
     except Exception as e:
         print(f"[warn] Arrangement detail analysis failed: {e}", file=sys.stderr)
         return {"arrangementDetail": None}
@@ -3684,87 +4136,91 @@ def analyze_danceability(mono: np.ndarray, sample_rate: int = 44100) -> dict:
         return {"danceability": None}
 
 
-def analyze_structure(mono: np.ndarray, sample_rate: int = 44100) -> dict:
+def analyze_structure(
+    mono: np.ndarray,
+    sample_rate: int = 44100,
+    rhythm_data: dict | None = None,
+) -> dict:
     """Structure segmentation with SBic, returned as capped segment objects."""
     try:
         duration = float(len(mono) / sample_rate) if sample_rate > 0 else 0.0
-        boundaries_seconds = None
-
-        # Requested path: direct SBic call on mono signal.
-        try:
-            direct_boundaries = es.SBic()(mono)
-            boundaries_seconds = np.asarray(direct_boundaries, dtype=np.float64)
-        except Exception:
-            boundaries_seconds = None
-
-        # Fallback path for builds where SBic expects feature matrices and returns frame indices.
-        if boundaries_seconds is None:
-            frame_size = 2048
-            hop_size = 1024
-            window = es.Windowing(type="hann", size=frame_size)
-            spectrum = es.Spectrum(size=frame_size)
-            mfcc = es.MFCC(
-                inputSize=frame_size // 2 + 1,
-                sampleRate=sample_rate,
-                numberCoefficients=13,
-            )
-
-            feature_rows = []
-            for frame in es.FrameGenerator(
-                mono, frameSize=frame_size, hopSize=hop_size
-            ):
-                spec = spectrum(window(frame))
-                _bands, coeffs = mfcc(spec)
-                feature_rows.append(np.asarray(coeffs, dtype=np.float64))
-
-            if len(feature_rows) < 2:
-                return {"structure": {"segments": [], "segmentCount": 0}}
-
-            feature_matrix = np.asarray(feature_rows, dtype=np.float32).T
-            boundary_frames = np.asarray(es.SBic()(feature_matrix), dtype=np.float64)
-            boundaries_seconds = boundary_frames * (
-                float(hop_size) / float(sample_rate)
-            )
-
-        boundaries_seconds = np.asarray(boundaries_seconds, dtype=np.float64)
-        if boundaries_seconds.size == 0:
+        if duration <= 0.0:
             return {"structure": {"segments": [], "segmentCount": 0}}
 
-        # Normalize and enforce [0, duration] with sorted unique boundaries.
-        boundaries_seconds = boundaries_seconds[np.isfinite(boundaries_seconds)]
-        if boundaries_seconds.size == 0:
-            return {"structure": {"segments": [], "segmentCount": 0}}
-        boundaries_seconds = np.clip(boundaries_seconds, 0.0, duration)
-        boundaries_seconds = np.unique(boundaries_seconds)
-        boundaries_seconds.sort()
+        boundaries_seconds = np.asarray([], dtype=np.float64)
 
-        if boundaries_seconds.size == 1:
-            only = float(boundaries_seconds[0])
-            if only > 0.0:
-                boundaries_seconds = np.array([0.0, only], dtype=np.float64)
-            elif duration > 0.0:
-                boundaries_seconds = np.array([0.0, duration], dtype=np.float64)
+        feature_payload = _extract_structure_feature_matrix(
+            mono,
+            sample_rate,
+            feature_preset=STRUCTURE_MFCC_FEATURE_PRESET,
+            frame_size=STRUCTURE_FRAME_SIZE,
+            hop_size=STRUCTURE_HOP_SIZE,
+        )
+        if feature_payload is not None:
+            feature_matrix, hop_size = feature_payload
+            try:
+                boundaries_seconds = _run_structure_sbic_boundaries(
+                    feature_matrix,
+                    sample_rate=sample_rate,
+                    hop_size=hop_size,
+                )
+            except Exception:
+                boundaries_seconds = np.asarray([], dtype=np.float64)
 
-        if boundaries_seconds[0] > 0.0:
-            boundaries_seconds = np.insert(boundaries_seconds, 0, 0.0)
-        if duration > 0.0 and boundaries_seconds[-1] < duration:
-            boundaries_seconds = np.append(boundaries_seconds, duration)
+        boundaries_seconds = _normalize_structure_boundaries(boundaries_seconds, duration)
+        needs_novelty_fallback = (
+            boundaries_seconds.size == 0
+            or _is_structure_output_too_coarse(boundaries_seconds, duration)
+        )
+        if needs_novelty_fallback:
+            novelty_summary = _compute_arrangement_novelty_summary(mono, sample_rate)
+            novelty_peaks = None
+            if isinstance(novelty_summary, dict):
+                novelty_peaks = novelty_summary.get("noveltyPeaks")
 
-        segments = []
-        for i in range(len(boundaries_seconds) - 1):
-            start = float(boundaries_seconds[i])
-            end = float(boundaries_seconds[i + 1])
-            if end <= start:
-                continue
-            segments.append(
-                {
-                    "start": round(start, 3),
-                    "end": round(end, 3),
-                    "index": int(i),
-                }
+            if boundaries_seconds.size == 0:
+                boundaries_seconds = np.asarray([0.0, duration], dtype=np.float64)
+
+            boundaries_seconds = _fuse_novelty_boundaries(
+                boundaries_seconds,
+                novelty_peaks=novelty_peaks,
+                duration=duration,
             )
-            if len(segments) >= 20:
-                break
+            boundaries_seconds = _normalize_structure_boundaries(boundaries_seconds, duration)
+
+        if boundaries_seconds.size == 0:
+            boundaries_seconds = np.asarray([0.0, duration], dtype=np.float64)
+
+        downbeats, median_beat_interval = _resolve_downbeats_and_interval(rhythm_data)
+        if downbeats.size > 0 and median_beat_interval is not None:
+            snap_threshold = min(STRUCTURE_SNAP_THRESHOLD_SECONDS, 0.5 * median_beat_interval)
+            snapped_boundaries = [float(boundaries_seconds[0])]
+            for boundary in boundaries_seconds[1:-1]:
+                nearest_downbeat = float(
+                    downbeats[np.argmin(np.abs(downbeats - boundary))],
+                )
+                if abs(nearest_downbeat - float(boundary)) <= snap_threshold:
+                    snapped_boundaries.append(nearest_downbeat)
+                else:
+                    snapped_boundaries.append(float(boundary))
+            snapped_boundaries.append(float(boundaries_seconds[-1]))
+            boundaries_seconds = _normalize_structure_boundaries(
+                np.asarray(snapped_boundaries, dtype=np.float64),
+                duration,
+            )
+
+        segments = _boundaries_to_structure_segments(boundaries_seconds)
+        minimum_duration_seconds = _compute_structure_merge_floor(
+            duration,
+            median_beat_interval=median_beat_interval,
+        )
+        segments = _merge_short_structure_segments(
+            segments,
+            minimum_duration_seconds=minimum_duration_seconds,
+        )
+        segments = segments[:STRUCTURE_MAX_SEGMENTS]
+        if len(segments) == 0:
+            segments = [{"start": 0.0, "end": round(duration, 3), "index": 0}]
 
         return {
             "structure": {
@@ -4886,6 +5342,8 @@ def main():
             "key": result.get("key"),
             "keyConfidence": result.get("keyConfidence"),
             "timeSignature": result.get("timeSignature"),
+            "timeSignatureSource": result.get("timeSignatureSource"),
+            "timeSignatureConfidence": result.get("timeSignatureConfidence"),
             "durationSeconds": result.get("durationSeconds"),
             "sampleRate": result.get("sampleRate"),
             "lufsIntegrated": result.get("lufsIntegrated"),
@@ -5012,7 +5470,7 @@ def main():
     result.update(analyze_plr(result.get("lufsIntegrated"), result.get("truePeak")))
 
     # Rhythm detail
-    result.update(analyze_rhythm_detail(rhythm_data))
+    result.update(analyze_rhythm_detail(mono, sample_rate, rhythm_data))
 
     # Shared beat-domain loudness data used by groove + sidechain analyses.
     beat_data = _extract_beat_loudness_data(mono, sample_rate, rhythm_data)
@@ -5020,7 +5478,15 @@ def main():
     # Groove detail (Tier 2 — always run)
     result.update(analyze_groove(mono, sample_rate, rhythm_data, beat_data))
     result.update(analyze_beats_loudness(mono, sample_rate, rhythm_data, beat_data))
-    result.update(analyze_sidechain_detail(mono, sample_rate, rhythm_data, beat_data))
+    result.update(
+        analyze_sidechain_detail(
+            mono,
+            sample_rate,
+            rhythm_data,
+            beat_data,
+            stems=stems,
+        )
+    )
 
     # Genre detail (Tier 2 — derived from other results, nearly free)
     result.update(analyze_genre_detail(result))
@@ -5029,7 +5495,7 @@ def main():
     result.update(analyze_danceability(mono, sample_rate))
 
     # Structure + arrangement (Tier 2)
-    result.update(analyze_structure(mono, sample_rate))
+    result.update(analyze_structure(mono, sample_rate, rhythm_data))
     result.update(analyze_arrangement_detail(mono, sample_rate))
 
     if run_standard:
@@ -5065,8 +5531,22 @@ def main():
         result.update(analyze_reverb_detail(mono, sample_rate, bpm=result.get("bpm")))
         result.update(analyze_vocal_detail(mono, sample_rate, bpm=result.get("bpm")))
         result.update(analyze_supersaw_detail(mono, sample_rate, bpm=result.get("bpm")))
-        result.update(analyze_bass_detail(mono, sample_rate, bpm=result.get("bpm")))
-        result.update(analyze_kick_detail(mono, sample_rate, bpm=result.get("bpm")))
+        result.update(
+            analyze_bass_detail(
+                mono,
+                sample_rate,
+                bpm=result.get("bpm"),
+                stems=stems,
+            )
+        )
+        result.update(
+            analyze_kick_detail(
+                mono,
+                sample_rate,
+                bpm=result.get("bpm"),
+                stems=stems,
+            )
+        )
         result.update(
             analyze_effects_detail(
                 mono,
@@ -5152,6 +5632,8 @@ def main():
         "tuningFrequency": result.get("tuningFrequency"),
         "tuningCents": result.get("tuningCents"),
         "timeSignature": result.get("timeSignature"),
+        "timeSignatureSource": result.get("timeSignatureSource"),
+        "timeSignatureConfidence": result.get("timeSignatureConfidence"),
         "durationSeconds": result.get("durationSeconds"),
         "sampleRate": result.get("sampleRate"),
         "lufsIntegrated": result.get("lufsIntegrated"),

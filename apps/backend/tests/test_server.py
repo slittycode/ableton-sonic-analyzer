@@ -693,6 +693,77 @@ class ServerContractTests(unittest.TestCase):
         payload = self._decode_json_response(response)
         self.assertNotIn("--fast", payload["diagnostics"]["timings"]["flagsUsed"])
 
+    @patch.object(server, "get_audio_duration_seconds", return_value=60.0, create=True)
+    @patch.object(
+        server,
+        "build_analysis_estimate",
+        return_value={
+            "durationSeconds": 60.0,
+            "totalSeconds": {"min": 10, "max": 20},
+            "stages": [{"key": "dsp", "label": "DSP analysis", "seconds": {"min": 10, "max": 20}}],
+        },
+        create=True,
+    )
+    @patch.object(
+        server.subprocess,
+        "run",
+        return_value=subprocess.CompletedProcess(
+            args=["./venv/bin/python", "analyze.py", "track.mp3", "--yes"],
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "bpm": 128,
+                    "bpmConfidence": 0.9,
+                    "key": "C major",
+                    "keyConfidence": 0.8,
+                    "timeSignature": "4/4",
+                    "timeSignatureSource": "assumed_four_four",
+                    "timeSignatureConfidence": 0.0,
+                    "durationSeconds": 60.0,
+                    "lufsIntegrated": -8.0,
+                    "truePeak": -0.5,
+                    "stereoDetail": {"stereoWidth": 0.5, "stereoCorrelation": 0.9},
+                    "spectralBalance": {
+                        "subBass": 0.0,
+                        "lowBass": 0.0,
+                        "lowMids": 0.0,
+                        "mids": 0.0,
+                        "upperMids": 0.0,
+                        "highs": 0.0,
+                        "brilliance": 0.0,
+                    },
+                    "melodyDetail": None,
+                    "transcriptionDetail": None,
+                }
+            ),
+            stderr="",
+        ),
+    )
+    def test_analyze_endpoint_forwards_time_signature_source_and_confidence(
+        self, *_mocks
+    ) -> None:
+        with (
+            patch.object(server, "_current_time", side_effect=_timing_points(), create=True),
+            patch("builtins.print"),
+        ):
+            response = asyncio.run(
+                server.analyze_audio(
+                    track=self._upload_file(),
+                    dsp_json_override=None,
+                    transcribe=False,
+                    separate=False,
+                    separate_query=False,
+                    separate_flag=False,
+                    fast=False,
+                    fast_query=False,
+                )
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["phase1"]["timeSignatureSource"], "assumed_four_four")
+        self.assertEqual(payload["phase1"]["timeSignatureConfidence"], 0.0)
+
     @patch.object(server, "get_audio_duration_seconds", return_value=214.6, create=True)
     @patch.object(
         server,
@@ -1332,6 +1403,25 @@ class BuildPhase1CoercionTests(unittest.TestCase):
         phase1 = server._build_phase1(self._minimal_payload(keyProfile="edma"))
         self.assertEqual(phase1["keyProfile"], "edma")
 
+    def test_time_signature_source_passes_through(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(timeSignatureSource="assumed_four_four"))
+        self.assertEqual(phase1["timeSignatureSource"], "assumed_four_four")
+
+    def test_time_signature_confidence_passes_through(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(timeSignatureConfidence=0.0))
+        self.assertEqual(phase1["timeSignatureConfidence"], 0.0)
+
+    def test_time_signature_confidence_nan_coerced_to_none(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(timeSignatureConfidence=float("nan")))
+        self.assertIsNone(phase1["timeSignatureConfidence"])
+
+    def test_time_signature_fields_null_stay_none(self) -> None:
+        phase1 = server._build_phase1(
+            self._minimal_payload(timeSignatureSource=None, timeSignatureConfidence=None)
+        )
+        self.assertIsNone(phase1["timeSignatureSource"])
+        self.assertIsNone(phase1["timeSignatureConfidence"])
+
     def test_tuning_frequency_passes_through(self) -> None:
         phase1 = server._build_phase1(self._minimal_payload(tuningFrequency=440.12))
         self.assertEqual(phase1["tuningFrequency"], 440.12)
@@ -1407,6 +1497,8 @@ class BuildPhase1CoercionTests(unittest.TestCase):
         self.assertIsNone(phase1.get("essentiaFeatures"))
         self.assertIsNone(phase1.get("beatsLoudness"))
         self.assertIsNone(phase1.get("keyProfile"))
+        self.assertIsNone(phase1.get("timeSignatureSource"))
+        self.assertIsNone(phase1.get("timeSignatureConfidence"))
         self.assertIsNone(phase1.get("tuningFrequency"))
         self.assertIsNone(phase1.get("tuningCents"))
         self.assertIsNone(phase1.get("lufsMomentaryMax"))

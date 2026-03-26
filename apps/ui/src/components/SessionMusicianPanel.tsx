@@ -32,6 +32,8 @@ const NOTE_COLORS = {
 };
 
 const LOW_CONFIDENCE_TITLE = "Low confidence — treat this as approximate.";
+const LOW_MELODY_CONFIDENCE_THRESHOLD = 0.2;
+const LOW_TRANSCRIPTION_CONFIDENCE_THRESHOLD = 0.15;
 type SessionMusicianSource = 'pitchNote' | 'melodyGuide' | 'none';
 
 export function filterNotesByConfidence(notes: MidiDisplayNote[], confidenceThreshold: number): MidiDisplayNote[] {
@@ -336,9 +338,9 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
         : 0;
   const isDraft =
     activeSource === 'pitchNote'
-      ? (transcriptionDetail?.averageConfidence ?? 0) < 0.15
+      ? (transcriptionDetail?.averageConfidence ?? 0) < LOW_TRANSCRIPTION_CONFIDENCE_THRESHOLD
       : activeSource === 'melodyGuide'
-        ? (melodyDetail?.pitchConfidence ?? 0) < 0.15
+        ? (melodyDetail?.pitchConfidence ?? 0) < LOW_MELODY_CONFIDENCE_THRESHOLD
         : false;
   const sourceBadgeLabel =
     activeSource === 'pitchNote'
@@ -347,7 +349,8 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
         ? 'MELODY GUIDE: ESSENTIA'
         : null;
   const { transcriptionPathLabel, stemSourcesLabel } = deriveTranscriptionProvenance(activeSource, transcriptionDetail);
-  const melodyIsApproximate = !!melodyDetail && (melodyDetail.pitchConfidence ?? 1) <= 0.15;
+  const melodyIsApproximate =
+    !!melodyDetail && (melodyDetail.pitchConfidence ?? 1) <= LOW_MELODY_CONFIDENCE_THRESHOLD;
 
   return (
     <section data-testid="session-musician-panel" className="space-y-4">

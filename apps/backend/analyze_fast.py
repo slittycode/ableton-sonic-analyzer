@@ -70,7 +70,7 @@ def analyze_fast(mono: np.ndarray, sample_rate: int = 44100) -> dict:
 
     # Key extraction
     try:
-        key_extractor = es.KeyExtractor(profileType="temperley")
+        key_extractor = es.KeyExtractor(profileType="edma")
         key, scale, strength = key_extractor(mono)
         result["key"] = f"{key} {scale}".title() if key and scale else None
         result["keyConfidence"] = round(float(strength), 3) if strength is not None else None
@@ -82,8 +82,12 @@ def analyze_fast(mono: np.ndarray, sample_rate: int = 44100) -> dict:
     # Time signature (default to 4/4 if we have rhythm data)
     if beats is not None and len(beats) > 0:
         result["timeSignature"] = "4/4"
+        result["timeSignatureSource"] = "assumed_four_four"
+        result["timeSignatureConfidence"] = 0.0
     else:
         result["timeSignature"] = None
+        result["timeSignatureSource"] = None
+        result["timeSignatureConfidence"] = None
 
     # Duration
     result["durationSeconds"] = round(float(len(mono) / sample_rate), 3)

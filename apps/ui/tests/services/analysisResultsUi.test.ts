@@ -264,13 +264,13 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).not.toContain('title="Low confidence — treat this as approximate."');
   });
 
-  it('shows the chord low-confidence warning at the inclusive 0.70 threshold', () => {
+  it('shows the chord low-confidence warning at the inclusive 0.50 threshold', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
         phase1: {
           ...baseMeasurement,
           chordDetail: {
-            chordStrength: 0.7,
+            chordStrength: 0.5,
           },
         },
         phase2: basePhase2,
@@ -289,7 +289,7 @@ describe('AnalysisResults UI wiring', () => {
         phase1: {
           ...baseMeasurement,
           chordDetail: {
-            chordStrength: 0.71,
+            chordStrength: 0.51,
           },
         },
         phase2: basePhase2,

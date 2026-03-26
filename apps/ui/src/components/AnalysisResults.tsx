@@ -41,6 +41,8 @@ export interface AnalysisResultsProps {
   runId?: string;
 }
 
+const LOW_CHORD_CONFIDENCE_THRESHOLD = 0.5;
+
 export function toggleOpenKeySet(previous: ReadonlySet<string>, id: string): Set<string> {
   const next = new Set(previous);
   if (next.has(id)) {
@@ -231,7 +233,8 @@ export function AnalysisResults({
     : [];
   const keyIsApproximate = phase1.keyConfidence <= 0.6;
   const chordStrength = getChordStrength(phase1);
-  const chordsAreApproximate = chordStrength !== null && chordStrength <= 0.7;
+  const chordsAreApproximate =
+    chordStrength !== null && chordStrength <= LOW_CHORD_CONFIDENCE_THRESHOLD;
   const hasRenderablePhase2Content =
     confidenceBadges.length > 0 ||
     characteristicPills.length > 0 ||

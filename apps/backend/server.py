@@ -544,6 +544,8 @@ def _build_phase1(payload: dict[str, Any]) -> dict[str, Any]:
         "tuningFrequency": _coerce_nullable_number(payload.get("tuningFrequency")),
         "tuningCents": _coerce_nullable_number(payload.get("tuningCents")),
         "timeSignature": _coerce_string(payload.get("timeSignature"), "4/4"),
+        "timeSignatureSource": _coerce_nullable_string(payload.get("timeSignatureSource")),
+        "timeSignatureConfidence": _coerce_nullable_number(payload.get("timeSignatureConfidence")),
         "durationSeconds": _coerce_number(payload.get("durationSeconds")),
         "sampleRate": payload.get("sampleRate"),
         "lufsIntegrated": _coerce_number(payload.get("lufsIntegrated")),

@@ -8,6 +8,8 @@ export interface ConfidenceBadgeViewModel {
 }
 
 const SENTENCE_BREAK_REGEX = /(?<=[.!?])\s+/;
+const LOW_MELODY_CONFIDENCE_THRESHOLD = 0.2;
+const LOW_TRANSCRIPTION_CONFIDENCE_THRESHOLD = 0.15;
 
 const CONFIDENCE_LABEL_MAP: Record<string, string> = {
   "key signature": "Key",
@@ -407,7 +409,7 @@ export function buildMelodyInsights(phase1: Phase1Result): MelodyInsightsViewMod
       rangeLabel,
       confidence,
       confidenceLabel,
-      isDraft: confidence < 0.15,
+      isDraft: confidence < LOW_TRANSCRIPTION_CONFIDENCE_THRESHOLD,
     };
   }
 
@@ -429,7 +431,7 @@ export function buildMelodyInsights(phase1: Phase1Result): MelodyInsightsViewMod
     rangeLabel,
     confidence,
     confidenceLabel,
-    isDraft: confidence < 0.15,
+    isDraft: confidence < LOW_MELODY_CONFIDENCE_THRESHOLD,
   };
 }
 

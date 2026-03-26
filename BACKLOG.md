@@ -42,3 +42,6 @@ Source: active/sonic-architect-app (keep in active/ as reference)
   → ASA slot: waveform/analysis view; replaces or supplements WaveSurfer display
 - `components/SpectralAreaChart.tsx` — stacked spectral energy area chart (D3)
   → ASA slot: same view; alternative representation of spectral balance data
+
+## Contract Follow-Ups
+- ✅ `timeSignatureSource` / `timeSignatureConfidence` — surfaced through HTTP `phase1` via `server.py` (verified on live raw analyzer output before passthrough wiring)
