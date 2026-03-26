@@ -1,12 +1,12 @@
 # Field Utilization Report
 
-Generated: 2026-03-16 14:30:00 UTC
+Last reviewed: 2026-03-26
 
 ## Summary
 
 - Total Recommendations: **24**
 - Avg Sources per Recommendation: **2.30**
-- Unused Fields: **11**
+- Unused Fields: **10**
 
 ## Most Used Fields (Top 10)
 
@@ -35,9 +35,10 @@ The following Phase 1 fields were never cited in recommendations:
 - `stereoDetail.stereoCorrelation`
 - `stereoDetail.subBassMono`
 - `rhythmDetail.beatInterval`
-- `melodyDetail.vibratoExtent`
 - `transcriptionDetail.noteCount`
 - `sidechainDetail.pumpingConfidence`
+
+`melodyDetail.vibratoExtent` is actively used in the frontend UI. It is surfaced in the Session Musician section with provenance and truthfulness labelling, so it is not an unused field or a removal candidate.
 
 ## Category Breakdown
 
@@ -114,6 +115,5 @@ These fields are never cited and may not be useful:
 
 - Confidence fields (`bpmConfidence`, `keyConfidence`)
 - Complex nested fields (`stereoDetail.subBassMono`, `rhythmDetail.beatInterval`)
-- Niche analysis fields (`melodyDetail.vibratoExtent`)
 
 Consider removing these from Phase 1 to reduce processing time, or improve prompting to leverage them.

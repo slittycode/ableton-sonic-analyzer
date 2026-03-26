@@ -39,6 +39,7 @@ from analyze import (
     build_analysis_estimate,
     get_audio_duration_seconds,
 )
+from utils.cleanup import cleanup_artifacts
 
 
 app = FastAPI(title="Sonic Analyzer Local API")
@@ -330,7 +331,20 @@ def _evict_expired_cache_entries() -> None:
 
 @app.on_event("startup")
 async def _start_cache_eviction() -> None:
-    get_analysis_runtime().recover_incomplete_attempts()
+    runtime = get_analysis_runtime()
+    runtime.recover_incomplete_attempts()
+
+    def _run_artifact_cleanup() -> None:
+        try:
+            cleanup_artifacts(runtime.runtime_dir)
+        except Exception as exc:
+            logger.warning("[warn] artifact cleanup failed: %s", exc)
+
+    threading.Thread(
+        target=_run_artifact_cleanup,
+        name="artifact-cleanup",
+        daemon=True,
+    ).start()
 
     async def _evict_loop() -> None:
         while True:

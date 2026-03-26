@@ -41,6 +41,7 @@ PUMPING_CONFIDENCE_THRESHOLDS = [0.20, 0.30, 0.40, 0.50]
 CURRENT_PITCH_THRESHOLD = 0.15
 CURRENT_CHORD_THRESHOLD = 0.70
 CURRENT_PUMPING_THRESHOLD = 0.40
+AUDIO_EXTENSIONS = (".mp3", ".wav", ".flac", ".aif", ".aiff")
 
 
 def load_ground_truth(path: str) -> dict[str, Any]:
@@ -141,6 +142,15 @@ def run_analysis(audio_path: str, venv_python: str | None = None) -> dict[str, A
     except json.JSONDecodeError as e:
         print(f"[warn] Failed to parse analysis output for {audio_path}: {e}", file=sys.stderr)
         return None
+
+
+def find_track_audio_path(tracks_dir: str, track_name: str) -> str | None:
+    """Return the first matching audio path for a ground-truth track."""
+    for ext in AUDIO_EXTENSIONS:
+        candidate = os.path.join(tracks_dir, f"{track_name}{ext}")
+        if os.path.exists(candidate):
+            return candidate
+    return None
 
 
 def extract_pitch_confidence(analysis: dict[str, Any]) -> float | None:
@@ -549,6 +559,38 @@ def run_calibration(
         print("[error] No ground truth data available", file=sys.stderr)
         return {}
 
+    audio_paths = {
+        track_name: find_track_audio_path(tracks_dir, track_name)
+        for track_name in ground_truth
+    }
+    audio_count = sum(1 for audio_path in audio_paths.values() if audio_path is not None)
+    cache_count = 0
+    if cache_dir:
+        cache_count = sum(
+            1
+            for track_name in ground_truth
+            if load_cached_result(os.path.join(cache_dir, f"{track_name}.json")) is not None
+        )
+
+    if audio_count == 0 and cache_count > 0:
+        print(
+            "[ERROR] All "
+            f"{len(ground_truth)} tracks are being served from cache with no audio files\n"
+            f"present in {tracks_dir}. The cache stubs may not represent real analysis\n"
+            "output. Populate tracks/ with real audio or use --no-cache to skip caching.\n"
+            "Calibration aborted.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
+    restrict_to_audio_subset = 0 < audio_count < len(ground_truth)
+    if restrict_to_audio_subset:
+        print(
+            f"[WARN] {audio_count}/{len(ground_truth)} tracks have audio files.\n"
+            "Calibration will proceed on the subset with real audio.",
+            file=sys.stderr,
+        )
+
     print(f"Loaded ground truth for {len(ground_truth)} tracks")
 
     # Prepare track data
@@ -557,15 +599,9 @@ def run_calibration(
     sidechain_tracks = []
 
     for track_name, labels in ground_truth.items():
-        # Check if track has audio file
-        audio_path = os.path.join(tracks_dir, f"{track_name}.mp3")
-        if not os.path.exists(audio_path):
-            # Try other extensions
-            for ext in [".wav", ".flac", ".aif", ".aiff"]:
-                alt_path = os.path.join(tracks_dir, f"{track_name}{ext}")
-                if os.path.exists(alt_path):
-                    audio_path = alt_path
-                    break
+        audio_path = audio_paths[track_name]
+        if restrict_to_audio_subset and audio_path is None:
+            continue
 
         # Load or run analysis
         analysis = None
@@ -573,7 +609,7 @@ def run_calibration(
             cache_path = os.path.join(cache_dir, f"{track_name}.json")
             analysis = load_cached_result(cache_path)
 
-        if analysis is None and os.path.exists(audio_path):
+        if analysis is None and audio_path is not None:
             print(f"Analyzing {track_name}...", file=sys.stderr)
             analysis = run_analysis(audio_path, venv_python)
             if analysis and cache_dir:

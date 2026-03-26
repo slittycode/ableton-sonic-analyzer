@@ -21,6 +21,7 @@ import { SpectrogramViewer } from './SpectrogramViewer';
 import { SpectralEvolutionChart } from './SpectralEvolutionChart';
 import { ChromaHeatmap } from './ChromaHeatmap';
 import { MiniHeatmap } from './MiniHeatmap';
+import { MixDoctorPanel } from './MixDoctorPanel';
 import { Sparkline } from './Sparkline';
 import { SpectralCursorProvider } from '../hooks/useSpectralCursorBus';
 
@@ -1649,74 +1650,7 @@ export function MeasurementDashboard({
 
       {/* 3. MixDoctor */}
       <Section id="section-meas-mixdoctor" number={3} title="MixDoctor">
-        <MetricRow
-          label="Target Genre"
-          value={`${mixDoctorReport.genreName} (${mixDoctorReport.genreId})`}
-        />
-        <MetricRow
-          label="Health Score"
-          value={`${mixDoctorReport.overallScore}/100`}
-        />
-        <MetricRow
-          label="Loudness Offset"
-          value={formatNumber(mixDoctorReport.loudnessOffset, 2)}
-        />
-
-        <div className="border-t border-border pt-3">
-          <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
-            Advisory Summary
-          </span>
-          <div className="mt-2 space-y-2 text-sm text-text-primary">
-            <div>
-              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mr-2">
-                Dynamics
-              </span>
-              {mixDoctorReport.dynamicsAdvice.message}
-            </div>
-            <div>
-              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mr-2">
-                Loudness
-              </span>
-              {mixDoctorReport.loudnessAdvice.message}
-            </div>
-            <div>
-              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mr-2">
-                Stereo
-              </span>
-              {mixDoctorReport.stereoAdvice.message}
-            </div>
-          </div>
-        </div>
-
-        <div className="border-t border-border pt-3">
-          <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
-            Band Diagnostics
-          </span>
-          <div className="mt-2">
-            <SimpleTable
-              data={mixDoctorReport.advice}
-              columns={[
-                { key: 'band', label: 'Band', format: (v) => String(v ?? '—') },
-                {
-                  key: 'normalizedDb',
-                  label: 'Norm dB',
-                  format: (v) => formatNumber(v as number, 1),
-                },
-                {
-                  key: 'targetOptimalDb',
-                  label: 'Target dB',
-                  format: (v) => formatNumber(v as number, 1),
-                },
-                {
-                  key: 'diffDb',
-                  label: 'Delta dB',
-                  format: (v) => formatNumber(v as number, 1),
-                },
-                { key: 'issue', label: 'Issue', format: (v) => String(v ?? '—') },
-              ]}
-            />
-          </div>
-        </div>
+        <MixDoctorPanel report={mixDoctorReport} />
       </Section>
 
       {/* 4. Spectral */}

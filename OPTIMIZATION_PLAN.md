@@ -431,7 +431,7 @@ def analyze_fast(mono: np.ndarray, sample_rate: int) -> dict:
 - [x] `apps/backend/analyze_fast.py`
 
 ### Documentation
-- [ ] `tests/ground_truth/README.md`
+- [x] `tests/ground_truth/README.md`
 - [x] `docs/confidence_calibration_results.md`
 - [x] `docs/field_utilization_report.md`
 

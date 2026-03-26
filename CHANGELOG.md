@@ -28,6 +28,7 @@ All notable changes to `asa` are documented here.
 ### Fixed
 - MixDoctor null-genre fallback: prompts for manual selection instead of silently using first profile
 - Genre abstention logic with tests for empty, sparse, ambiguous, and fast-mode inputs
+- **Confidence calibration invalidated**: `docs/confidence_calibration_results.md` was generated from hand-crafted cache stubs with no real audio. All F1=1.0 results and threshold recommendations were artefacts of the stub data. Thresholds reverted to original engineering-judgment values (`pitchConfidence=0.15`, `chordStrength=0.70`, `pumpingConfidence=0.40`) in `apps/backend/prompts/phase2_system.txt`. Calibration script now aborts if all tracks are cache-only with no audio files present, and warns when only a partial real-audio subset is available.
 
 ## v2.1.0
 

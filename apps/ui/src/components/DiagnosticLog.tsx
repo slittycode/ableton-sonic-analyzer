@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 
+import { Phase2ConsistencyReport } from './Phase2ConsistencyReport';
 import { BackendTimingDiagnostics, DiagnosticLogEntry, DiagnosticLogStatus } from '../types';
 
 interface DiagnosticLogProps {
@@ -149,6 +150,11 @@ export function DiagnosticLog({ logs, defaultExpanded }: DiagnosticLogProps) {
                     <div className="pl-2 text-text-secondary/70 whitespace-nowrap">
                       <span className="opacity-50">TIMINGS:</span>{' '}
                       <span className="text-text-primary">{formatTimings(log.timings)}</span>
+                    </div>
+                  )}
+                  {log.stageKey === 'interpretation' && log.validationReport && (
+                    <div className="pl-2 pt-2">
+                      <Phase2ConsistencyReport report={log.validationReport} />
                     </div>
                   )}
                 </div>
