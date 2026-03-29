@@ -1,8 +1,25 @@
 import { test, expect } from '@playwright/test';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
+const uiPackage = JSON.parse(
+  fs.readFileSync(path.resolve(testDir, '../../package.json'), 'utf8'),
+) as { version: string };
+const uiVersionLabel = `v${uiPackage.version}`;
+
+const buildStepPattern = (
+  bars: number,
+  primarySteps: number[],
+  primaryValue: number,
+  secondaryValue = 0,
+): number[] =>
+  Array.from({ length: bars * 16 }, (_, index) => {
+    const stepInBar = index % 16;
+    if (primarySteps.includes(stepInBar)) return primaryValue;
+    return secondaryValue;
+  });
 
 const PHASE1_STUB = {
   bpm: 126,
@@ -10,6 +27,8 @@ const PHASE1_STUB = {
   key: 'F minor',
   keyConfidence: 0.88,
   timeSignature: '4/4',
+  timeSignatureSource: 'assumed_four_four',
+  timeSignatureConfidence: 0,
   durationSeconds: 210.6,
   lufsIntegrated: -7.9,
   truePeak: -0.2,
@@ -24,12 +43,69 @@ const PHASE1_STUB = {
     highs: 1.0,
     brilliance: 0.8,
   },
+  grooveDetail: {
+    kickSwing: 0.47,
+    hihatSwing: 0.46,
+    kickAccent: [1.0, 0.2, 0.9, 0.1],
+    hihatAccent: [0.2, 0.8, 0.6, 1.0],
+  },
+  beatsLoudness: {
+    kickDominantRatio: 0.62,
+    midDominantRatio: 0.18,
+    highDominantRatio: 0.2,
+    patternBeatsPerBar: 4,
+    lowBandAccentPattern: [1.0, 0.24, 0.82, 0.16],
+    midBandAccentPattern: [0.22, 1.0, 0.34, 0.28],
+    highBandAccentPattern: [0.3, 0.88, 1.0, 0.92],
+    overallAccentPattern: [1.0, 0.55, 0.92, 0.61],
+    accentPattern: [1.0, 0.55, 0.92, 0.61],
+    meanBeatLoudness: 0.42,
+    beatLoudnessVariation: 0.83,
+    beatCount: 362,
+  },
+  rhythmTimeline: {
+    beatsPerBar: 4,
+    stepsPerBeat: 4,
+    availableBars: 16,
+    selectionMethod: 'representative_dsp_window',
+    windows: [
+      {
+        bars: 8,
+        startBar: 5,
+        endBar: 12,
+        lowBandSteps: buildStepPattern(8, [0, 8], 1.0),
+        midBandSteps: buildStepPattern(8, [4, 12], 0.72),
+        highBandSteps: buildStepPattern(8, [0, 2, 4, 6, 8, 10, 12, 14], 0.38, 0.14),
+        overallSteps: buildStepPattern(8, [0, 4, 8, 12], 0.92, 0.2),
+      },
+      {
+        bars: 16,
+        startBar: 1,
+        endBar: 16,
+        lowBandSteps: buildStepPattern(16, [0, 8], 1.0),
+        midBandSteps: buildStepPattern(16, [4, 12], 0.72),
+        highBandSteps: buildStepPattern(16, [0, 2, 4, 6, 8, 10, 12, 14], 0.38, 0.14),
+        overallSteps: buildStepPattern(16, [0, 4, 8, 12], 0.92, 0.2),
+      },
+    ],
+  },
 };
 
 const PHASE2_STUB = {
   trackCharacter: 'Deterministic smoke response.',
   detectedCharacteristics: [],
   arrangementOverview: { summary: 'Smoke summary.', segments: [] },
+  audioObservations: {
+    soundDesignFingerprint: 'Smoke fingerprint from the audio path.',
+    elementCharacter: [
+      {
+        element: 'Kick',
+        description: 'Smoke-test kick description.',
+      },
+    ],
+    productionSignatures: ['Smoke-test transition delay.'],
+    mixContext: 'Smoke-test mix context.',
+  },
   sonicElements: {
     kick: 'Kick.',
     bass: 'Bass.',
@@ -205,7 +281,7 @@ test('NO SIGNAL DETECTED disappears when a file is selected', async ({ page }) =
 
 test('CPU indicator bar is visible in the header', async ({ page }) => {
   await page.goto('/', { waitUntil: 'networkidle' });
-  await expect(page.getByText('CPU')).toBeVisible();
+  await expect(page.getByTestId('app-toolbar').getByText(/^CPU$/)).toBeVisible();
 });
 
 test('CPU indicator animates during analysis', async ({ page }) => {
@@ -354,12 +430,38 @@ test('CPU indicator animates during analysis', async ({ page }) => {
   await page.setInputFiles('#audio-upload', fixturePath());
   await page.getByRole('button', { name: /Run Analysis/i }).click();
 
-  await expect(page.getByText('CPU')).toBeVisible();
+  await expect(page.getByTestId('app-toolbar').getByText(/^CPU$/)).toBeVisible();
 
   const cpuBar = page.getByTestId('cpu-meter-fill');
   await expect(cpuBar).toBeVisible();
 
   await expect(page.getByText('Analysis Results')).toBeVisible();
+});
+
+test('rhythm section renders the DSP-grounded 8-bar sequencer and can expand to 16 bars', async ({ page }) => {
+  await stubRoutes(page);
+  await page.goto('/', { waitUntil: 'networkidle' });
+
+  await page.setInputFiles('#audio-upload', fixturePath());
+  await page.getByRole('button', { name: /Run Analysis/i }).click();
+
+  await expect(page.getByText('Analysis Results')).toBeVisible();
+  const rhythmPanel = page.getByTestId('rhythm-grid-panel');
+  await expect(rhythmPanel.getByText('Rhythm Grid')).toBeVisible();
+  await expect(rhythmPanel.getByText('LOW BAND')).toBeVisible();
+  await expect(rhythmPanel.getByText('MID BAND')).toBeVisible();
+  await expect(rhythmPanel.getByText('HIGH BAND')).toBeVisible();
+  await expect(rhythmPanel.getByText('OVERALL ACCENT')).toBeVisible();
+  await expect(rhythmPanel.getByText('DSP band-energy lanes. Frequency-band proxies, not isolated stems.')).toBeVisible();
+  await expect(page.getByTestId('rhythm-grid-window-8')).toBeVisible();
+  await expect(page.getByTestId('rhythm-grid-window-16')).toBeVisible();
+  await expect(rhythmPanel.getByTestId('rhythm-grid-bar-5')).toBeVisible();
+  await expect(rhythmPanel.getByTestId('rhythm-grid-bar-12')).toBeVisible();
+  await page.getByTestId('rhythm-grid-window-16').click();
+  await expect(rhythmPanel.getByTestId('rhythm-grid-bar-1')).toBeVisible();
+  await expect(rhythmPanel.getByTestId('rhythm-grid-bar-16')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'grid' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'energy' })).toHaveCount(0);
 });
 
 test('diagnostic log shows SUCCESS badge and model info after analysis', async ({ page }) => {
@@ -400,10 +502,11 @@ test('top metric cards show TEMPO, KEY SIG, METER, CHARACTER after analysis', as
   await expect(page.getByText('4/4', { exact: true }).first()).toBeVisible();
 });
 
-test('header shows SonicAnalyzer brand and Local DSP Engine label', async ({ page }) => {
+test('header shows SonicAnalyzer brand and Local DSP Engine version label', async ({ page }) => {
   await page.goto('/', { waitUntil: 'networkidle' });
   await expect(page.getByText('SonicAnalyzer')).toBeVisible();
   await expect(page.getByText('Local DSP Engine')).toBeVisible();
+  await expect(page.getByText(uiVersionLabel)).toBeVisible();
 });
 
 test('JSON_DATA and REPORT_MD buttons are visible after analysis', async ({ page }) => {
@@ -415,6 +518,18 @@ test('JSON_DATA and REPORT_MD buttons are visible after analysis', async ({ page
   await expect(page.getByText('Analysis Results')).toBeVisible();
   await expect(page.getByRole('button', { name: /JSON_DATA/i })).toBeVisible();
   await expect(page.getByRole('button', { name: /REPORT_MD/i })).toBeVisible();
+});
+
+test('audio observations panel appears when the interpretation includes perceptual notes', async ({ page }) => {
+  await stubRoutes(page);
+  await page.goto('/', { waitUntil: 'networkidle' });
+  await page.setInputFiles('#audio-upload', fixturePath());
+  await page.getByRole('button', { name: /Run Analysis/i }).click();
+
+  await expect(page.getByText('Analysis Results')).toBeVisible();
+  await expect(page.getByText('Audio Observations')).toBeVisible();
+  await expect(page.getByText('Perceptual / Audio-Derived')).toBeVisible();
+  await expect(page.getByText('Smoke fingerprint from the audio path.')).toBeVisible();
 });
 
 test('diagnostic log can be collapsed and expanded via toggle button', async ({ page }) => {

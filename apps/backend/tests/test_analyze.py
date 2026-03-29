@@ -29,9 +29,9 @@ EXPECTED_TOP_LEVEL_KEYS = {
     "key", "keyConfidence", "timeSignature", "timeSignatureSource",
     "timeSignatureConfidence", "durationSeconds", "sampleRate",
     "lufsIntegrated", "lufsRange", "truePeak", "plr", "crestFactor",
-    "dynamicSpread", "dynamicCharacter", "stereoDetail", "monoCompatible", "spectralBalance",
+    "dynamicSpread", "dynamicCharacter", "textureCharacter", "stereoDetail", "monoCompatible", "spectralBalance",
     "spectralDetail", "rhythmDetail", "melodyDetail", "transcriptionDetail",
-    "grooveDetail", "sidechainDetail", "acidDetail", "reverbDetail",
+    "grooveDetail", "beatsLoudness", "rhythmTimeline", "sidechainDetail", "acidDetail", "reverbDetail",
     "vocalDetail", "supersawDetail", "bassDetail", "kickDetail",
     "genreDetail", "effectsDetail", "synthesisCharacter",
     "danceability", "structure", "arrangementDetail",
@@ -495,6 +495,62 @@ class AnalyzeTranscriptionHelperTests(unittest.TestCase):
 
 
 
+class AnalyzeTextureCharacterTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        analyze_path = Path(__file__).resolve().parents[1] / "analyze.py"
+        spec = importlib.util.spec_from_file_location("analyze_texture_test", analyze_path)
+        if spec is None or spec.loader is None:
+            raise AssertionError("Could not load analyze.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        cls.analyze = module
+
+    def test_dynamic_character_exposes_loudness_db_and_legacy_alias(self) -> None:
+        sample_rate = 44_100
+        time_axis = np.arange(sample_rate, dtype=np.float32) / sample_rate
+        signal = (0.2 * np.sin(2 * np.pi * 220.0 * time_axis)).astype(np.float32)
+
+        dynamic_character = self.analyze.analyze_dynamic_character(signal, sample_rate)[
+            "dynamicCharacter"
+        ]
+
+        self.assertIn("loudnessDb", dynamic_character)
+        self.assertIn("loudnessVariation", dynamic_character)
+        self.assertEqual(
+            dynamic_character["loudnessDb"],
+            dynamic_character["loudnessVariation"],
+        )
+
+    def test_texture_character_scores_noise_above_tone(self) -> None:
+        sample_rate = 44_100
+        time_axis = np.arange(sample_rate * 2, dtype=np.float32) / sample_rate
+        tone = (0.2 * np.sin(2 * np.pi * 220.0 * time_axis)).astype(np.float32)
+        rng = np.random.default_rng(7)
+        noise = (0.2 * rng.standard_normal(sample_rate * 2)).astype(np.float32)
+
+        tone_texture = self.analyze.analyze_texture_character(
+            tone,
+            sample_rate,
+            inharmonicity=0.0,
+        )["textureCharacter"]
+        noise_texture = self.analyze.analyze_texture_character(
+            noise,
+            sample_rate,
+            inharmonicity=0.2,
+        )["textureCharacter"]
+
+        self.assertLess(tone_texture["textureScore"], noise_texture["textureScore"])
+        self.assertLess(
+            tone_texture["midBandFlatness"],
+            noise_texture["midBandFlatness"],
+        )
+        self.assertLess(
+            tone_texture["highBandFlatness"],
+            noise_texture["highBandFlatness"],
+        )
+
+
 class AnalyzeRhythmAndStructureTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -686,6 +742,163 @@ class AnalyzeFastFullConsistencyTests(unittest.TestCase):
 
         self.assertEqual(full_payload["key"], fast_payload["key"])
         self.assertEqual(full_payload["timeSignatureSource"], fast_payload["timeSignatureSource"])
+
+
+class BeatsLoudnessPatternTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        analyze_path = Path(__file__).resolve().parents[1] / "analyze.py"
+        spec = importlib.util.spec_from_file_location("analyze_beats_loudness_test", analyze_path)
+        if spec is None or spec.loader is None:
+            raise AssertionError("Could not load analyze.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        cls.analyze = module
+
+    def test_analyze_beats_loudness_returns_normalized_bar_position_patterns(self) -> None:
+        band_loudness = np.asarray(
+            [
+                [4.0, 1.0, 0.5],
+                [1.0, 3.0, 0.5],
+                [3.5, 1.5, 2.0],
+                [0.5, 1.0, 4.0],
+                [4.0, 1.0, 0.4],
+                [1.0, 4.0, 0.6],
+                [3.0, 1.2, 2.2],
+                [0.6, 1.1, 4.2],
+            ],
+            dtype=np.float64,
+        )
+        beat_loudness = np.asarray([5.5, 4.5, 7.0, 5.5, 5.4, 5.6, 6.4, 5.9], dtype=np.float64)
+        result = self.analyze.analyze_beats_loudness(
+            np.zeros(128, dtype=np.float32),
+            sample_rate=44_100,
+            beat_data={
+                "beatLoudness": beat_loudness,
+                "bandLoudness": band_loudness,
+                "lowBand": band_loudness[:, 0],
+                "highBand": band_loudness[:, -1],
+            },
+        )["beatsLoudness"]
+
+        self.assertEqual(result["patternBeatsPerBar"], 4)
+        self.assertEqual(result["accentPattern"], result["overallAccentPattern"])
+        self.assertEqual(len(result["lowBandAccentPattern"]), 4)
+        self.assertEqual(len(result["midBandAccentPattern"]), 4)
+        self.assertEqual(len(result["highBandAccentPattern"]), 4)
+        self.assertEqual(len(result["overallAccentPattern"]), 4)
+        self.assertAlmostEqual(result["lowBandAccentPattern"][0], 1.0, places=4)
+        self.assertAlmostEqual(result["lowBandAccentPattern"][2], 0.8125, places=4)
+        self.assertAlmostEqual(result["midBandAccentPattern"][1], 1.0, places=4)
+        self.assertAlmostEqual(result["highBandAccentPattern"][3], 1.0, places=4)
+        self.assertAlmostEqual(result["overallAccentPattern"][2], 1.0, places=4)
+
+    def _build_rhythm_timeline_fixture(
+        self,
+        bar_patterns: list[dict[str, list[float]]],
+        sample_rate: int = 16_000,
+        bpm: float = 120.0,
+    ) -> tuple[np.ndarray, dict[str, object]]:
+        beats_per_bar = 4
+        steps_per_beat = 4
+        step_duration = (60.0 / bpm) / steps_per_beat
+        step_samples = max(16, int(round(step_duration * sample_rate)))
+        total_steps = len(bar_patterns) * beats_per_bar * steps_per_beat
+        total_samples = total_steps * step_samples
+        mono = np.zeros(total_samples, dtype=np.float32)
+        envelope = np.hanning(step_samples).astype(np.float32)
+        time_axis = np.arange(step_samples, dtype=np.float32) / sample_rate
+        lane_frequencies = {
+            "low": 80.0,
+            "mid": 1000.0,
+            "high": 6000.0,
+        }
+
+        for bar_index, pattern in enumerate(bar_patterns):
+            for step_index in range(beats_per_bar * steps_per_beat):
+                start = (bar_index * beats_per_bar * steps_per_beat + step_index) * step_samples
+                stop = start + step_samples
+                segment = np.zeros(step_samples, dtype=np.float32)
+                for lane_key, frequency in lane_frequencies.items():
+                    lane_values = pattern.get(lane_key, [])
+                    amplitude = float(lane_values[step_index]) if step_index < len(lane_values) else 0.0
+                    if amplitude <= 0:
+                        continue
+                    segment += (
+                        amplitude
+                        * np.sin(2 * np.pi * frequency * time_axis, dtype=np.float32)
+                        * envelope
+                    )
+                mono[start:stop] += segment
+
+        beat_duration = 60.0 / bpm
+        ticks = [
+            round(index * beat_duration, 6)
+            for index in range(len(bar_patterns) * beats_per_bar)
+        ]
+        return mono, {"ticks": ticks, "bpm": bpm}
+
+    def test_analyze_rhythm_timeline_selects_representative_dsp_window(self) -> None:
+        quiet_bar = {
+            "low": [0.08 if step == 0 else 0.0 for step in range(16)],
+            "mid": [0.04 if step == 4 else 0.0 for step in range(16)],
+            "high": [0.03 if step % 4 == 2 else 0.0 for step in range(16)],
+        }
+        active_bar = {
+            "low": [1.0 if step in (0, 8) else 0.0 for step in range(16)],
+            "mid": [0.72 if step in (4, 12) else 0.0 for step in range(16)],
+            "high": [0.38 if step % 2 == 0 else 0.14 for step in range(16)],
+        }
+        mono, rhythm_data = self._build_rhythm_timeline_fixture(
+            [quiet_bar] * 4 + [active_bar] * 8 + [quiet_bar] * 4
+        )
+
+        result = self.analyze.analyze_rhythm_timeline(
+            mono,
+            sample_rate=16_000,
+            rhythm_data=rhythm_data,
+        )["rhythmTimeline"]
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["beatsPerBar"], 4)
+        self.assertEqual(result["stepsPerBeat"], 4)
+        self.assertEqual(result["availableBars"], 16)
+        self.assertEqual(result["selectionMethod"], "representative_dsp_window")
+
+        windows_by_bars = {window["bars"]: window for window in result["windows"]}
+        self.assertEqual(sorted(windows_by_bars.keys()), [8, 16])
+
+        window_8 = windows_by_bars[8]
+        self.assertEqual(window_8["startBar"], 5)
+        self.assertEqual(window_8["endBar"], 12)
+        self.assertEqual(len(window_8["lowBandSteps"]), 8 * 16)
+        self.assertEqual(len(window_8["midBandSteps"]), 8 * 16)
+        self.assertEqual(len(window_8["highBandSteps"]), 8 * 16)
+        self.assertEqual(len(window_8["overallSteps"]), 8 * 16)
+        self.assertTrue(all(0.0 <= value <= 1.0 for value in window_8["overallSteps"]))
+
+        window_16 = windows_by_bars[16]
+        self.assertEqual(window_16["startBar"], 1)
+        self.assertEqual(window_16["endBar"], 16)
+        self.assertEqual(len(window_16["overallSteps"]), 16 * 16)
+
+    def test_analyze_rhythm_timeline_omits_16_bar_window_when_not_enough_bars(self) -> None:
+        active_bar = {
+            "low": [1.0 if step in (0, 8) else 0.0 for step in range(16)],
+            "mid": [0.6 if step in (4, 12) else 0.0 for step in range(16)],
+            "high": [0.35 if step % 2 == 0 else 0.12 for step in range(16)],
+        }
+        mono, rhythm_data = self._build_rhythm_timeline_fixture([active_bar] * 10)
+
+        result = self.analyze.analyze_rhythm_timeline(
+            mono,
+            sample_rate=16_000,
+            rhythm_data=rhythm_data,
+        )["rhythmTimeline"]
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["availableBars"], 10)
+        self.assertEqual([window["bars"] for window in result["windows"]], [8])
 
 
 class TranscriptionBackendAbstractionTests(unittest.TestCase):

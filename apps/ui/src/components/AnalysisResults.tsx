@@ -1,5 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { Phase1Result, Phase2Result, SpectralArtifacts } from '../types';
+import {
+  InterpretationSchemaVersion,
+  InterpretationValidationWarning,
+  MeasurementAvailabilityContext,
+  Phase1Result,
+  Phase2Result,
+  SpectralArtifacts,
+} from '../types';
 import {
   Activity,
   ChevronDown,
@@ -18,6 +25,12 @@ import { downloadFile, generateMarkdown } from '../utils/exportUtils';
 import { INTERPRETATION_LABEL } from '../services/phaseLabels';
 import { MeasurementDashboard } from './MeasurementDashboard';
 import { SessionMusicianPanel } from './SessionMusicianPanel';
+import {
+  AccentMetricCard,
+  MetricBar,
+  StatusBadge,
+  TokenBadgeList,
+} from './MeasurementPrimitives';
 import { PhaseSourceBadge } from './PhaseSourceBadge';
 import { StickyNav, type StickyNavSection } from './StickyNav';
 import {
@@ -34,9 +47,12 @@ import {
 export interface AnalysisResultsProps {
   phase1: Phase1Result | null;
   phase2: Phase2Result | null;
+  phase2SchemaVersion?: InterpretationSchemaVersion | null;
+  phase2ValidationWarnings?: InterpretationValidationWarning[] | null;
   phase2StatusMessage?: string | null;
   sourceFileName?: string | null;
   spectralArtifacts?: SpectralArtifacts | null;
+  measurementAvailability?: MeasurementAvailabilityContext;
   apiBaseUrl?: string;
   runId?: string;
 }
@@ -149,6 +165,59 @@ function lowConfidenceIndicator(show: boolean) {
   );
 }
 
+interface MetaBadgeItem {
+  label: string;
+  value?: string | null;
+}
+
+function MetaBadgeList({ items }: { items: MetaBadgeItem[] }) {
+  const visibleItems = items.filter((item) => typeof item.value === 'string' && item.value.trim().length > 0);
+  if (visibleItems.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {visibleItems.map((item) => (
+        <span
+          key={`${item.label}-${item.value}`}
+          className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-border text-text-secondary whitespace-nowrap"
+        >
+          {item.label}: {item.value}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function GroundingBadgeList({
+  phase1Fields,
+  segmentIndexes,
+}: {
+  phase1Fields: string[];
+  segmentIndexes?: number[];
+}) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {phase1Fields.map((field) => (
+        <span
+          key={field}
+          className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-accent/30 bg-accent/5 text-accent"
+        >
+          {field}
+        </span>
+      ))}
+      {Array.isArray(segmentIndexes) &&
+        segmentIndexes.map((segmentIndex) => (
+          <span
+            key={`segment-${segmentIndex}`}
+            className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-border text-text-secondary"
+          >
+            Segment {segmentIndex}
+          </span>
+        ))}
+    </div>
+  );
+}
+
 function toFiniteNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string' && value.trim()) {
@@ -182,9 +251,12 @@ function formatBpmScore(value: number): string {
 export function AnalysisResults({
   phase1,
   phase2,
+  phase2SchemaVersion = null,
+  phase2ValidationWarnings = null,
   phase2StatusMessage = null,
   sourceFileName = null,
   spectralArtifacts = null,
+  measurementAvailability,
   apiBaseUrl,
   runId,
 }: AnalysisResultsProps) {
@@ -234,12 +306,28 @@ export function AnalysisResults({
 
   const finalBpm = Math.round(phase1.bpm);
   const finalKey = phase1.key ?? 'Unknown';
+  const isPhase2V2 = phase2SchemaVersion === 'interpretation.v2';
+  const validationWarnings = Array.isArray(phase2ValidationWarnings) ? phase2ValidationWarnings : [];
 
   const confidenceBadges = toConfidenceBadges(phase2?.confidenceNotes);
   const arrangement = buildArrangementViewModel(phase1, phase2?.arrangementOverview);
   const sonicCards = buildSonicElementCards(phase1, phase2?.sonicElements);
   const mixGroups = buildMixChainGroups(phase1, phase2?.mixAndMasterChain, phase2?.sonicElements);
   const patchCards = buildPatchCards(phase1, phase2);
+  const projectSetup = isPhase2V2 ? phase2?.projectSetup ?? null : null;
+  const trackLayout = isPhase2V2 && Array.isArray(phase2?.trackLayout) ? phase2.trackLayout : [];
+  const routingBlueprint = isPhase2V2 ? phase2?.routingBlueprint ?? null : null;
+  const warpGuide = isPhase2V2 ? phase2?.warpGuide ?? null : null;
+  const audioObservations = phase2?.audioObservations ?? null;
+  const warpTargets = warpGuide
+    ? [
+        { label: 'Full Track', target: warpGuide.fullTrack },
+        { label: 'Drums', target: warpGuide.drums },
+        { label: 'Bass', target: warpGuide.bass },
+        { label: 'Melodic', target: warpGuide.melodic },
+        ...(warpGuide.vocals ? [{ label: 'Vocals', target: warpGuide.vocals }] : []),
+      ]
+    : [];
   const characteristicPills = Array.isArray(phase2?.detectedCharacteristics)
     ? phase2.detectedCharacteristics.slice(0, 4)
     : [];
@@ -251,10 +339,16 @@ export function AnalysisResults({
     Boolean(phase2?.trackCharacter?.trim()) ||
     confidenceBadges.length > 0 ||
     characteristicPills.length > 0 ||
+    Boolean(projectSetup) ||
+    trackLayout.length > 0 ||
+    Boolean(routingBlueprint) ||
+    Boolean(warpGuide) ||
+    Boolean(audioObservations) ||
     arrangement !== null ||
     sonicCards.length > 0 ||
     mixGroups.length > 0 ||
-    patchCards.length > 0;
+    patchCards.length > 0 ||
+    Boolean(phase2?.secretSauce);
   const navSections: StickyNavSection[] = [
     { id: 'section-meas-core', label: 'Core' },
     { id: 'section-meas-loudness', label: 'Loudness' },
@@ -265,6 +359,11 @@ export function AnalysisResults({
     { id: 'section-meas-harmony', label: 'Harmony' },
     { id: 'section-meas-structure', label: 'Structure' },
     { id: 'section-meas-synthesis', label: 'Synthesis' },
+    projectSetup ? { id: 'section-project-setup', label: 'Setup' } : null,
+    trackLayout.length > 0 ? { id: 'section-track-layout', label: 'Layout' } : null,
+    routingBlueprint ? { id: 'section-routing-blueprint', label: 'Routing' } : null,
+    warpGuide ? { id: 'section-warp-guide', label: 'Warp' } : null,
+    audioObservations ? { id: 'section-audio-observations', label: 'Audio' } : null,
     arrangement ? { id: 'section-arrangement', label: 'Arrangement' } : null,
     { id: 'section-session', label: 'Session' },
     sonicCards.length > 0 ? { id: 'section-sonic-elements', label: 'Sonic' } : null,
@@ -314,126 +413,136 @@ export function AnalysisResults({
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {/* TEMPO */}
-        <div className="bg-bg-card border border-border rounded-sm p-4 flex flex-col group hover:border-accent/30 transition-colors">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-1.5">
+        <AccentMetricCard
+          label={
+            <span className="flex items-center gap-1.5">
               <Activity className="w-3.5 h-3.5 text-accent/60" />
-              <span className="text-[9px] font-mono text-text-secondary uppercase tracking-wider">TEMPO</span>
-            </div>
-            <PhaseSourceBadge source="measured" />
-          </div>
-          <div className="flex items-baseline gap-1.5 mb-3">
-            <span className="text-3xl font-display font-bold text-text-primary">{finalBpm}</span>
-            <span className="text-xs font-mono text-text-secondary">BPM</span>
-          </div>
-          <div className="mt-auto space-y-1">
-            <span className="text-[8px] font-mono text-text-secondary/60 tabular-nums">
-              {formatBpmScore(phase1.bpmConfidence)}
+              <span>TEMPO</span>
             </span>
-            {phase1.bpmSource && (
-              <span className="text-[8px] font-mono text-text-secondary/50">
-                {phase1.bpmSource.replace(/_/g, ' ')}
-              </span>
-            )}
-          </div>
-        </div>
+          }
+          value={finalBpm}
+          unit="BPM"
+          headerRight={<PhaseSourceBadge source="measured" />}
+          footer={
+            <div className="space-y-2">
+              <StatusBadge
+                label={formatBpmScore(phase1.bpmConfidence)}
+                tone="accent"
+                compact
+              />
+              {phase1.bpmSource && (
+                <span className="block text-[8px] font-mono uppercase tracking-wide text-text-secondary/50">
+                  {phase1.bpmSource.replace(/_/g, ' ')}
+                </span>
+              )}
+            </div>
+          }
+        />
 
         {/* KEY SIG */}
-        <div className="bg-bg-card border border-border rounded-sm p-4 flex flex-col group hover:border-accent/30 transition-colors">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-1.5">
+        <AccentMetricCard
+          label={
+            <span className="flex items-center gap-1.5">
               <Music className="w-3.5 h-3.5 text-accent/60" />
-              <span className="text-[9px] font-mono text-text-secondary uppercase tracking-wider">KEY SIG</span>
-            </div>
+              <span>KEY SIG</span>
+            </span>
+          }
+          value={<span className="truncate block">{finalKey}</span>}
+          headerRight={
             <div className="flex items-center gap-1">
               <PhaseSourceBadge source="measured" />
               {lowConfidenceIndicator(keyIsApproximate)}
             </div>
-          </div>
-          <div className="mb-3 overflow-hidden">
-            <span className="text-3xl font-display font-bold text-text-primary truncate block">{finalKey}</span>
-          </div>
-          <div className="mt-auto space-y-1">
-            <div className="w-full h-1 bg-bg-app border border-border/20 rounded-sm overflow-hidden">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${phase1.keyConfidence * 100}%` }}
-                className="h-full bg-accent shadow-[0_0_4px_var(--color-accent)]"
+          }
+          footer={
+            <div className="space-y-1.5">
+              <MetricBar
+                value={phase1.keyConfidence}
+                color="var(--color-accent)"
+                glow
               />
+              <span className="block text-[8px] font-mono uppercase tracking-wide text-text-secondary/60 tabular-nums">
+                CONF {(phase1.keyConfidence * 100).toFixed(0)}%
+              </span>
             </div>
-            <span className="text-[8px] font-mono text-text-secondary/60 tabular-nums">
-              CONF {(phase1.keyConfidence * 100).toFixed(0)}%
-            </span>
-          </div>
-        </div>
+          }
+        />
 
         {/* METER */}
-        <div className="bg-bg-card border border-border rounded-sm p-4 flex flex-col group hover:border-accent/30 transition-colors">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-1.5">
+        <AccentMetricCard
+          label={
+            <span className="flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5 text-accent/60" />
-              <span className="text-[9px] font-mono text-text-secondary uppercase tracking-wider">METER</span>
-            </div>
-          </div>
-          <div className="flex-1 flex items-center">
-            <span className="text-3xl font-display font-bold text-text-primary">{phase1.timeSignature}</span>
-          </div>
-          <span className="text-[8px] font-mono text-text-secondary/60 mt-auto">{meterStatusLabel(phase1)}</span>
-        </div>
+              <span>METER</span>
+            </span>
+          }
+          value={phase1.timeSignature}
+          footer={<StatusBadge label={meterStatusLabel(phase1)} tone="muted" compact />}
+        />
 
         {/* CHARACTER — genre primary, characteristic pills secondary */}
-        <div className="bg-bg-card border border-border rounded-sm p-4 flex flex-col group hover:border-accent/30 transition-colors">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-1.5">
-              <Disc className="w-3.5 h-3.5 text-accent/60" />
-              <span className="text-[9px] font-mono text-text-secondary uppercase tracking-wider">CHARACTER</span>
-            </div>
-            {phase1.genreDetail && <PhaseSourceBadge source="measured" />}
-          </div>
-          {phase1.genreDetail ? (
-            <>
-              <div className="mb-1 overflow-hidden">
-                <span className="text-xl font-display font-bold text-text-primary truncate block capitalize">
-                  {phase1.genreDetail.genre}
-                </span>
-              </div>
-              <span className="text-[9px] font-mono text-text-secondary/70 uppercase tracking-wider mb-2">
-                {phase1.genreDetail.genreFamily}
-                {phase1.genreDetail.secondaryGenre && ` / ${phase1.genreDetail.secondaryGenre}`}
+        {phase1.genreDetail ? (
+          <AccentMetricCard
+            label={
+              <span className="flex items-center gap-1.5">
+                <Disc className="w-3.5 h-3.5 text-accent/60" />
+                <span>CHARACTER</span>
               </span>
-              <div className="mt-auto space-y-1">
-                <div className="w-full h-1 bg-bg-app border border-border/20 rounded-sm overflow-hidden">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${phase1.genreDetail.confidence * 100}%` }}
-                    className="h-full bg-accent shadow-[0_0_4px_var(--color-accent)]"
-                  />
-                </div>
-                <span className="text-[8px] font-mono text-text-secondary/60 tabular-nums">
+            }
+            value={<span className="truncate block capitalize text-[1.5rem]">{phase1.genreDetail.genre}</span>}
+            headerRight={<PhaseSourceBadge source="measured" />}
+            footer={
+              <div className="space-y-2">
+                <TokenBadgeList
+                  items={[
+                    { label: phase1.genreDetail.genreFamily.toUpperCase(), tone: 'accent' },
+                    ...(phase1.genreDetail.secondaryGenre
+                      ? [{ label: phase1.genreDetail.secondaryGenre.toUpperCase(), tone: 'muted' as const }]
+                      : []),
+                  ]}
+                />
+                <MetricBar
+                  value={phase1.genreDetail.confidence}
+                  color="var(--color-accent)"
+                  glow
+                />
+                <span className="block text-[8px] font-mono uppercase tracking-wide text-text-secondary/60 tabular-nums">
                   CONF {Math.round(phase1.genreDetail.confidence * 100)}%
                 </span>
               </div>
-            </>
-          ) : characteristicPills.length > 0 ? (
-            <div className="w-full flex flex-wrap gap-1">
-              {characteristicPills.map((item, idx) => (
-                <span
-                  key={`${item.name}-${idx}`}
-                  className={`inline-flex items-center px-2 py-1 rounded-sm border text-[9px] font-mono uppercase tracking-wide ${characteristicPillClass(item.confidence)}`}
-                >
-                  {shortenCharacteristicName(item.name)}
-                </span>
-              ))}
-            </div>
-          ) : (
-            <span className="text-xs font-mono text-text-secondary/50">SCANNING...</span>
-          )}
-        </div>
+            }
+          />
+        ) : (
+          <AccentMetricCard
+            label={
+              <span className="flex items-center gap-1.5">
+                <Disc className="w-3.5 h-3.5 text-accent/60" />
+                <span>CHARACTER</span>
+              </span>
+            }
+            value={<span className="text-base font-mono uppercase tracking-wide text-text-secondary/60">SCANNING...</span>}
+            footer={
+              characteristicPills.length > 0 ? (
+                <div className="w-full flex flex-wrap gap-1">
+                  {characteristicPills.map((item, idx) => (
+                    <span
+                      key={`${item.name}-${idx}`}
+                      className={`inline-flex items-center px-2 py-1 rounded-sm border text-[9px] font-mono uppercase tracking-wide ${characteristicPillClass(item.confidence)}`}
+                    >
+                      {shortenCharacteristicName(item.name)}
+                    </span>
+                  ))}
+                </div>
+              ) : undefined
+            }
+          />
+        )}
       </div>
 
       <MeasurementDashboard
         phase1={phase1}
         spectralArtifacts={spectralArtifacts}
+        measurementAvailability={measurementAvailability}
         apiBaseUrl={apiBaseUrl}
         runId={runId}
       />
@@ -461,6 +570,48 @@ export function AnalysisResults({
         )}
       </section>
 
+      {validationWarnings.length > 0 && (
+        <section className="space-y-3 rounded-sm border border-warning/30 bg-warning/10 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-mono uppercase tracking-wider text-warning">
+                Interpretation Caution
+              </h2>
+              <p className="text-[10px] font-mono uppercase tracking-[0.16em] text-warning/80">
+                The backend kept the result, but flagged parts that may not match the approved Live catalog.
+              </p>
+            </div>
+            <span className="text-[10px] font-mono uppercase px-2 py-1 rounded border border-warning/30 text-warning">
+              {validationWarnings.length} warning{validationWarnings.length === 1 ? '' : 's'}
+            </span>
+          </div>
+          <div className="space-y-2">
+            {validationWarnings.map((warning, index) => (
+              <div
+                key={`${warning.code ?? 'warning'}-${warning.path ?? index}`}
+                className="rounded-sm border border-warning/20 bg-bg-panel/60 p-3 space-y-1"
+              >
+                <div className="flex flex-wrap gap-1.5">
+                  {warning.code && (
+                    <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-warning/30 text-warning">
+                      {warning.code}
+                    </span>
+                  )}
+                  {warning.path && (
+                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-border text-text-secondary">
+                      {warning.path}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs font-mono text-text-secondary leading-relaxed">
+                  {truncateAtSentenceBoundary(warning.message, 240)}
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {confidenceBadges.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 px-1">
           {confidenceBadges.map((badge, idx) => (
@@ -486,6 +637,262 @@ export function AnalysisResults({
           <p className="text-xs text-text-secondary font-mono leading-relaxed opacity-80">
             {truncateAtSentenceBoundary(phase2.trackCharacter, 900)}
           </p>
+        </section>
+      )}
+
+      {audioObservations && (
+        <section id="section-audio-observations" className="space-y-6 scroll-mt-24">
+          <div className="flex items-center justify-between border-b border-border pb-2">
+            <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
+              <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
+              Audio Observations
+            </h2>
+            <span className="text-[10px] font-mono bg-bg-panel border border-border text-text-secondary px-2 py-1 rounded font-bold">
+              Perceptual / Audio-Derived
+            </span>
+          </div>
+
+          <div className="rounded-sm border border-accent/20 bg-accent/5 p-4 space-y-2">
+            <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-accent">
+              Sound Design Fingerprint
+            </p>
+            <p className="text-xs font-mono text-text-secondary leading-relaxed">
+              {truncateAtSentenceBoundary(audioObservations.soundDesignFingerprint, 320)}
+            </p>
+          </div>
+
+          {audioObservations.elementCharacter.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {audioObservations.elementCharacter.map((item, index) => (
+                <div
+                  key={`${item.element}-${index}`}
+                  className="rounded-sm border border-border bg-bg-card p-4 space-y-2"
+                >
+                  <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+                    {item.element}
+                  </p>
+                  <p className="text-xs font-mono text-text-secondary leading-relaxed">
+                    {truncateAtSentenceBoundary(item.description, 220)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {audioObservations.productionSignatures.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+                Production Signatures
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {audioObservations.productionSignatures.map((signature, index) => (
+                  <span
+                    key={`${signature}-${index}`}
+                    className="text-[10px] font-mono rounded-sm border border-accent/30 bg-accent/5 px-2 py-1 text-accent"
+                  >
+                    {truncateAtSentenceBoundary(signature, 140)}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="rounded-sm border border-border bg-bg-card p-4 space-y-2">
+            <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+              Mix Context
+            </p>
+            <p className="text-xs font-mono text-text-secondary leading-relaxed">
+              {truncateAtSentenceBoundary(audioObservations.mixContext, 280)}
+            </p>
+          </div>
+        </section>
+      )}
+
+      {projectSetup && (
+        <section id="section-project-setup" className="space-y-6 scroll-mt-24">
+          <div className="flex items-center justify-between border-b border-border pb-2">
+            <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
+              <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
+              Project Setup
+            </h2>
+            <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">
+              LIVE 12 V2
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <AccentMetricCard label="Tempo" value={projectSetup.tempoBpm} unit="BPM" />
+            <AccentMetricCard label="Meter" value={projectSetup.timeSignature} />
+            <AccentMetricCard label="Sample Rate" value={`${projectSetup.sampleRate} Hz`} />
+            <AccentMetricCard label="Bit Depth" value={`${projectSetup.bitDepth}-bit`} />
+            <AccentMetricCard label="Headroom" value={projectSetup.headroomTarget} />
+          </div>
+
+          <div className="rounded-sm border border-border bg-bg-card p-4">
+            <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+              Session Goal
+            </p>
+            <p className="mt-2 text-xs font-mono text-text-secondary leading-relaxed">
+              {truncateAtSentenceBoundary(projectSetup.sessionGoal, 320)}
+            </p>
+          </div>
+        </section>
+      )}
+
+      {trackLayout.length > 0 && (
+        <section id="section-track-layout" className="space-y-6 scroll-mt-24">
+          <div className="flex items-center justify-between border-b border-border pb-2">
+            <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
+              <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
+              Track Layout
+            </h2>
+            <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">
+              SCAFFOLD
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {trackLayout.map((item) => (
+              <div key={`${item.order}-${item.name}`} className="rounded-sm border border-border bg-bg-card p-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="w-6 h-6 rounded-sm bg-bg-panel border border-border text-accent font-mono text-[10px] flex items-center justify-center">
+                      {item.order}
+                    </span>
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-bold text-text-primary truncate">{item.name}</h3>
+                      <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+                        {item.type}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <p className="text-xs font-mono text-text-secondary leading-relaxed">
+                  {truncateAtSentenceBoundary(item.purpose, 220)}
+                </p>
+                <div className="space-y-2">
+                  <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+                    Grounding
+                  </p>
+                  <GroundingBadgeList
+                    phase1Fields={item.grounding.phase1Fields}
+                    segmentIndexes={item.grounding.segmentIndexes}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {routingBlueprint && (
+        <section id="section-routing-blueprint" className="space-y-6 scroll-mt-24">
+          <div className="flex items-center justify-between border-b border-border pb-2">
+            <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
+              <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
+              Routing Blueprint
+            </h2>
+            <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">
+              SIGNAL MAP
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="rounded-sm border border-border bg-bg-card p-4 space-y-2">
+              <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">Sidechain Source</p>
+              <p className="text-sm font-bold text-text-primary">{routingBlueprint.sidechainSource ?? 'Not specified'}</p>
+            </div>
+            <div className="rounded-sm border border-border bg-bg-card p-4 space-y-2 md:col-span-2">
+              <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">Sidechain Targets</p>
+              <div className="flex flex-wrap gap-1.5">
+                {routingBlueprint.sidechainTargets.map((target) => (
+                  <span
+                    key={target}
+                    className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-accent/30 bg-accent/5 text-accent"
+                  >
+                    {target}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {routingBlueprint.returns.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {routingBlueprint.returns.map((returnTrack) => (
+                <div key={returnTrack.name} className="rounded-sm border border-border bg-bg-card p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-bold text-text-primary">{returnTrack.name}</h3>
+                    <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-border text-text-secondary">
+                      {returnTrack.deviceFocus}
+                    </span>
+                  </div>
+                  <p className="text-xs font-mono text-text-secondary leading-relaxed">
+                    {truncateAtSentenceBoundary(returnTrack.purpose, 220)}
+                  </p>
+                  <MetaBadgeList
+                    items={[
+                      { label: 'Sends', value: returnTrack.sendSources.join(', ') },
+                      { label: 'Level', value: returnTrack.levelGuidance },
+                    ]}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {routingBlueprint.notes.length > 0 && (
+            <div className="rounded-sm border border-border bg-bg-card p-4 space-y-2">
+              <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">Routing Notes</p>
+              {routingBlueprint.notes.map((note, index) => (
+                <p key={`${note}-${index}`} className="text-xs font-mono text-text-secondary leading-relaxed">
+                  {truncateAtSentenceBoundary(note, 220)}
+                </p>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {warpGuide && (
+        <section id="section-warp-guide" className="space-y-6 scroll-mt-24">
+          <div className="flex items-center justify-between border-b border-border pb-2">
+            <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
+              <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
+              Warp Guide
+            </h2>
+            <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">
+              CLIP PREP
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            {warpTargets.map(({ label, target }) => (
+              <div key={label} className="rounded-sm border border-border bg-bg-card p-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">{label}</p>
+                  <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-accent/30 bg-accent/5 text-accent">
+                    {target.warpMode}
+                  </span>
+                </div>
+                {target.settings && (
+                  <p className="text-[10px] font-mono text-text-secondary uppercase tracking-wide">
+                    {target.settings}
+                  </p>
+                )}
+                <p className="text-xs font-mono text-text-secondary leading-relaxed">
+                  {truncateAtSentenceBoundary(target.reason, 220)}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-sm border border-border bg-bg-card p-4">
+            <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">Why These Modes</p>
+            <p className="mt-2 text-xs font-mono text-text-secondary leading-relaxed">
+              {truncateAtSentenceBoundary(warpGuide.rationale, 320)}
+            </p>
+          </div>
         </section>
       )}
 
@@ -586,7 +993,7 @@ export function AnalysisResults({
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <div className="h-px bg-border/60 flex-1" />
-                  <span className="text-[9px] font-mono uppercase tracking-widest text-text-secondary/80">
+                  <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
                     NOVELTY EVENTS
                   </span>
                   <div className="h-px bg-border/60 flex-1" />
@@ -663,6 +1070,40 @@ export function AnalysisResults({
                             <p className="text-[11px] text-text-secondary/90 font-mono leading-relaxed">
                               {segment.spectralNote}
                             </p>
+                          </div>
+                        )}
+                        {isPhase2V2 && (segment.sceneName || segment.abletonAction || segment.automationFocus) && (
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                            {segment.sceneName && (
+                              <div className="border border-border/70 rounded-sm bg-bg-panel/50 px-2 py-2 space-y-1">
+                                <span className="inline-flex text-[9px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded border border-border text-text-secondary">
+                                  Scene
+                                </span>
+                                <p className="text-[11px] text-text-secondary/90 font-mono leading-relaxed">
+                                  {segment.sceneName}
+                                </p>
+                              </div>
+                            )}
+                            {segment.abletonAction && (
+                              <div className="border border-border/70 rounded-sm bg-bg-panel/50 px-2 py-2 space-y-1">
+                                <span className="inline-flex text-[9px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded border border-border text-text-secondary">
+                                  Ableton Action
+                                </span>
+                                <p className="text-[11px] text-text-secondary/90 font-mono leading-relaxed">
+                                  {segment.abletonAction}
+                                </p>
+                              </div>
+                            )}
+                            {segment.automationFocus && (
+                              <div className="border border-border/70 rounded-sm bg-bg-panel/50 px-2 py-2 space-y-1">
+                                <span className="inline-flex text-[9px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded border border-border text-text-secondary">
+                                  Automation Focus
+                                </span>
+                                <p className="text-[11px] text-text-secondary/90 font-mono leading-relaxed">
+                                  {segment.automationFocus}
+                                </p>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -818,6 +1259,15 @@ export function AnalysisResults({
                                 </span>
                               </div>
                               <p className="text-xs font-mono text-text-secondary mt-1 truncate">{card.role}</p>
+                              <div className="mt-2">
+                                <MetaBadgeList
+                                  items={[
+                                    { label: 'Family', value: card.deviceFamily },
+                                    { label: 'Context', value: card.trackContext },
+                                    { label: 'Stage', value: card.workflowStage },
+                                  ]}
+                                />
+                              </div>
                             </div>
                             <span className="text-text-secondary flex-shrink-0">
                               {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
@@ -898,6 +1348,15 @@ export function AnalysisResults({
                           </span>
                         </div>
                         <p className="text-xs font-mono text-text-secondary mt-1 truncate">{patch.patchRole}</p>
+                        <div className="mt-2">
+                          <MetaBadgeList
+                            items={[
+                              { label: 'Family', value: patch.deviceFamily },
+                              { label: 'Context', value: patch.trackContext },
+                              { label: 'Stage', value: patch.workflowStage },
+                            ]}
+                          />
+                        </div>
                       </div>
                       <span className="text-text-secondary flex-shrink-0">
                         {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
@@ -965,21 +1424,58 @@ export function AnalysisResults({
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-border/50">
-                {(Array.isArray(phase2.secretSauce.implementationSteps)
-                  ? phase2.secretSauce.implementationSteps
-                  : []
-                ).map((step, idx) => (
-                  <div key={idx} className="flex space-x-3">
-                    <span className="flex-shrink-0 w-6 h-6 rounded-sm bg-bg-panel border border-border flex items-center justify-center text-accent font-mono text-xs">
-                      {idx + 1}
-                    </span>
-                    <p className="text-xs text-text-secondary leading-relaxed font-mono pt-1">
-                      {truncateAtSentenceBoundary(step, 260)}
-                    </p>
-                  </div>
-                ))}
-              </div>
+              {isPhase2V2 && Array.isArray(phase2.secretSauce.workflowSteps) && phase2.secretSauce.workflowSteps.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-border/50">
+                  {phase2.secretSauce.workflowSteps.map((step) => (
+                    <div key={step.step} className="rounded-sm border border-border bg-bg-panel/40 p-4 space-y-3">
+                      <div className="flex items-center gap-3">
+                        <span className="flex-shrink-0 w-6 h-6 rounded-sm bg-bg-panel border border-border flex items-center justify-center text-accent font-mono text-xs">
+                          {step.step}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-text-primary truncate">{step.device}</p>
+                          <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+                            {step.parameter}: {step.value}
+                          </p>
+                        </div>
+                      </div>
+                      <MetaBadgeList
+                        items={[
+                          { label: 'Context', value: step.trackContext },
+                          { label: 'Device', value: step.device },
+                        ]}
+                      />
+                      <p className="text-xs text-text-secondary leading-relaxed font-mono">
+                        {truncateAtSentenceBoundary(step.instruction, 220)}
+                      </p>
+                      <div className="border border-accent/20 bg-accent/5 rounded-sm px-2 py-2">
+                        <p className="text-[10px] font-mono text-accent uppercase tracking-wide">
+                          Measurement Reason
+                        </p>
+                        <p className="text-xs font-mono text-text-secondary mt-1 leading-relaxed">
+                          {truncateAtSentenceBoundary(step.measurementJustification, 220)}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-border/50">
+                  {(Array.isArray(phase2.secretSauce.implementationSteps)
+                    ? phase2.secretSauce.implementationSteps
+                    : []
+                  ).map((step, idx) => (
+                    <div key={idx} className="flex space-x-3">
+                      <span className="flex-shrink-0 w-6 h-6 rounded-sm bg-bg-panel border border-border flex items-center justify-center text-accent font-mono text-xs">
+                        {idx + 1}
+                      </span>
+                      <p className="text-xs text-text-secondary leading-relaxed font-mono pt-1">
+                        {truncateAtSentenceBoundary(step, 260)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

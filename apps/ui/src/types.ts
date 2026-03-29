@@ -189,20 +189,52 @@ export interface EssentiaFeatures {
 
 export interface DynamicCharacter {
   dynamicComplexity: number;
-  loudnessVariation: number;
+  loudnessDb: number;
+  loudnessVariation?: number | null;
   spectralFlatness: number;
   logAttackTime: number;
   attackTimeStdDev: number;
+}
+
+export interface TextureCharacter {
+  textureScore: number;
+  lowBandFlatness: number;
+  midBandFlatness: number;
+  highBandFlatness: number;
+  inharmonicity?: number | null;
 }
 
 export interface BeatsLoudness {
   kickDominantRatio: number;
   midDominantRatio: number;
   highDominantRatio: number;
+  patternBeatsPerBar: number;
+  lowBandAccentPattern: number[];
+  midBandAccentPattern: number[];
+  highBandAccentPattern: number[];
+  overallAccentPattern: number[];
   accentPattern: number[];
   meanBeatLoudness: number;
   beatLoudnessVariation: number;
   beatCount: number;
+}
+
+export interface RhythmTimelineWindow {
+  bars: number;
+  startBar: number;
+  endBar: number;
+  lowBandSteps: number[];
+  midBandSteps: number[];
+  highBandSteps: number[];
+  overallSteps: number[];
+}
+
+export interface RhythmTimeline {
+  beatsPerBar: number;
+  stepsPerBeat: number;
+  availableBars: number;
+  selectionMethod: "representative_dsp_window";
+  windows: RhythmTimelineWindow[];
 }
 
 export interface PitchStemResult {
@@ -305,6 +337,7 @@ export interface Phase1Result {
   crestFactor?: number | null;
   dynamicSpread?: number | null;
   dynamicCharacter?: DynamicCharacter | null;
+  textureCharacter?: TextureCharacter | null;
   stereoWidth: number;
   stereoCorrelation: number;
   stereoDetail?: StereoDetail | null;
@@ -325,6 +358,7 @@ export interface Phase1Result {
   pitchDetail?: PitchDetail | null;
   grooveDetail?: GrooveDetail | null;
   beatsLoudness?: BeatsLoudness | null;
+  rhythmTimeline?: RhythmTimeline | null;
   sidechainDetail?: SidechainDetail | null;
   effectsDetail?: EffectsDetail | null;
   synthesisCharacter?: SynthesisCharacter | null;
@@ -359,8 +393,90 @@ export type RecommendationCategory =
   | "MIDI"
   | "ROUTING";
 
+export type DeviceFamily = "NATIVE" | "MAX_FOR_LIVE";
+
+export type WorkflowStage =
+  | "PROJECT_SETUP"
+  | "SOUND_DESIGN"
+  | "ARRANGEMENT"
+  | "MIX"
+  | "MASTER";
+
+export type WarpMode =
+  | "Beats"
+  | "Tones"
+  | "Texture"
+  | "Re-Pitch"
+  | "Complex"
+  | "Complex Pro";
+
+export interface Phase2Grounding {
+  phase1Fields: string[];
+  segmentIndexes?: number[];
+}
+
+export interface Phase2ProjectSetup {
+  tempoBpm: number;
+  timeSignature: string;
+  sampleRate: number;
+  bitDepth: number;
+  headroomTarget: string;
+  sessionGoal: string;
+}
+
+export interface Phase2TrackLayoutItem {
+  order: number;
+  name: string;
+  type: string;
+  purpose: string;
+  grounding: Phase2Grounding;
+}
+
+export interface RoutingBlueprintReturn {
+  name: string;
+  purpose: string;
+  sendSources: string[];
+  deviceFocus: string;
+  levelGuidance: string;
+}
+
+export interface RoutingBlueprint {
+  sidechainSource?: string | null;
+  sidechainTargets: string[];
+  returns: RoutingBlueprintReturn[];
+  notes: string[];
+}
+
+export interface WarpGuideTarget {
+  warpMode: WarpMode;
+  settings?: string;
+  reason: string;
+}
+
+export interface Phase2WarpGuide {
+  fullTrack: WarpGuideTarget;
+  drums: WarpGuideTarget;
+  bass: WarpGuideTarget;
+  melodic: WarpGuideTarget;
+  vocals?: WarpGuideTarget;
+  rationale: string;
+}
+
+export interface SecretSauceWorkflowStep {
+  step: number;
+  trackContext: string;
+  device: string;
+  parameter: string;
+  value: string;
+  instruction: string;
+  measurementJustification: string;
+}
+
 export interface AbletonRecommendation {
   device: string;
+  deviceFamily?: DeviceFamily;
+  trackContext?: string;
+  workflowStage?: WorkflowStage;
   category: RecommendationCategory;
   parameter: string;
   value: string;
@@ -368,8 +484,25 @@ export interface AbletonRecommendation {
   advancedTip?: string;
 }
 
+export interface AudioObservationElement {
+  element: string;
+  description: string;
+}
+
+export interface AudioObservations {
+  soundDesignFingerprint: string;
+  elementCharacter: AudioObservationElement[];
+  productionSignatures: string[];
+  mixContext: string;
+}
+
 export interface Phase2Result {
   trackCharacter: string;
+  projectSetup?: Phase2ProjectSetup;
+  trackLayout?: Phase2TrackLayoutItem[];
+  routingBlueprint?: RoutingBlueprint;
+  warpGuide?: Phase2WarpGuide;
+  audioObservations?: AudioObservations;
   detectedCharacteristics: {
     name: string;
     confidence: "HIGH" | "MED" | "LOW";
@@ -384,6 +517,9 @@ export interface Phase2Result {
       lufs?: number;
       description: string;
       spectralNote?: string;
+      sceneName?: string;
+      abletonAction?: string;
+      automationFocus?: string;
     }>;
     noveltyNotes?: string;
   };
@@ -399,6 +535,9 @@ export interface Phase2Result {
   mixAndMasterChain: Array<{
     order: number;
     device: string;
+    deviceFamily?: DeviceFamily;
+    trackContext?: string;
+    workflowStage?: WorkflowStage;
     parameter: string;
     value: string;
     reason: string;
@@ -408,6 +547,7 @@ export interface Phase2Result {
     icon?: string;
     explanation: string;
     implementationSteps: string[];
+    workflowSteps?: SecretSauceWorkflowStep[];
   };
   confidenceNotes: {
     field: string;
@@ -441,6 +581,17 @@ export interface StemSummaryResult {
 }
 
 export type InterpretationResult = Phase2Result | StemSummaryResult;
+
+export type InterpretationSchemaVersion = "interpretation.v1" | "interpretation.v2";
+
+export interface InterpretationValidationWarning {
+  code?: string;
+  path?: string;
+  message: string;
+  originalValue?: string;
+  coercedValue?: string;
+  dropReason?: string;
+}
 
 export interface BackendTimingDiagnostics {
   totalMs: number;
@@ -558,6 +709,11 @@ export interface AnalysisRunRequestedStages {
   interpretationMode: string;
   interpretationProfile: string;
   interpretationModel: string | null;
+}
+
+export interface MeasurementAvailabilityContext {
+  analysisMode?: 'full' | 'standard';
+  hasRunContext: boolean;
 }
 
 export interface MeasurementStageSnapshot {

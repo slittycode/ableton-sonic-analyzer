@@ -53,4 +53,83 @@ describe('MixDoctorPanel', () => {
     expect(html).toContain('Band Diagnostics');
     expect(html).toContain('Low Mids');
   });
+
+  it('renders score, issue, and delta values as styled badges instead of plain text rows', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(MixDoctorPanel, {
+        report: {
+          genreId: 'tech-house',
+          genreName: 'Tech House',
+          targetProfile: {
+            id: 'tech-house',
+            name: 'Tech House',
+            family: 'house',
+            aliases: [],
+            spectralTargets: {
+              'Sub Bass': { minDb: -12, maxDb: -8, optimalDb: -10 },
+              'Low Bass': { minDb: -15, maxDb: -11, optimalDb: -13 },
+              'Low Mids': { minDb: -21, maxDb: -17, optimalDb: -19 },
+              Mids: { minDb: -18, maxDb: -14, optimalDb: -16 },
+              'Upper Mids': { minDb: -20, maxDb: -16, optimalDb: -18 },
+              Highs: { minDb: -21, maxDb: -17, optimalDb: -19 },
+              Brilliance: { minDb: -24, maxDb: -20, optimalDb: -22 },
+            },
+            targetLufsRange: [-9, -7],
+            targetPlrRange: [7, 10],
+            targetCrestFactorRange: [7, 10],
+          },
+          advice: [
+            {
+              band: 'Sub Bass',
+              issue: 'optimal',
+              message: 'Balanced.',
+              diffDb: 0.1,
+              measuredDb: -10,
+              normalizedDb: -10,
+              targetMinDb: -12,
+              targetMaxDb: -8,
+              targetOptimalDb: -10,
+            },
+            {
+              band: 'Low Mids',
+              issue: 'too-quiet',
+              message: 'Needs more body.',
+              diffDb: -2.3,
+              measuredDb: -21.3,
+              normalizedDb: -21.3,
+              targetMinDb: -19,
+              targetMaxDb: -17,
+              targetOptimalDb: -18,
+            },
+          ],
+          loudnessOffset: -1.8,
+          dynamicsAdvice: {
+            issue: 'too-compressed',
+            message: 'Dynamics need more punch.',
+            actualCrest: 6.2,
+            actualPlr: 5.8,
+          },
+          loudnessAdvice: {
+            issue: 'too-loud',
+            message: 'Streaming services will turn this down.',
+            actualLufs: -6.4,
+            truePeak: -0.2,
+          },
+          stereoAdvice: {
+            correlation: 0.11,
+            width: 0.78,
+            monoCompatible: true,
+            message: 'Stereo image is wide and needs checking in mono.',
+          },
+          overallScore: 86,
+        },
+      }),
+    );
+
+    expect(html).toContain('86/100');
+    expect(html).toContain('border-success/30 bg-success/10');
+    expect(html).toContain('border-warning/30 bg-warning/10');
+    expect(html).toContain('border-error/30 bg-error/10');
+    expect(html).toContain('-1.8');
+  });
 });

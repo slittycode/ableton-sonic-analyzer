@@ -20,6 +20,7 @@ import tempfile
 import warnings
 import wave
 from collections import Counter
+from typing import Any
 
 import numpy as np
 
@@ -1511,7 +1512,7 @@ def analyze_dynamic_character(mono: np.ndarray, sample_rate: int = 44100) -> dic
     """Dynamic complexity, spectral flatness, and attack-time metrics."""
     try:
         dynamic_complexity = 0.0
-        loudness_variation = 0.0
+        loudness_db = 0.0
         spectral_flatness = 0.0
         log_attack_time = 0.0
         attack_time_stddev = 0.0
@@ -1519,12 +1520,12 @@ def analyze_dynamic_character(mono: np.ndarray, sample_rate: int = 44100) -> dic
         # DynamicComplexity on full signal
         try:
             dynamic_algo = es.DynamicComplexity(sampleRate=sample_rate)
-            dynamic_complexity, loudness_variation = dynamic_algo(mono)
+            dynamic_complexity, loudness_db = dynamic_algo(mono)
             dynamic_complexity = float(dynamic_complexity)
-            loudness_variation = float(loudness_variation)
+            loudness_db = float(loudness_db)
         except Exception:
             dynamic_complexity = 0.0
-            loudness_variation = 0.0
+            loudness_db = 0.0
 
         # Frame-wise flatness
         try:
@@ -1651,7 +1652,8 @@ def analyze_dynamic_character(mono: np.ndarray, sample_rate: int = 44100) -> dic
         return {
             "dynamicCharacter": {
                 "dynamicComplexity": round(dynamic_complexity, 4),
-                "loudnessVariation": round(loudness_variation, 4),
+                "loudnessDb": round(loudness_db, 4),
+                "loudnessVariation": round(loudness_db, 4),
                 "spectralFlatness": round(spectral_flatness, 4),
                 "logAttackTime": round(log_attack_time, 4),
                 "attackTimeStdDev": round(attack_time_stddev, 4),
@@ -1660,6 +1662,99 @@ def analyze_dynamic_character(mono: np.ndarray, sample_rate: int = 44100) -> dic
     except Exception as e:
         print(f"[warn] Dynamic character analysis failed: {e}", file=sys.stderr)
         return {"dynamicCharacter": None}
+
+
+TEXTURE_FLATNESS_BANDS = {
+    "lowBandFlatness": (20.0, 250.0),
+    "midBandFlatness": (250.0, 2000.0),
+    "highBandFlatness": (2000.0, 12000.0),
+}
+
+
+def _build_texture_character(
+    low_band_flatness: float,
+    mid_band_flatness: float,
+    high_band_flatness: float,
+    inharmonicity: float | None,
+) -> dict[str, float | None]:
+    normalized_inharmonicity = None
+    if inharmonicity is not None and np.isfinite(inharmonicity):
+        normalized_inharmonicity = min(1.0, max(0.0, float(inharmonicity) / 0.25))
+
+    weighted_terms: list[tuple[float, float]] = [
+        (0.15, low_band_flatness),
+        (0.30, mid_band_flatness),
+        (0.35, high_band_flatness),
+    ]
+    if normalized_inharmonicity is not None:
+        weighted_terms.append((0.20, normalized_inharmonicity))
+
+    total_weight = sum(weight for weight, _ in weighted_terms)
+    texture_score = (
+        sum(weight * value for weight, value in weighted_terms) / total_weight
+        if total_weight > 0
+        else 0.0
+    )
+
+    return {
+        "textureScore": round(float(texture_score), 4),
+        "lowBandFlatness": round(float(low_band_flatness), 4),
+        "midBandFlatness": round(float(mid_band_flatness), 4),
+        "highBandFlatness": round(float(high_band_flatness), 4),
+        "inharmonicity": round(float(inharmonicity), 4)
+        if inharmonicity is not None and np.isfinite(inharmonicity)
+        else None,
+    }
+
+
+def analyze_texture_character(
+    mono: np.ndarray,
+    sample_rate: int = 44100,
+    inharmonicity: float | None = None,
+) -> dict:
+    """Band-aware texture metrics that better capture noise-heavy material."""
+    try:
+        frame_size = 2048
+        hop_size = 1024
+        window = es.Windowing(type="hann", size=frame_size)
+        spectrum = es.Spectrum(size=frame_size)
+        frequencies = np.fft.rfftfreq(frame_size, d=1.0 / float(sample_rate))
+        band_masks = {
+            name: (frequencies >= low_hz) & (frequencies < high_hz)
+            for name, (low_hz, high_hz) in TEXTURE_FLATNESS_BANDS.items()
+        }
+        band_values: dict[str, list[float]] = {name: [] for name in TEXTURE_FLATNESS_BANDS}
+
+        for frame in es.FrameGenerator(mono, frameSize=frame_size, hopSize=hop_size):
+            spec = np.asarray(spectrum(window(frame)), dtype=np.float64)
+            for name, mask in band_masks.items():
+                band = spec[mask]
+                if band.size == 0 or np.all(band <= 0):
+                    band_values[name].append(0.0)
+                    continue
+                band = np.maximum(band, 1e-12)
+                arithmetic_mean = float(np.mean(band))
+                if arithmetic_mean <= 0:
+                    band_values[name].append(0.0)
+                    continue
+                geometric_mean = float(np.exp(np.mean(np.log(band))))
+                band_values[name].append(geometric_mean / arithmetic_mean)
+
+        averages = {
+            name: float(np.mean(values)) if values else 0.0
+            for name, values in band_values.items()
+        }
+        return {
+            "textureCharacter": _build_texture_character(
+                averages["lowBandFlatness"],
+                averages["midBandFlatness"],
+                averages["highBandFlatness"],
+                inharmonicity,
+            )
+        }
+    except Exception as e:
+        print(f"[warn] Texture character analysis failed: {e}", file=sys.stderr)
+        return {"textureCharacter": None}
 
 
 SPECTRAL_BALANCE_BANDS = {
@@ -2589,6 +2684,208 @@ def analyze_groove(
         return {"grooveDetail": None}
 
 
+def _build_bar_position_pattern(values: np.ndarray, count: int) -> list[float]:
+    if values.size == 0 or count <= 0:
+        return [0.0] * max(count, 0)
+
+    sums = np.zeros(count, dtype=np.float64)
+    counts = np.zeros(count, dtype=np.float64)
+    for index, value in enumerate(values):
+        position = index % count
+        sums[position] += float(value)
+        counts[position] += 1.0
+
+    averages = []
+    for position in range(count):
+        if counts[position] > 0:
+            averages.append(float(sums[position] / counts[position]))
+        else:
+            averages.append(0.0)
+
+    max_value = max(averages, default=0.0)
+    if max_value <= 0:
+        return [0.0] * count
+    return [round(value / max_value, 4) for value in averages]
+
+
+def analyze_rhythm_timeline(
+    mono: np.ndarray,
+    sample_rate: int = 44100,
+    rhythm_data: dict | None = None,
+    beat_data: dict | None = None,
+) -> dict:
+    """Build a representative multi-bar sequencer timeline from DSP timing and band energy."""
+    try:
+        beats_per_bar = 4
+        steps_per_beat = 4
+        steps_per_bar = beats_per_bar * steps_per_beat
+
+        if beat_data is None:
+            beat_data = _extract_beat_loudness_data(mono, sample_rate, rhythm_data)
+
+        beats = np.asarray(
+            beat_data.get("beats", []) if isinstance(beat_data, dict) else [],
+            dtype=np.float64,
+        )
+        beats = beats[np.isfinite(beats)]
+        if beats.size < beats_per_bar:
+            return {"rhythmTimeline": None}
+
+        if beats.size >= 2:
+            beat_intervals = np.diff(beats)
+            finite_intervals = beat_intervals[np.isfinite(beat_intervals) & (beat_intervals > 0)]
+            median_beat_interval = (
+                float(np.median(finite_intervals)) if finite_intervals.size > 0 else None
+            )
+        else:
+            median_beat_interval = None
+        if median_beat_interval is None or median_beat_interval <= 0:
+            return {"rhythmTimeline": None}
+
+        mono_arr = np.asarray(mono, dtype=np.float32)
+        total_samples = int(mono_arr.size)
+        if total_samples < 8 or sample_rate <= 0:
+            return {"rhythmTimeline": None}
+
+        low_steps: list[float] = []
+        mid_steps: list[float] = []
+        high_steps: list[float] = []
+        overall_steps: list[float] = []
+        valid_beats = 0
+
+        for beat_index, start in enumerate(beats):
+            end = (
+                float(beats[beat_index + 1])
+                if beat_index + 1 < beats.size
+                else float(start + median_beat_interval)
+            )
+            if not np.isfinite(start) or not np.isfinite(end) or end <= start:
+                continue
+
+            beat_start_sample = max(0, int(round(start * sample_rate)))
+            beat_end_sample = min(total_samples, int(round(end * sample_rate)))
+            if beat_end_sample - beat_start_sample < 8:
+                continue
+
+            step_length = (beat_end_sample - beat_start_sample) / float(steps_per_beat)
+            if step_length <= 0:
+                continue
+
+            for step_index in range(steps_per_beat):
+                step_start = beat_start_sample + int(round(step_index * step_length))
+                step_end = beat_start_sample + int(round((step_index + 1) * step_length))
+                step_start = max(0, min(total_samples - 1, step_start))
+                step_end = max(step_start + 1, min(total_samples, step_end))
+                segment = mono_arr[step_start:step_end]
+                if segment.size < 8:
+                    low_steps.append(0.0)
+                    mid_steps.append(0.0)
+                    high_steps.append(0.0)
+                    overall_steps.append(0.0)
+                    continue
+
+                window = np.hanning(segment.size).astype(np.float32)
+                spectrum = np.fft.rfft(segment * window)
+                freqs = np.fft.rfftfreq(segment.size, d=1.0 / sample_rate)
+                power = np.abs(spectrum) ** 2
+
+                low_mask = (freqs >= 20.0) & (freqs < 200.0)
+                mid_mask = (freqs >= 200.0) & (freqs < 4000.0)
+                high_mask = freqs >= 4000.0
+
+                low_energy = float(np.sum(power[low_mask])) if np.any(low_mask) else 0.0
+                mid_energy = float(np.sum(power[mid_mask])) if np.any(mid_mask) else 0.0
+                high_energy = float(np.sum(power[high_mask])) if np.any(high_mask) else 0.0
+                total_energy = low_energy + mid_energy + high_energy
+
+                low_steps.append(low_energy)
+                mid_steps.append(mid_energy)
+                high_steps.append(high_energy)
+                overall_steps.append(total_energy)
+
+            valid_beats += 1
+
+        available_bars = valid_beats // beats_per_bar
+        if available_bars <= 0:
+            return {"rhythmTimeline": None}
+
+        usable_step_count = available_bars * steps_per_bar
+
+        def _normalize_step_series(values: list[float]) -> np.ndarray:
+            series = np.asarray(values[:usable_step_count], dtype=np.float64)
+            if series.size == 0:
+                return series
+            max_value = float(np.max(series))
+            if max_value <= 0 or not np.isfinite(max_value):
+                return np.zeros_like(series)
+            return np.clip(series / max_value, 0.0, 1.0)
+
+        low_series = _normalize_step_series(low_steps)
+        mid_series = _normalize_step_series(mid_steps)
+        high_series = _normalize_step_series(high_steps)
+        overall_series = _normalize_step_series(overall_steps)
+
+        low_bars = low_series.reshape(available_bars, steps_per_bar)
+        mid_bars = mid_series.reshape(available_bars, steps_per_bar)
+        high_bars = high_series.reshape(available_bars, steps_per_bar)
+        overall_bars = overall_series.reshape(available_bars, steps_per_bar)
+
+        def _window_similarity(window: np.ndarray) -> float:
+            if window.shape[0] < 2:
+                return 1.0
+            diffs = np.mean(np.abs(np.diff(window, axis=0)), axis=1)
+            return float(np.mean(1.0 - np.clip(diffs, 0.0, 1.0)))
+
+        def _best_window_start(bar_count: int) -> int:
+            if available_bars <= bar_count:
+                return 0
+            best_index = 0
+            best_score = -1.0
+            for start_index in range(0, available_bars - bar_count + 1):
+                window = overall_bars[start_index : start_index + bar_count]
+                activity = float(np.mean(window))
+                consistency = _window_similarity(window)
+                score = activity * 0.65 + consistency * 0.35
+                if score > best_score + 1e-9:
+                    best_index = start_index
+                    best_score = score
+            return best_index
+
+        def _emit_window(start_bar_index: int, bar_count: int) -> dict[str, Any]:
+            start_step = start_bar_index * steps_per_bar
+            end_step = start_step + bar_count * steps_per_bar
+            return {
+                "bars": int(bar_count),
+                "startBar": int(start_bar_index + 1),
+                "endBar": int(start_bar_index + bar_count),
+                "lowBandSteps": [round(float(value), 4) for value in low_series[start_step:end_step]],
+                "midBandSteps": [round(float(value), 4) for value in mid_series[start_step:end_step]],
+                "highBandSteps": [round(float(value), 4) for value in high_series[start_step:end_step]],
+                "overallSteps": [round(float(value), 4) for value in overall_series[start_step:end_step]],
+            }
+
+        primary_bars = 8 if available_bars >= 8 else available_bars
+        primary_start = _best_window_start(primary_bars)
+        windows = [_emit_window(primary_start, primary_bars)]
+
+        if available_bars >= 16:
+            extended_start = min(max(primary_start, 0), available_bars - 16)
+            windows.append(_emit_window(extended_start, 16))
+
+        return {
+            "rhythmTimeline": {
+                "beatsPerBar": beats_per_bar,
+                "stepsPerBeat": steps_per_beat,
+                "availableBars": int(available_bars),
+                "selectionMethod": "representative_dsp_window",
+                "windows": windows,
+            }
+        }
+    except Exception as e:
+        print(f"[warn] Rhythm timeline analysis failed: {e}", file=sys.stderr)
+        return {"rhythmTimeline": None}
+
+
 def analyze_beats_loudness(
     mono: np.ndarray,
     sample_rate: int = 44100,
@@ -2625,25 +2922,14 @@ def analyze_beats_loudness(
         mid_dominant_ratio = round(float(np.clip(mean_mid / mean_total, 0.0, 1.0)), 4)
         high_dominant_ratio = round(float(np.clip(mean_high / mean_total, 0.0, 1.0)), 4)
 
-        # Accent pattern: average beat loudness by bar position (4 beats per bar)
-        n_beats = beat_loudness.size
-        accent_pattern = [0.0, 0.0, 0.0, 0.0]
-        counts = [0, 0, 0, 0]
-        for i in range(n_beats):
-            pos = i % 4
-            accent_pattern[pos] += float(beat_loudness[i])
-            counts[pos] += 1
-        for pos in range(4):
-            if counts[pos] > 0:
-                accent_pattern[pos] /= counts[pos]
-        # Normalize so max = 1.0
-        accent_max = max(accent_pattern)
-        if accent_max > 0:
-            accent_pattern = [round(v / accent_max, 4) for v in accent_pattern]
-        else:
-            accent_pattern = [0.0, 0.0, 0.0, 0.0]
+        beats_per_bar = 4
+        low_band_pattern = _build_bar_position_pattern(low_band, beats_per_bar)
+        mid_band_pattern = _build_bar_position_pattern(mid_band, beats_per_bar)
+        high_band_pattern = _build_bar_position_pattern(high_band, beats_per_bar)
+        overall_pattern = _build_bar_position_pattern(beat_loudness, beats_per_bar)
 
         # Summary stats
+        n_beats = beat_loudness.size
         std_total = float(np.std(beat_loudness))
         beat_loudness_variation = round(std_total / mean_total, 4) if mean_total > 0 else 0.0
 
@@ -2652,7 +2938,12 @@ def analyze_beats_loudness(
                 "kickDominantRatio": kick_dominant_ratio,
                 "midDominantRatio": mid_dominant_ratio,
                 "highDominantRatio": high_dominant_ratio,
-                "accentPattern": accent_pattern,
+                "patternBeatsPerBar": beats_per_bar,
+                "lowBandAccentPattern": low_band_pattern,
+                "midBandAccentPattern": mid_band_pattern,
+                "highBandAccentPattern": high_band_pattern,
+                "overallAccentPattern": overall_pattern,
+                "accentPattern": overall_pattern,
                 "meanBeatLoudness": round(mean_total, 4),
                 "beatLoudnessVariation": beat_loudness_variation,
                 "beatCount": int(n_beats),
@@ -5393,6 +5684,7 @@ def main():
             "crestFactor": result.get("crestFactor"),
             "dynamicSpread": result.get("dynamicSpread"),
             "dynamicCharacter": result.get("dynamicCharacter"),
+            "textureCharacter": result.get("textureCharacter"),
             "stereoDetail": result.get("stereoDetail"),
             "monoCompatible": fast_mono_compatible,
             "spectralBalance": result.get("spectralBalance"),
@@ -5401,6 +5693,8 @@ def main():
             "melodyDetail": result.get("melodyDetail"),
             "transcriptionDetail": result.get("transcriptionDetail"),
             "grooveDetail": result.get("grooveDetail"),
+            "beatsLoudness": result.get("beatsLoudness"),
+            "rhythmTimeline": result.get("rhythmTimeline"),
             "sidechainDetail": result.get("sidechainDetail"),
             "acidDetail": result.get("acidDetail"),
             "reverbDetail": result.get("reverbDetail"),
@@ -5529,6 +5823,7 @@ def main():
     # Groove detail (Tier 2 — always run)
     result.update(analyze_groove(mono, sample_rate, rhythm_data, beat_data))
     result.update(analyze_beats_loudness(mono, sample_rate, rhythm_data, beat_data))
+    result.update(analyze_rhythm_timeline(mono, sample_rate, rhythm_data, beat_data))
     result.update(
         analyze_sidechain_detail(
             mono,
@@ -5560,6 +5855,7 @@ def main():
         result["kickDetail"] = None
         result["effectsDetail"] = None
         result["synthesisCharacter"] = None
+        result.update(analyze_texture_character(mono, sample_rate, inharmonicity=None))
         result["segmentLoudness"] = None
         result["segmentSpectral"] = None
         result["segmentStereo"] = None
@@ -5609,6 +5905,19 @@ def main():
 
         # Synthesis character
         result.update(analyze_synthesis_character(mono, sample_rate))
+        synthesis_character = result.get("synthesisCharacter")
+        inharmonicity = (
+            synthesis_character.get("inharmonicity")
+            if isinstance(synthesis_character, dict)
+            else None
+        )
+        result.update(
+            analyze_texture_character(
+                mono,
+                sample_rate,
+                inharmonicity=inharmonicity,
+            )
+        )
 
         # Segment analyses (need stereo)
         result.update(analyze_segment_stereo(result.get("structure"), stereo, sample_rate))
@@ -5701,6 +6010,7 @@ def main():
         "crestFactor": result.get("crestFactor"),
         "dynamicSpread": result.get("dynamicSpread"),
         "dynamicCharacter": result.get("dynamicCharacter"),
+        "textureCharacter": result.get("textureCharacter"),
         "stereoDetail": result.get("stereoDetail"),
         "monoCompatible": result.get("monoCompatible"),
         "spectralBalance": result.get("spectralBalance"),
@@ -5711,6 +6021,7 @@ def main():
         "pitchDetail": result.get("pitchDetail"),
         "grooveDetail": result.get("grooveDetail"),
         "beatsLoudness": result.get("beatsLoudness"),
+        "rhythmTimeline": result.get("rhythmTimeline"),
         "sidechainDetail": result.get("sidechainDetail"),
         "acidDetail": result.get("acidDetail"),
         "reverbDetail": result.get("reverbDetail"),

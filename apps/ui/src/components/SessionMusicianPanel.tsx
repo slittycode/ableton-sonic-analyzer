@@ -51,6 +51,14 @@ export function formatFilteredNoteCount(
   return `${filteredCount} / ${totalCount} NOTES`;
 }
 
+export function formatVibratoConfidence(confidence: number, vibratoPresent: boolean): string {
+  const rounded = Math.round(confidence * 100);
+  if (vibratoPresent && rounded === 0) {
+    return '< 1';
+  }
+  return String(rounded);
+}
+
 export function deriveTranscriptionProvenance(
   activeSource: SessionMusicianSource,
   transcriptionDetail: Phase1Result['transcriptionDetail'] | null | undefined,
@@ -357,7 +365,7 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
         midiFile: melodyDetail.midiFile ? 'available' : 'none',
         source: melodyDetail.sourceSeparated ? 'separated' : 'full mix',
         vibrato: melodyDetail.vibratoPresent
-          ? `present (${melodyDetail.vibratoRate.toFixed(1)} Hz / ${melodyDetail.vibratoExtent.toFixed(2)} / ${Math.round(melodyDetail.vibratoConfidence * 100)}%)`
+          ? `present (${melodyDetail.vibratoRate.toFixed(1)} Hz / ${melodyDetail.vibratoExtent.toFixed(2)} cents / ${formatVibratoConfidence(melodyDetail.vibratoConfidence, true)}%)`
           : `not detected (${Math.round(melodyDetail.vibratoConfidence * 100)}%)`,
       }
     : null;

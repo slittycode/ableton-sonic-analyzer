@@ -51,6 +51,9 @@ export interface ArrangementSegmentViewModel {
   lufsLabel: string;
   description: string;
   spectralNote?: string;
+  sceneName?: string;
+  abletonAction?: string;
+  automationFocus?: string;
   colorClass: string;
 }
 
@@ -97,6 +100,9 @@ export interface MixChainCardViewModel {
   device: string;
   category: string;
   role: string;
+  deviceFamily?: string;
+  trackContext?: string;
+  workflowStage?: string;
   parameters: ChainParameterViewModel[];
   proTip: string;
 }
@@ -113,6 +119,9 @@ export interface PatchCardViewModel {
   category: string;
   patchRole: string;
   whyThisWorks: string;
+  deviceFamily?: string;
+  trackContext?: string;
+  workflowStage?: string;
   parameters: ChainParameterViewModel[];
   proTip: string;
   transcriptionDerived?: boolean;
@@ -342,6 +351,11 @@ export function buildArrangementViewModel(
       lufsLabel: lufs !== null ? `${lufs.toFixed(1)} LUFS` : "LUFS n/a",
       description: truncateAtSentenceBoundary(segment.description, 600),
       spectralNote: segment.spectralNote ? truncateAtSentenceBoundary(segment.spectralNote, 260) : undefined,
+      sceneName: segment.sceneName ? truncateAtSentenceBoundary(segment.sceneName, 80) : undefined,
+      abletonAction: segment.abletonAction ? truncateAtSentenceBoundary(segment.abletonAction, 220) : undefined,
+      automationFocus: segment.automationFocus
+        ? truncateAtSentenceBoundary(segment.automationFocus, 220)
+        : undefined,
       colorClass: SEGMENT_COLOR_CLASSES[index % SEGMENT_COLOR_CLASSES.length],
     } satisfies ArrangementSegmentViewModel;
   });
@@ -782,6 +796,9 @@ function makeLimiterFallbackCard(phase1: Phase1Result, nextOrder: number): MixCh
     device: "Limiter",
     category: "MASTERING",
     role: "Finalizes loudness control so peaks stay contained while preserving punch.",
+    deviceFamily: "NATIVE",
+    trackContext: "Master",
+    workflowStage: "MASTER",
     parameters: [
       { label: "Ceiling", value: `${Math.min(-0.3, phase1.truePeak - 0.1).toFixed(1)} dB` },
       { label: "Integrated Loudness", value: `${phase1.lufsIntegrated.toFixed(1)} LUFS` },
@@ -885,6 +902,9 @@ export function buildMixChainGroups(
       device: item.device,
       category,
       role: buildRoleSentence(item.reason, group, highEnd.cues),
+      deviceFamily: item.deviceFamily,
+      trackContext: item.trackContext,
+      workflowStage: item.workflowStage,
       parameters: safeParameters,
       proTip: buildProTip(group),
       group,
@@ -1005,6 +1025,9 @@ function buildStereoWidthPatchCard(
       `${widthNarrative} This maps directly to measured width ${phase1.stereoWidth.toFixed(2)} and correlation ${phase1.stereoCorrelation.toFixed(2)}.`,
       320,
     ),
+    deviceFamily: "NATIVE",
+    trackContext: "Master",
+    workflowStage: "MIX",
     parameters: [
       { label: "Stereo Width", value: phase1.stereoWidth.toFixed(2) },
       { label: "Correlation Floor", value: phase1.stereoCorrelation.toFixed(2) },
@@ -1035,6 +1058,7 @@ export function buildPatchCards(
   const cards: PatchCardViewModel[] = grouped.map((group, index) => {
     const normalizedCategory = String(group.category || "EFFECTS").toUpperCase();
     const midiFocused = !!melodyInsights && isMidiFocusedGroup(group.device, normalizedCategory);
+    const primaryItem = group.items[0];
     const parameters = uniqueParameters(
       group.items.map((item) => ({
         label: normalizeParameterLabel(item.parameter),
@@ -1071,6 +1095,9 @@ export function buildPatchCards(
       category: normalizedCategory,
       patchRole: midiFocused ? `${mapPatchRole(normalizedCategory)} • Transcription-driven` : mapPatchRole(normalizedCategory),
       whyThisWorks,
+      deviceFamily: primaryItem?.deviceFamily,
+      trackContext: primaryItem?.trackContext,
+      workflowStage: primaryItem?.workflowStage,
       parameters: enrichedParameters,
       proTip: sanitizeText(
         firstTip || "Automate one macro over each phrase to keep motion while maintaining the core tone.",

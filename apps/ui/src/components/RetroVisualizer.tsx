@@ -27,6 +27,8 @@ const BAND_COLORS = {
   },
 };
 
+const WAVEFORM_DISPLAY_SCALE = 0.75;
+
 type ColorMode = 'three-band' | 'amber' | 'violet' | 'sunset';
 
 interface RetroVisualizerProps {
@@ -446,7 +448,7 @@ function drawBandWaveform(
   const baseAmp = band === 'bass' ? 0.40 : band === 'mid' ? 0.32 : 0.26;
   
   // Amplitude reacts to THIS band's energy (not all bands)
-  const amplitude = baseAmp * (0.7 + bandSmoothed * 0.5);
+  const amplitude = baseAmp * (0.7 + bandSmoothed * 0.5) * WAVEFORM_DISPLAY_SCALE;
   
   // Create band-specific waveform modulation
   const modulationScale = band === 'bass' ? 1.15 : band === 'mid' ? 1.0 : 0.85;

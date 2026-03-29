@@ -1,0 +1,979 @@
+{
+  "_meta": {
+    "version": "1.0.0",
+    "source": "Ableton Reference Manual Version 12 (ableton.com/en/manual/)",
+    "scope": "ASA Phase 2 output surface only — curated subset, not an exhaustive model of every device parameter.",
+    "policy": "NATIVE + MAX_FOR_LIVE only. No third-party VST/AU.",
+    "live12_naming_notes": [
+      "Auto Pan was renamed to Auto Pan-Tremolo in Live 12 (Chapter 28.3).",
+      "Chorus was merged into Chorus-Ensemble in Live 11+. Do not emit 'Chorus' alone.",
+      "Auto Shift is new in Live 12 (Chapter 28.4).",
+      "Roar is Live 12 Standard only — excluded from ASA catalog (not available in all editions).",
+      "Meld is new in Live 12 — macro-oscillator instrument.",
+      "Drift is new in Live 12 — subtractive MPE instrument.",
+      "Granulator III is the Live 12 version (M4L) — do not emit 'Granulator II'.",
+      "Drum Sampler is new in Live 12 — single-pad sampler inside Drum Rack.",
+      "EQ Eight is the canonical spelling — not 'EQ8' or 'EQ 8'.",
+      "Glue Compressor is the canonical spelling — not 'Glue Comp'.",
+      "Multiband Dynamics is the canonical spelling — not 'MultibandDynamics'."
+    ]
+  },
+  "devices": [
+    {
+      "name": "Operator",
+      "family": "NATIVE",
+      "class": "instrument",
+      "allowedParameters": [
+        "Algorithm",
+        "Oscillator A Waveform",
+        "Oscillator A Coarse",
+        "Oscillator A Fine",
+        "Oscillator A Fixed",
+        "Oscillator A Level",
+        "Oscillator B Waveform",
+        "Oscillator B Coarse",
+        "Oscillator B Fine",
+        "Oscillator B Fixed",
+        "Oscillator B Level",
+        "Oscillator C Waveform",
+        "Oscillator C Coarse",
+        "Oscillator C Fine",
+        "Oscillator C Level",
+        "Oscillator D Waveform",
+        "Oscillator D Coarse",
+        "Oscillator D Fine",
+        "Oscillator D Level",
+        "Filter Type",
+        "Filter Frequency",
+        "Filter Resonance",
+        "Filter Drive",
+        "Amp Envelope Attack",
+        "Amp Envelope Decay",
+        "Amp Envelope Sustain",
+        "Amp Envelope Release",
+        "LFO Waveform",
+        "LFO Rate",
+        "LFO Amount",
+        "Unison Amount",
+        "Voices",
+        "Volume",
+        "Pitch Bend Range",
+        "Glide Time"
+      ]
+    },
+    {
+      "name": "Analog",
+      "family": "NATIVE",
+      "class": "instrument",
+      "allowedParameters": [
+        "Osc 1 Shape",
+        "Osc 1 Octave",
+        "Osc 1 Semi",
+        "Osc 1 Detune",
+        "Osc 1 Level",
+        "Osc 2 Shape",
+        "Osc 2 Octave",
+        "Osc 2 Semi",
+        "Osc 2 Detune",
+        "Osc 2 Level",
+        "Fil 1 Type",
+        "Fil 1 Freq",
+        "Fil 1 Resonance",
+        "Fil 1 Drive",
+        "Fil 2 Type",
+        "Fil 2 Freq",
+        "Fil 2 Resonance",
+        "Fil 2 Drive",
+        "Amp 1 Attack",
+        "Amp 1 Decay",
+        "Amp 1 Sustain",
+        "Amp 1 Release",
+        "Amp 2 Attack",
+        "Amp 2 Decay",
+        "Amp 2 Sustain",
+        "Amp 2 Release",
+        "LFO 1 Rate",
+        "LFO 1 Waveform",
+        "LFO 2 Rate",
+        "LFO 2 Waveform",
+        "Glide Time",
+        "Unison Detune",
+        "Voices",
+        "Volume",
+        "Vibrato Amount",
+        "Vibrato Rate"
+      ]
+    },
+    {
+      "name": "Wavetable",
+      "family": "NATIVE",
+      "class": "instrument",
+      "allowedParameters": [
+        "Oscillator 1 Position",
+        "Oscillator 1 Wavetable",
+        "Oscillator 2 Position",
+        "Oscillator 2 Wavetable",
+        "Sub Oscillator Level",
+        "Filter Type",
+        "Filter Frequency",
+        "Filter Resonance",
+        "Filter Drive",
+        "Amp Envelope Attack",
+        "Amp Envelope Decay",
+        "Amp Envelope Sustain",
+        "Amp Envelope Release",
+        "Mod Envelope Attack",
+        "Mod Envelope Decay",
+        "Mod Envelope Sustain",
+        "Mod Envelope Release",
+        "LFO 1 Rate",
+        "LFO 1 Amount",
+        "LFO 1 Waveform",
+        "Unison Amount",
+        "Unison Mode",
+        "Voices",
+        "Volume",
+        "Glide Time"
+      ]
+    },
+    {
+      "name": "Drift",
+      "family": "NATIVE",
+      "class": "instrument",
+      "allowedParameters": [
+        "Osc 1 Waveform",
+        "Osc 1 Oct",
+        "Osc 1 Shape",
+        "Osc 2 Waveform",
+        "Osc 2 Oct",
+        "Osc 2 Detune",
+        "Noise Gain",
+        "Filter Frequency",
+        "Filter Resonance",
+        "Filter Type",
+        "HP Frequency",
+        "Amp Envelope Attack",
+        "Amp Envelope Decay",
+        "Amp Envelope Sustain",
+        "Amp Envelope Release",
+        "Mod Envelope Attack",
+        "Mod Envelope Decay",
+        "LFO Rate",
+        "LFO Amount",
+        "LFO Waveform",
+        "Drift",
+        "Voice Mode",
+        "Voices",
+        "Glide Time",
+        "Volume",
+        "Transpose"
+      ]
+    },
+    {
+      "name": "Meld",
+      "family": "NATIVE",
+      "class": "instrument",
+      "allowedParameters": [
+        "Oscillator A Type",
+        "Oscillator B Type",
+        "Balance",
+        "Filter Type",
+        "Filter Frequency",
+        "Filter Resonance",
+        "Amp Envelope Attack",
+        "Amp Envelope Decay",
+        "Amp Envelope Sustain",
+        "Amp Envelope Release",
+        "Voices",
+        "Volume"
+      ]
+    },
+    {
+      "name": "Sampler",
+      "family": "NATIVE",
+      "class": "instrument",
+      "allowedParameters": [
+        "Transpose",
+        "Volume",
+        "Filter Type",
+        "Filter Frequency",
+        "Filter Resonance",
+        "Amp Envelope Attack",
+        "Amp Envelope Decay",
+        "Amp Envelope Sustain",
+        "Amp Envelope Release",
+        "LFO Amount",
+        "LFO Rate",
+        "Loop Mode",
+        "Root Key"
+      ]
+    },
+    {
+      "name": "Simpler",
+      "family": "NATIVE",
+      "class": "instrument",
+      "allowedParameters": [
+        "Start",
+        "End",
+        "Loop Start",
+        "Loop End",
+        "Warp Mode",
+        "Transpose",
+        "Volume",
+        "Filter Type",
+        "Filter Frequency",
+        "Filter Resonance",
+        "Amp Envelope Attack",
+        "Amp Envelope Decay",
+        "Amp Envelope Sustain",
+        "Amp Envelope Release",
+        "LFO Rate",
+        "LFO Amount"
+      ]
+    },
+    {
+      "name": "Drum Rack",
+      "family": "NATIVE",
+      "class": "instrument",
+      "allowedParameters": [
+        "Pad Volume",
+        "Pad Pitch",
+        "Pad Pan",
+        "Choke Group",
+        "Send Level"
+      ]
+    },
+    {
+      "name": "Impulse",
+      "family": "NATIVE",
+      "class": "instrument",
+      "allowedParameters": [
+        "Volume",
+        "Transpose",
+        "Start",
+        "Decay",
+        "Sustain",
+        "Saturate",
+        "Pan",
+        "Stretch"
+      ]
+    },
+    {
+      "name": "Electric",
+      "family": "NATIVE",
+      "class": "instrument",
+      "allowedParameters": [
+        "Decay",
+        "Envelope",
+        "Pickup",
+        "Tone",
+        "Volume"
+      ]
+    },
+    {
+      "name": "Collision",
+      "family": "NATIVE",
+      "class": "instrument",
+      "allowedParameters": [
+        "Mallet Stiffness",
+        "Mallet Noise",
+        "Mallet Volume",
+        "Resonator Type",
+        "Decay",
+        "Material",
+        "Brightness",
+        "Inharm",
+        "Tune",
+        "Voices",
+        "Volume"
+      ]
+    },
+    {
+      "name": "Tension",
+      "family": "NATIVE",
+      "class": "instrument",
+      "allowedParameters": [
+        "String Decay",
+        "String Damping",
+        "Pickup Position",
+        "Excitator Type",
+        "Bow Pressure",
+        "Bow Position",
+        "Volume"
+      ]
+    },
+    {
+      "name": "EQ Eight",
+      "family": "NATIVE",
+      "class": "audio_effect",
+      "allowedParameters": [
+        "Band 1 Gain",
+        "Band 1 Frequency",
+        "Band 1 Q",
+        "Band 1 Filter Type",
+        "Band 2 Gain",
+        "Band 2 Frequency",
+        "Band 2 Q",
+        "Band 2 Filter Type",
+        "Band 3 Gain",
+        "Band 3 Frequency",
+        "Band 3 Q",
+        "Band 4 Gain",
+        "Band 4 Frequency",
+        "Band 4 Q",
+        "Band 5 Gain",
+        "Band 5 Frequency",
+        "Band 5 Q",
+        "Band 6 Gain",
+        "Band 6 Frequency",
+        "Band 6 Q",
+        "Band 7 Gain",
+        "Band 7 Frequency",
+        "Band 7 Q",
+        "Band 8 Gain",
+        "Band 8 Frequency",
+        "Band 8 Q",
+        "Scale",
+        "Mode"
+      ]
+    },
+    {
+      "name": "Channel EQ",
+      "family": "NATIVE",
+      "class": "audio_effect",
+      "allowedParameters": [
+        "HP 80 Hz",
+        "Low",
+        "Mid",
+        "Mid Frequency",
+        "High"
+      ]
+    },
+    {
+      "name": "EQ Three",
+      "family": "NATIVE",
+      "class": "audio_effect",
+      "allowedParameters": [
+        "GainLo",
+        "GainMid",
+        "GainHi",
+        "FreqLo",
+        "FreqHi"
+      ]
+    },
+    {
+      "name": "Compressor",
+      "family": "NATIVE",
+      "class": "audio_effect",
+      "allowedParameters": [
+        "Threshold",
+        "Ratio",
+        "Attack",
+        "Release",
+        "Knee",
+        "Gain",
+        "Dry/Wet",
+        "Lookahead",
+        "Sidechain",
+        "Sidechain Gain",
+        "Peak/RMS"
+      ]
+    },
+    {
+      "name": "Glue Compressor",
+      "family": "NATIVE",
+      "class": "audio_effect",
+      "allowedParameters": [
+        "Threshold",
+        "Ratio",
+        "Attack",
+        "Release",
+        "Makeup",
+        "Dry/Wet",
+        "Soft Clip",
+        "Peak Clip"
+      ]
+    },
+    {
+      "name": "Multiband Dynamics",
+      "family": "NATIVE",
+      "class": "audio_effect",
+      "allowedParameters": [
+        "Low Above Threshold",
+        "Low Below Threshold",
+        "Low Ratio",
+        "Mid Above Threshold",
+        "Mid Below Threshold",
+        "Mid Ratio",
+        "High Above Threshold",
+        "High Below Threshold",
+        "High Ratio",
+        "Low Gain",
+        "Mid Gain",
+        "High Gain",
+        "Low Attack",
+        "Low Release",
+        "Mid Attack",
+        "Mid Release",
+        "High Attack",
+        "High Release",
+        "FreqLow",
+        "FreqHigh",
+        "Dry/Wet"
+      ]
+    },
+    {
+      "name": "Limiter",
+      "family": "NATIVE",
+      "class": "audio_effect",
+      "allowedParameters": [
+        "Ceiling",
+        "Release",
+        "Lookahead",
+        "True Peak"
+      ]
+    },
+    {
+      "name": "Gate",
+      "family": "NATIVE",
+      "class": "audio_effect",
+      "allowedParameters": [
+        "Threshold",
+        "Return",
+        "Attack",
+        "Hold",
+        "Release",
+        "Flip"
+      ]
+    },
+    {
+      "name": "Saturator",
+      "family": "NATIVE",
+      "class": "audio_effect",
+      "allowedParameters": [
+        "Drive",
+        "Type",
+        "Output",
+        "Dry/Wet",
+        "Color",
+        "Base",
+        "Frequency",
+        "Width",
+        "Depth"
+      ]
+    },
+    {
+      "name": "Dynamic Tube",
+      "family": "NATIVE",
+      "class": "audio_effect",
+      "allowedParameters": [
+        "Drive",
+        "Bias",
+        "Type",
+        "Output",
+        "Dry/Wet"
+      ]
+    },
+    {
+      "name": "Amp",
+      "family": "NATIVE",
+      "class": "audio_effect",
+      "allowedParameters": [
+        "Amp Type",
+        "Bass",
+        "Middle",
+        "Treble",
+        "Presence",
+        "Gain",
+        "Volume",
+        "Dry/Wet"
+      ]
+    },
+    {
+      "name": "Cabinet",
+      "family": "NATIVE",
+      "class": "audio_effect",
+      "allowedParameters": [
+        "Cabinet Type",
+        "Microphone Type",
+        "Microphone Position",
+        "Dry/Wet"
+      ]
+    },
+    {
+      "name": "Drum Buss",
+      "family": "NATIVE",
+      "class": "audio_effect",
+      "allowedParameters": [
+        "Drive",
+        "Crunch",
+        "Transients",
+        "Boom Frequency",
+        "Boom",
+        "Boom Decay",
+        "Trim",
+        "Dry/Wet"
+      ]
+    },
+    {
+      "name": "Auto Filter",
+      "family": "NATIVE",
+      "class": "audio_effect",
+      "allowedParameters": [
+        "Filter Type",
+        "Frequency",
+        "Resonance",
+        "Drive",
+        "Envelope Amount",
+        "Attack",
+        "Release",
+        "LFO Amount",
+        "LFO Rate",
+        "LFO Waveform",
+        "Dry/Wet"
+      ]
+    },
+    {
+      "name": "Auto Pan-Tremolo",
+      "family": "NATIVE",
+      "class": "audio_effect",
+      "allowedParameters": [
+        "Rate",
+        "Amount",
+        "Phase",
+        "Shape",
+        "Offset",
+        "Waveform",
+        "Dry/Wet"
+      ]
+    },
+    {
+      "name": "Chorus-Ensemble",
+      "family": "NATIVE",
+      "class": "audio_effect",
+      "allowedParameters": [
+        "Rate",
+        "Amount",
+        "Mode",
+        "Dry/Wet"
+      ]
+    },
+    {
+      "name": "Flanger",
+      "family": "NATIVE",
+      "class": "audio_effect",
+      "allowedParameters": [
+        "Rate",
+        "Delay Time",
+        "Feedback",
+        "Dry/Wet",
+        "HiPass",
+        "Soft"
+      ]
+    },
+    {
+      "name": "Phaser-Flanger",
+      "family": "NATIVE",
+      "class": "audio_effect",
+      "_notes": "Mode selector switches between Phaser, Flanger, and Doubler sub-modes. Notches/Center/Spread/Blend are Phaser-only. Time is Flanger and Doubler only.",
+      "allowedParameters": [
+        "Mode",
+        "Rate",
+        "Amount",
+        "Feedback",
+        "Output",
+        "Warmth",
+        "Dry/Wet",
+        "Notches",
+        "Center",
+        "Spread",
+        "Blend",
+        "Time"
+      ]
+    },
+    {
+      "name": "Frequency Shifter",
+      "family": "NATIVE",
+      "class": "audio_effect",
+      "allowedParameters": [
+        "Coarse",
+        "Fine",
+        "Mode",
+        "Ring Frequency",
+        "Dry/Wet"
+      ]
+    },
+    {
+      "name": "Spectral Resonator",
+      "family": "NATIVE",
+      "class": "audio_effect",
+      "allowedParameters": [
+        "Frequency",
+        "Harmonics",
+        "Inharmonics",
+        "Decay",
+        "Midi",
+        "Transposition",
+        "Dry/Wet"
+      ]
+    },
+    {
+      "name": "Hybrid Reverb",
+      "family": "NATIVE",
+      "class": "audio_effect",
+      "allowedParameters": [
+        "Algorithm",
+        "Decay",
+        "Size",
+        "Predelay",
+        "ER Level",
+        "Diffusion",
+        "Dry/Wet",
+        "Low Cut",
+        "High Cut"
+      ]
+    },
+    {
+      "name": "Reverb",
+      "family": "NATIVE",
+      "class": "audio_effect",
+      "allowedParameters": [
+        "Room Size",
+        "Decay Time",
+        "Predelay",
+        "Diffusion",
+        "Dry/Wet",
+        "High Cut",
+        "Low Cut",
+        "Flat",
+        "Spin",
+        "Wander",
+        "Density"
+      ]
+    },
+    {
+      "name": "Echo",
+      "family": "NATIVE",
+      "class": "audio_effect",
+      "allowedParameters": [
+        "Delay Time (L)",
+        "Delay Time (R)",
+        "Sync",
+        "Feedback",
+        "Filter Frequency",
+        "Filter On",
+        "Reverb Level",
+        "Reverb Decay",
+        "Stereo",
+        "Repitch",
+        "Fade",
+        "Dry/Wet"
+      ]
+    },
+    {
+      "name": "Delay",
+      "family": "NATIVE",
+      "class": "audio_effect",
+      "allowedParameters": [
+        "Delay Time (L)",
+        "Delay Time (R)",
+        "Sync",
+        "Feedback",
+        "Dry/Wet",
+        "Filter Frequency",
+        "Stereo Link"
+      ]
+    },
+    {
+      "name": "Filter Delay",
+      "family": "NATIVE",
+      "class": "audio_effect",
+      "allowedParameters": [
+        "L Delay Time",
+        "R Delay Time",
+        "L Feedback",
+        "R Feedback",
+        "L Filter Frequency",
+        "R Filter Frequency",
+        "Dry/Wet"
+      ]
+    },
+    {
+      "name": "Beat Repeat",
+      "family": "NATIVE",
+      "class": "audio_effect",
+      "allowedParameters": [
+        "Interval",
+        "Offset",
+        "Grid",
+        "Chance",
+        "Pitch",
+        "Pitch Decay",
+        "Variation",
+        "Filter Frequency",
+        "Filter Width",
+        "Volume",
+        "Decay"
+      ]
+    },
+    {
+      "name": "Erosion",
+      "family": "NATIVE",
+      "class": "audio_effect",
+      "allowedParameters": [
+        "Amount",
+        "Frequency",
+        "Width",
+        "Mode"
+      ]
+    },
+    {
+      "name": "Utility",
+      "family": "NATIVE",
+      "class": "utility",
+      "allowedParameters": [
+        "Gain",
+        "Bass Mono",
+        "Stereo Width",
+        "Mid/Side",
+        "Mute",
+        "Phase L",
+        "Phase R",
+        "DC"
+      ]
+    },
+    {
+      "name": "Auto Shift",
+      "family": "NATIVE",
+      "class": "audio_effect",
+      "_notes": "Has two tabs: Quantizer (scale quantization) and LFO (pitch modulation). Input section has High/Mid/Bass band selector and Gain. Right column is shared across both tabs.",
+      "allowedParameters": [
+        "Input Band",
+        "Gain",
+        "Quantizer Strength",
+        "Quantizer Smooth",
+        "Root",
+        "Scale",
+        "Shift",
+        "LFO Shape",
+        "LFO Rate",
+        "LFO Onset",
+        "LFO Delay",
+        "LFO Attack",
+        "Mod Routing Pitch",
+        "Mod Routing Formant",
+        "Mod Routing Volume",
+        "Mod Routing Pan",
+        "Pitch",
+        "Fine",
+        "Formant",
+        "F. Follow",
+        "Vibrato",
+        "Vibrato Rate",
+        "Fade In",
+        "Dry/Wet"
+      ]
+    },
+    {
+      "name": "Corpus",
+      "family": "NATIVE",
+      "class": "audio_effect",
+      "allowedParameters": [
+        "Resonator Type",
+        "Tune",
+        "Decay",
+        "Material",
+        "Brightness",
+        "Bleed",
+        "Sidechain",
+        "Dry/Wet"
+      ]
+    },
+    {
+      "name": "Arpeggiator",
+      "family": "NATIVE",
+      "class": "midi_effect",
+      "allowedParameters": [
+        "Style",
+        "Rate",
+        "Gate",
+        "Retrigger",
+        "Offset",
+        "Tranpose Steps",
+        "Tranpose Distance"
+      ]
+    },
+    {
+      "name": "Chord",
+      "family": "NATIVE",
+      "class": "midi_effect",
+      "allowedParameters": [
+        "Shift 1",
+        "Shift 2",
+        "Shift 3",
+        "Shift 4",
+        "Shift 5",
+        "Shift 6"
+      ]
+    },
+    {
+      "name": "Note Length",
+      "family": "NATIVE",
+      "class": "midi_effect",
+      "allowedParameters": [
+        "Length",
+        "Gate",
+        "On/Off Balance",
+        "Decay Time"
+      ]
+    },
+    {
+      "name": "Pitch",
+      "family": "NATIVE",
+      "class": "midi_effect",
+      "allowedParameters": [
+        "Pitch",
+        "Range",
+        "Lowest"
+      ]
+    },
+    {
+      "name": "Random",
+      "family": "NATIVE",
+      "class": "midi_effect",
+      "allowedParameters": [
+        "Chance",
+        "Choices",
+        "Interval",
+        "Mode"
+      ]
+    },
+    {
+      "name": "Scale",
+      "family": "NATIVE",
+      "class": "midi_effect",
+      "allowedParameters": [
+        "Scale Name",
+        "Base",
+        "Use Current Scale"
+      ]
+    },
+    {
+      "name": "Velocity",
+      "family": "NATIVE",
+      "class": "midi_effect",
+      "allowedParameters": [
+        "Out Low",
+        "Out High",
+        "Mode",
+        "Drive",
+        "Compand",
+        "Random"
+      ]
+    },
+    {
+      "name": "LFO",
+      "family": "MAX_FOR_LIVE",
+      "class": "midi_effect",
+      "allowedParameters": [
+        "Rate",
+        "Depth",
+        "Waveform",
+        "Phase",
+        "Smooth",
+        "Offset",
+        "Sync"
+      ]
+    },
+    {
+      "name": "Envelope Follower",
+      "family": "MAX_FOR_LIVE",
+      "class": "audio_effect",
+      "allowedParameters": [
+        "Rise",
+        "Fall",
+        "Min",
+        "Max"
+      ]
+    },
+    {
+      "name": "Shaper",
+      "family": "MAX_FOR_LIVE",
+      "class": "midi_effect",
+      "allowedParameters": [
+        "Rate",
+        "Depth",
+        "Phase",
+        "Smooth",
+        "Sync"
+      ]
+    },
+    {
+      "name": "Note Echo",
+      "family": "MAX_FOR_LIVE",
+      "class": "midi_effect",
+      "_notes": "Delay Time is a button grid (1/2/3/4/5/6/8/16 steps) not a continuous knob. Input can be Thru or Mute. Confirmed bundled with Live 12 Suite.",
+      "allowedParameters": [
+        "Delay Time",
+        "Sync",
+        "Input",
+        "Pitch",
+        "Delay",
+        "Fback"
+      ]
+    },
+    {
+      "name": "Bass",
+      "family": "MAX_FOR_LIVE",
+      "class": "instrument",
+      "allowedParameters": [
+        "Sub Level",
+        "Tone",
+        "Drive",
+        "Octave",
+        "Decay",
+        "Volume"
+      ]
+    },
+    {
+      "name": "Granulator III",
+      "family": "MAX_FOR_LIVE",
+      "class": "instrument",
+      "allowedParameters": [
+        "Position",
+        "Size",
+        "Spray",
+        "Volume",
+        "Attack",
+        "Release",
+        "Reverse",
+        "Mode",
+        "Transpose"
+      ]
+    },
+    {
+      "name": "Color Limiter",
+      "family": "MAX_FOR_LIVE",
+      "class": "audio_effect",
+      "allowedParameters": [
+        "Saturation",
+        "Color",
+        "Ceiling",
+        "Release",
+        "Dry/Wet"
+      ]
+    },
+    {
+      "name": "Gated Delay",
+      "family": "MAX_FOR_LIVE",
+      "class": "audio_effect",
+      "allowedParameters": [
+        "Rate",
+        "Delay Time",
+        "Feedback",
+        "Steps",
+        "Dry/Wet"
+      ]
+    }
+  ]
+}

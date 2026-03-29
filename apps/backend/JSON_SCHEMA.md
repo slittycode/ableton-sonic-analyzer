@@ -15,7 +15,7 @@ Conventions:
 
 Top-level keys:
 
-`bpm`, `bpmConfidence`, `bpmPercival`, `bpmAgreement`, `bpmDoubletime`, `bpmSource`, `bpmRawOriginal`, `key`, `keyConfidence`, `keyProfile`, `tuningFrequency`, `tuningCents`, `timeSignature`, `timeSignatureSource`, `timeSignatureConfidence`, `durationSeconds`, `sampleRate`, `lufsIntegrated`, `lufsRange`, `lufsMomentaryMax`, `lufsShortTermMax`, `truePeak`, `crestFactor`, `dynamicSpread`, `dynamicCharacter`, `stereoDetail`, `spectralBalance`, `spectralDetail`, `rhythmDetail`, `melodyDetail`, `transcriptionDetail`, `pitchDetail`, `grooveDetail`, `beatsLoudness`, `sidechainDetail`, `effectsDetail`, `synthesisCharacter`, `danceability`, `structure`, `arrangementDetail`, `segmentLoudness`, `segmentSpectral`, `segmentStereo`, `segmentKey`, `chordDetail`, `perceptual`, `essentiaFeatures`.
+`bpm`, `bpmConfidence`, `bpmPercival`, `bpmAgreement`, `bpmDoubletime`, `bpmSource`, `bpmRawOriginal`, `key`, `keyConfidence`, `keyProfile`, `tuningFrequency`, `tuningCents`, `timeSignature`, `timeSignatureSource`, `timeSignatureConfidence`, `durationSeconds`, `sampleRate`, `lufsIntegrated`, `lufsRange`, `lufsMomentaryMax`, `lufsShortTermMax`, `truePeak`, `crestFactor`, `dynamicSpread`, `dynamicCharacter`, `textureCharacter`, `stereoDetail`, `spectralBalance`, `spectralDetail`, `rhythmDetail`, `melodyDetail`, `transcriptionDetail`, `pitchDetail`, `grooveDetail`, `beatsLoudness`, `rhythmTimeline`, `sidechainDetail`, `effectsDetail`, `synthesisCharacter`, `danceability`, `structure`, `arrangementDetail`, `segmentLoudness`, `segmentSpectral`, `segmentStereo`, `segmentKey`, `chordDetail`, `perceptual`, `essentiaFeatures`.
 
 ## Relationship To `POST /api/analyze`
 
@@ -96,6 +96,7 @@ Compatibility note:
 - `perceptual`
 - `essentiaFeatures`
 - `dynamicCharacter`
+- `textureCharacter`
 - `acidDetail`
 - `reverbDetail`
 - `vocalDetail`
@@ -121,7 +122,7 @@ Compatibility note:
 - `bpmSource`
 - `bpmRawOriginal`
 
-All raw `analyze.py` fields are now forwarded through the server `phase1` wrapper, including fields previously excluded: `bpmPercival`, `bpmAgreement`, `timeSignatureSource`, `timeSignatureConfidence`, `sampleRate`, `dynamicSpread`, `dynamicCharacter`, `segmentStereo`, `essentiaFeatures`.
+All raw `analyze.py` fields are now forwarded through the server `phase1` wrapper, including fields previously excluded: `bpmPercival`, `bpmAgreement`, `timeSignatureSource`, `timeSignatureConfidence`, `sampleRate`, `dynamicSpread`, `dynamicCharacter`, `textureCharacter`, `segmentStereo`, `essentiaFeatures`.
 
 Two server-only convenience fields are derived from `stereoDetail`:
 
@@ -187,10 +188,23 @@ Type: `object \| null`
 | Field | Type | Description | Units / Scale | LLM interpretation note |
 |---|---|---|---|---|
 | `dynamicCharacter.dynamicComplexity` | `float` | From `DynamicComplexity`; measures short-term loudness variation complexity. | unitless | Higher values often indicate denser envelope modulation, pumping, or articulated transients. |
-| `dynamicCharacter.loudnessVariation` | `float` | Secondary output from `DynamicComplexity`. | dB-like scale | Tracks overall variation depth; can be lower on heavily flattened masters. |
-| `dynamicCharacter.spectralFlatness` | `float` | Mean frame spectral flatness. | 0-1 (tonal->noisy) | Near 0 = tonal/sinusoidal; higher values suggest noise/saturation texture. |
+| `dynamicCharacter.loudnessDb` | `float` | Secondary output from `DynamicComplexity`; an estimated loudness value. | dB | Use as a loudness anchor for the dynamics block, not as a variation metric. |
+| `dynamicCharacter.loudnessVariation` | `float` | Deprecated alias of `loudnessDb`, kept for compatibility. | dB | Treat this as the same loudness estimate as `loudnessDb`. |
+| `dynamicCharacter.spectralFlatness` | `float` | Mean full-spectrum frame spectral flatness. | 0-1 (tonal->noisy) | Legacy global texture proxy; useful but can understate band-limited abrasive/noise-heavy material. |
 | `dynamicCharacter.logAttackTime` | `float` | Mean log attack time (fallback-first strategy). | log10(seconds) style | More negative implies faster attacks/transients; less negative implies slower envelope rise. |
 | `dynamicCharacter.attackTimeStdDev` | `float` | Std dev of linearised attack times. | seconds (derived) | Higher spread suggests mixed transient behaviours across events. |
+
+### `textureCharacter`
+
+Type: `object \| null`
+
+| Field | Type | Description | Units / Scale | LLM interpretation note |
+|---|---|---|---|---|
+| `textureCharacter.textureScore` | `float` | Weighted summary of band flatness plus optional inharmonicity. | 0-1 | Deterministic texture/noisiness summary for abrasive, distorted, or industrial material. |
+| `textureCharacter.lowBandFlatness` | `float` | Mean flatness over 20-250 Hz. | 0-1 | Captures how noise-like or broadband the low-end is. |
+| `textureCharacter.midBandFlatness` | `float` | Mean flatness over 250-2000 Hz. | 0-1 | Useful for gritty body, distortion, and abrasive midrange texture. |
+| `textureCharacter.highBandFlatness` | `float` | Mean flatness over 2000-12000 Hz. | 0-1 | Useful for hiss, hash, harshness, and noisy top-end texture. |
+| `textureCharacter.inharmonicity` | `float \| null` | Copied through from synthesis analysis when available. | unitless | Higher values reinforce a metallic/noisy reading but are not required for the score to exist. |
 
 ---
 
@@ -291,10 +305,35 @@ Beat-synchronous loudness analysis via Essentia `BeatsLoudness`. Summary statist
 | `beatsLoudness.kickDominantRatio` | `float` | Fraction of beats where the kick (low) band is loudest. | 0-1 | High values indicate kick-driven groove; low values suggest mid/high-frequency rhythmic emphasis. |
 | `beatsLoudness.midDominantRatio` | `float` | Fraction of beats where the mid band is loudest. | 0-1 | Elevated values suggest chord-stab or synth-driven rhythmic energy. |
 | `beatsLoudness.highDominantRatio` | `float` | Fraction of beats where the high band is loudest. | 0-1 | Elevated values suggest hi-hat or cymbal-driven groove. |
+| `beatsLoudness.patternBeatsPerBar` | `int` | Beat positions represented by the bar-pattern arrays. | count | Currently `4` because meter is assumed 4/4 unless a future detector provides a better value. |
+| `beatsLoudness.lowBandAccentPattern` | `float[]` | Normalized low-band accent by bar position. | 0-1 per position | Kick-weighted proxy used for bar-position groove sketches. |
+| `beatsLoudness.midBandAccentPattern` | `float[]` | Normalized mid-band accent by bar position. | 0-1 per position | Clap/snare-weighted proxy used for bar-position groove sketches. |
+| `beatsLoudness.highBandAccentPattern` | `float[]` | Normalized high-band accent by bar position. | 0-1 per position | Hi-hat/shaker-weighted proxy used for bar-position groove sketches. |
+| `beatsLoudness.overallAccentPattern` | `float[]` | Normalized total beat accent by bar position. | 0-1 per position | Primary “accent” row for the rhythm grid UI. |
 | `beatsLoudness.accentPattern` | `float[4]` | Normalized beat accent across bar positions (4 values for 4/4). | 0-1 per position | Shows accent weight per beat within the bar; useful for groove template reconstruction. |
 | `beatsLoudness.meanBeatLoudness` | `float` | Mean loudness across all detected beats. | linear loudness | Overall rhythmic energy level baseline. |
 | `beatsLoudness.beatLoudnessVariation` | `float` | Coefficient of variation of beat loudness. | unitless ratio | Higher values indicate more dynamic variation across beats (less compressed). |
 | `beatsLoudness.beatCount` | `int` | Number of beats analysed. | count | Context for statistical reliability of the beat loudness summary. |
+
+### `rhythmTimeline`
+
+Type: `object | null`
+
+Representative multi-bar sequencer window derived from DSP beat timing plus band-energy measurements at 16th-note resolution. This is intended for UI playback-style rhythm views. It is a frequency-band timeline, not isolated-instrument detection.
+
+| Field | Type | Description | Units / Scale | LLM interpretation note |
+|---|---|---|---|---|
+| `rhythmTimeline.beatsPerBar` | `int` | Beat count assumed for each bar in the sequencer timeline. | count | Currently `4` because meter detection still defaults to 4/4. |
+| `rhythmTimeline.stepsPerBeat` | `int` | Step subdivision per beat. | count | Currently `4`, yielding 16th-note sequencing. |
+| `rhythmTimeline.availableBars` | `int` | Total complete bars available to choose from. | count | Useful for deciding whether an 8-bar or 16-bar view is truthful. |
+| `rhythmTimeline.selectionMethod` | `"representative_dsp_window"` | Window-selection strategy for the returned clip(s). | categorical | Means the chosen view is based on measured energy plus consistency, not arrangement semantics or AI interpretation. |
+| `rhythmTimeline.windows[].bars` | `int` | Number of bars in this emitted clip window. | count | Usually `8`; `16` is only present when enough bars exist. |
+| `rhythmTimeline.windows[].startBar` | `int` | Inclusive 1-based bar number where this clip window starts. | count | UI bar labels should mirror this directly. |
+| `rhythmTimeline.windows[].endBar` | `int` | Inclusive 1-based bar number where this clip window ends. | count | UI bar labels should mirror this directly. |
+| `rhythmTimeline.windows[].lowBandSteps` | `float[]` | Normalized low-band energy across the emitted steps. | 0-1 per step | Kick-weighted proxy lane. |
+| `rhythmTimeline.windows[].midBandSteps` | `float[]` | Normalized mid-band energy across the emitted steps. | 0-1 per step | Snare/clap-range proxy lane. |
+| `rhythmTimeline.windows[].highBandSteps` | `float[]` | Normalized high-band energy across the emitted steps. | 0-1 per step | Hat/shaker-range proxy lane. |
+| `rhythmTimeline.windows[].overallSteps` | `float[]` | Normalized summed band energy across the emitted steps. | 0-1 per step | Truthful overall accent lane for the sequencer UI. |
 
 ### `sidechainDetail`
 

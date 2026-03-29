@@ -99,9 +99,11 @@ function getStageProgressDetails(
     return { fraction: null, message: null };
   }
 
+  const progressRecord = progress as Record<string, unknown>;
+
   return {
-    fraction: typeof progress.fraction === 'number' ? progress.fraction : null,
-    message: typeof progress.message === 'string' ? progress.message : null,
+    fraction: typeof progressRecord.fraction === 'number' ? progressRecord.fraction : null,
+    message: typeof progressRecord.message === 'string' ? progressRecord.message : null,
   };
 }
 

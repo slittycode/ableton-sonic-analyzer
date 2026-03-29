@@ -133,6 +133,7 @@ def analyze_fast(mono: np.ndarray, sample_rate: int = 44100) -> dict:
     # Set all other fields to None for fast mode
     result["dynamicSpread"] = None
     result["dynamicCharacter"] = None
+    result["textureCharacter"] = None
     result["stereoDetail"] = None
     result["spectralBalance"] = None
     result["spectralDetail"] = None

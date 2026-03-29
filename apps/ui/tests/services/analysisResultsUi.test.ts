@@ -4,6 +4,18 @@ import { AnalysisResults, toggleOpenKeySet } from '../../src/components/Analysis
 import { MIDI_DOWNLOAD_FILE_NAME } from '../../src/components/SessionMusicianPanel';
 import { MeasurementResult, Phase2Result, TranscriptionDetail } from '../../src/types';
 
+const buildStepPattern = (
+  bars: number,
+  primarySteps: number[],
+  primaryValue: number,
+  secondaryValue = 0,
+): number[] =>
+  Array.from({ length: bars * 16 }, (_, index) => {
+    const stepInBar = index % 16;
+    if (primarySteps.includes(stepInBar)) return primaryValue;
+    return secondaryValue;
+  });
+
 const baseMeasurement: MeasurementResult = {
   bpm: 126,
   bpmConfidence: 0.91,
@@ -99,6 +111,188 @@ const basePhase2: Phase2Result = {
       advancedTip: 'Modulate coarse slowly.',
     },
   ],
+};
+
+const phase2V2: Phase2Result = {
+  ...basePhase2,
+  projectSetup: {
+    tempoBpm: 126,
+    timeSignature: '4/4',
+    sampleRate: 48000,
+    bitDepth: 24,
+    headroomTarget: '-6 dB',
+    sessionGoal: 'Rebuild the measured club energy with a tight sub lane and restrained width on the low end.',
+  },
+  trackLayout: [
+    {
+      order: 1,
+      name: 'Drum Group',
+      type: 'GROUP',
+      purpose: 'Keep kick, clap, and hats under one timing-focused bus.',
+      grounding: {
+        phase1Fields: ['grooveDetail.kickSwing', 'spectralBalance.highs'],
+        segmentIndexes: [1, 2],
+      },
+    },
+    {
+      order: 2,
+      name: 'Bass Group',
+      type: 'GROUP',
+      purpose: 'Keep the sub and bass harmonics under one sidechain target.',
+      grounding: {
+        phase1Fields: ['spectralBalance.subBass', 'key'],
+      },
+    },
+  ],
+  routingBlueprint: {
+    sidechainSource: 'Kick',
+    sidechainTargets: ['Bass Group'],
+    returns: [
+      {
+        name: 'Return A',
+        purpose: 'Short top-end reverb for hats and vocal cuts.',
+        sendSources: ['Drum Group'],
+        deviceFocus: 'Hybrid Reverb',
+        levelGuidance: '-18 dB baseline send',
+      },
+    ],
+    notes: ['Keep the sub path dry and mono.'],
+  },
+  warpGuide: {
+    fullTrack: {
+      warpMode: 'Complex Pro',
+      settings: 'Formants 100, Envelope 128',
+      reason: 'Use this for the reference bounce so the full mix keeps its vocal and top-end detail.',
+    },
+    drums: {
+      warpMode: 'Beats',
+      settings: 'Preserve Transients',
+      reason: 'The measured transient profile favors a transient-safe warp mode.',
+    },
+    bass: {
+      warpMode: 'Tones',
+      reason: 'Bass sustain reads more naturally with a tonal warp mode.',
+    },
+    melodic: {
+      warpMode: 'Complex',
+      reason: 'The melodic layers need harmonic stability more than transient sharpness.',
+    },
+    rationale: 'Assign warp modes by source type so clip prep stays predictable in Live.',
+  },
+  arrangementOverview: {
+    summary: 'Arrangement transitions and energy shifts.',
+    segments: [
+      {
+        index: 1,
+        startTime: 0,
+        endTime: 30,
+        lufs: -8.4,
+        description: 'Intro: sparse opening.',
+        spectralNote: 'High shelf lift around 8 kHz on hats.',
+        sceneName: 'INTRO SCENE',
+        abletonAction: 'Launch the intro scene with filtered drums only.',
+        automationFocus: 'Open the low-pass filter over the last 4 bars.',
+      },
+      {
+        index: 2,
+        startTime: 30,
+        endTime: 75,
+        lufs: -7.0,
+        description: 'Drop: dense full-range impact.',
+        sceneName: 'DROP SCENE',
+        abletonAction: 'Trigger the bass and lead clips together.',
+        automationFocus: 'Push the return send up on the transition into the drop.',
+      },
+    ],
+    noveltyNotes: 'Novel shifts at 14.0s and 63.5s align with transitions.',
+  },
+  mixAndMasterChain: [
+    {
+      order: 1,
+      device: 'Drum Buss',
+      deviceFamily: 'NATIVE',
+      trackContext: 'Drum Group',
+      workflowStage: 'MIX',
+      parameter: 'Drive',
+      value: '5 dB',
+      reason: 'Adds punch to drums.',
+    },
+    {
+      order: 2,
+      device: 'EQ Eight',
+      deviceFamily: 'NATIVE',
+      trackContext: 'Bass Group',
+      workflowStage: 'MIX',
+      parameter: 'Low Cut',
+      value: '30 Hz',
+      reason: 'Removes rumble from bass bus.',
+    },
+    {
+      order: 3,
+      device: 'Auto Filter',
+      deviceFamily: 'NATIVE',
+      trackContext: 'Return:Return A',
+      workflowStage: 'ARRANGEMENT',
+      parameter: 'High Shelf',
+      value: '+2.0 dB @ 10 kHz',
+      reason: 'Adds sparkle to hi-hats and vocal chops in the top end.',
+    },
+  ],
+  secretSauce: {
+    title: 'Punch Layering',
+    explanation: 'Layered transient enhancement.',
+    implementationSteps: ['Legacy fallback step'],
+    workflowSteps: [
+      {
+        step: 1,
+        trackContext: 'Drum Group',
+        device: 'Glue Compressor',
+        parameter: 'Attack',
+        value: '3 ms',
+        instruction: 'Set light glue before the build opens up.',
+        measurementJustification: 'The measured crest factor supports a controlled transient shape.',
+      },
+    ],
+  },
+  abletonRecommendations: [
+    {
+      device: 'Operator',
+      deviceFamily: 'NATIVE',
+      trackContext: 'Bass Group',
+      workflowStage: 'SOUND_DESIGN',
+      category: 'SYNTHESIS',
+      parameter: 'Coarse',
+      value: '1.00',
+      reason: 'Matches tonal center.',
+      advancedTip: 'Modulate coarse slowly.',
+    },
+  ],
+};
+
+const phase2V2WithAudioObservations: Phase2Result = {
+  ...phase2V2,
+  audioObservations: {
+    soundDesignFingerprint:
+      'By ear the bass feels FM-leaning and tightly enveloped, while the top layers read as filtered synthetic textures rather than open acoustic material.',
+    elementCharacter: [
+      {
+        element: 'Kick',
+        description:
+          'The kick has a clipped front click and a short sub tail, so it feels designed for punch rather than long sustain.',
+      },
+      {
+        element: 'Lead',
+        description:
+          'The lead sounds bright but controlled, with the movement coming from filter motion more than from a wet delay wash.',
+      },
+    ],
+    productionSignatures: [
+      'Short gated reverb feel on percussion accents.',
+      'Pitched transition delays at scene changes.',
+    ],
+    mixContext:
+      'The mix feels intentionally club-forward by ear, with the sub lane pushing first and the ambience tucked behind the groove.',
+  },
 };
 
 const basePitchNote: TranscriptionDetail = {
@@ -204,6 +398,32 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).toContain('bg-error/20 text-error border-error/30');
   });
 
+  it('renders accented top summary cards and splits measured character chips into separate badges', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: {
+          ...baseMeasurement,
+          genreDetail: {
+            genre: 'tech house',
+            confidence: 0.86,
+            secondaryGenre: 'techno',
+            genreFamily: 'house',
+            topScores: [
+              { genre: 'tech house', score: 0.86 },
+              { genre: 'techno', score: 0.74 },
+            ],
+          },
+        },
+        phase2: basePhase2,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect((html.match(/border-l-2 border-accent/g) ?? []).length).toBeGreaterThanOrEqual(4);
+    expect(html).toContain('>HOUSE<');
+    expect(html).toContain('>TECHNO<');
+  });
+
   it('renders character scanning fallback when phase2 is unavailable', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
@@ -216,6 +436,125 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).toContain('SCANNING...');
     expect(html).toContain('AI Interpretation');
     expect(html).toContain('Draft — AI interpretation is incomplete or unavailable.');
+  });
+
+  it('renders v2-only Live session setup sections when interpretation.v2 is active', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults as React.ComponentType<Record<string, unknown>>, {
+        phase1: baseMeasurement,
+        phase2: phase2V2,
+        phase2SchemaVersion: 'interpretation.v2',
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).toContain('Project Setup');
+    expect(html).toContain('Track Layout');
+    expect(html).toContain('Routing Blueprint');
+    expect(html).toContain('Warp Guide');
+    expect(html).toContain('48000 Hz');
+    expect(html).toContain('Drum Group');
+    expect(html).toContain('Return A');
+    expect(html).toContain('Complex Pro');
+  });
+
+  it('keeps v2-only Live session setup sections hidden when interpretation.v1 is active', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults as React.ComponentType<Record<string, unknown>>, {
+        phase1: baseMeasurement,
+        phase2: phase2V2,
+        phase2SchemaVersion: 'interpretation.v1',
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).not.toContain('Project Setup');
+    expect(html).not.toContain('Track Layout');
+    expect(html).not.toContain('Routing Blueprint');
+    expect(html).not.toContain('Warp Guide');
+  });
+
+  it('renders interpretation validation warnings as a caution banner instead of hiding the result', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults as React.ComponentType<Record<string, unknown>>, {
+        phase1: baseMeasurement,
+        phase2: phase2V2,
+        phase2SchemaVersion: 'interpretation.v2',
+        phase2ValidationWarnings: [
+          {
+            code: 'UNKNOWN_PARAMETER',
+            path: 'abletonRecommendations[0].parameter',
+            message: 'Parameter mismatch surfaced as a caution.',
+          },
+        ],
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).toContain('Interpretation Caution');
+    expect(html).toContain('Parameter mismatch surfaced as a caution.');
+    expect(html).toContain('UNKNOWN_PARAMETER');
+    expect(html).toContain('abletonRecommendations[0].parameter');
+    expect(html).toContain('Track Character');
+  });
+
+  it('renders v2 arrangement actions, device workflow metadata, and prefers structured secret sauce steps', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults as React.ComponentType<Record<string, unknown>>, {
+        phase1: baseMeasurement,
+        phase2: phase2V2,
+        phase2SchemaVersion: 'interpretation.v2',
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).toContain('Scene');
+    expect(html).toContain('INTRO SCENE');
+    expect(html).toContain('Ableton Action');
+    expect(html).toContain('Launch the intro scene with filtered drums only.');
+    expect(html).toContain('Automation Focus');
+    expect(html).toContain('Open the low-pass filter over the last 4 bars.');
+    expect(html).toContain('NATIVE');
+    expect(html).toContain('Drum Group');
+    expect(html).toContain('MIX');
+    expect(html).toContain('SOUND_DESIGN');
+    expect(html).toContain('Glue Compressor');
+    expect(html).toContain('Attack');
+    expect(html).toContain('3 ms');
+    expect(html).toContain('The measured crest factor supports a controlled transient shape.');
+    expect(html).not.toContain('Legacy fallback step');
+  });
+
+  it('renders the perceptual audio observations panel when present', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults as React.ComponentType<Record<string, unknown>>, {
+        phase1: baseMeasurement,
+        phase2: phase2V2WithAudioObservations,
+        phase2SchemaVersion: 'interpretation.v2',
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).toContain('Audio Observations');
+    expect(html).toContain('Perceptual / Audio-Derived');
+    expect(html).toContain('FM-leaning');
+    expect(html).toContain('Kick');
+    expect(html).toContain('Short gated reverb feel on percussion accents.');
+    expect(html).toContain('The mix feels intentionally club-forward by ear');
+  });
+
+  it('silently omits the perceptual audio observations panel when absent', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults as React.ComponentType<Record<string, unknown>>, {
+        phase1: baseMeasurement,
+        phase2: phase2V2,
+        phase2SchemaVersion: 'interpretation.v2',
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).not.toContain('Audio Observations');
+    expect(html).not.toContain('Perceptual / Audio-Derived');
   });
 
   it('renders exactly two DSP badges for the current Phase 1 headings and one AI advisory badge', () => {
@@ -319,6 +658,246 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).toContain('1.24');
     expect(html).toContain('DFA (Rhythmic Complexity)');
     expect(html).toContain('0.870');
+  });
+
+  it('renders the DSP-grounded sequencer with multi-bar numbering and no prose summary', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: {
+          ...baseMeasurement,
+          timeSignatureSource: 'assumed_four_four',
+          timeSignatureConfidence: 0,
+          grooveDetail: {
+            kickSwing: 0.47,
+            hihatSwing: 0.46,
+            kickAccent: [1.0, 0.2, 0.9, 0.1],
+            hihatAccent: [0.2, 0.8, 0.6, 1.0],
+          },
+          beatsLoudness: {
+            kickDominantRatio: 0.62,
+            midDominantRatio: 0.18,
+            highDominantRatio: 0.2,
+            patternBeatsPerBar: 3,
+            lowBandAccentPattern: [1.0, 0.24, 0.82],
+            midBandAccentPattern: [0.22, 1.0, 0.34],
+            highBandAccentPattern: [0.3, 0.88, 1.0],
+            overallAccentPattern: [1.0, 0.55, 0.92],
+            accentPattern: [1.0, 0.55, 0.92],
+            meanBeatLoudness: 0.42,
+            beatLoudnessVariation: 0.83,
+            beatCount: 362,
+          },
+          rhythmTimeline: {
+            beatsPerBar: 4,
+            stepsPerBeat: 4,
+            availableBars: 16,
+            selectionMethod: 'representative_dsp_window',
+            windows: [
+              {
+                bars: 8,
+                startBar: 5,
+                endBar: 12,
+                lowBandSteps: buildStepPattern(8, [0, 8], 1.0),
+                midBandSteps: buildStepPattern(8, [4, 12], 0.72),
+                highBandSteps: buildStepPattern(8, [0, 2, 4, 6, 8, 10, 12, 14], 0.38, 0.14),
+                overallSteps: buildStepPattern(8, [0, 4, 8, 12], 0.92, 0.2),
+              },
+              {
+                bars: 16,
+                startBar: 1,
+                endBar: 16,
+                lowBandSteps: buildStepPattern(16, [0, 8], 1.0),
+                midBandSteps: buildStepPattern(16, [4, 12], 0.72),
+                highBandSteps: buildStepPattern(16, [0, 2, 4, 6, 8, 10, 12, 14], 0.38, 0.14),
+                overallSteps: buildStepPattern(16, [0, 4, 8, 12], 0.92, 0.2),
+              },
+            ],
+          },
+        },
+        phase2: basePhase2,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).toContain('Rhythm Grid');
+    expect(html).toContain('LOW BAND');
+    expect(html).toContain('MID BAND');
+    expect(html).toContain('HIGH BAND');
+    expect(html).toContain('OVERALL ACCENT');
+    expect(html).toContain('8 BAR');
+    expect(html).toContain('16 BAR');
+    expect(html).toContain('DSP band-energy lanes. Frequency-band proxies, not isolated stems.');
+    expect(html).toContain('>5<');
+    expect(html).toContain('>12<');
+    expect(html).not.toContain('Kick-led groove');
+    expect(html).not.toContain('Clap / Snare');
+    expect(html).not.toContain('HH / Shaker');
+    expect(html).not.toContain('>grid<');
+    expect(html).not.toContain('>energy<');
+  });
+
+  it('renders a mode-aware fallback when dynamics and texture metrics are unavailable for a run', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: {
+          ...baseMeasurement,
+          dynamicCharacter: null,
+          textureCharacter: null,
+        },
+        phase2: basePhase2,
+        sourceFileName: 'example.wav',
+        measurementAvailability: {
+          analysisMode: 'standard',
+          hasRunContext: true,
+        },
+      }),
+    );
+
+    expect(html).toContain('Dynamics &amp; Texture');
+    expect(html).toContain('Measurements not included in this run');
+    expect(html).toContain('This standard run completed without dynamics or texture detail.');
+    expect(html).toContain('older backend or partial measurement output');
+    expect(html).not.toContain('Requires full analysis mode');
+  });
+
+  it('renders separated dynamics and texture metrics', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: {
+          ...baseMeasurement,
+          dynamicCharacter: {
+            dynamicComplexity: 3.052,
+            loudnessDb: -14.9342,
+            loudnessVariation: -14.9342,
+            spectralFlatness: 0.0631,
+            logAttackTime: -3.9299,
+            attackTimeStdDev: 0.0476,
+          },
+          textureCharacter: {
+            textureScore: 0.704,
+            lowBandFlatness: 0.6515,
+            midBandFlatness: 0.6987,
+            highBandFlatness: 0.7131,
+            inharmonicity: 0.1838,
+          },
+        },
+        phase2: basePhase2,
+        sourceFileName: 'example.wav',
+        measurementAvailability: {
+          analysisMode: 'full',
+          hasRunContext: true,
+        },
+      }),
+    );
+
+    expect(html).toContain('Dynamics &amp; Texture');
+    expect(html).toContain('Estimated Loudness');
+    expect(html).toContain('Texture Score');
+    expect(html).not.toContain('Dynamic Character');
+    expect(html).not.toContain('Measurements not included in this run');
+  });
+
+  it('renders dynamics plus a texture fallback when texture metrics are missing', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: {
+          ...baseMeasurement,
+          dynamicCharacter: {
+            dynamicComplexity: 3.052,
+            loudnessDb: -14.9342,
+            loudnessVariation: -14.9342,
+            spectralFlatness: 0.0631,
+            logAttackTime: -3.9299,
+            attackTimeStdDev: 0.0476,
+          },
+          textureCharacter: null,
+        },
+        phase2: basePhase2,
+        sourceFileName: 'example.wav',
+        measurementAvailability: {
+          analysisMode: 'full',
+          hasRunContext: true,
+        },
+      }),
+    );
+
+    expect(html).toContain('Dynamics');
+    expect(html).toContain('Estimated Loudness');
+    expect(html).toContain('Texture unavailable');
+    expect(html).toContain('This full run did not include texture measurements.');
+    expect(html).not.toContain('Measurements not included in this run');
+  });
+
+  it('renders texture plus a dynamics fallback when dynamics metrics are missing', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: {
+          ...baseMeasurement,
+          dynamicCharacter: null,
+          textureCharacter: {
+            textureScore: 0.704,
+            lowBandFlatness: 0.6515,
+            midBandFlatness: 0.6987,
+            highBandFlatness: 0.7131,
+            inharmonicity: 0.1838,
+          },
+        },
+        phase2: basePhase2,
+        sourceFileName: 'example.wav',
+        measurementAvailability: {
+          analysisMode: 'standard',
+          hasRunContext: true,
+        },
+      }),
+    );
+
+    expect(html).toContain('Texture');
+    expect(html).toContain('Texture Score');
+    expect(html).toContain('Dynamics unavailable');
+    expect(html).toContain('This standard run did not include dynamics measurements.');
+    expect(html).not.toContain('Measurements not included in this run');
+  });
+
+  it('renders a generic fallback when no run context exists', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: {
+          ...baseMeasurement,
+          dynamicCharacter: null,
+          textureCharacter: null,
+        },
+        phase2: basePhase2,
+        sourceFileName: 'example.wav',
+        measurementAvailability: {
+          hasRunContext: false,
+        },
+      }),
+    );
+
+    expect(html).toContain('Measurements unavailable');
+    expect(html).toContain('This payload does not include dynamics or texture detail.');
+    expect(html).not.toContain('Requires full analysis mode');
+  });
+
+  it('labels stereo correlation bars from anti-phase to mono', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: {
+          ...baseMeasurement,
+          stereoDetail: {
+            stereoWidth: 0.69,
+            stereoCorrelation: 0.84,
+            subBassCorrelation: 0.92,
+            subBassMono: true,
+          },
+        },
+        phase2: basePhase2,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).toContain('anti-phase');
+    expect(html).toContain('mono');
   });
 
   it('uses normalized midi download filename', () => {

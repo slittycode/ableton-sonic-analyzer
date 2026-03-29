@@ -43,6 +43,63 @@ def _timing_points(
 def _valid_phase2_result() -> dict:
     return {
         "trackCharacter": "Driving techno groove at 128 BPM.",
+        "projectSetup": {
+            "tempoBpm": 128,
+            "timeSignature": "4/4",
+            "sampleRate": 48000,
+            "bitDepth": 24,
+            "headroomTarget": "-6 dB",
+            "sessionGoal": "Rebuild a tight, club-focused groove from measured loudness and synthesis cues.",
+        },
+        "trackLayout": [
+            {
+                "order": 1,
+                "name": "Drum Group",
+                "type": "GROUP",
+                "purpose": "Anchor the kick and percussion bus.",
+                "grounding": {
+                    "phase1Fields": ["grooveDetail.kickSwing", "crestFactor"],
+                    "segmentIndexes": [1],
+                },
+            }
+        ],
+        "routingBlueprint": {
+            "sidechainSource": "Kick",
+            "sidechainTargets": ["Bass", "Pads"],
+            "returns": [
+                {
+                    "name": "Return A",
+                    "purpose": "Short space for upper percussion.",
+                    "sendSources": ["Drum Group"],
+                    "deviceFocus": "Hybrid Reverb",
+                    "levelGuidance": "-18 dB send baseline",
+                }
+            ],
+            "notes": ["Keep sub content dry and centered."],
+        },
+        "warpGuide": {
+            "fullTrack": {
+                "warpMode": "Complex Pro",
+                "settings": "Formants 100, Envelope 128",
+                "reason": "Full mix preservation while checking the measured arrangement.",
+            },
+            "drums": {
+                "warpMode": "Beats",
+                "settings": "Preserve Transients",
+                "reason": "Transient integrity suits the punchy kick profile.",
+            },
+            "bass": {
+                "warpMode": "Tones",
+                "settings": "Grain Size 65",
+                "reason": "Keeps sustained bass notes stable.",
+            },
+            "melodic": {
+                "warpMode": "Complex",
+                "settings": "Default envelope",
+                "reason": "Maintains harmonic material in melodic layers.",
+            },
+            "rationale": "Use source-appropriate warp modes when rebuilding clips from the measured arrangement.",
+        },
         "detectedCharacteristics": [
             {
                 "name": "Pumping groove",
@@ -60,6 +117,9 @@ def _valid_phase2_result() -> dict:
                     "lufs": -8.2,
                     "description": "Intro groove.",
                     "spectralNote": "Tight low end.",
+                    "sceneName": "INTRO",
+                    "abletonAction": "Build the first scene with kick, hat, and filtered bass.",
+                    "automationFocus": "Open the filter over the last 4 bars.",
                 }
             ],
             "noveltyNotes": "Minimal transitions.",
@@ -77,7 +137,10 @@ def _valid_phase2_result() -> dict:
             {
                 "order": 1,
                 "device": "EQ Eight",
-                "parameter": "Low shelf",
+                "deviceFamily": "NATIVE",
+                "trackContext": "Master",
+                "workflowStage": "MIX",
+                "parameter": "Band 1 Frequency",
                 "value": "-1.5 dB @ 35 Hz",
                 "reason": "Tighten sub energy.",
             }
@@ -90,6 +153,17 @@ def _valid_phase2_result() -> dict:
                 "Insert compressor on bass.",
                 "Sidechain from kick.",
             ],
+            "workflowSteps": [
+                {
+                    "step": 1,
+                    "trackContext": "Drum Group",
+                    "device": "Glue Compressor",
+                    "parameter": "Attack",
+                    "value": "3 ms",
+                    "instruction": "Set up light bus glue before the build opens up.",
+                    "measurementJustification": "The measured crest profile supports a controlled transient shape.",
+                }
+            ],
         },
         "confidenceNotes": [
             {
@@ -101,13 +175,42 @@ def _valid_phase2_result() -> dict:
         "abletonRecommendations": [
             {
                 "device": "Glue Compressor",
-                "category": "Dynamics",
+                "deviceFamily": "NATIVE",
+                "trackContext": "Master",
+                "workflowStage": "MIX",
+                "category": "DYNAMICS",
                 "parameter": "Attack",
                 "value": "3 ms",
                 "reason": "Keep transients intact.",
                 "advancedTip": "Drive lightly.",
             }
         ],
+    }
+
+
+def _valid_audio_observations() -> dict:
+    return {
+        "soundDesignFingerprint": (
+            "The bass reads like an FM-weighted patch with a short envelope and clipped transient edge, "
+            "while the tops feel filtered rather than naturally bright."
+        ),
+        "elementCharacter": [
+            {
+                "element": "Kick",
+                "description": "The transient has a short click up front and a controlled sub tail without a long ring.",
+            },
+            {
+                "element": "Bass",
+                "description": "The body feels compact and synthetic, with a rounded sustain that still ducks clearly to the kick.",
+            },
+        ],
+        "productionSignatures": [
+            "Pitched delay throws used as a transition accent.",
+            "Short gated reverb feel on the upper percussion.",
+        ],
+        "mixContext": (
+            "By ear the mix feels intentionally club-focused rather than lo-fi, with the sub pushed forward and the upper effects kept tidy."
+        ),
     }
 
 
@@ -154,6 +257,297 @@ class ServerContractTests(unittest.TestCase):
     def test_phase2_prompt_template_loaded(self) -> None:
         self.assertIsInstance(server.PHASE2_PROMPT_TEMPLATE, str)
         self.assertGreater(len(server.PHASE2_PROMPT_TEMPLATE), 100)
+
+    def test_live12_device_catalog_is_loaded(self) -> None:
+        self.assertIsInstance(server.LIVE12_DEVICE_CATALOG, dict)
+        self.assertGreaterEqual(len(server.LIVE12_DEVICE_CATALOG.get("devices", [])), 16)
+
+    def test_load_live12_device_catalog_raises_when_missing(self) -> None:
+        missing_path = Path("/tmp/asa-missing-live12-catalog.json")
+        with self.assertRaisesRegex(RuntimeError, "not found"):
+            server._load_live12_device_catalog(missing_path)
+
+    def test_load_live12_device_catalog_raises_on_empty_devices(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="asa_live12_catalog_") as temp_dir:
+            catalog_path = Path(temp_dir) / "catalog.json"
+            catalog_path.write_text(json.dumps({"devices": []}), encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "devices"):
+                server._load_live12_device_catalog(catalog_path)
+
+    def test_build_phase2_prompt_includes_live12_catalog_json(self) -> None:
+        prompt = server._build_phase2_prompt(
+            measurement_result={"bpm": 128},
+            pitch_note_result=None,
+            grounding_metadata={"profileId": "producer_summary"},
+            descriptor_hooks=None,
+        )
+
+        self.assertIn("LIVE_12_DEVICE_CATALOG_JSON", prompt)
+        self.assertIn('"devices"', prompt)
+
+    def test_build_phase2_prompt_includes_audio_observations_instructions(self) -> None:
+        prompt = server._build_phase2_prompt(
+            measurement_result={"bpm": 128, "durationSeconds": 180},
+            pitch_note_result=None,
+            grounding_metadata={"profileId": "producer_summary"},
+            descriptor_hooks=None,
+        )
+
+        self.assertIn("audioObservations", prompt)
+        self.assertIn("sound design fingerprinting", prompt)
+        self.assertIn("production technique signatures", prompt)
+        self.assertIn("must not repeat or restate content already covered", prompt)
+        self.assertIn("Do not omit any required top-level keys", prompt)
+        self.assertIn("Only audioObservations may be omitted", prompt)
+        self.assertIn("category must be exactly one of", prompt)
+        self.assertIn("workflowStage = the project phase", prompt)
+        self.assertIn('"workflowStage":"SOUND_DESIGN","category":"SYNTHESIS"', prompt)
+        self.assertIn("Return:<name> with no space after the colon", prompt)
+
+    def test_parse_phase2_result_keeps_valid_audio_observations(self) -> None:
+        payload = _valid_phase2_result()
+        payload["audioObservations"] = _valid_audio_observations()
+
+        parsed, skip_message = server._parse_phase2_result(json.dumps(payload))
+
+        self.assertIsNone(skip_message)
+        self.assertIsNotNone(parsed)
+        self.assertEqual(
+            parsed["audioObservations"]["soundDesignFingerprint"],
+            payload["audioObservations"]["soundDesignFingerprint"],
+        )
+        self.assertEqual(
+            parsed["audioObservations"]["elementCharacter"][0]["element"],
+            "Kick",
+        )
+
+    def test_parse_phase2_result_allows_missing_audio_observations(self) -> None:
+        parsed, skip_message = server._parse_phase2_result(json.dumps(_valid_phase2_result()))
+
+        self.assertIsNone(skip_message)
+        self.assertIsNotNone(parsed)
+        self.assertNotIn("audioObservations", parsed)
+
+    def test_parse_phase2_result_drops_malformed_audio_observations_only(self) -> None:
+        payload = _valid_phase2_result()
+        payload["audioObservations"] = {
+            "soundDesignFingerprint": "Compact FM-like bass contour.",
+            "elementCharacter": "not-an-array",
+            "productionSignatures": ["Short reverb tails."],
+            "mixContext": "Club-focused low end.",
+        }
+
+        parsed, skip_message = server._parse_phase2_result(json.dumps(payload))
+
+        self.assertIsNone(skip_message)
+        self.assertIsNotNone(parsed)
+        self.assertNotIn("audioObservations", parsed)
+        self.assertEqual(parsed["projectSetup"]["sampleRate"], 48000)
+
+    def test_parse_phase2_result_debug_coerces_synthesis_workflow_stage(self) -> None:
+        payload = _valid_phase2_result()
+        payload["abletonRecommendations"][0]["workflowStage"] = "SYNTHESIS"
+
+        debug = server._parse_phase2_result_debug(json.dumps(payload))
+
+        self.assertIsNone(debug["skipReason"])
+        self.assertIsNotNone(debug["result"])
+        self.assertEqual(
+            debug["result"]["abletonRecommendations"][0]["workflowStage"],
+            "SOUND_DESIGN",
+        )
+        self.assertEqual(
+            debug["validationWarnings"],
+            [
+                {
+                    "code": "COERCED_ENUM_VALUE",
+                    "path": "abletonRecommendations[0].workflowStage",
+                    "message": (
+                        "Coerced workflowStage 'SYNTHESIS' to 'SOUND_DESIGN' for "
+                        "abletonRecommendations."
+                    ),
+                    "originalValue": "SYNTHESIS",
+                    "coercedValue": "SOUND_DESIGN",
+                }
+            ],
+        )
+
+    def test_parse_phase2_result_debug_coerces_return_track_context_spacing(self) -> None:
+        payload = _valid_phase2_result()
+        payload["routingBlueprint"]["returns"][0]["name"] = "Long Reverb"
+        payload["mixAndMasterChain"][0]["trackContext"] = "Return: Long Reverb"
+        payload["abletonRecommendations"][0]["trackContext"] = "Return: Long Reverb"
+        payload["secretSauce"]["workflowSteps"][0]["trackContext"] = "Return: Long Reverb"
+
+        debug = server._parse_phase2_result_debug(json.dumps(payload))
+
+        self.assertIsNone(debug["skipReason"])
+        self.assertIsNotNone(debug["result"])
+        self.assertEqual(debug["result"]["mixAndMasterChain"][0]["trackContext"], "Return:Long Reverb")
+        self.assertEqual(
+            debug["result"]["abletonRecommendations"][0]["trackContext"],
+            "Return:Long Reverb",
+        )
+        self.assertEqual(
+            debug["result"]["secretSauce"]["workflowSteps"][0]["trackContext"],
+            "Return:Long Reverb",
+        )
+        warning_paths = {warning["path"] for warning in debug["validationWarnings"]}
+        self.assertIn("mixAndMasterChain[0].trackContext", warning_paths)
+        self.assertIn("abletonRecommendations[0].trackContext", warning_paths)
+        self.assertIn("secretSauce.workflowSteps[0].trackContext", warning_paths)
+
+    def test_parse_phase2_result_drops_single_invalid_ableton_recommendation_item(self) -> None:
+        payload = _valid_phase2_result()
+        payload["abletonRecommendations"].append(
+            {
+                "device": "Glue Compressor",
+                "deviceFamily": "NATIVE",
+                "trackContext": "Master",
+                "workflowStage": "PATCHING",
+                "category": "DYNAMICS",
+                "parameter": "Attack",
+                "value": "3 ms",
+                "reason": "Bad enum should drop this one item.",
+                "advancedTip": "Ignore this card.",
+            }
+        )
+
+        debug = server._parse_phase2_result_debug(json.dumps(payload))
+
+        self.assertIsNone(debug["skipReason"])
+        self.assertIsNotNone(debug["result"])
+        self.assertEqual(len(debug["result"]["abletonRecommendations"]), 1)
+        warning = next(
+            warning
+            for warning in debug["validationWarnings"]
+            if warning["code"] == "DROPPED_INVALID_ARRAY_ITEM"
+        )
+        self.assertEqual(warning["path"], "abletonRecommendations[1]")
+        self.assertIn("workflowStage", warning["dropReason"])
+        self.assertIn('"workflowStage": "PATCHING"', warning["originalValue"])
+
+    def test_parse_phase2_result_drops_single_invalid_mix_chain_item(self) -> None:
+        payload = _valid_phase2_result()
+        payload["mixAndMasterChain"].append(
+            {
+                "order": 2,
+                "device": "EQ Eight",
+                "deviceFamily": "NATIVE",
+                "trackContext": "Master",
+                "workflowStage": "PATCHING",
+                "parameter": "Band 1 Frequency",
+                "value": "-1 dB @ 45 Hz",
+                "reason": "Bad stage should drop this one item.",
+            }
+        )
+
+        debug = server._parse_phase2_result_debug(json.dumps(payload))
+
+        self.assertIsNone(debug["skipReason"])
+        self.assertIsNotNone(debug["result"])
+        self.assertEqual(len(debug["result"]["mixAndMasterChain"]), 1)
+        warning = next(
+            warning
+            for warning in debug["validationWarnings"]
+            if warning["code"] == "DROPPED_INVALID_ARRAY_ITEM"
+            and warning["path"] == "mixAndMasterChain[1]"
+        )
+        self.assertIn("workflowStage", warning["dropReason"])
+        self.assertIn('"workflowStage": "PATCHING"', warning["originalValue"])
+
+    def test_parse_phase2_result_skips_when_required_recommendation_array_is_emptied(self) -> None:
+        payload = _valid_phase2_result()
+        payload["abletonRecommendations"] = [
+            {
+                "device": "Glue Compressor",
+                "deviceFamily": "NATIVE",
+                "trackContext": "Master",
+                "workflowStage": "PATCHING",
+                "category": "DYNAMICS",
+                "parameter": "Attack",
+                "value": "3 ms",
+                "reason": "This only card should be dropped.",
+                "advancedTip": "Ignore this card.",
+            }
+        ]
+
+        debug = server._parse_phase2_result_debug(json.dumps(payload))
+
+        self.assertEqual(debug["skipReason"], "invalid_shape")
+        self.assertIsNone(debug["result"])
+        paths = {issue["path"] for issue in debug["shapeIssues"]}
+        self.assertIn("abletonRecommendations", paths)
+        warning = next(
+            warning
+            for warning in debug["validationWarnings"]
+            if warning["code"] == "DROPPED_INVALID_ARRAY_ITEM"
+        )
+        self.assertEqual(warning["path"], "abletonRecommendations[0]")
+        self.assertIn("workflowStage", warning["dropReason"])
+
+    def test_parse_phase2_result_debug_reports_invalid_shape_paths(self) -> None:
+        payload = _valid_phase2_result()
+        payload["projectSetup"] = "wrong-type"
+        payload["warpGuide"]["drums"]["warpMode"] = "Warped"
+        payload["arrangementOverview"]["segments"][0].pop("sceneName")
+
+        debug = server._parse_phase2_result_debug(json.dumps(payload))
+
+        self.assertEqual(debug["skipReason"], "invalid_shape")
+        self.assertIsNone(debug["result"])
+        self.assertGreaterEqual(len(debug["shapeIssues"]), 3)
+        paths = {issue["path"] for issue in debug["shapeIssues"]}
+        self.assertIn("projectSetup", paths)
+        self.assertIn("warpGuide.drums.warpMode", paths)
+        self.assertIn("arrangementOverview.segments[0].sceneName", paths)
+
+    def test_run_interpretation_request_with_profile_config_surfaces_salvage_warnings_in_normal_diagnostics(
+        self,
+    ) -> None:
+        payload = _valid_phase2_result()
+        payload["abletonRecommendations"][0]["workflowStage"] = "SYNTHESIS"
+        mock_response = unittest.mock.MagicMock()
+        mock_response.text = json.dumps(payload)
+        mock_model = unittest.mock.MagicMock()
+        mock_model.generate_content.return_value = mock_response
+        mock_client = unittest.mock.MagicMock()
+        mock_client.models = mock_model
+        with tempfile.TemporaryDirectory(prefix="asa_phase2_salvage_") as temp_dir:
+            audio_path = Path(temp_dir) / "track.wav"
+            audio_path.write_bytes(b"fake-audio")
+            profile_config = server._resolve_interpretation_profile_config("producer_summary")
+            with (
+                patch.object(server, "_GENAI_AVAILABLE", True),
+                patch.dict(server.os.environ, {"GEMINI_API_KEY": "fake-key"}),
+                patch.object(server, "_genai") as mock_genai,
+                patch.object(server, "_genai_types") as mock_genai_types,
+            ):
+                mock_genai.Client.return_value = mock_client
+                mock_genai_types.GenerateContentConfig.return_value = unittest.mock.MagicMock()
+                execution = server._run_interpretation_request_with_profile_config(
+                    source_path=str(audio_path),
+                    filename=audio_path.name,
+                    file_size_bytes=audio_path.stat().st_size,
+                    profile_id="producer_summary",
+                    profile_config=profile_config,
+                    measurement_result={"bpm": 128},
+                    pitch_note_result=None,
+                    grounding_metadata={"profileId": "producer_summary"},
+                    model_name="gemini-3.1-pro-preview",
+                    request_id="normal-salvage-test",
+                )
+
+        self.assertTrue(execution["ok"])
+        self.assertIsNotNone(execution["interpretationResult"])
+        self.assertEqual(
+            execution["interpretationResult"]["abletonRecommendations"][0]["workflowStage"],
+            "SOUND_DESIGN",
+        )
+        warnings = execution["diagnostics"]["validationWarnings"]
+        self.assertEqual(warnings[0]["code"], "COERCED_ENUM_VALUE")
+        self.assertEqual(warnings[0]["originalValue"], "SYNTHESIS")
+        self.assertEqual(warnings[0]["coercedValue"], "SOUND_DESIGN")
 
     def test_resolve_server_port_defaults_to_8100(self) -> None:
         with patch.dict(server.os.environ, {}, clear=True):
@@ -1424,9 +1818,20 @@ class BuildPhase1CoercionTests(unittest.TestCase):
         self.assertIsNone(phase1["dynamicSpread"])
 
     def test_dynamic_character_passes_through(self) -> None:
-        dc = {"dynamicComplexity": 0.5, "loudnessVariation": 0.3}
+        dc = {"dynamicComplexity": 0.5, "loudnessDb": -14.2, "loudnessVariation": -14.2}
         phase1 = server._build_phase1(self._minimal_payload(dynamicCharacter=dc))
         self.assertEqual(phase1["dynamicCharacter"], dc)
+
+    def test_texture_character_passes_through(self) -> None:
+        tc = {
+            "textureScore": 0.68,
+            "lowBandFlatness": 0.51,
+            "midBandFlatness": 0.72,
+            "highBandFlatness": 0.83,
+            "inharmonicity": 0.19,
+        }
+        phase1 = server._build_phase1(self._minimal_payload(textureCharacter=tc))
+        self.assertEqual(phase1["textureCharacter"], tc)
 
     def test_segment_stereo_passes_through(self) -> None:
         ss = [{"segmentIndex": 0, "stereoWidth": 0.8}]
@@ -1503,6 +1908,11 @@ class BuildPhase1CoercionTests(unittest.TestCase):
             "kickDominantRatio": 0.45,
             "midDominantRatio": 0.35,
             "highDominantRatio": 0.20,
+            "patternBeatsPerBar": 4,
+            "lowBandAccentPattern": [1.0, 0.3, 0.8, 0.2],
+            "midBandAccentPattern": [0.2, 1.0, 0.4, 0.3],
+            "highBandAccentPattern": [0.1, 0.2, 0.6, 1.0],
+            "overallAccentPattern": [1.0, 0.6, 0.8, 0.5],
             "accentPattern": [1.0, 0.6, 0.8, 0.5],
             "meanBeatLoudness": 0.32,
             "beatLoudnessVariation": 0.18,
@@ -1510,6 +1920,36 @@ class BuildPhase1CoercionTests(unittest.TestCase):
         }
         phase1 = server._build_phase1(self._minimal_payload(beatsLoudness=bl))
         self.assertEqual(phase1["beatsLoudness"], bl)
+
+    def test_rhythm_timeline_passes_through(self) -> None:
+        rhythm_timeline = {
+            "beatsPerBar": 4,
+            "stepsPerBeat": 4,
+            "availableBars": 16,
+            "selectionMethod": "representative_dsp_window",
+            "windows": [
+                {
+                    "bars": 8,
+                    "startBar": 5,
+                    "endBar": 12,
+                    "lowBandSteps": [1.0] * 128,
+                    "midBandSteps": [0.6] * 128,
+                    "highBandSteps": [0.4] * 128,
+                    "overallSteps": [0.8] * 128,
+                },
+                {
+                    "bars": 16,
+                    "startBar": 1,
+                    "endBar": 16,
+                    "lowBandSteps": [1.0] * 256,
+                    "midBandSteps": [0.6] * 256,
+                    "highBandSteps": [0.4] * 256,
+                    "overallSteps": [0.8] * 256,
+                },
+            ],
+        }
+        phase1 = server._build_phase1(self._minimal_payload(rhythmTimeline=rhythm_timeline))
+        self.assertEqual(phase1["rhythmTimeline"], rhythm_timeline)
 
     def test_envelope_shape_inside_sidechain_detail(self) -> None:
         sd = {
@@ -1535,6 +1975,7 @@ class BuildPhase1CoercionTests(unittest.TestCase):
         self.assertIsNone(phase1.get("segmentStereo"))
         self.assertIsNone(phase1.get("essentiaFeatures"))
         self.assertIsNone(phase1.get("beatsLoudness"))
+        self.assertIsNone(phase1.get("rhythmTimeline"))
         self.assertIsNone(phase1.get("keyProfile"))
         self.assertIsNone(phase1.get("timeSignatureSource"))
         self.assertIsNone(phase1.get("timeSignatureConfidence"))
@@ -1765,6 +2206,59 @@ class Phase2EndpointTests(unittest.TestCase):
         body = self._decode(response)
         self.assertIsNone(body["phase2"])
         self.assertIn("skipped", body["message"])
+
+    def test_returns_200_with_validation_warnings_when_catalog_semantics_do_not_match(self) -> None:
+        invalid_catalog_payload = _valid_phase2_result()
+        invalid_catalog_payload["mixAndMasterChain"][0]["device"] = "Transient Shaper"
+        invalid_catalog_payload["mixAndMasterChain"][0]["parameter"] = "Attack"
+        mock_client = self._mock_successful_gemini(json.dumps(invalid_catalog_payload))
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_phase2_runtime_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            run_id = self._make_completed_run(runtime)
+            with (
+                patch.object(server, "get_analysis_runtime", return_value=runtime),
+                patch.object(server, "_GENAI_AVAILABLE", True),
+                patch.dict(server.os.environ, {"GEMINI_API_KEY": "fake-key"}),
+                patch.object(server, "_genai") as mock_genai,
+                patch.object(server, "_genai_types") as mock_genai_types,
+            ):
+                mock_genai.Client.return_value = mock_client
+                mock_genai_types.GenerateContentConfig.return_value = unittest.mock.MagicMock()
+                response = self._call(analysis_run_id=run_id)
+
+        self.assertEqual(response.status_code, 200)
+        body = self._decode(response)
+        self.assertIsNotNone(body["phase2"])
+        self.assertIn("validationWarnings", body["diagnostics"])
+        self.assertEqual(body["diagnostics"]["validationWarnings"][0]["code"], "UNKNOWN_DEVICE")
+        self.assertEqual(body["diagnostics"]["validationWarnings"][0]["path"], "mixAndMasterChain[0].device")
+
+    def test_completed_interpretation_attempt_uses_interpretation_v2_provenance(self) -> None:
+        mock_client = self._mock_successful_gemini(json.dumps(_valid_phase2_result()))
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_phase2_runtime_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            run_id = self._make_completed_run(runtime)
+            with (
+                patch.object(server, "get_analysis_runtime", return_value=runtime),
+                patch.object(server, "_GENAI_AVAILABLE", True),
+                patch.dict(server.os.environ, {"GEMINI_API_KEY": "fake-key"}),
+                patch.object(server, "_genai") as mock_genai,
+                patch.object(server, "_genai_types") as mock_genai_types,
+            ):
+                mock_genai.Client.return_value = mock_client
+                mock_genai_types.GenerateContentConfig.return_value = unittest.mock.MagicMock()
+                response = self._call(analysis_run_id=run_id)
+                snapshot = runtime.get_run(run_id)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            snapshot["stages"]["interpretation"]["provenance"]["schemaVersion"],
+            "interpretation.v2",
+        )
 
     def test_returns_502_when_gemini_generate_raises(self) -> None:
         mock_client = unittest.mock.MagicMock()

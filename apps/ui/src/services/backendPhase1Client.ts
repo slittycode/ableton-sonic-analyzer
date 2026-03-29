@@ -13,7 +13,9 @@ import {
   KickDetail,
   Phase1Result,
   ReverbDetail,
+  RhythmTimeline,
   SupersawDetail,
+  TextureCharacter,
   VocalDetail,
 } from "../types";
 
@@ -581,6 +583,7 @@ export function parsePhase1Result(value: unknown): Phase1Result {
     crestFactor: toNumber(phase1.crestFactor),
     dynamicSpread: toNumber(phase1.dynamicSpread),
     dynamicCharacter: parseOptionalDynamicCharacter(phase1.dynamicCharacter),
+    textureCharacter: parseOptionalTextureCharacter(phase1.textureCharacter),
     stereoWidth,
     stereoCorrelation,
     stereoDetail: isRecord(phase1.stereoDetail) ? phase1.stereoDetail as unknown as Phase1Result["stereoDetail"] : null,
@@ -601,6 +604,7 @@ export function parsePhase1Result(value: unknown): Phase1Result {
     pitchDetail: isRecord(phase1.pitchDetail) ? phase1.pitchDetail as unknown as Phase1Result["pitchDetail"] : null,
     grooveDetail: isRecord(phase1.grooveDetail) ? phase1.grooveDetail as unknown as Phase1Result["grooveDetail"] : null,
     beatsLoudness: parseOptionalBeatsLoudness(phase1.beatsLoudness),
+    rhythmTimeline: parseOptionalRhythmTimeline(phase1.rhythmTimeline),
     sidechainDetail: isRecord(phase1.sidechainDetail) ? phase1.sidechainDetail as unknown as Phase1Result["sidechainDetail"] : null,
     effectsDetail: isRecord(phase1.effectsDetail) ? phase1.effectsDetail as Phase1Result["effectsDetail"] : null,
     synthesisCharacter: isRecord(phase1.synthesisCharacter) ? phase1.synthesisCharacter as Phase1Result["synthesisCharacter"] : null,
@@ -645,14 +649,49 @@ function parseOptionalDynamicCharacter(value: unknown): DynamicCharacter | null 
   if (!isRecord(value)) return null;
 
   const dynamicComplexity = toNumber(value.dynamicComplexity);
-  const loudnessVariation = toNumber(value.loudnessVariation);
+  const loudnessDb = toNumber(value.loudnessDb) ?? toNumber(value.loudnessVariation);
+  const loudnessVariation = toNumber(value.loudnessVariation) ?? loudnessDb;
   const spectralFlatness = toNumber(value.spectralFlatness);
   const logAttackTime = toNumber(value.logAttackTime);
   const attackTimeStdDev = toNumber(value.attackTimeStdDev);
-  if (dynamicComplexity === null || loudnessVariation === null ||
+  if (dynamicComplexity === null || loudnessDb === null || loudnessVariation === null ||
       spectralFlatness === null || logAttackTime === null || attackTimeStdDev === null) return null;
 
-  return { dynamicComplexity, loudnessVariation, spectralFlatness, logAttackTime, attackTimeStdDev };
+  return {
+    dynamicComplexity,
+    loudnessDb,
+    loudnessVariation,
+    spectralFlatness,
+    logAttackTime,
+    attackTimeStdDev,
+  };
+}
+
+function parseOptionalTextureCharacter(value: unknown): TextureCharacter | null {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value)) return null;
+
+  const textureScore = toNumber(value.textureScore);
+  const lowBandFlatness = toNumber(value.lowBandFlatness);
+  const midBandFlatness = toNumber(value.midBandFlatness);
+  const highBandFlatness = toNumber(value.highBandFlatness);
+  const inharmonicity = toNumber(value.inharmonicity);
+  if (
+    textureScore === null
+    || lowBandFlatness === null
+    || midBandFlatness === null
+    || highBandFlatness === null
+  ) {
+    return null;
+  }
+
+  return {
+    textureScore,
+    lowBandFlatness,
+    midBandFlatness,
+    highBandFlatness,
+    inharmonicity,
+  };
 }
 
 function parseOptionalBeatsLoudness(value: unknown): BeatsLoudness | null {
@@ -672,11 +711,88 @@ function parseOptionalBeatsLoudness(value: unknown): BeatsLoudness | null {
   const accentPattern = Array.isArray(value.accentPattern)
     ? value.accentPattern.map((v: unknown) => toNumber(v) ?? 0).slice(0, 4) as number[]
     : [0, 0, 0, 0];
+  const patternBeatsPerBar = Math.max(
+    1,
+    Math.round(toNumber(value.patternBeatsPerBar) ?? (accentPattern.length > 0 ? accentPattern.length : 4)),
+  );
+  const normalizePattern = (input: unknown, fallback: number[]) => {
+    const source = Array.isArray(input)
+      ? input.map((entry: unknown) => toNumber(entry) ?? 0).slice(0, patternBeatsPerBar)
+      : fallback.slice(0, patternBeatsPerBar);
+    while (source.length < patternBeatsPerBar) source.push(0);
+    return source as number[];
+  };
+  const overallAccentPattern = normalizePattern(value.overallAccentPattern, accentPattern);
+  const emptyPattern = Array.from({ length: patternBeatsPerBar }, () => 0);
 
   return {
     kickDominantRatio, midDominantRatio, highDominantRatio,
-    accentPattern, meanBeatLoudness, beatLoudnessVariation,
+    patternBeatsPerBar,
+    lowBandAccentPattern: normalizePattern(value.lowBandAccentPattern, emptyPattern),
+    midBandAccentPattern: normalizePattern(value.midBandAccentPattern, emptyPattern),
+    highBandAccentPattern: normalizePattern(value.highBandAccentPattern, emptyPattern),
+    overallAccentPattern,
+    accentPattern,
+    meanBeatLoudness, beatLoudnessVariation,
     beatCount: Math.round(beatCount),
+  };
+}
+
+function parseOptionalRhythmTimeline(value: unknown): RhythmTimeline | null {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value)) return null;
+
+  const beatsPerBar = Math.max(1, Math.round(toNumber(value.beatsPerBar) ?? 4));
+  const stepsPerBeat = Math.max(1, Math.round(toNumber(value.stepsPerBeat) ?? 4));
+  const availableBars = Math.max(0, Math.round(toNumber(value.availableBars) ?? 0));
+  const selectionMethod =
+    value.selectionMethod === "representative_dsp_window"
+      ? "representative_dsp_window"
+      : "representative_dsp_window";
+
+  if (!Array.isArray(value.windows)) {
+    return {
+      beatsPerBar,
+      stepsPerBeat,
+      availableBars,
+      selectionMethod,
+      windows: [],
+    };
+  }
+
+  const normalizeSteps = (input: unknown, expectedLength: number): number[] => {
+    const steps = Array.isArray(input)
+      ? input.map((entry: unknown) => toNumber(entry) ?? 0).slice(0, expectedLength)
+      : [];
+    while (steps.length < expectedLength) steps.push(0);
+    return steps;
+  };
+
+  const windows = value.windows
+    .filter(isRecord)
+    .map((windowValue): RhythmTimeline["windows"][number] | null => {
+      const bars = Math.max(1, Math.round(toNumber(windowValue.bars) ?? 0));
+      const startBar = Math.max(1, Math.round(toNumber(windowValue.startBar) ?? 1));
+      const endBar = Math.max(startBar, Math.round(toNumber(windowValue.endBar) ?? (startBar + bars - 1)));
+      const stepCount = bars * beatsPerBar * stepsPerBeat;
+      return {
+        bars,
+        startBar,
+        endBar,
+        lowBandSteps: normalizeSteps(windowValue.lowBandSteps, stepCount),
+        midBandSteps: normalizeSteps(windowValue.midBandSteps, stepCount),
+        highBandSteps: normalizeSteps(windowValue.highBandSteps, stepCount),
+        overallSteps: normalizeSteps(windowValue.overallSteps, stepCount),
+      };
+    })
+    .filter((windowValue): windowValue is RhythmTimeline["windows"][number] => windowValue !== null);
+
+  return {
+    beatsPerBar,
+    stepsPerBeat,
+    availableBars,
+    selectionMethod,
+    windows,
   };
 }
 

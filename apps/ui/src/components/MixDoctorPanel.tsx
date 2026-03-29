@@ -1,5 +1,10 @@
 import React from 'react';
-import type { MixDoctorReport } from '../services/mixDoctor';
+import type { MixDoctorReport, MixDynamicsIssue, MixIssue } from '../services/mixDoctor';
+import {
+  DeltaBadge,
+  StatusBadge,
+  StyledDataTable,
+} from './MeasurementPrimitives';
 
 interface MixDoctorPanelProps {
   report: MixDoctorReport;
@@ -10,117 +15,114 @@ const formatNumber = (value: number | null | undefined, decimals = 2): string =>
   return typeof value === 'number' ? value.toFixed(decimals) : '—';
 };
 
-const MetricRow = ({
-  label,
-  value,
-}: {
-  label: string;
-  value: React.ReactNode;
-}) => (
-  <div className="flex justify-between items-center gap-4">
-    <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
-      {label}
-    </span>
-    <div className="flex items-center gap-2">
-      <span className="text-sm font-display font-bold text-text-primary">
-        {value}
-      </span>
-    </div>
-  </div>
-);
+const toneForScore = (score: number): 'success' | 'warning' | 'error' => {
+  if (score >= 80) return 'success';
+  if (score >= 60) return 'warning';
+  return 'error';
+};
 
-const SimpleTable = <T extends object>({
-  data,
-  columns,
-}: {
-  data: T[];
-  columns: { key: string; label: string; format?: (value: unknown) => string }[];
-}) => (
-  <div className="overflow-x-auto">
-    <table className="w-full text-sm border-collapse">
-      <thead>
-        <tr className="border-b border-border">
-          {columns.map((column) => (
-            <th
-              key={column.key}
-              className="px-2 py-1 text-left text-[10px] font-mono uppercase tracking-wide text-text-secondary font-normal"
-            >
-              {column.label}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {data.map((row, rowIndex) => (
-          <tr
-            key={rowIndex}
-            className={`border-b border-border ${
-              rowIndex % 2 === 0 ? 'bg-bg-secondary' : ''
-            }`}
-          >
-            {columns.map((column) => (
-              <td
-                key={`${rowIndex}-${column.key}`}
-                className="px-2 py-1 text-sm text-text-primary"
-              >
-                {(() => {
-                  const value = (row as Record<string, unknown>)[column.key];
-                  return column.format
-                    ? column.format(value)
-                    : formatNumber(value as number);
-                })()}
-              </td>
-            ))}
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  </div>
-);
+const toneForMixIssue = (issue: MixIssue): 'success' | 'warning' | 'error' => {
+  if (issue === 'optimal') return 'success';
+  if (issue === 'too-quiet') return 'warning';
+  return 'error';
+};
+
+const toneForDynamicsIssue = (issue: MixDynamicsIssue): 'success' | 'warning' | 'error' => {
+  if (issue === 'optimal') return 'success';
+  if (issue === 'too-dynamic') return 'warning';
+  return 'error';
+};
+
+const toneForStereoAdvice = (
+  report: MixDoctorReport,
+): 'success' | 'warning' | 'error' => {
+  if (report.stereoAdvice.monoCompatible === false) return 'error';
+  if (
+    (report.stereoAdvice.correlation !== null && report.stereoAdvice.correlation < 0.2) ||
+    ((report.stereoAdvice.correlation ?? 0) > 0.95 &&
+      (report.stereoAdvice.width ?? 1) < 0.05)
+  ) {
+    return 'warning';
+  }
+  return 'success';
+};
 
 export function MixDoctorPanel({ report }: MixDoctorPanelProps) {
-  /*
-   // TODO: wire delta chart
-   // TODO: wire band-issue details
-  */
+  const stereoTone = toneForStereoAdvice(report);
+
   return (
-    <>
-      <MetricRow
-        label="Target Genre"
-        value={`${report.genreName} (${report.genreId})`}
-      />
-      <MetricRow
-        label="Health Score"
-        value={`${report.overallScore}/100`}
-      />
-      <MetricRow
-        label="Loudness Offset"
-        value={formatNumber(report.loudnessOffset, 2)}
-      />
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="rounded-sm border border-border-light border-l-2 border-accent bg-bg-surface-dark p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+          <span className="text-[9px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+            Target Genre
+          </span>
+          <div className="mt-3 text-xl font-display font-bold text-text-primary">
+            {report.genreName}
+          </div>
+          <div className="mt-2">
+            <StatusBadge label={report.genreId} tone="muted" compact />
+          </div>
+        </div>
+
+        <div className="rounded-sm border border-border-light border-l-2 border-accent bg-bg-surface-dark p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+          <span className="text-[9px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+            Health Score
+          </span>
+          <div className="mt-3">
+            <StatusBadge
+              label={`${report.overallScore}/100`}
+              tone={toneForScore(report.overallScore)}
+            />
+          </div>
+        </div>
+
+        <div className="rounded-sm border border-border-light border-l-2 border-accent bg-bg-surface-dark p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+          <span className="text-[9px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+            Loudness Offset
+          </span>
+          <div className="mt-3">
+            <DeltaBadge
+              value={report.loudnessOffset}
+              decimals={1}
+              okThreshold={0.5}
+              warnThreshold={1.5}
+              unit="dB"
+            />
+          </div>
+        </div>
+      </div>
 
       <div className="border-t border-border pt-3">
         <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
           Advisory Summary
         </span>
-        <div className="mt-2 space-y-2 text-sm text-text-primary">
-          <div>
-            <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mr-2">
-              Dynamics
-            </span>
-            {report.dynamicsAdvice.message}
-          </div>
-          <div>
-            <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mr-2">
-              Loudness
-            </span>
-            {report.loudnessAdvice.message}
-          </div>
-          <div>
-            <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mr-2">
-              Stereo
-            </span>
-            {report.stereoAdvice.message}
-          </div>
+        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+          {[
+            {
+              label: 'Dynamics',
+              tone: toneForDynamicsIssue(report.dynamicsAdvice.issue),
+              message: report.dynamicsAdvice.message,
+            },
+            {
+              label: 'Loudness',
+              tone: toneForMixIssue(report.loudnessAdvice.issue),
+              message: report.loudnessAdvice.message,
+            },
+            {
+              label: 'Stereo',
+              tone: stereoTone,
+              message: report.stereoAdvice.message,
+            },
+          ].map((item) => (
+            <div
+              key={item.label}
+              className="rounded-sm border border-border-light bg-bg-card/35 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+            >
+              <StatusBadge label={item.label} tone={item.tone} compact />
+              <p className="mt-2 text-sm leading-5 text-text-primary">{item.message}</p>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -128,31 +130,57 @@ export function MixDoctorPanel({ report }: MixDoctorPanelProps) {
         <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
           Band Diagnostics
         </span>
-        <div className="mt-2">
-          <SimpleTable
+        <div className="mt-3">
+          <StyledDataTable
             data={report.advice}
             columns={[
-              { key: 'band', label: 'Band', format: (value) => String(value ?? '—') },
+              {
+                key: 'band',
+                label: 'Band',
+                render: (row) => row.band,
+              },
               {
                 key: 'normalizedDb',
                 label: 'Norm dB',
-                format: (value) => formatNumber(value as number, 1),
+                align: 'right',
+                monospace: true,
+                render: (row) => formatNumber(row.normalizedDb, 1),
               },
               {
                 key: 'targetOptimalDb',
                 label: 'Target dB',
-                format: (value) => formatNumber(value as number, 1),
+                align: 'right',
+                monospace: true,
+                render: (row) => formatNumber(row.targetOptimalDb, 1),
               },
               {
                 key: 'diffDb',
                 label: 'Delta dB',
-                format: (value) => formatNumber(value as number, 1),
+                render: (row) => (
+                  <div className="flex justify-end">
+                    <DeltaBadge
+                      value={row.diffDb}
+                      decimals={1}
+                      okThreshold={0.5}
+                      warnThreshold={1.5}
+                      unit="dB"
+                    />
+                  </div>
+                ),
               },
-              { key: 'issue', label: 'Issue', format: (value) => String(value ?? '—') },
+              {
+                key: 'issue',
+                label: 'Issue',
+                render: (row) => (
+                  <div className="flex justify-start">
+                    <StatusBadge label={row.issue} tone={toneForMixIssue(row.issue)} compact />
+                  </div>
+                ),
+              },
             ]}
           />
         </div>
       </div>
-    </>
+    </div>
   );
 }

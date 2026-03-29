@@ -1,3 +1,5 @@
+import uiPackage from '../package.json';
+
 export interface AppConfig {
   apiBaseUrl: string;
   enablePhase2Gemini: boolean;
@@ -42,6 +44,8 @@ export function resolveAppConfig(env: AppConfigEnv, overrides: AppConfigEnv = {}
 
 const runtimeWindow = typeof window === 'undefined' ? undefined : window;
 
+export const appVersionLabel = `v${uiPackage.version}`;
+
 export const appConfig: AppConfig = resolveAppConfig(
   import.meta.env,
   readRuntimeEnvOverrides(runtimeWindow),
@@ -50,4 +54,3 @@ export const appConfig: AppConfig = resolveAppConfig(
 export function isGeminiPhase2ConfigEnabled(config: AppConfig = appConfig): boolean {
   return config.enablePhase2Gemini;
 }
-

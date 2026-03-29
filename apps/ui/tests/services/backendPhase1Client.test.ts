@@ -8,6 +8,18 @@ import {
 } from '../../src/services/backendPhase1Client';
 import { afterEach, vi } from 'vitest';
 
+const buildStepPattern = (
+  bars: number,
+  primarySteps: number[],
+  primaryValue: number,
+  secondaryValue = 0,
+): number[] =>
+  Array.from({ length: bars * 16 }, (_, index) => {
+    const stepInBar = index % 16;
+    if (primarySteps.includes(stepInBar)) return primaryValue;
+    return secondaryValue;
+  });
+
 const validPayload = {
   requestId: 'req_123',
   phase1: {
@@ -35,10 +47,18 @@ const validPayload = {
     dynamicSpread: 0.42,
     dynamicCharacter: {
       dynamicComplexity: 0.5,
-      loudnessVariation: 0.3,
+      loudnessDb: -14.2,
+      loudnessVariation: -14.2,
       spectralFlatness: 0.2,
       logAttackTime: -0.8,
       attackTimeStdDev: 0.15,
+    },
+    textureCharacter: {
+      textureScore: 0.68,
+      lowBandFlatness: 0.51,
+      midBandFlatness: 0.72,
+      highBandFlatness: 0.83,
+      inharmonicity: 0.19,
     },
     stereoWidth: 0.75,
     stereoCorrelation: 0.82,
@@ -123,10 +143,41 @@ const validPayload = {
       kickDominantRatio: 0.45,
       midDominantRatio: 0.35,
       highDominantRatio: 0.20,
+      patternBeatsPerBar: 4,
+      lowBandAccentPattern: [1.0, 0.3, 0.8, 0.2],
+      midBandAccentPattern: [0.2, 1.0, 0.4, 0.3],
+      highBandAccentPattern: [0.1, 0.2, 0.6, 1.0],
+      overallAccentPattern: [1.0, 0.6, 0.8, 0.5],
       accentPattern: [1.0, 0.6, 0.8, 0.5],
       meanBeatLoudness: 0.32,
       beatLoudnessVariation: 0.18,
       beatCount: 256,
+    },
+    rhythmTimeline: {
+      beatsPerBar: 4,
+      stepsPerBeat: 4,
+      availableBars: 16,
+      selectionMethod: 'representative_dsp_window',
+      windows: [
+        {
+          bars: 8,
+          startBar: 5,
+          endBar: 12,
+          lowBandSteps: buildStepPattern(8, [0, 8], 1.0),
+          midBandSteps: buildStepPattern(8, [4, 12], 0.72),
+          highBandSteps: buildStepPattern(8, [0, 2, 4, 6, 8, 10, 12, 14], 0.38, 0.14),
+          overallSteps: buildStepPattern(8, [0, 4, 8, 12], 0.92, 0.2),
+        },
+        {
+          bars: 16,
+          startBar: 1,
+          endBar: 16,
+          lowBandSteps: buildStepPattern(16, [0, 8], 1.0),
+          midBandSteps: buildStepPattern(16, [4, 12], 0.72),
+          highBandSteps: buildStepPattern(16, [0, 2, 4, 6, 8, 10, 12, 14], 0.38, 0.14),
+          overallSteps: buildStepPattern(16, [0, 4, 8, 12], 0.92, 0.2),
+        },
+      ],
     },
     sidechainDetail: {
       pumpingStrength: 0.65,
@@ -307,9 +358,24 @@ describe('parseBackendAnalyzeResponse', () => {
     expect(parsed.phase1.lufsShortTermMax).toBe(-4.8);
     expect(parsed.phase1.dynamicSpread).toBe(0.42);
     expect(parsed.phase1.dynamicCharacter).toEqual(validPayload.phase1.dynamicCharacter);
+    expect(parsed.phase1.textureCharacter).toEqual(validPayload.phase1.textureCharacter);
     expect(parsed.phase1.beatsLoudness?.kickDominantRatio).toBe(0.45);
+    expect(parsed.phase1.beatsLoudness?.patternBeatsPerBar).toBe(4);
+    expect(parsed.phase1.beatsLoudness?.lowBandAccentPattern).toEqual([1.0, 0.3, 0.8, 0.2]);
+    expect(parsed.phase1.beatsLoudness?.midBandAccentPattern).toEqual([0.2, 1.0, 0.4, 0.3]);
+    expect(parsed.phase1.beatsLoudness?.highBandAccentPattern).toEqual([0.1, 0.2, 0.6, 1.0]);
+    expect(parsed.phase1.beatsLoudness?.overallAccentPattern).toEqual([1.0, 0.6, 0.8, 0.5]);
     expect(parsed.phase1.beatsLoudness?.accentPattern).toEqual([1.0, 0.6, 0.8, 0.5]);
     expect(parsed.phase1.beatsLoudness?.beatCount).toBe(256);
+    expect(parsed.phase1.rhythmTimeline?.beatsPerBar).toBe(4);
+    expect(parsed.phase1.rhythmTimeline?.stepsPerBeat).toBe(4);
+    expect(parsed.phase1.rhythmTimeline?.availableBars).toBe(16);
+    expect(parsed.phase1.rhythmTimeline?.selectionMethod).toBe('representative_dsp_window');
+    expect(parsed.phase1.rhythmTimeline?.windows).toHaveLength(2);
+    expect(parsed.phase1.rhythmTimeline?.windows[0]?.bars).toBe(8);
+    expect(parsed.phase1.rhythmTimeline?.windows[0]?.lowBandSteps).toHaveLength(128);
+    expect(parsed.phase1.rhythmTimeline?.windows[1]?.bars).toBe(16);
+    expect(parsed.phase1.rhythmTimeline?.windows[1]?.overallSteps).toHaveLength(256);
     expect(parsed.phase1.sidechainDetail).toEqual(validPayload.phase1.sidechainDetail);
     expect(parsed.phase1.segmentStereo).toEqual(validPayload.phase1.segmentStereo);
     expect(parsed.phase1.segmentKey).toEqual(validPayload.phase1.segmentKey);
@@ -365,7 +431,9 @@ describe('parseBackendAnalyzeResponse', () => {
     expect(parsed.phase1.plr).toBe(7.9);
     expect(parsed.phase1.dynamicSpread).toBeNull();
     expect(parsed.phase1.dynamicCharacter).toBeNull();
+    expect(parsed.phase1.textureCharacter).toBeNull();
     expect(parsed.phase1.beatsLoudness).toBeNull();
+    expect(parsed.phase1.rhythmTimeline).toBeNull();
     expect(parsed.phase1.segmentStereo).toBeNull();
     expect(parsed.phase1.essentiaFeatures).toBeNull();
     expect(parsed.phase1.bpmDoubletime).toBeNull();
@@ -376,12 +444,98 @@ describe('parseBackendAnalyzeResponse', () => {
     expect(parsed.phase1.genreDetail).toBeNull();
   });
 
+  it('falls back gracefully when legacy beatsLoudness payload omits the new pattern arrays', () => {
+    const parsed = parseBackendAnalyzeResponse({
+      requestId: 'req_legacy_beats',
+      phase1: {
+        ...validPayload.phase1,
+        beatsLoudness: {
+          kickDominantRatio: 0.45,
+          midDominantRatio: 0.35,
+          highDominantRatio: 0.2,
+          accentPattern: [1.0, 0.6, 0.8, 0.5],
+          meanBeatLoudness: 0.32,
+          beatLoudnessVariation: 0.18,
+          beatCount: 256,
+        },
+      },
+    });
+
+    expect(parsed.phase1.beatsLoudness?.patternBeatsPerBar).toBe(4);
+    expect(parsed.phase1.beatsLoudness?.overallAccentPattern).toEqual([1.0, 0.6, 0.8, 0.5]);
+    expect(parsed.phase1.beatsLoudness?.lowBandAccentPattern).toEqual([0, 0, 0, 0]);
+    expect(parsed.phase1.beatsLoudness?.midBandAccentPattern).toEqual([0, 0, 0, 0]);
+    expect(parsed.phase1.beatsLoudness?.highBandAccentPattern).toEqual([0, 0, 0, 0]);
+  });
+
+  it('sanitizes malformed rhythmTimeline windows instead of crashing the rest of phase1 parsing', () => {
+    const parsed = parseBackendAnalyzeResponse({
+      ...validPayload,
+      phase1: {
+        ...validPayload.phase1,
+        rhythmTimeline: {
+          beatsPerBar: 4,
+          stepsPerBeat: 4,
+          availableBars: 12,
+          selectionMethod: 'representative_dsp_window',
+          windows: [
+            {
+              bars: 8,
+              startBar: 3,
+              endBar: 10,
+              lowBandSteps: [1, 0, 1],
+              midBandSteps: 'bad',
+              highBandSteps: null,
+              overallSteps: undefined,
+            },
+          ],
+        },
+      },
+    });
+
+    expect(parsed.phase1.rhythmTimeline?.windows).toHaveLength(1);
+    expect(parsed.phase1.rhythmTimeline?.windows[0]?.bars).toBe(8);
+    expect(parsed.phase1.rhythmTimeline?.windows[0]?.lowBandSteps).toHaveLength(128);
+    expect(parsed.phase1.rhythmTimeline?.windows[0]?.midBandSteps.every((value) => value === 0)).toBe(true);
+    expect(parsed.phase1.rhythmTimeline?.windows[0]?.highBandSteps.every((value) => value === 0)).toBe(true);
+    expect(parsed.phase1.rhythmTimeline?.windows[0]?.overallSteps.every((value) => value === 0)).toBe(true);
+  });
+
   it('throws when phase1 is missing', () => {
     expect(() =>
       parseBackendAnalyzeResponse({
         requestId: 'req_123',
       }),
     ).toThrow(/phase1/i);
+  });
+
+  it('maps legacy loudnessVariation payloads onto loudnessDb', () => {
+    const parsed = parseBackendAnalyzeResponse({
+      requestId: 'req_legacy_dynamic',
+      phase1: {
+        bpm: 128,
+        bpmConfidence: 0.98,
+        key: 'A minor',
+        keyConfidence: 0.91,
+        timeSignature: '4/4',
+        durationSeconds: 184.2,
+        lufsIntegrated: -8.4,
+        truePeak: -0.5,
+        stereoWidth: 0.75,
+        stereoCorrelation: 0.82,
+        spectralBalance: validPayload.phase1.spectralBalance,
+        dynamicCharacter: {
+          dynamicComplexity: 3.05,
+          loudnessVariation: -14.93,
+          spectralFlatness: 0.0631,
+          logAttackTime: -3.9299,
+          attackTimeStdDev: 0.0476,
+        },
+      },
+    });
+
+    expect(parsed.phase1.dynamicCharacter?.loudnessDb).toBe(-14.93);
+    expect(parsed.phase1.dynamicCharacter?.loudnessVariation).toBe(-14.93);
   });
 
   it('falls back lowMids to mids when lowMids is absent', () => {

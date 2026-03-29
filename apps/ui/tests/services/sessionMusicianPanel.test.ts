@@ -6,6 +6,7 @@ import {
   deriveTranscriptionProvenance,
   filterNotesByConfidence,
   formatFilteredNoteCount,
+  formatVibratoConfidence,
   SessionMusicianPanel,
 } from '../../src/components/SessionMusicianPanel';
 import { MeasurementResult, TranscriptionDetail } from '../../src/types';
@@ -197,6 +198,18 @@ describe('SessionMusicianPanel confidence helpers', () => {
 
   it('formats note counts without the filtered prefix when threshold is zero', () => {
     expect(formatFilteredNoteCount(3, 3, 0)).toBe('3 NOTES');
+  });
+
+  it('formats present vibrato confidence below 1 percent as less than 1', () => {
+    expect(formatVibratoConfidence(0.004, true)).toBe('< 1');
+  });
+
+  it('formats present vibrato confidence normally when it rounds above zero', () => {
+    expect(formatVibratoConfidence(0.15, true)).toBe('15');
+  });
+
+  it('formats not-detected vibrato confidence as zero without the present guard', () => {
+    expect(formatVibratoConfidence(0, false)).toBe('0');
   });
 
   it('derives transcription provenance only for the active pitch-note source', () => {
@@ -414,7 +427,35 @@ describe('SessionMusicianPanel confidence helpers', () => {
     expect(html).toContain('Melody source: separated');
     expect(html).toContain('Vibrato: present');
     expect(html).toContain('5.2 Hz');
-    expect(html).toContain('0.38');
+    expect(html).toContain('0.38 cents');
     expect(html).toContain('81%');
+  });
+
+  it('renders present vibrato metadata with cents and less-than-one-percent confidence when needed', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(SessionMusicianPanel, {
+        phase1: {
+          ...baseMeasurement,
+          melodyDetail: {
+            noteCount: 1,
+            notes: [{ midi: 60, onset: 0.2, duration: 0.3 }],
+            dominantNotes: [60],
+            pitchRange: { min: 60, max: 60 },
+            pitchConfidence: 0.72,
+            midiFile: null,
+            sourceSeparated: true,
+            vibratoPresent: true,
+            vibratoExtent: 0.38,
+            vibratoRate: 5.2,
+            vibratoConfidence: 0.004,
+          },
+        },
+      }),
+    );
+
+    expect(html).toContain('Vibrato: present');
+    expect(html).toContain('5.2 Hz');
+    expect(html).toContain('0.38 cents');
+    expect(html).toContain('&lt; 1%');
   });
 });

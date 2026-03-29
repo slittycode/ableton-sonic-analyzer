@@ -6,8 +6,10 @@ import {
   AnalysisStageStatus,
   BackendEstimateResponse,
   InterpretationAttemptSummary,
+  InterpretationSchemaVersion,
   InterpretationResult,
   InterpretationStageSnapshot,
+  InterpretationValidationWarning,
   MeasurementResult,
   Phase1Result,
   Phase2Result,
@@ -207,6 +209,54 @@ export function projectPhase2FromRun(snapshot: AnalysisRunSnapshot): Phase2Resul
     return null;
   }
   return snapshot.stages.interpretation.result as Phase2Result | null;
+}
+
+export function getPhase2SchemaVersionFromRun(
+  snapshot: AnalysisRunSnapshot,
+): InterpretationSchemaVersion | null {
+  const preferredProfileId = getPreferredInterpretationProfileId(snapshot.stages.interpretation);
+  if (preferredProfileId !== 'producer_summary') {
+    return null;
+  }
+
+  const provenance = parseNullableRecord(snapshot.stages.interpretation.provenance);
+  const schemaVersion = asString(provenance?.schemaVersion);
+  if (schemaVersion === 'interpretation.v1' || schemaVersion === 'interpretation.v2') {
+    return schemaVersion;
+  }
+  return null;
+}
+
+export function projectPhase2ValidationWarningsFromRun(
+  snapshot: AnalysisRunSnapshot,
+): InterpretationValidationWarning[] {
+  const preferredProfileId = getPreferredInterpretationProfileId(snapshot.stages.interpretation);
+  if (preferredProfileId !== 'producer_summary') {
+    return [];
+  }
+
+  const diagnostics = parseNullableRecord(snapshot.stages.interpretation.diagnostics);
+  const rawWarnings = Array.isArray(diagnostics?.validationWarnings)
+    ? diagnostics.validationWarnings
+    : [];
+
+  return rawWarnings.flatMap((warning): InterpretationValidationWarning[] => {
+    const parsed = parseNullableRecord(warning);
+    const message = asString(parsed?.message);
+    if (!message) {
+      return [];
+    }
+    return [
+      {
+        code: asString(parsed?.code) ?? undefined,
+        path: asString(parsed?.path) ?? undefined,
+        message,
+        originalValue: asString(parsed?.originalValue) ?? undefined,
+        coercedValue: asString(parsed?.coercedValue) ?? undefined,
+        dropReason: asString(parsed?.dropReason) ?? undefined,
+      },
+    ];
+  });
 }
 
 export function projectStemSummaryFromRun(snapshot: AnalysisRunSnapshot): StemSummaryResult | null {

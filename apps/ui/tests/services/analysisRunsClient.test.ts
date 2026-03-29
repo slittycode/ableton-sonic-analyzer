@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { AnalysisRunSnapshot } from '../../src/types';
+import * as analysisRunsClient from '../../src/services/analysisRunsClient';
 import {
   createAnalysisRun,
   estimateAnalysisRun,
@@ -345,6 +346,230 @@ describe('analysisRunsClient', () => {
     const phase2 = projectPhase2FromRun(baseRunSnapshot);
 
     expect(phase2?.trackCharacter).toBe('Tight modern electronic mix.');
+  });
+
+  it('projects interpretation.v2 producer-summary fields without breaking the run snapshot parser', async () => {
+    const v2Snapshot = {
+      ...baseRunSnapshot,
+      stages: {
+        ...baseRunSnapshot.stages,
+        interpretation: {
+          ...baseRunSnapshot.stages.interpretation,
+          result: {
+            ...baseRunSnapshot.stages.interpretation.result,
+            projectSetup: {
+              tempoBpm: 126,
+              timeSignature: '4/4',
+              sampleRate: 48000,
+              bitDepth: 24,
+              headroomTarget: '-6 dB',
+              sessionGoal: 'Recreate the measured club energy with a controlled low end.',
+            },
+            trackLayout: [
+              {
+                order: 1,
+                name: 'Drum Group',
+                type: 'GROUP',
+                purpose: 'Bus kick and percussion together.',
+                grounding: {
+                  phase1Fields: ['grooveDetail.kickSwing', 'crestFactor'],
+                  segmentIndexes: [1],
+                },
+              },
+            ],
+            routingBlueprint: {
+              sidechainSource: 'Kick',
+              sidechainTargets: ['Bass'],
+              returns: [
+                {
+                  name: 'Return A',
+                  purpose: 'Short reverb for top percussion.',
+                  sendSources: ['Drum Group'],
+                  deviceFocus: 'Hybrid Reverb',
+                  levelGuidance: '-18 dB baseline send',
+                },
+              ],
+              notes: ['Keep the sub path dry.'],
+            },
+            warpGuide: {
+              fullTrack: {
+                warpMode: 'Complex Pro',
+                settings: 'Formants 100, Envelope 128',
+                reason: 'Protect the full mix while checking arrangement cues.',
+              },
+              drums: {
+                warpMode: 'Beats',
+                reason: 'Measured kick transients favor a transient-preserving mode.',
+              },
+              bass: {
+                warpMode: 'Tones',
+                reason: 'Bass sustain is better served by a tonal mode.',
+              },
+              melodic: {
+                warpMode: 'Complex',
+                reason: 'Melodic material needs harmonic stability.',
+              },
+              rationale: 'Use stem-appropriate warp modes when reconstructing clips.',
+            },
+            arrangementOverview: {
+              summary: 'Four sections.',
+              segments: [
+                {
+                  index: 1,
+                  startTime: 0,
+                  endTime: 16,
+                  description: 'Intro section',
+                  sceneName: 'INTRO',
+                  abletonAction: 'Launch the intro scene with filtered drums.',
+                  automationFocus: 'Open the filter over the last 4 bars.',
+                },
+              ],
+            },
+            mixAndMasterChain: [
+              {
+                order: 1,
+                device: 'EQ Eight',
+                deviceFamily: 'NATIVE',
+                trackContext: 'Master',
+                workflowStage: 'MIX',
+                parameter: 'Band 1 Frequency',
+                value: '35 Hz',
+                reason: 'Tighten the sub shelf before glue compression.',
+              },
+            ],
+            secretSauce: {
+              title: 'Punch Layering',
+              explanation: 'Layered transient enhancement.',
+              implementationSteps: [],
+              workflowSteps: [
+                {
+                  step: 1,
+                  trackContext: 'Drum Group',
+                  device: 'Glue Compressor',
+                  parameter: 'Attack',
+                  value: '3 ms',
+                  instruction: 'Set up light glue before the build opens up.',
+                  measurementJustification: 'Measured crest factor supports a controlled transient shape.',
+                },
+              ],
+            },
+            abletonRecommendations: [
+              {
+                device: 'Glue Compressor',
+                deviceFamily: 'NATIVE',
+                trackContext: 'Master',
+                workflowStage: 'MIX',
+                category: 'DYNAMICS',
+                parameter: 'Attack',
+                value: '3 ms',
+                reason: 'Keep transients intact.',
+                advancedTip: 'Drive lightly.',
+              },
+            ],
+            audioObservations: {
+              soundDesignFingerprint:
+                'By ear the bass feels FM-leaning and tightly enveloped, while the hats sit inside a filtered synthetic wash.',
+              elementCharacter: [
+                {
+                  element: 'Kick',
+                  description: 'Short click transient with a compact low-end tail.',
+                },
+              ],
+              productionSignatures: ['Short gated reverb feel on percussion accents.'],
+              mixContext:
+                'The low end feels deliberately forward while the ambience stays tucked behind the groove.',
+            },
+          },
+          provenance: {
+            schemaVersion: 'interpretation.v2',
+            modelName: 'gemini-2.5-flash',
+          },
+          diagnostics: {
+            validationWarnings: [
+              {
+                code: 'UNKNOWN_PARAMETER',
+                path: 'abletonRecommendations[0].parameter',
+                message: 'Parameter mismatch surfaced as a caution.',
+              },
+            ],
+          },
+        },
+      },
+    } satisfies AnalysisRunSnapshot;
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: () => Promise.resolve(v2Snapshot),
+    } as Response));
+
+    const snapshot = await getAnalysisRun('run_123', {
+      apiBaseUrl: 'http://127.0.0.1:8100',
+    });
+    const phase2 = projectPhase2FromRun(snapshot);
+
+    expect(phase2?.projectSetup?.sampleRate).toBe(48000);
+    expect(phase2?.trackLayout?.[0]?.grounding.phase1Fields).toContain('grooveDetail.kickSwing');
+    expect(phase2?.routingBlueprint?.returns[0]?.deviceFocus).toBe('Hybrid Reverb');
+    expect(phase2?.warpGuide?.fullTrack.warpMode).toBe('Complex Pro');
+    expect(phase2?.secretSauce.workflowSteps?.[0]?.trackContext).toBe('Drum Group');
+    expect(phase2?.audioObservations?.elementCharacter[0]?.element).toBe('Kick');
+    expect((snapshot.stages.interpretation.provenance as Record<string, unknown> | null)?.schemaVersion).toBe('interpretation.v2');
+    expect((snapshot.stages.interpretation.diagnostics as Record<string, unknown> | null)?.validationWarnings).toBeTruthy();
+  });
+
+  it('exposes schema-version and validation-warning helpers for the Phase B UI path', () => {
+    const getPhase2SchemaVersion = (
+      analysisRunsClient as Record<string, unknown>
+    ).getPhase2SchemaVersionFromRun as
+      | ((snapshot: AnalysisRunSnapshot) => string | null)
+      | undefined;
+    const projectPhase2ValidationWarnings = (
+      analysisRunsClient as Record<string, unknown>
+    ).projectPhase2ValidationWarningsFromRun as
+      | ((snapshot: AnalysisRunSnapshot) => Array<Record<string, unknown>>)
+      | undefined;
+
+    expect(typeof getPhase2SchemaVersion).toBe('function');
+    expect(typeof projectPhase2ValidationWarnings).toBe('function');
+
+    const v2Snapshot: AnalysisRunSnapshot = {
+      ...baseRunSnapshot,
+      stages: {
+        ...baseRunSnapshot.stages,
+        interpretation: {
+          ...baseRunSnapshot.stages.interpretation,
+          provenance: {
+            schemaVersion: 'interpretation.v2',
+          },
+          diagnostics: {
+            validationWarnings: [
+              {
+                code: 'UNKNOWN_DEVICE',
+                path: 'mixAndMasterChain[0].device',
+                message: 'Device mismatch surfaced as a caution.',
+                originalValue: 'Glue Comp',
+                coercedValue: 'Glue Compressor',
+                dropReason: 'Legacy alias was normalized before validation.',
+              },
+            ],
+          },
+        },
+      },
+    };
+
+    expect(getPhase2SchemaVersion?.(v2Snapshot)).toBe('interpretation.v2');
+    expect(projectPhase2ValidationWarnings?.(v2Snapshot)).toEqual([
+      {
+        code: 'UNKNOWN_DEVICE',
+        path: 'mixAndMasterChain[0].device',
+        message: 'Device mismatch surfaced as a caution.',
+        originalValue: 'Glue Comp',
+        coercedValue: 'Glue Compressor',
+        dropReason: 'Legacy alias was normalized before validation.',
+      },
+    ]);
   });
 
   it('keeps stem summary additive and out of the producer-summary projection path', async () => {

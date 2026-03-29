@@ -11,6 +11,7 @@ import { useCpuMeter } from './hooks/useCpuMeter';
 import { useGlobalDrag } from './hooks/useGlobalDrag';
 import {
   appConfig,
+  appVersionLabel,
   isGeminiPhase2ConfigEnabled,
 } from './config';
 import { getAudioMimeTypeOrDefault, isSupportedAudioFile } from './services/audioFile';
@@ -19,9 +20,11 @@ import {
   createInterpretationAttempt,
   createPitchNoteTranslationAttempt,
   estimateAnalysisRun,
+  getPhase2SchemaVersionFromRun,
   interruptAnalysisRun,
   projectPhase1FromRun,
   projectPhase2FromRun,
+  projectPhase2ValidationWarningsFromRun,
 } from './services/analysisRunsClient';
 import { buildDisplayDiagnosticLogs } from './services/diagnosticLogs';
 import {
@@ -529,27 +532,7 @@ export default function App() {
               estimateLowMs: activeEstimate?.totalLowMs,
               estimateHighMs: activeEstimate?.totalHighMs,
             });
-
-            if (!interpretationWillRun) {
-              return nextLogs;
-            }
-
-            return [
-              ...nextLogs,
-              {
-                model: activeModel,
-                phase: INTERPRETATION_LABEL,
-                stageKey: 'interpretation',
-                promptLength: 0,
-                responseLength: 0,
-                durationMs: 0,
-                audioMetadata,
-                timestamp: new Date().toISOString(),
-                source: 'backend',
-                status: 'running',
-                message: 'AI interpretation in progress.',
-              },
-            ];
+            return nextLogs;
           });
           completionRef.current.measurement = true;
         },
@@ -900,6 +883,8 @@ export default function App() {
   const shouldShowStatusPanel = Boolean(audioUrl && audioFile && analysisRun && (isAnalyzing || hasRetryableRunStage));
   const phase1ForRender: Phase1Result | null = analysisRun ? projectPhase1FromRun(analysisRun) : null;
   const phase2ForRender = analysisRun ? projectPhase2FromRun(analysisRun) : null;
+  const phase2SchemaVersion = analysisRun ? getPhase2SchemaVersionFromRun(analysisRun) : null;
+  const phase2ValidationWarnings = analysisRun ? projectPhase2ValidationWarningsFromRun(analysisRun) : [];
 
   return (
     <div className="min-h-screen bg-bg-app px-3 py-3 md:px-6 md:py-5 font-sans flex items-center justify-center">
@@ -917,7 +902,10 @@ export default function App() {
               <span className="text-xs font-bold text-text-primary tracking-wide">SonicAnalyzer</span>
             </div>
             <div className="h-4 w-px bg-border"></div>
-            <span className="text-[10px] font-mono text-text-secondary uppercase">Local DSP Engine</span>
+            <div className="flex items-center space-x-2">
+              <span className="text-[10px] font-mono text-text-secondary uppercase">Local DSP Engine</span>
+              <span className="text-[10px] font-mono text-text-primary">{appVersionLabel}</span>
+            </div>
           </div>
 
           <div className="hidden sm:flex items-center space-x-4">
@@ -1219,9 +1207,15 @@ export default function App() {
                 <AnalysisResults
                   phase1={phase1ForRender}
                   phase2={phase2ForRender}
+                  phase2SchemaVersion={phase2SchemaVersion}
+                  phase2ValidationWarnings={phase2ValidationWarnings}
                   phase2StatusMessage={phase2StatusMessage}
                   sourceFileName={audioFile?.name ?? null}
                   spectralArtifacts={analysisRun?.artifacts?.spectral ?? null}
+                  measurementAvailability={{
+                    analysisMode: analysisRun?.requestedStages.analysisMode,
+                    hasRunContext: Boolean(analysisRun),
+                  }}
                   apiBaseUrl={appConfig.apiBaseUrl}
                   runId={activeRunId ?? undefined}
                 />

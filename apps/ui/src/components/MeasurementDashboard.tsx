@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { motion } from 'motion/react';
 import {
   ChromaInteractiveData,
+  MeasurementAvailabilityContext,
   OnsetStrengthData,
   Phase1Result,
   PhraseGrid,
@@ -22,12 +23,23 @@ import { SpectralEvolutionChart } from './SpectralEvolutionChart';
 import { ChromaHeatmap } from './ChromaHeatmap';
 import { MiniHeatmap } from './MiniHeatmap';
 import { MixDoctorPanel } from './MixDoctorPanel';
+import {
+  AccentMetricCard,
+  DeltaBadge,
+  MetricBar,
+  MetricBarRow,
+  OutlinePillButton,
+  StatusBadge,
+  StyledDataTable,
+  TokenBadgeList,
+} from './MeasurementPrimitives';
 import { Sparkline } from './Sparkline';
 import { SpectralCursorProvider } from '../hooks/useSpectralCursorBus';
 
 interface MeasurementDashboardProps {
   phase1: Phase1Result;
   spectralArtifacts?: SpectralArtifacts | null;
+  measurementAvailability?: MeasurementAvailabilityContext;
   apiBaseUrl?: string;
   runId?: string;
 }
@@ -79,35 +91,166 @@ const PLATFORM_REFS = [
   { lufs: -23, label: 'BDCST' },
 ];
 
-interface NormalizedDC {
-  complexity: number;
-  loudnessVar: number;
-  spectralFlat: number;
-  attackTime: number;
-  attackStd: number;
+const SPECTRAL_BALANCE_PALETTE: Record<
+  keyof Phase1Result['spectralBalance'],
+  string
+> = {
+  subBass: '#ff6b00',
+  lowBass: '#fb923c',
+  lowMids: '#f59e0b',
+  mids: '#facc15',
+  upperMids: '#14b8a6',
+  highs: '#38bdf8',
+  brilliance: '#a78bfa',
+};
+
+const SPECTRAL_ROW_CONFIG: Array<{
+  key: keyof Phase1Result['spectralBalance'];
+  label: string;
+}> = [
+  { key: 'subBass', label: 'Sub Bass' },
+  { key: 'lowBass', label: 'Low Bass' },
+  { key: 'lowMids', label: 'Low Mids' },
+  { key: 'mids', label: 'Mids' },
+  { key: 'upperMids', label: 'Upper Mids' },
+  { key: 'highs', label: 'Highs' },
+  { key: 'brilliance', label: 'Brilliance' },
+];
+
+const SPECTRAL_CHART_PALETTE = [
+  '#ff6b00',
+  '#ff8c42',
+  '#f59e0b',
+  '#facc15',
+  '#14b8a6',
+  '#38bdf8',
+  '#60a5fa',
+  '#a78bfa',
+];
+
+const asFiniteNumber = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  return null;
+};
+
+const clamp = (value: number, min: number, max: number): number =>
+  Math.max(min, Math.min(max, value));
+
+const normalizePercent = (value: number, min: number, max: number): number => {
+  if (max === min) return 0;
+  return clamp(((value - min) / (max - min)) * 100, 0, 100);
+};
+
+const formatAnalysisModeLabel = (
+  analysisMode?: MeasurementAvailabilityContext['analysisMode'],
+): string => {
+  if (analysisMode === 'full') return 'full run';
+  if (analysisMode === 'standard') return 'standard run';
+  return 'run';
+};
+
+const buildDynamicsTextureCopy = (
+  kind: 'both' | 'dynamics' | 'texture',
+  measurementAvailability?: MeasurementAvailabilityContext,
+): {
+  title: string;
+  description: string;
+  detail?: string;
+} => {
+  if (!measurementAvailability?.hasRunContext) {
+    if (kind === 'both') {
+      return {
+        title: 'Measurements unavailable',
+        description: 'This payload does not include dynamics or texture detail.',
+      };
+    }
+
+    return {
+      title: `${kind === 'dynamics' ? 'Dynamics' : 'Texture'} unavailable`,
+      description: `This payload does not include ${kind} measurements.`,
+    };
+  }
+
+  const runLabel = formatAnalysisModeLabel(measurementAvailability.analysisMode);
+
+  if (kind === 'both') {
+    return {
+      title: 'Measurements not included in this run',
+      description: `This ${runLabel} completed without dynamics or texture detail.`,
+      detail: 'This usually means an older backend or partial measurement output.',
+    };
+  }
+
+  return {
+    title: `${kind === 'dynamics' ? 'Dynamics' : 'Texture'} unavailable`,
+    description: `This ${runLabel} did not include ${kind} measurements.`,
+    detail: 'This usually means an older backend or partial measurement output.',
+  };
+};
+
+function UnavailableMeasurementCard({
+  title,
+  description,
+  detail,
+}: {
+  title: string;
+  description: string;
+  detail?: string;
+}) {
+  return (
+    <div className="space-y-3 rounded-sm border border-dashed border-border-light/60 bg-bg-surface-dark/40 p-4">
+      <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-text-secondary block">
+        {title}
+      </span>
+      <p className="text-[11px] font-mono uppercase tracking-[0.14em] text-text-secondary/80">
+        {description}
+      </p>
+      {detail ? (
+        <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-text-secondary/60">
+          {detail}
+        </p>
+      ) : null}
+    </div>
+  );
 }
 
-const normalizeDynamicCharacter = (dc: {
-  dynamicComplexity: number;
-  loudnessVariation: number;
-  spectralFlatness: number;
-  logAttackTime: number;
-  attackTimeStdDev: number;
-}): NormalizedDC => ({
-  complexity: Math.max(0, Math.min(1, dc.dynamicComplexity)),
-  loudnessVar: Math.max(0, Math.min(1, dc.loudnessVariation)),
-  spectralFlat: Math.max(0, Math.min(1, dc.spectralFlatness)),
-  attackTime: Math.max(0, Math.min(1, (dc.logAttackTime + 3) / 4)),
-  attackStd: Math.max(0, Math.min(1, dc.attackTimeStdDev / 2)),
-});
+const correlationPercent = (value: number | null | undefined): number =>
+  typeof value === 'number' ? normalizePercent(value, -1, 1) : 0;
 
-const RADAR_AXES = [
-  { key: 'complexity' as const, label: 'Complexity' },
-  { key: 'loudnessVar' as const, label: 'Loud Var' },
-  { key: 'spectralFlat' as const, label: 'Spec Flat' },
-  { key: 'attackStd' as const, label: 'Atk Std' },
-  { key: 'attackTime' as const, label: 'Atk Time' },
-];
+const isDynamicCharacterObject = (
+  value: Phase1Result['dynamicCharacter'],
+): value is NonNullable<Phase1Result['dynamicCharacter']> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const isTextureCharacterObject = (
+  value: Phase1Result['textureCharacter'],
+): value is NonNullable<Phase1Result['textureCharacter']> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const chordToneForLabel = (
+  chord: string,
+): 'accent' | 'violet' | 'error' | 'warning' | 'muted' => {
+  const normalized = chord.trim().toLowerCase();
+  if (!normalized) return 'muted';
+  if (/(dim|°|o)(?![a-z])/.test(normalized)) return 'error';
+  if (/(aug|\+)/.test(normalized)) return 'warning';
+  if (/(^|[^a-z])m(?!aj)/.test(normalized) || /min/.test(normalized)) return 'violet';
+  if (/[a-g](maj|sus|add|7|9|11|13)?/.test(normalized)) return 'accent';
+  return 'muted';
+};
+
+const loudnessToneColor = (value: number | null | undefined): string => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 'var(--color-text-secondary)';
+  if (value >= -8) return '#ff6b00';
+  if (value >= -12) return '#ffb347';
+  if (value >= -16) return '#ffd166';
+  return '#a3e635';
+};
+
+const formatSigned = (value: number | null | undefined, decimals = 1): string => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
+  return `${value >= 0 ? '+' : ''}${value.toFixed(decimals)}`;
+};
 
 const MetricRow = ({
   label,
@@ -188,37 +331,55 @@ const Section = ({
   );
 };
 
+const ChordTokenRow = ({ chords }: { chords: string[] }) => (
+  <div className="mt-2 flex flex-wrap items-center gap-1.5 text-sm text-text-primary break-words">
+    {chords.map((chord, index) => (
+      <React.Fragment key={`${chord}-${index}`}>
+        <StatusBadge label={chord} tone={chordToneForLabel(chord)} compact />
+        {index < chords.length - 1 && (
+          <span className="text-text-secondary/45 font-mono text-xs">→</span>
+        )}
+      </React.Fragment>
+    ))}
+  </div>
+);
+
 const BarChart = ({
   values,
   count,
   label,
   height = 'h-6',
+  colors = SPECTRAL_CHART_PALETTE,
 }: {
   values: number[];
   count: number;
   label: string;
   height?: string;
+  colors?: string[];
 }) => {
   const padding = Math.max(0, count - values.length);
   const displayValues = [...values, ...Array(padding).fill(0)];
+  const maxVal = Math.max(...displayValues.slice(0, count), 1);
 
   return (
-    <div className="space-y-1">
-      <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+    <div className="space-y-1.5">
+      <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-text-secondary">
         {label}
       </span>
-      <div className="flex gap-1 items-end">
+      <div className="flex gap-1 items-end rounded-sm border border-border-light/60 bg-bg-surface-dark/80 p-2">
         {displayValues.slice(0, count).map((val, i) => {
-          const maxVal = Math.max(...displayValues.slice(0, count), 1);
           const percent = (val / maxVal) * 100;
+          const color = colors[i % colors.length];
           return (
             <div
               key={i}
-              className={`flex-1 bg-gradient-to-t from-blue-500 to-blue-400 rounded-sm`}
+              className="flex-1 rounded-sm"
               style={{
                 height: `calc(${height} * ${percent / 100})`,
                 minHeight: val > 0 ? '4px' : '2px',
                 opacity: val > 0 ? 1 : 0.2,
+                background: `linear-gradient(to top, ${color}cc, ${color})`,
+                boxShadow: val > 0 ? `0 0 10px ${color}33` : undefined,
               }}
               title={formatNumber(val, 3)}
             />
@@ -322,119 +483,6 @@ const SimpleTable = <T extends object>({
     </table>
   </div>
 );
-
-const DynamicCharacterRadar = ({ data }: { data: NormalizedDC }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  const draw = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.scale(dpr, dpr);
-
-    const w = rect.width;
-    const h = rect.height;
-    const cx = w / 2;
-    const cy = h / 2;
-    const radius = Math.min(cx, cy) - 28;
-    const axes = RADAR_AXES.length;
-
-    ctx.fillStyle = '#222222';
-    ctx.fillRect(0, 0, w, h);
-
-    // Concentric pentagons
-    for (const ring of [0.25, 0.5, 0.75, 1]) {
-      ctx.beginPath();
-      for (let i = 0; i < axes; i++) {
-        const angle = (Math.PI * 2 * i) / axes - Math.PI / 2;
-        const x = cx + Math.cos(angle) * radius * ring;
-        const y = cy + Math.sin(angle) * radius * ring;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
-      ctx.closePath();
-      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    }
-
-    // Axis lines
-    for (let i = 0; i < axes; i++) {
-      const angle = (Math.PI * 2 * i) / axes - Math.PI / 2;
-      ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.lineTo(cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius);
-      ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    }
-
-    // Data polygon
-    const values = RADAR_AXES.map((a) => data[a.key]);
-    ctx.beginPath();
-    for (let i = 0; i < axes; i++) {
-      const angle = (Math.PI * 2 * i) / axes - Math.PI / 2;
-      const v = values[i];
-      const x = cx + Math.cos(angle) * radius * v;
-      const y = cy + Math.sin(angle) * radius * v;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-    ctx.closePath();
-    ctx.fillStyle = 'rgba(255,136,0,0.15)';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255,136,0,0.8)';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-
-    // Data dots
-    for (let i = 0; i < axes; i++) {
-      const angle = (Math.PI * 2 * i) / axes - Math.PI / 2;
-      const v = values[i];
-      const x = cx + Math.cos(angle) * radius * v;
-      const y = cy + Math.sin(angle) * radius * v;
-      ctx.beginPath();
-      ctx.arc(x, y, 3, 0, Math.PI * 2);
-      ctx.fillStyle = '#ff8800';
-      ctx.fill();
-    }
-
-    // Axis labels
-    ctx.font = '9px "JetBrains Mono", monospace';
-    ctx.fillStyle = 'rgba(170,170,170,0.7)';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    for (let i = 0; i < axes; i++) {
-      const angle = (Math.PI * 2 * i) / axes - Math.PI / 2;
-      const lx = cx + Math.cos(angle) * (radius + 18);
-      const ly = cy + Math.sin(angle) * (radius + 18);
-      ctx.fillText(RADAR_AXES[i].label, lx, ly);
-    }
-  }, [data]);
-
-  useEffect(() => {
-    draw();
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ro = new ResizeObserver(draw);
-    ro.observe(canvas);
-    return () => ro.disconnect();
-  }, [draw]);
-
-  return (
-    <canvas
-      ref={canvasRef}
-      className="w-48 h-48"
-      style={{ imageRendering: 'auto' }}
-    />
-  );
-};
 
 /* ── Rhythm & Groove Components ─────────────────────────────────────── */
 
@@ -590,7 +638,7 @@ const ComparativeMetricTile = ({
       className="bg-[#141414] border border-[#1e1e1e] rounded-sm p-3"
     >
       <span
-        className="text-[7px] font-mono uppercase tracking-wider block"
+        className="text-[10px] font-mono uppercase tracking-wider block"
         style={{ color: `${cfg.color}80` }}
       >
         {metricKey === 'onsetRate' ? 'Onset Rate' : metricKey}
@@ -643,206 +691,187 @@ const ComparativeMetricTile = ({
   );
 };
 
-const BeatSequencerGrid = ({
-  kickAccent,
-  hihatAccent,
-  accentPattern,
-}: {
-  kickAccent: number[];
-  hihatAccent: number[];
-  accentPattern: number[];
-}) => {
-  const cols = 16;
-  const pad = (arr: number[]) => {
-    const out = [...arr];
-    while (out.length < cols) out.push(0);
-    return out.slice(0, cols);
-  };
-  const kick = pad(kickAccent);
-  const hh = pad(hihatAccent);
-  const vel = pad(
-    accentPattern.length === 4 ? accentPattern.flatMap((v) => [v, 0, 0, 0]) : accentPattern,
+const RhythmGridPanel = ({ phase1 }: { phase1: Phase1Result }) => {
+  const rhythmTimeline = phase1.rhythmTimeline;
+  const availableWindows = useMemo(
+    () => (rhythmTimeline?.windows ?? []).slice().sort((left, right) => left.bars - right.bars),
+    [rhythmTimeline],
   );
+  const defaultWindowBars = availableWindows.find((window) => window.bars === 8)?.bars
+    ?? availableWindows[0]?.bars
+    ?? null;
+  const [selectedWindowBars, setSelectedWindowBars] = useState<number | null>(defaultWindowBars);
 
-  const maxKick = Math.max(...kick, 0.001);
-  const maxHh = Math.max(...hh, 0.001);
-  const maxVel = Math.max(...vel, 0.001);
+  useEffect(() => {
+    setSelectedWindowBars(defaultWindowBars);
+  }, [defaultWindowBars]);
+
+  const selectedWindow = useMemo(() => {
+    if (availableWindows.length === 0) return null;
+    return availableWindows.find((window) => window.bars === selectedWindowBars) ?? availableWindows[0];
+  }, [availableWindows, selectedWindowBars]);
+
+  if (!rhythmTimeline || !selectedWindow) return null;
+
+  const beatsPerBar = Math.max(1, rhythmTimeline.beatsPerBar || 4);
+  const stepsPerBeat = Math.max(1, rhythmTimeline.stepsPerBeat || 4);
+  const stepsPerBar = beatsPerBar * stepsPerBeat;
+  const barNumbers = Array.from(
+    { length: selectedWindow.bars },
+    (_, index) => selectedWindow.startBar + index,
+  );
+  const barCellWidth = stepsPerBar * 12 + (stepsPerBar - 1) * 2 + 8;
+  const lanes = [
+    {
+      label: 'LOW BAND',
+      helper: 'kick-weighted proxy',
+      values: selectedWindow.lowBandSteps,
+      rgb: '255, 68, 68',
+      labelColor: '#ff6b6b',
+    },
+    {
+      label: 'MID BAND',
+      helper: 'snare-range proxy',
+      values: selectedWindow.midBandSteps,
+      rgb: '245, 158, 11',
+      labelColor: '#fbbf24',
+    },
+    {
+      label: 'HIGH BAND',
+      helper: 'hat-range proxy',
+      values: selectedWindow.highBandSteps,
+      rgb: '96, 165, 250',
+      labelColor: '#93c5fd',
+    },
+    {
+      label: 'OVERALL ACCENT',
+      helper: 'summed band energy',
+      values: selectedWindow.overallSteps,
+      rgb: '52, 211, 153',
+      labelColor: '#6ee7b7',
+    },
+  ];
 
   return (
-    <div className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-sm p-3">
-      <div className="text-[8px] font-mono uppercase tracking-widest text-[#555] mb-2">
-        Beat Pattern
-      </div>
-      <div className="grid gap-[3px]" style={{ gridTemplateColumns: `32px repeat(${cols}, 1fr)` }}>
-        <div />
-        {Array.from({ length: 4 }, (_, i) => (
-          <div
-            key={i}
-            className="text-[7px] font-mono text-[#444] text-center"
-            style={{ gridColumn: 'span 4' }}
-          >
-            {i + 1}
-          </div>
-        ))}
-        <div className="text-[8px] font-mono text-[#ff4444] self-center">KICK</div>
-        {kick.map((v, i) => {
-          const intensity = v / maxKick;
-          return (
-            <div
-              key={i}
-              className="aspect-square rounded-sm"
-              style={{
-                background: intensity > 0.1 ? '#ff4444' : '#1a1a1a',
-                opacity: intensity > 0.1 ? 0.3 + intensity * 0.7 : 1,
-                boxShadow: intensity > 0.7 ? '0 0 8px #ff444440' : undefined,
-              }}
-            />
-          );
-        })}
-        <div className="text-[8px] font-mono text-[#60a5fa] self-center">HH</div>
-        {hh.map((v, i) => {
-          const intensity = v / maxHh;
-          return (
-            <div
-              key={i}
-              className="aspect-square rounded-sm"
-              style={{
-                background: intensity > 0.1 ? '#60a5fa' : '#1a1a1a',
-                opacity: intensity > 0.1 ? 0.3 + intensity * 0.7 : 1,
-                boxShadow: intensity > 0.7 ? '0 0 6px #60a5fa30' : undefined,
-              }}
-            />
-          );
-        })}
-        <div className="text-[8px] font-mono text-[#555] self-center">VEL</div>
-        {vel.map((v, i) => (
-          <div
-            key={i}
-            className="h-[14px] rounded-[1px]"
-            style={{
-              background: `linear-gradient(to top, #00ff9d${Math.round(
-                (v / maxVel) * 0.8 * 255,
-              )
-                .toString(16)
-                .padStart(2, '0')}, transparent)`,
-            }}
-          />
-        ))}
-      </div>
-    </div>
-  );
-};
-
-const AccentPatternBars = ({
-  kickAccent,
-  hihatAccent,
-}: {
-  kickAccent: number[];
-  hihatAccent: number[];
-}) => {
-  const beats = Math.min(kickAccent.length, hihatAccent.length, 4);
-  const maxVal = Math.max(
-    ...kickAccent.slice(0, beats),
-    ...hihatAccent.slice(0, beats),
-    0.001,
-  );
-
-  return (
-    <div className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-sm p-3">
-      <div className="text-[7px] font-mono uppercase tracking-widest text-[#555] mb-2">
-        Accent Pattern · {beats} beats
-      </div>
-      <div className="flex gap-3 items-end h-[36px]">
-        {Array.from({ length: beats }, (_, i) => (
-          <div key={i} className="flex-1 flex gap-[2px] items-end h-full">
-            <div
-              className="flex-1 rounded-[1px]"
-              style={{
-                height: `${(kickAccent[i] / maxVal) * 100}%`,
-                background: 'linear-gradient(to top, #ff4444, #ff444460)',
-                minHeight: kickAccent[i] > 0 ? '3px' : '1px',
-              }}
-            />
-            <div
-              className="flex-1 rounded-[1px]"
-              style={{
-                height: `${(hihatAccent[i] / maxVal) * 100}%`,
-                background: 'linear-gradient(to top, #60a5fa, #60a5fa60)',
-                minHeight: hihatAccent[i] > 0 ? '3px' : '1px',
-              }}
-            />
-          </div>
-        ))}
-      </div>
-      <div className="flex justify-around mt-1">
-        {Array.from({ length: beats }, (_, i) => (
-          <span key={i} className="text-[7px] font-mono text-[#333]">
-            {i + 1}
+    <div
+      data-testid="rhythm-grid-panel"
+      className="rounded-sm border border-[#1e1e1e] bg-[#141414] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
+    >
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+            Rhythm Grid
           </span>
-        ))}
+          {isAssumedMeter(phase1) && (
+            <span className="inline-flex items-center rounded-sm border border-[#3a2b1c] bg-[#20160c] px-2 py-1 text-[10px] font-mono uppercase tracking-[0.14em] text-[#d8a15d]">
+              Assumed 4/4
+            </span>
+          )}
+          {availableWindows.length > 1 && (
+            <div className="ml-1 inline-flex items-center gap-1">
+              {availableWindows.map((window) => {
+                const isActive = selectedWindow.bars === window.bars;
+                return (
+                  <button
+                    key={window.bars}
+                    type="button"
+                    onClick={() => setSelectedWindowBars(window.bars)}
+                    data-testid={`rhythm-grid-window-${window.bars}`}
+                    className={`rounded-sm border px-2 py-1 text-[10px] font-mono uppercase tracking-[0.14em] transition-colors ${
+                      isActive
+                        ? 'border-accent/50 bg-accent/10 text-accent'
+                        : 'border-[#2a2a2a] bg-[#111111] text-text-secondary hover:border-accent/30 hover:text-text-primary'
+                    }`}
+                  >
+                    {window.bars} BAR
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        <p className="max-w-[360px] text-[10px] font-mono uppercase tracking-[0.14em] text-[#6d6d6d]">
+          DSP band-energy lanes. Frequency-band proxies, not isolated stems.
+        </p>
       </div>
-    </div>
-  );
-};
 
-const BeatEnergyWaveform = ({
-  kickAccent,
-  hihatAccent,
-}: {
-  kickAccent: number[];
-  hihatAccent: number[];
-}) => {
-  const maxVal = Math.max(...kickAccent, ...hihatAccent, 0.001);
-  const bars: { value: number; color: string; opacity: number }[] = [];
-  const len = Math.max(kickAccent.length, hihatAccent.length);
-  for (let i = 0; i < len; i++) {
-    if (i < kickAccent.length) {
-      bars.push({
-        value: kickAccent[i],
-        color: '#ff4444',
-        opacity: 0.3 + (kickAccent[i] / maxVal) * 0.7,
-      });
-    }
-    if (i < hihatAccent.length) {
-      bars.push({
-        value: hihatAccent[i],
-        color: '#60a5fa',
-        opacity: 0.3 + (hihatAccent[i] / maxVal) * 0.7,
-      });
-    }
-  }
+      <div className="mt-4 overflow-x-auto pb-1">
+        <div className="min-w-max">
+          <div className="flex items-center gap-3">
+            <div className="w-[136px] shrink-0" />
+            {barNumbers.map((barNumber) => (
+              <div
+                key={`bar-header-${barNumber}`}
+                data-testid={`rhythm-grid-bar-${barNumber}`}
+                className="rounded-sm border border-[#242424] bg-[#101010] px-2 py-2 text-center text-[10px] font-mono text-text-secondary"
+                style={{ width: `${barCellWidth}px` }}
+              >
+                {barNumber}
+              </div>
+            ))}
+          </div>
 
-  const svgW = 300;
-  const barW = Math.max(8, (svgW - bars.length * 3) / bars.length);
+          <div className="mt-2 space-y-2">
+            {lanes.map((lane) => (
+              <div key={lane.label} className="flex items-start gap-3">
+                <div className="flex min-h-[42px] w-[136px] shrink-0 flex-col justify-center rounded-sm border border-[#202020] bg-[#121212] px-3 py-2">
+                  <span
+                    className="text-[10px] font-mono uppercase tracking-[0.12em]"
+                    style={{ color: lane.labelColor }}
+                  >
+                    {lane.label}
+                  </span>
+                  <span className="mt-1 text-[8px] font-mono uppercase tracking-[0.12em] text-[#5f5f5f]">
+                    {lane.helper}
+                  </span>
+                </div>
 
-  return (
-    <div className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-sm p-3">
-      <div className="text-[7px] font-mono uppercase tracking-widest text-[#555] mb-2">
-        Beat Energy
-      </div>
-      <svg viewBox={`0 0 ${svgW} 50`} className="w-full h-[50px]">
-        {bars.map((b, i) => {
-          const h = (b.value / maxVal) * 42;
-          const x = i * (barW + 3);
-          return (
-            <rect
-              key={i}
-              x={x}
-              y={50 - h - 4}
-              width={barW}
-              height={Math.max(h, 2)}
-              rx="2"
-              fill={b.color}
-              opacity={b.opacity}
-            />
-          );
-        })}
-      </svg>
-      <div className="flex justify-around mt-1 font-mono text-[7px] text-[#333]">
-        <span>|1</span>
-        <span>|2</span>
-        <span>|3</span>
-        <span>|4</span>
+                <div className="flex gap-3">
+                  {barNumbers.map((barNumber, barIndex) => {
+                    const startIndex = barIndex * stepsPerBar;
+                    const barSteps = lane.values.slice(startIndex, startIndex + stepsPerBar);
+                    return (
+                      <div
+                        key={`${lane.label}-bar-${barNumber}`}
+                        className="rounded-sm border border-[#202020] bg-[#111111] p-1"
+                        style={{ width: `${barCellWidth}px` }}
+                      >
+                        <div
+                          className="grid gap-[2px]"
+                          style={{ gridTemplateColumns: `repeat(${stepsPerBar}, minmax(0, 1fr))` }}
+                        >
+                          {barSteps.map((value, stepIndex) => {
+                            const clampedValue = clamp(value ?? 0, 0, 1);
+                            const isActive = clampedValue > 0.02;
+                            const isBeatBoundary = stepIndex % stepsPerBeat === 0;
+                            const borderOpacity = isBeatBoundary ? 0.15 : 0.08;
+                            const fillOpacity = isActive ? Math.max(0.14, clampedValue * 0.92) : 0.04;
+                            return (
+                              <div
+                                key={`${lane.label}-${barNumber}-${stepIndex}`}
+                                className="h-5 rounded-[2px] border transition-colors"
+                                title={`${lane.label} bar ${barNumber} step ${stepIndex + 1}: ${formatNumber(clampedValue, 2)}`}
+                                style={{
+                                  borderColor: `rgba(255,255,255,${borderOpacity})`,
+                                  backgroundColor: isActive
+                                    ? `rgba(${lane.rgb}, ${fillOpacity})`
+                                    : 'rgba(255,255,255,0.035)',
+                                  boxShadow: isActive && clampedValue >= 0.55
+                                    ? `inset 0 0 0 1px rgba(${lane.rgb}, 0.55), 0 0 8px rgba(${lane.rgb}, 0.14)`
+                                    : undefined,
+                                }}
+                              />
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -899,7 +928,7 @@ const SidechainEnvelope = ({
   return (
     <div className="flex h-full flex-col rounded-sm border border-[#242424] bg-[#101010] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
       <div className="flex items-start justify-between gap-3">
-        <span className="text-[8px] font-mono uppercase tracking-[0.2em] text-[#6f6f6f]">
+        <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
           Sidechain Envelope
         </span>
         <span className="text-[8px] font-mono text-[#a78bfa75]">
@@ -934,7 +963,7 @@ const SidechainEnvelope = ({
       </svg>
       <div className="mt-3 grid grid-cols-2 gap-3">
         <div className="rounded-sm border border-[#232323] bg-[#121212] px-3 py-2">
-          <span className="block text-[7px] font-mono uppercase tracking-[0.18em] text-[#5f5f5f]">
+          <span className="block text-[10px] font-mono uppercase tracking-wide text-text-secondary">
             Confidence
           </span>
           <span className="mt-1 block text-sm font-display font-bold text-text-primary">
@@ -942,7 +971,7 @@ const SidechainEnvelope = ({
           </span>
         </div>
         <div className="rounded-sm border border-[#232323] bg-[#121212] px-3 py-2">
-          <span className="block text-[7px] font-mono uppercase tracking-[0.18em] text-[#5f5f5f]">
+          <span className="block text-[10px] font-mono uppercase tracking-wide text-text-secondary">
             Regularity
           </span>
           <span className="mt-1 block text-sm font-display font-bold text-text-primary">
@@ -990,7 +1019,7 @@ const EffectsFieldPanel = ({
       <div className="flex h-full flex-col rounded-sm border border-[#242424] bg-[#101010] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <span className="block text-[8px] font-mono uppercase tracking-[0.2em] text-[#7f6a2c]">
+            <span className="block text-[10px] font-mono uppercase tracking-wide text-text-secondary">
               Effects Field
             </span>
             <span className="mt-1 block text-[11px] font-mono uppercase tracking-[0.2em] text-[#fbbf24]">
@@ -1021,7 +1050,7 @@ const EffectsFieldPanel = ({
 
         <div className="mt-4 grid grid-cols-2 gap-3">
           <div className="rounded-sm border border-[#2a2416] bg-[#121212] px-3 py-2">
-            <span className="block text-[7px] font-mono uppercase tracking-[0.18em] text-[#6b6040]">
+            <span className="block text-[10px] font-mono uppercase tracking-wide text-text-secondary">
               Gate Events
             </span>
             <span className="mt-1 block text-sm font-display font-bold text-text-primary">
@@ -1029,7 +1058,7 @@ const EffectsFieldPanel = ({
             </span>
           </div>
           <div className="rounded-sm border border-[#2a2416] bg-[#121212] px-3 py-2">
-            <span className="block text-[7px] font-mono uppercase tracking-[0.18em] text-[#6b6040]">
+            <span className="block text-[10px] font-mono uppercase tracking-wide text-text-secondary">
               Gate Regularity
             </span>
             <div className="mt-2 h-[6px] rounded-full bg-[#1c1a12]">
@@ -1054,7 +1083,7 @@ const EffectsFieldPanel = ({
     <div className="flex h-full flex-col rounded-sm border border-[#242424] bg-[#101010] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <span className="block text-[8px] font-mono uppercase tracking-[0.2em] text-[#6f6f6f]">
+          <span className="block text-[10px] font-mono uppercase tracking-wide text-text-secondary">
             Pump Matrix
           </span>
           <span className="mt-1 block text-[11px] font-mono uppercase tracking-[0.2em] text-[#a78bfa]">
@@ -1068,7 +1097,7 @@ const EffectsFieldPanel = ({
         {fallbackRows.map((row) => (
           <div key={row.label}>
             <div className="mb-1 flex items-center justify-between">
-              <span className="text-[7px] font-mono uppercase tracking-[0.18em] text-[#5f5f5f]">
+              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
                 {row.label}
               </span>
               <span className="text-[8px] font-mono" style={{ color: `${row.color}cc` }}>
@@ -1160,6 +1189,7 @@ const PhraseStructureTimeline = ({ phraseGrid }: { phraseGrid: PhraseGrid }) => 
 export function MeasurementDashboard({
   phase1,
   spectralArtifacts,
+  measurementAvailability,
   apiBaseUrl,
   runId,
 }: MeasurementDashboardProps) {
@@ -1174,7 +1204,31 @@ export function MeasurementDashboard({
   const [onsetData, setOnsetData] = useState<OnsetStrengthData | null>(null);
   const [chromaData, setChromaData] = useState<ChromaInteractiveData | null>(null);
   const [generating, setGenerating] = useState<Set<SpectralEnhancementKind>>(new Set());
-  const [beatView, setBeatView] = useState<'grid' | 'energy'>('grid');
+  const dynamicCharacter = isDynamicCharacterObject(phase1.dynamicCharacter)
+    ? phase1.dynamicCharacter
+    : null;
+  const textureCharacter = isTextureCharacterObject(phase1.textureCharacter)
+    ? phase1.textureCharacter
+    : null;
+  const dynamicsTextureFallback = useMemo(
+    () =>
+      buildDynamicsTextureCopy(
+        dynamicCharacter || textureCharacter
+          ? dynamicCharacter
+            ? 'texture'
+            : 'dynamics'
+          : 'both',
+        measurementAvailability,
+      ),
+    [dynamicCharacter, measurementAvailability, textureCharacter],
+  );
+  const spectralBalanceStats = useMemo(() => {
+    const values = SPECTRAL_ROW_CONFIG.map((row) => phase1.spectralBalance[row.key]);
+    return {
+      min: Math.min(...values),
+      max: Math.max(...values),
+    };
+  }, [phase1.spectralBalance]);
 
   // Fetch spectral time-series
   useEffect(() => {
@@ -1248,160 +1302,136 @@ export function MeasurementDashboard({
         {/* Hero Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {/* BPM Tile */}
-          <div className="bg-bg-panel border border-border rounded-sm p-4 hover:border-accent/30 transition-colors">
-            <span className="text-[9px] font-mono text-text-secondary uppercase tracking-wider">Tempo</span>
-            <div className="flex items-baseline gap-2 mt-2">
-              <span className="text-2xl font-display font-bold text-text-primary">
-                {formatNumber(phase1.bpm, 1)}
-              </span>
-              <span className="text-xs font-mono text-text-secondary">BPM</span>
-            </div>
-            {phase1.bpmDoubletime === true && phase1.bpmRawOriginal != null && (
-              <span className="text-[8px] font-mono text-warning/70 block mt-1">
-                corrected from {formatNumber(phase1.bpmRawOriginal, 1)}
-              </span>
-            )}
-            <div className="mt-3 space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-[8px] font-mono text-text-secondary/60 tabular-nums">
-                  {formatBpmScore(phase1.bpmConfidence)}
-                </span>
-                {phase1.bpmAgreement !== undefined && phase1.bpmAgreement !== null && (
-                  <span className={`text-[8px] font-mono ${phase1.bpmAgreement ? 'text-success/70' : 'text-error/70'}`}>
-                    {phase1.bpmAgreement ? 'CROSS-CHECK ✓' : 'CROSS-CHECK ✗'}
+          <AccentMetricCard
+            label="Tempo"
+            value={formatNumber(phase1.bpm, 1)}
+            unit="BPM"
+            footer={
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <StatusBadge label={formatBpmScore(phase1.bpmConfidence)} tone="accent" compact />
+                  {phase1.bpmAgreement !== undefined && phase1.bpmAgreement !== null && (
+                    <StatusBadge
+                      label={phase1.bpmAgreement ? 'Cross-Check ✓' : 'Cross-Check ✗'}
+                      tone={phase1.bpmAgreement ? 'success' : 'error'}
+                      compact
+                    />
+                  )}
+                </div>
+                {phase1.bpmDoubletime === true && phase1.bpmRawOriginal != null && (
+                  <span className="block text-[8px] font-mono uppercase tracking-wide text-warning/80">
+                    corrected from {formatNumber(phase1.bpmRawOriginal, 1)}
+                  </span>
+                )}
+                {phase1.bpmPercival !== undefined && phase1.bpmPercival !== null && (
+                  <span className="block text-[8px] font-mono uppercase tracking-wide text-text-secondary/50">
+                    Percival {formatNumber(phase1.bpmPercival, 1)}
+                  </span>
+                )}
+                {phase1.bpmSource != null && phase1.bpmSource !== 'rhythm_extractor' && (
+                  <span className="block text-[8px] font-mono uppercase tracking-wide text-text-secondary/50">
+                    Source {phase1.bpmSource.replace(/_/g, ' ')}
                   </span>
                 )}
               </div>
-            </div>
-            {phase1.bpmPercival !== undefined && phase1.bpmPercival !== null && (
-              <span className="text-[8px] font-mono text-text-secondary/50 block mt-1">
-                Percival: {formatNumber(phase1.bpmPercival, 1)}
-              </span>
-            )}
-            {phase1.bpmSource != null && phase1.bpmSource !== "rhythm_extractor" && (
-              <span className="text-[8px] font-mono text-text-secondary/50 block mt-0.5">
-                Source: {phase1.bpmSource.replace(/_/g, ' ')}
-              </span>
-            )}
-          </div>
+            }
+          />
 
           {/* Key Tile */}
-          <div className="bg-bg-panel border border-border rounded-sm p-4 hover:border-accent/30 transition-colors">
-            <span className="text-[9px] font-mono text-text-secondary uppercase tracking-wider">Key Signature</span>
-            <div className="mt-2 overflow-hidden">
-              <span className="text-2xl font-display font-bold text-text-primary truncate block">
-                {phase1.key || '—'}
-              </span>
-            </div>
-            {phase1.keyProfile && (
-              <span className="text-[8px] font-mono text-text-secondary/50 block mt-1">
-                Profile: {phase1.keyProfile}
-              </span>
-            )}
-            <div className="mt-3 space-y-1">
-              <div className="w-full h-1 bg-bg-app border border-border/20 rounded-sm overflow-hidden">
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${phase1.keyConfidence * 100}%` }}
-                  transition={{ duration: 0.6, ease: 'easeOut' }}
-                  className="h-full bg-accent shadow-[0_0_4px_var(--color-accent)]"
-                />
+          <AccentMetricCard
+            label="Key Signature"
+            value={<span className="truncate block">{phase1.key || '—'}</span>}
+            footer={
+              <div className="space-y-2">
+                {phase1.keyProfile && (
+                  <span className="block text-[8px] font-mono uppercase tracking-wide text-text-secondary/50">
+                    Profile {phase1.keyProfile}
+                  </span>
+                )}
+                <MetricBar value={phase1.keyConfidence} color="var(--color-accent)" glow />
+                <span className="block text-[8px] font-mono uppercase tracking-wide text-text-secondary/60 tabular-nums">
+                  CONF {Math.round(phase1.keyConfidence * 100)}%
+                </span>
               </div>
-              <span className="text-[8px] font-mono text-text-secondary/60 tabular-nums">
-                CONF {Math.round(phase1.keyConfidence * 100)}%
-              </span>
-            </div>
-          </div>
+            }
+          />
 
           {/* Duration / Format Tile */}
-          <div className="bg-bg-panel border border-border rounded-sm p-4 hover:border-accent/30 transition-colors">
-            <span className="text-[9px] font-mono text-text-secondary uppercase tracking-wider">Duration</span>
-            {(() => {
-              const mins = Math.floor(phase1.durationSeconds / 60);
-              const secs = Math.floor(phase1.durationSeconds % 60);
+          <AccentMetricCard
+            label="Duration"
+            value={formatDuration(phase1.durationSeconds)}
+            unit={phase1.timeSignature}
+            footer={(() => {
               const totalBars = resolveBarCount(phase1);
               const gridSegments = Math.min(Math.ceil(totalBars / 4), 24);
               const fullSegments = Math.floor(totalBars / 4);
               const remainder = (totalBars % 4) / 4;
               const meterStatus = isAssumedMeter(phase1) ? 'ASSUMED' : 'DETECTED';
               return (
-                <>
-                  {/* Transport LCD */}
-                  <div className="flex items-center gap-0.5 mt-2">
-                    <span className="bg-bg-app/80 border border-border/30 px-2 py-0.5 rounded-[2px] text-2xl font-mono font-bold text-text-primary tabular-nums leading-none">
-                      {mins}
-                    </span>
-                    <span className="text-xl font-mono font-bold text-accent/50">:</span>
-                    <span className="bg-bg-app/80 border border-border/30 px-2 py-0.5 rounded-[2px] text-2xl font-mono font-bold text-text-primary tabular-nums leading-none">
-                      {String(secs).padStart(2, '0')}
-                    </span>
-                    <span className="text-[9px] font-mono text-text-secondary/50 ml-2 self-end mb-0.5">{phase1.timeSignature}</span>
-                    <span className="text-[8px] font-mono text-text-secondary/50 ml-2 self-end mb-0.5">{meterStatus}</span>
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <StatusBadge label={meterStatus} tone="muted" compact />
+                    <StatusBadge label={`${totalBars} BARS`} tone="accent" compact />
                   </div>
-                  {/* Bar count + grid */}
-                  <div className="mt-3 space-y-1.5">
+                  <div className="space-y-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-[8px] font-mono text-text-secondary/60 uppercase tracking-wide">Arrangement</span>
-                      <span className="text-[8px] font-mono text-accent/80 tabular-nums font-bold">{totalBars} BARS</span>
+                      <span className="text-[8px] font-mono uppercase tracking-wide text-text-secondary/60">
+                        Arrangement
+                      </span>
+                      {phase1.sampleRate !== undefined && phase1.sampleRate !== null && (
+                        <span className="text-[8px] font-mono uppercase tracking-wide text-text-secondary/50 tabular-nums">
+                          {(phase1.sampleRate / 1000).toFixed(1)} kHz
+                        </span>
+                      )}
                     </div>
-                    <div className="flex gap-[2px]">
+                    <div className="flex gap-[3px] rounded-sm border border-border/30 bg-bg-app/70 p-1">
                       {Array.from({ length: gridSegments }).map((_, i) => (
-                        <motion.div
+                        <div
                           key={i}
-                          initial={{ scaleX: 0 }}
-                          animate={{ scaleX: 1 }}
-                          transition={{ duration: 0.25, delay: i * 0.025, ease: 'easeOut' }}
-                          className="h-2 flex-1 rounded-[1px] origin-left"
+                          className="h-2 flex-1 rounded-[2px]"
                           style={{
-                            backgroundColor: i < fullSegments
-                              ? `rgba(255, 136, 0, ${0.3 + (i / gridSegments) * 0.4})`
-                              : i === fullSegments && remainder > 0
-                                ? `rgba(255, 136, 0, ${0.2})`
-                                : undefined,
+                            background:
+                              i < fullSegments
+                                ? `linear-gradient(90deg, rgba(255,107,0,${0.42 + (i / Math.max(gridSegments, 1)) * 0.28}), rgba(249,115,22,${0.58 + (i / Math.max(gridSegments, 1)) * 0.22}))`
+                                : i === fullSegments && remainder > 0
+                                  ? 'linear-gradient(90deg, rgba(255,107,0,0.28), rgba(249,115,22,0.18))'
+                                  : 'rgba(255,255,255,0.04)',
+                            opacity: i === fullSegments && remainder > 0 ? remainder : 1,
                           }}
                         />
                       ))}
                     </div>
                   </div>
-                  {/* Supporting info */}
-                  <div className="mt-2.5 space-y-1.5">
-                    {phase1.sampleRate !== undefined && phase1.sampleRate !== null && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-[8px] font-mono text-text-secondary/60 uppercase">Sample Rate</span>
-                        <span className="text-xs font-display font-bold text-text-primary tabular-nums">{(phase1.sampleRate / 1000).toFixed(1)} kHz</span>
-                      </div>
-                    )}
-                  </div>
-                </>
+                </div>
               );
             })()}
-          </div>
+          />
         </div>
 
         {/* Genre Banner */}
         {phase1.genreDetail && (
-          <div className="bg-bg-panel border border-border rounded-sm p-4 hover:border-accent/30 transition-colors">
+          <div className="bg-bg-surface-dark border border-border-light border-l-2 border-accent rounded-sm p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <div className="flex items-center gap-2 mb-1">
                   <div className={`w-2 h-2 rounded-full bg-accent ${phase1.genreDetail.confidence > 0.8 ? 'animate-pulse' : ''}`} />
-                  <span className="text-[9px] font-mono text-text-secondary uppercase tracking-wider">Genre Classification</span>
+                  <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">Genre Classification</span>
                 </div>
                 <span className="text-lg font-display font-bold text-text-primary capitalize block truncate">
                   {phase1.genreDetail.genre}
                 </span>
-                <div className="flex items-center gap-3 mt-1">
-                  <span className="text-[9px] font-mono text-text-secondary/70 uppercase">{phase1.genreDetail.genreFamily}</span>
-                  {phase1.genreDetail.secondaryGenre && (
-                    <>
-                      <span className="text-text-secondary/30">/</span>
-                      <span className="text-[9px] font-mono text-text-secondary/50 uppercase">{phase1.genreDetail.secondaryGenre}</span>
-                    </>
-                  )}
-                </div>
+                <TokenBadgeList
+                  className="mt-2"
+                  items={[
+                    { label: phase1.genreDetail.genreFamily.toUpperCase(), tone: 'accent' },
+                    ...(phase1.genreDetail.secondaryGenre
+                      ? [{ label: phase1.genreDetail.secondaryGenre.toUpperCase(), tone: 'muted' as const }]
+                      : []),
+                  ]}
+                />
               </div>
               <div className="shrink-0 text-right">
-                <span className="text-[8px] font-mono text-text-secondary/60 uppercase">Conf</span>
+                <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">Conf</span>
                 <span className="text-sm font-display font-bold text-text-primary ml-1.5 tabular-nums">
                   {Math.round(phase1.genreDetail.confidence * 100)}%
                 </span>
@@ -1411,26 +1441,26 @@ export function MeasurementDashboard({
             {/* Genre fingerprint — top scores as horizontal bars */}
             {phase1.genreDetail.topScores && phase1.genreDetail.topScores.length > 0 && (
               <div className="mt-3 pt-3 border-t border-border/50 space-y-1.5">
-                <span className="text-[8px] font-mono text-text-secondary/50 uppercase tracking-wider">Genre Fingerprint</span>
+                <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">Genre Fingerprint</span>
                 <div className="space-y-1">
                   {phase1.genreDetail.topScores.slice(0, 5).map((score, i) => {
                     const maxScore = phase1.genreDetail!.topScores[0]?.score || 1;
                     const pct = (score.score / maxScore) * 100;
+                    const color = ['#ff6b00', '#fb923c', '#f59e0b', '#fdba74', '#fed7aa'][i] ?? '#fb923c';
                     return (
                       <div key={`${score.genre}-${i}`} className="flex items-center gap-2">
                         <span className="text-[8px] font-mono text-text-secondary/70 w-20 truncate text-right capitalize">
                           {score.genre}
                         </span>
-                        <div className="flex-1 h-2 bg-bg-app border border-border/20 rounded-sm overflow-hidden">
-                          <motion.div
-                            initial={{ width: 0 }}
-                            animate={{ width: `${pct}%` }}
-                            transition={{ duration: 0.5, delay: i * 0.08, ease: 'easeOut' }}
-                            className={`h-full rounded-sm ${
-                              i === 0 ? 'bg-accent shadow-[0_0_4px_var(--color-accent)]' : 'bg-accent/50'
-                            }`}
-                          />
-                        </div>
+                        <MetricBar
+                          value={score.score}
+                          min={0}
+                          max={maxScore}
+                          color={color}
+                          glow={i === 0}
+                          className="flex-1"
+                          heightClassName="h-2"
+                        />
                         <span className="text-[8px] font-mono text-text-secondary/50 tabular-nums w-8 text-right">
                           {(score.score * 100).toFixed(0)}
                         </span>
@@ -1445,17 +1475,19 @@ export function MeasurementDashboard({
 
         {/* Tuning Detail */}
         {(phase1.tuningFrequency !== undefined && phase1.tuningFrequency !== null) && (
-          <div className="flex items-center gap-3 px-1">
-            <span className="text-[8px] font-mono text-text-secondary/50 uppercase tracking-wider">Tuning</span>
+          <div className="flex items-center gap-3 px-1 flex-wrap">
+            <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">Tuning</span>
             <span className="text-[9px] font-mono text-text-secondary/70 tabular-nums">
               {formatNumber(phase1.tuningFrequency, 1)} Hz
             </span>
             {phase1.tuningCents !== undefined && phase1.tuningCents !== null && (
-              <span className={`text-[9px] font-mono tabular-nums ${
-                Math.abs(phase1.tuningCents) > 10 ? 'text-warning/70' : 'text-text-secondary/50'
-              }`}>
-                {phase1.tuningCents >= 0 ? '+' : ''}{formatNumber(phase1.tuningCents, 1)} cents
-              </span>
+              <DeltaBadge
+                value={phase1.tuningCents}
+                unit="cents"
+                decimals={1}
+                okThreshold={5}
+                warnThreshold={12}
+              />
             )}
           </div>
         )}
@@ -1504,25 +1536,19 @@ export function MeasurementDashboard({
           {/* Loudness hierarchy bars */}
           <div className="space-y-1">
             {[
-              { label: 'MOM MAX', value: phase1.lufsMomentaryMax, opacity: 'bg-accent/40', delay: 0 },
-              { label: 'ST MAX', value: phase1.lufsShortTermMax, opacity: 'bg-accent/25', delay: 0.08 },
-              { label: 'INTEGRATED', value: phase1.lufsIntegrated, opacity: 'bg-accent/15', delay: 0.16 },
+              { label: 'MOM MAX', value: phase1.lufsMomentaryMax, color: '#ff6b00' },
+              { label: 'ST MAX', value: phase1.lufsShortTermMax, color: '#fb923c' },
+              { label: 'INTEGRATED', value: phase1.lufsIntegrated, color: '#ffd166' },
             ].filter((row) => row.value !== undefined && row.value !== null).map((row) => (
-              <div key={row.label} className="flex items-center gap-2">
-                <span className="text-[8px] font-mono text-text-secondary/50 w-16 text-right shrink-0">
-                  {row.label}
-                </span>
-                <div className="flex-1 h-1.5 bg-bg-surface-darker border border-border/20 rounded-sm overflow-hidden">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${lufsToPercent(row.value!)}%` }}
-                    transition={{ duration: 0.5, delay: row.delay, ease: 'easeOut' }}
-                    className={`h-full rounded-sm ${row.opacity}`}
-                  />
-                </div>
-                <span className="text-[8px] font-mono text-text-secondary/60 tabular-nums w-10 text-right shrink-0">
-                  {formatNumber(row.value!, 1)}
-                </span>
+              <div key={row.label}>
+                <MetricBarRow
+                  label={row.label}
+                  value={row.value}
+                  min={-60}
+                  max={0}
+                  color={row.color}
+                  valueLabel={`${formatNumber(row.value!, 1)} LUFS`}
+                />
               </div>
             ))}
           </div>
@@ -1532,15 +1558,28 @@ export function MeasurementDashboard({
         <div className="border-t border-border pt-3">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {/* Left — Headroom Diagram */}
-            <div className="bg-bg-panel border border-border rounded-sm p-4 flex flex-col items-center">
-              <span className="text-[8px] font-mono text-text-secondary/60 uppercase tracking-wider mb-3 self-start">
+            <div className="bg-bg-surface-dark border border-border-light border-l-2 border-accent rounded-sm p-4 flex flex-col items-center shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+              <span className="mb-3 self-start text-[10px] font-mono uppercase tracking-wide text-text-secondary">
                 Headroom
               </span>
-              <div className="relative w-6 bg-bg-surface-darker border border-border/30 rounded-sm" style={{ height: 180 }}>
-                {/* 0 dBFS reference */}
-                <div className="absolute left-0 right-0 border-t border-dashed border-text-secondary/20" style={{ top: `${((3 - 0) / 51) * 100}%` }}>
-                  <span className="absolute -left-9 -top-1.5 text-[7px] font-mono text-text-secondary/30">0 dB</span>
-                </div>
+              <div className="relative w-8 bg-bg-panel border border-border/30 rounded-sm" style={{ height: 180 }}>
+                {[
+                  { label: '0 dB', value: 0 },
+                  { label: '-6 dB', value: -6 },
+                  { label: '-12 dB', value: -12 },
+                  { label: '-18 dB', value: -18 },
+                  { label: '-24 dB', value: -24 },
+                ].map((tick) => (
+                  <div
+                    key={tick.label}
+                    className="absolute left-0 right-0 border-t border-dashed border-text-secondary/18"
+                    style={{ top: `${((3 - tick.value) / 51) * 100}%` }}
+                  >
+                    <span className="absolute -left-11 -top-1.5 text-[7px] font-mono text-text-secondary/35">
+                      {tick.label}
+                    </span>
+                  </div>
+                ))}
                 {/* True Peak marker */}
                 <div
                   className="absolute left-0 right-0 border-t-2 border-error/70 z-10"
@@ -1581,6 +1620,9 @@ export function MeasurementDashboard({
                     </span>
                   </div>
                 )}
+                <span className="absolute left-1/2 bottom-1 -translate-x-1/2 text-[7px] font-mono uppercase tracking-wide text-text-secondary/35">
+                  floor
+                </span>
               </div>
             </div>
 
@@ -1592,60 +1634,231 @@ export function MeasurementDashboard({
                 { label: 'LUFS Range', value: phase1.lufsRange, suffix: 'LU', decimals: 1 },
                 { label: 'True Peak', value: phase1.truePeak, suffix: 'dBTP', decimals: 2 },
               ].filter((tile) => tile.value !== undefined && tile.value !== null).map((tile) => (
-                <div
-                  key={tile.label}
-                  className="bg-bg-panel border border-border rounded-sm p-3 hover:border-accent/30 transition-colors"
-                >
-                  <span className="text-[8px] font-mono text-text-secondary/60 uppercase tracking-wider block">
-                    {tile.label}
-                  </span>
-                  <div className="flex items-baseline gap-1 mt-1.5">
-                    <span className="text-lg font-display font-bold text-text-primary tabular-nums">
-                      {formatNumber(tile.value!, tile.decimals)}
-                    </span>
-                    {tile.suffix && (
-                      <span className="text-[7px] font-mono text-text-secondary/40">{tile.suffix}</span>
-                    )}
-                  </div>
+                <div key={tile.label}>
+                  <AccentMetricCard
+                    label={tile.label}
+                    value={formatNumber(tile.value!, tile.decimals)}
+                    unit={tile.suffix ? <span className="text-[8px] font-mono text-text-secondary/45">{tile.suffix}</span> : undefined}
+                    className="min-h-[110px]"
+                  />
                 </div>
               ))}
             </div>
           </div>
         </div>
 
-        {/* Zone 3 — Dynamic Character Radar */}
-        {phase1.dynamicCharacter && (
-          <div className="border-t border-border pt-3">
-            <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary block mb-3">
-              Dynamic Character
-            </span>
-            <div className="flex gap-4 items-start">
-              <DynamicCharacterRadar data={normalizeDynamicCharacter(phase1.dynamicCharacter)} />
-              <div className="flex-1 space-y-2 pt-2">
-                <MetricRow
+        {/* Zone 3 — Dynamics & Texture */}
+        <div className="border-t border-border pt-3">
+          <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary block mb-3">
+            Dynamics & Texture
+          </span>
+          {dynamicCharacter && textureCharacter ? (
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="space-y-3 rounded-sm border border-border-light/60 bg-bg-surface-dark/70 p-4">
+                <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-text-secondary block">
+                  Dynamics
+                </span>
+                <MetricBarRow
                   label="Complexity"
-                  value={formatNumber(phase1.dynamicCharacter.dynamicComplexity, 2)}
+                  value={dynamicCharacter.dynamicComplexity}
+                  valueLabel={formatNumber(dynamicCharacter.dynamicComplexity, 3)}
+                  min={0}
+                  max={6}
+                  color="#ff6b00"
                 />
-                <MetricRow
-                  label="Loudness Variation"
-                  value={formatNumber(phase1.dynamicCharacter.loudnessVariation, 2)}
+                <MetricBarRow
+                  label="Estimated Loudness"
+                  value={dynamicCharacter.loudnessDb}
+                  valueLabel={`${formatNumber(dynamicCharacter.loudnessDb, 2)} dB`}
+                  min={-30}
+                  max={-6}
+                  color="#fb923c"
                 />
-                <MetricRow
-                  label="Spectral Flatness"
-                  value={formatNumber(phase1.dynamicCharacter.spectralFlatness, 2)}
-                />
-                <MetricRow
+                <MetricBarRow
                   label="Log Attack Time"
-                  value={formatNumber(phase1.dynamicCharacter.logAttackTime, 2)}
+                  value={dynamicCharacter.logAttackTime}
+                  valueLabel={formatNumber(dynamicCharacter.logAttackTime, 3)}
+                  min={-5}
+                  max={-1.5}
+                  color="#38bdf8"
                 />
-                <MetricRow
+                <MetricBarRow
                   label="Attack Time Std Dev"
-                  value={formatNumber(phase1.dynamicCharacter.attackTimeStdDev, 2)}
+                  value={dynamicCharacter.attackTimeStdDev}
+                  valueLabel={`${formatNumber(dynamicCharacter.attackTimeStdDev, 4)} s`}
+                  min={0}
+                  max={0.1}
+                  color="#a78bfa"
+                />
+              </div>
+              <div className="space-y-3 rounded-sm border border-border-light/60 bg-bg-surface-dark/70 p-4">
+                <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-text-secondary block">
+                  Texture
+                </span>
+                <MetricBarRow
+                  label="Texture Score"
+                  value={textureCharacter.textureScore}
+                  valueLabel={formatNumber(textureCharacter.textureScore, 3)}
+                  min={0}
+                  max={1}
+                  color="#f97316"
+                />
+                <MetricBarRow
+                  label="Low-Band Flatness"
+                  value={textureCharacter.lowBandFlatness}
+                  valueLabel={formatNumber(textureCharacter.lowBandFlatness, 3)}
+                  min={0}
+                  max={1}
+                  color="#facc15"
+                />
+                <MetricBarRow
+                  label="Mid-Band Flatness"
+                  value={textureCharacter.midBandFlatness}
+                  valueLabel={formatNumber(textureCharacter.midBandFlatness, 3)}
+                  min={0}
+                  max={1}
+                  color="#14b8a6"
+                />
+                <MetricBarRow
+                  label="High-Band Flatness"
+                  value={textureCharacter.highBandFlatness}
+                  valueLabel={formatNumber(textureCharacter.highBandFlatness, 3)}
+                  min={0}
+                  max={1}
+                  color="#60a5fa"
+                />
+                <MetricBarRow
+                  label="Inharmonicity"
+                  value={textureCharacter.inharmonicity}
+                  valueLabel={formatNumber(textureCharacter.inharmonicity, 3)}
+                  min={0}
+                  max={0.25}
+                  color="#f472b6"
                 />
               </div>
             </div>
-          </div>
-        )}
+          ) : dynamicCharacter || textureCharacter ? (
+            <div className="grid gap-4 lg:grid-cols-2">
+              {dynamicCharacter ? (
+                <div className="space-y-3 rounded-sm border border-border-light/60 bg-bg-surface-dark/70 p-4">
+                  <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-text-secondary block">
+                    Dynamics
+                  </span>
+                  <MetricBarRow
+                    label="Complexity"
+                    value={dynamicCharacter.dynamicComplexity}
+                    valueLabel={formatNumber(dynamicCharacter.dynamicComplexity, 3)}
+                    min={0}
+                    max={6}
+                    color="#ff6b00"
+                  />
+                  <MetricBarRow
+                    label="Estimated Loudness"
+                    value={dynamicCharacter.loudnessDb}
+                    valueLabel={`${formatNumber(dynamicCharacter.loudnessDb, 2)} dB`}
+                    min={-30}
+                    max={-6}
+                    color="#fb923c"
+                  />
+                  <MetricBarRow
+                    label="Log Attack Time"
+                    value={dynamicCharacter.logAttackTime}
+                    valueLabel={formatNumber(dynamicCharacter.logAttackTime, 3)}
+                    min={-5}
+                    max={-1.5}
+                    color="#38bdf8"
+                  />
+                  <MetricBarRow
+                    label="Attack Time Std Dev"
+                    value={dynamicCharacter.attackTimeStdDev}
+                    valueLabel={`${formatNumber(dynamicCharacter.attackTimeStdDev, 4)} s`}
+                    min={0}
+                    max={0.1}
+                    color="#a78bfa"
+                  />
+                </div>
+              ) : (
+                <UnavailableMeasurementCard
+                  title={dynamicsTextureFallback.title}
+                  description={dynamicsTextureFallback.description}
+                  detail={dynamicsTextureFallback.detail}
+                />
+              )}
+              {textureCharacter ? (
+                <div className="space-y-3 rounded-sm border border-border-light/60 bg-bg-surface-dark/70 p-4">
+                  <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-text-secondary block">
+                    Texture
+                  </span>
+                  <MetricBarRow
+                    label="Texture Score"
+                    value={textureCharacter.textureScore}
+                    valueLabel={formatNumber(textureCharacter.textureScore, 3)}
+                    min={0}
+                    max={1}
+                    color="#f97316"
+                  />
+                  <MetricBarRow
+                    label="Low-Band Flatness"
+                    value={textureCharacter.lowBandFlatness}
+                    valueLabel={formatNumber(textureCharacter.lowBandFlatness, 3)}
+                    min={0}
+                    max={1}
+                    color="#facc15"
+                  />
+                  <MetricBarRow
+                    label="Mid-Band Flatness"
+                    value={textureCharacter.midBandFlatness}
+                    valueLabel={formatNumber(textureCharacter.midBandFlatness, 3)}
+                    min={0}
+                    max={1}
+                    color="#14b8a6"
+                  />
+                  <MetricBarRow
+                    label="High-Band Flatness"
+                    value={textureCharacter.highBandFlatness}
+                    valueLabel={formatNumber(textureCharacter.highBandFlatness, 3)}
+                    min={0}
+                    max={1}
+                    color="#60a5fa"
+                  />
+                  <MetricBarRow
+                    label="Inharmonicity"
+                    value={textureCharacter.inharmonicity}
+                    valueLabel={formatNumber(textureCharacter.inharmonicity, 3)}
+                    min={0}
+                    max={0.25}
+                    color="#f472b6"
+                  />
+                </div>
+              ) : (
+                <UnavailableMeasurementCard
+                  title={dynamicsTextureFallback.title}
+                  description={dynamicsTextureFallback.description}
+                  detail={dynamicsTextureFallback.detail}
+                />
+              )}
+            </div>
+          ) : (
+            <AccentMetricCard
+              label="Dynamics & Texture"
+              value={dynamicsTextureFallback.title}
+              unit={<span className="text-[8px] font-mono uppercase tracking-wide text-text-secondary/45">Unavailable</span>}
+              accent="warning"
+              footer={
+                <div className="space-y-2">
+                  <p className="text-[10px] font-mono uppercase tracking-[0.14em] text-text-secondary/70">
+                    {dynamicsTextureFallback.description}
+                  </p>
+                  {dynamicsTextureFallback.detail ? (
+                    <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-text-secondary/55">
+                      {dynamicsTextureFallback.detail}
+                    </p>
+                  ) : null}
+                </div>
+              }
+            />
+          )}
+        </div>
       </Section>
 
       {/* 3. MixDoctor */}
@@ -1660,81 +1873,87 @@ export function MeasurementDashboard({
             <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
               Spectral Balance
             </span>
-            <div className="mt-2 space-y-1.5">
-              <MetricRow
-                label="Sub Bass"
-                value={formatNumber(phase1.spectralBalance.subBass, 2)}
-              />
-              <MetricRow
-                label="Low Bass"
-                value={formatNumber(phase1.spectralBalance.lowBass, 2)}
-              />
-              <MetricRow
-                label="Low Mids"
-                value={formatNumber(phase1.spectralBalance.lowMids, 2)}
-              />
-              <MetricRow label="Mids" value={formatNumber(phase1.spectralBalance.mids, 2)} />
-              <MetricRow
-                label="Upper Mids"
-                value={formatNumber(phase1.spectralBalance.upperMids, 2)}
-              />
-              <MetricRow label="Highs" value={formatNumber(phase1.spectralBalance.highs, 2)} />
-              <MetricRow
-                label="Brilliance"
-                value={formatNumber(phase1.spectralBalance.brilliance, 2)}
-              />
+            <div className="mt-2 space-y-3">
+              {SPECTRAL_ROW_CONFIG.map((row) => (
+                <div key={row.key}>
+                  <MetricBarRow
+                    label={row.label}
+                    value={phase1.spectralBalance[row.key]}
+                    valueLabel={`${formatNumber(phase1.spectralBalance[row.key], 2)} dB`}
+                    min={spectralBalanceStats.min}
+                    max={spectralBalanceStats.max}
+                    color={SPECTRAL_BALANCE_PALETTE[row.key]}
+                  />
+                </div>
+              ))}
             </div>
           </div>
           {phase1.spectralDetail && (
-            <div className="border-t border-border/30 pt-2 mt-2 space-y-1.5">
+            <div className="border-t border-border/30 pt-2 mt-2 space-y-3">
               {phase1.spectralDetail.spectralCentroidMean !== undefined &&
                 phase1.spectralDetail.spectralCentroidMean !== null && (
-                  <MetricRow
+                  <MetricBarRow
                     label="Centroid Mean"
-                    value={formatNumber(phase1.spectralDetail.spectralCentroidMean, 1)}
+                    value={phase1.spectralDetail.spectralCentroidMean}
+                    min={0}
+                    max={12000}
+                    color={SPECTRAL_BALANCE_PALETTE.highs}
+                    valueLabel={`${formatNumber(phase1.spectralDetail.spectralCentroidMean, 1)} Hz`}
                     sparkline={
                       spectralTimeSeries?.spectralCentroid &&
                       spectralTimeSeries.spectralCentroid.length > 1 && (
-                        <Sparkline values={spectralTimeSeries.spectralCentroid} color="#60a5fa" />
+                        <Sparkline values={spectralTimeSeries.spectralCentroid} color={SPECTRAL_BALANCE_PALETTE.highs} />
                       )
                     }
                   />
                 )}
               {phase1.spectralDetail.spectralRolloffMean !== undefined &&
                 phase1.spectralDetail.spectralRolloffMean !== null && (
-                  <MetricRow
+                  <MetricBarRow
                     label="Rolloff Mean"
-                    value={formatNumber(phase1.spectralDetail.spectralRolloffMean, 1)}
+                    value={phase1.spectralDetail.spectralRolloffMean}
+                    min={0}
+                    max={22050}
+                    color={SPECTRAL_BALANCE_PALETTE.brilliance}
+                    valueLabel={`${formatNumber(phase1.spectralDetail.spectralRolloffMean, 1)} Hz`}
                     sparkline={
                       spectralTimeSeries?.spectralRolloff &&
                       spectralTimeSeries.spectralRolloff.length > 1 && (
-                        <Sparkline values={spectralTimeSeries.spectralRolloff} color="#a78bfa" />
+                        <Sparkline values={spectralTimeSeries.spectralRolloff} color={SPECTRAL_BALANCE_PALETTE.brilliance} />
                       )
                     }
                   />
                 )}
               {phase1.spectralDetail.spectralBandwidthMean !== undefined &&
                 phase1.spectralDetail.spectralBandwidthMean !== null && (
-                  <MetricRow
+                  <MetricBarRow
                     label="Bandwidth Mean"
-                    value={formatNumber(phase1.spectralDetail.spectralBandwidthMean, 1)}
+                    value={phase1.spectralDetail.spectralBandwidthMean}
+                    min={0}
+                    max={12000}
+                    color={SPECTRAL_BALANCE_PALETTE.upperMids}
+                    valueLabel={`${formatNumber(phase1.spectralDetail.spectralBandwidthMean, 1)} Hz`}
                     sparkline={
                       spectralTimeSeries?.spectralBandwidth &&
                       spectralTimeSeries.spectralBandwidth.length > 1 && (
-                        <Sparkline values={spectralTimeSeries.spectralBandwidth} color="#34d399" />
+                        <Sparkline values={spectralTimeSeries.spectralBandwidth} color={SPECTRAL_BALANCE_PALETTE.upperMids} />
                       )
                     }
                   />
                 )}
               {phase1.spectralDetail.spectralFlatnessMean !== undefined &&
                 phase1.spectralDetail.spectralFlatnessMean !== null && (
-                  <MetricRow
+                  <MetricBarRow
                     label="Flatness Mean"
-                    value={formatNumber(phase1.spectralDetail.spectralFlatnessMean, 6)}
+                    value={phase1.spectralDetail.spectralFlatnessMean}
+                    min={0}
+                    max={1}
+                    color={SPECTRAL_BALANCE_PALETTE.lowMids}
+                    valueLabel={formatNumber(phase1.spectralDetail.spectralFlatnessMean, 6)}
                     sparkline={
                       spectralTimeSeries?.spectralFlatness &&
                       spectralTimeSeries.spectralFlatness.length > 1 && (
-                        <Sparkline values={spectralTimeSeries.spectralFlatness} color="#fbbf24" />
+                        <Sparkline values={spectralTimeSeries.spectralFlatness} color={SPECTRAL_BALANCE_PALETTE.lowMids} />
                       )
                     }
                   />
@@ -1757,21 +1976,22 @@ export function MeasurementDashboard({
                 { kind: 'chroma_interactive' as SpectralEnhancementKind, label: 'Chroma', done: !!localArtifacts?.chromaInteractive },
               ]).map(({ kind, label, done }) =>
                 done ? (
-                  <span
-                    key={kind}
-                    className="px-2 py-0.5 text-[10px] font-mono uppercase tracking-wide text-success/70 border border-success/20 rounded-sm"
-                  >
-                    {label} ✓
-                  </span>
+                  <React.Fragment key={kind}>
+                    <StatusBadge
+                      label={`${label} ✓`}
+                      tone="success"
+                      compact
+                    />
+                  </React.Fragment>
                 ) : (
-                  <button
-                    key={kind}
-                    onClick={() => handleGenerate(kind)}
-                    disabled={generating.has(kind)}
-                    className="px-2 py-0.5 text-[10px] font-mono uppercase tracking-wide rounded-sm border border-border text-text-secondary hover:text-text-primary hover:border-accent/30 transition-colors disabled:opacity-50 disabled:cursor-wait"
-                  >
-                    {generating.has(kind) ? `${label}...` : `Generate ${label}`}
-                  </button>
+                  <React.Fragment key={kind}>
+                    <OutlinePillButton
+                      onClick={() => handleGenerate(kind)}
+                      disabled={generating.has(kind)}
+                      tone="accent"
+                      label={generating.has(kind) ? `${label}...` : `Generate ${label}`}
+                    />
+                  </React.Fragment>
                 ),
               )}
             </div>
@@ -1858,29 +2078,45 @@ export function MeasurementDashboard({
             </div>
             {phase1.essentiaFeatures.zeroCrossingRate !== undefined &&
               phase1.essentiaFeatures.zeroCrossingRate !== null && (
-                <MetricRow
+                <MetricBarRow
                   label="Zero Crossing Rate"
-                  value={formatNumber(phase1.essentiaFeatures.zeroCrossingRate, 3)}
+                  value={phase1.essentiaFeatures.zeroCrossingRate}
+                  min={0}
+                  max={0.5}
+                  color="#ff8c42"
+                  valueLabel={formatNumber(phase1.essentiaFeatures.zeroCrossingRate, 3)}
                 />
               )}
             {phase1.essentiaFeatures.hfc !== undefined && phase1.essentiaFeatures.hfc !== null && (
-              <MetricRow
+              <MetricBarRow
                 label="High Frequency Content"
-                value={formatNumber(phase1.essentiaFeatures.hfc, 2)}
+                value={phase1.essentiaFeatures.hfc}
+                min={0}
+                max={1}
+                color="#38bdf8"
+                valueLabel={formatNumber(phase1.essentiaFeatures.hfc, 2)}
               />
             )}
             {phase1.essentiaFeatures.spectralComplexity !== undefined &&
               phase1.essentiaFeatures.spectralComplexity !== null && (
-                <MetricRow
+                <MetricBarRow
                   label="Spectral Complexity"
-                  value={formatNumber(phase1.essentiaFeatures.spectralComplexity, 2)}
+                  value={phase1.essentiaFeatures.spectralComplexity}
+                  min={0}
+                  max={60}
+                  color="#a78bfa"
+                  valueLabel={formatNumber(phase1.essentiaFeatures.spectralComplexity, 2)}
                 />
               )}
             {phase1.essentiaFeatures.dissonance !== undefined &&
               phase1.essentiaFeatures.dissonance !== null && (
-                <MetricRow
+                <MetricBarRow
                   label="Dissonance"
-                  value={formatNumber(phase1.essentiaFeatures.dissonance, 2)}
+                  value={phase1.essentiaFeatures.dissonance}
+                  min={0}
+                  max={1}
+                  color="#ef4444"
+                  valueLabel={formatNumber(phase1.essentiaFeatures.dissonance, 2)}
                 />
               )}
           </>
@@ -1889,31 +2125,52 @@ export function MeasurementDashboard({
 
       {/* 5. Stereo Field */}
       <Section id="section-meas-stereo" number={5} title="Stereo Field">
-        <MetricRow label="Stereo Width" value={formatNumber(phase1.stereoWidth, 2)} />
-        <MetricRow
+        <MetricBarRow
+          label="Stereo Width"
+          value={phase1.stereoWidth}
+          min={0}
+          max={1}
+          color="#38bdf8"
+          leftLabel="narrow"
+          rightLabel="wide"
+          valueLabel={formatNumber(phase1.stereoWidth, 2)}
+        />
+        <MetricBarRow
           label="Stereo Correlation"
-          value={formatNumber(phase1.stereoCorrelation, 2)}
+          value={phase1.stereoCorrelation}
+          min={-1}
+          max={1}
+          color="#ff6b00"
+          leftLabel="anti-phase"
+          rightLabel="mono"
+          valueLabel={formatNumber(phase1.stereoCorrelation, 2)}
         />
         {phase1.monoCompatible !== undefined && phase1.monoCompatible !== null && (
           <MetricRow
             label="Mono Compatible"
-            value={phase1.monoCompatible ? 'Yes' : 'No'}
+            value={<StatusBadge label={phase1.monoCompatible ? 'Yes' : 'No'} tone={phase1.monoCompatible ? 'success' : 'error'} compact />}
           />
         )}
         {phase1.stereoDetail && (
           <>
             {phase1.stereoDetail.subBassCorrelation !== undefined &&
               phase1.stereoDetail.subBassCorrelation !== null && (
-                <MetricRow
+                <MetricBarRow
                   label="Sub-Bass Correlation"
-                  value={formatNumber(phase1.stereoDetail.subBassCorrelation, 2)}
+                  value={phase1.stereoDetail.subBassCorrelation}
+                  min={-1}
+                  max={1}
+                  color="#14b8a6"
+                  leftLabel="anti-phase"
+                  rightLabel="mono"
+                  valueLabel={formatNumber(phase1.stereoDetail.subBassCorrelation, 2)}
                 />
               )}
             {phase1.stereoDetail.subBassMono !== undefined &&
               phase1.stereoDetail.subBassMono !== null && (
                 <MetricRow
                   label="Sub-Bass Mono"
-                  value={phase1.stereoDetail.subBassMono ? 'Yes' : 'No'}
+                  value={<StatusBadge label={phase1.stereoDetail.subBassMono ? 'Yes' : 'No'} tone={phase1.stereoDetail.subBassMono ? 'success' : 'error'} compact />}
                 />
               )}
           </>
@@ -1925,23 +2182,50 @@ export function MeasurementDashboard({
                 Segment Stereo
               </span>
             </div>
-            <SimpleTable
+            <StyledDataTable
               data={phase1.segmentStereo}
               columns={[
                 {
                   key: 'segmentIndex',
                   label: 'Segment',
-                  format: (v) => String(v || '—'),
+                  monospace: true,
+                  render: (row) => String(row.segmentIndex ?? '—'),
                 },
                 {
-                  key: 'stereoWidth',
+                  key: 'width',
                   label: 'Width',
-                  format: (v) => formatNumber(v as number, 2),
+                  render: (row) => (
+                    <div className="space-y-1">
+                      <div className="text-right font-mono tabular-nums text-text-primary">
+                        {formatNumber(row.stereoWidth, 2)}
+                      </div>
+                      <MetricBar
+                        value={row.stereoWidth}
+                        min={0}
+                        max={1}
+                        color="#38bdf8"
+                        heightClassName="h-1.5"
+                      />
+                    </div>
+                  ),
                 },
                 {
-                  key: 'stereoCorrelation',
+                  key: 'corr',
                   label: 'Corr',
-                  format: (v) => formatNumber(v as number, 2),
+                  render: (row) => (
+                    <div className="space-y-1">
+                      <div className="text-right font-mono tabular-nums text-text-primary">
+                        {formatNumber(row.stereoCorrelation, 2)}
+                      </div>
+                      <MetricBar
+                        value={row.stereoCorrelation}
+                        min={-1}
+                        max={1}
+                        color="#ff6b00"
+                        heightClassName="h-1.5"
+                      />
+                    </div>
+                  ),
                 },
               ]}
             />
@@ -1988,92 +2272,41 @@ export function MeasurementDashboard({
           </div>
         </div>
 
-        {phase1.grooveDetail &&
-          phase1.grooveDetail.kickAccent?.length > 0 &&
-          phase1.grooveDetail.hihatAccent?.length > 0 && (
-            <div className="border-t border-border pt-3 space-y-2">
-              <div className="flex items-center gap-1">
-                {(['grid', 'energy'] as const).map((view) => (
-                  <button
-                    key={view}
-                    onClick={() => setBeatView(view)}
-                    className={`text-[8px] font-mono uppercase tracking-wider px-2 py-1 rounded-sm transition-colors ${
-                      beatView === view
-                        ? 'bg-[#1e1e1e] text-text-primary'
-                        : 'text-[#555] hover:text-[#888]'
-                    }`}
-                  >
-                    {view}
-                  </button>
-                ))}
-              </div>
-              <AnimatePresence mode="wait">
-                {beatView === 'grid' ? (
-                  <motion.div
-                    key="grid"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.2 }}
-                    className="space-y-2"
-                  >
-                    <BeatSequencerGrid
-                      kickAccent={phase1.grooveDetail.kickAccent}
-                      hihatAccent={phase1.grooveDetail.hihatAccent}
-                      accentPattern={phase1.beatsLoudness?.accentPattern ?? []}
-                    />
-                    <AccentPatternBars
-                      kickAccent={phase1.grooveDetail.kickAccent}
-                      hihatAccent={phase1.grooveDetail.hihatAccent}
-                    />
-                  </motion.div>
-                ) : (
-                  <motion.div
-                    key="energy"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <BeatEnergyWaveform
-                      kickAccent={phase1.grooveDetail.kickAccent}
-                      hihatAccent={phase1.grooveDetail.hihatAccent}
-                    />
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          )}
+        {phase1.rhythmTimeline?.windows && phase1.rhythmTimeline.windows.length > 0 && (
+          <div className="border-t border-border pt-3">
+            <RhythmGridPanel phase1={phase1} />
+          </div>
+        )}
 
         {(phase1.grooveDetail || phase1.beatsLoudness) && (
           <div className="border-t border-border pt-3">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {phase1.grooveDetail && (
                 <div className="bg-[#141414] border border-[#1e1e1e] rounded-sm p-3">
-                  <div className="text-[7px] font-mono uppercase tracking-widest text-[#555] mb-2">
+                  <div className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mb-3">
                     Swing
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {[
                       { label: 'KICK', value: phase1.grooveDetail.kickSwing, color: '#ff4444' },
                       { label: 'HH', value: phase1.grooveDetail.hihatSwing, color: '#60a5fa' },
                     ].map((s) => (
                       <div key={s.label}>
-                        <div className="flex justify-between mb-1">
+                        <div className="mb-1.5 flex items-center justify-between gap-3">
                           <span
-                            className="text-[7px] font-mono"
+                            className="text-[10px] font-mono uppercase tracking-[0.12em]"
                             style={{ color: `${s.color}80` }}
                           >
                             {s.label}
                           </span>
                           <span
-                            className="text-[8px] font-mono font-bold"
+                            className="text-[10px] font-mono font-bold"
                             style={{ color: s.color }}
                           >
                             {formatNumber(s.value, 2)}
                           </span>
                         </div>
-                        <div className="h-[5px] bg-[#1a1a1a] rounded-sm overflow-hidden">
+                        <div className="h-2 overflow-hidden rounded-sm border border-[#202020] bg-[#1a1a1a]">
                           <motion.div
                             initial={{ width: 0 }}
                             animate={{ width: `${s.value * 100}%` }}
@@ -2094,21 +2327,21 @@ export function MeasurementDashboard({
                     midRatio={phase1.beatsLoudness.midDominantRatio}
                     highRatio={phase1.beatsLoudness.highDominantRatio}
                   />
-                  <div className="mt-2 grid grid-cols-3 gap-2">
+                  <div className="mt-3 grid grid-cols-3 gap-3">
                     <div>
-                      <span className="text-[7px] font-mono text-[#555] block">Beat Count</span>
+                      <span className="block text-[10px] font-mono text-text-secondary">Beat Count</span>
                       <span className="text-sm font-display font-bold text-text-primary">
                         {formatNumber(phase1.beatsLoudness.beatCount, 0)}
                       </span>
                     </div>
                     <div>
-                      <span className="text-[7px] font-mono text-[#555] block">Mean Loud</span>
+                      <span className="block text-[10px] font-mono text-text-secondary">Mean Loud</span>
                       <span className="text-sm font-display font-bold text-text-primary">
                         {formatNumber(phase1.beatsLoudness.meanBeatLoudness, 2)}
                       </span>
                     </div>
                     <div>
-                      <span className="text-[7px] font-mono text-[#555] block">Variation</span>
+                      <span className="block text-[10px] font-mono text-text-secondary">Variation</span>
                       <span className="text-sm font-display font-bold text-text-primary">
                         {formatNumber(phase1.beatsLoudness.beatLoudnessVariation, 2)}
                       </span>
@@ -2175,9 +2408,7 @@ export function MeasurementDashboard({
                   <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
                     Chord Progression
                   </span>
-                  <div className="mt-2 text-sm text-text-primary break-words">
-                    {phase1.chordDetail.progression.join(' → ')}
-                  </div>
+                  <ChordTokenRow chords={phase1.chordDetail.progression} />
                 </div>
               </>
             )}
@@ -2187,17 +2418,19 @@ export function MeasurementDashboard({
                   <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
                     Chord Sequence
                   </span>
-                  <div className="mt-2 text-sm text-text-primary break-words">
-                    {phase1.chordDetail.chordSequence.join(' → ')}
-                  </div>
+                  <ChordTokenRow chords={phase1.chordDetail.chordSequence} />
                 </div>
               </>
             )}
             {phase1.chordDetail.chordStrength !== undefined &&
               phase1.chordDetail.chordStrength !== null && (
-                <MetricRow
+                <MetricBarRow
                   label="Chord Strength"
-                  value={formatNumber(phase1.chordDetail.chordStrength, 2)}
+                  value={phase1.chordDetail.chordStrength}
+                  min={0}
+                  max={1}
+                  color="#ff6b00"
+                  valueLabel={formatNumber(phase1.chordDetail.chordStrength, 2)}
                 />
               )}
             {phase1.chordDetail.dominantChords && phase1.chordDetail.dominantChords.length > 0 && (
@@ -2206,9 +2439,13 @@ export function MeasurementDashboard({
                   <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
                     Dominant Chords
                   </span>
-                  <div className="mt-2 text-sm text-text-primary">
-                    {phase1.chordDetail.dominantChords.join(', ')}
-                  </div>
+                  <TokenBadgeList
+                    className="mt-2"
+                    items={phase1.chordDetail.dominantChords.map((chord) => ({
+                      label: chord,
+                      tone: chordToneForLabel(chord),
+                    }))}
+                  />
                 </div>
               </>
             )}
@@ -2221,23 +2458,37 @@ export function MeasurementDashboard({
                 Segment Keys
               </span>
             </div>
-            <SimpleTable
+            <StyledDataTable
               data={phase1.segmentKey}
               columns={[
                 {
                   key: 'segmentIndex',
                   label: 'Segment',
-                  format: (v) => (v === null || v === undefined ? '—' : String(v)),
+                  monospace: true,
+                  render: (row) => (row.segmentIndex === null || row.segmentIndex === undefined ? '—' : String(row.segmentIndex)),
                 },
                 {
                   key: 'key',
                   label: 'Key',
-                  format: (v) => (v === null || v === undefined || v === '' ? '—' : String(v)),
+                  render: (row) => (row.key === null || row.key === undefined || row.key === '' ? '—' : row.key),
                 },
                 {
-                  key: 'keyConfidence',
+                  key: 'confidence',
                   label: 'Confidence',
-                  format: (v) => formatNumber(v as number, 2),
+                  render: (row) => (
+                    <div className="space-y-1">
+                      <div className="text-right font-mono tabular-nums text-text-primary">
+                        {formatNumber(row.keyConfidence, 2)}
+                      </div>
+                      <MetricBar
+                        value={row.keyConfidence}
+                        min={0}
+                        max={1}
+                        color="#ff6b00"
+                        heightClassName="h-1.5"
+                      />
+                    </div>
+                  ),
                 },
               ]}
             />
@@ -2326,28 +2577,38 @@ export function MeasurementDashboard({
                 Segment Loudness
               </span>
             </div>
-            <SimpleTable
+            <StyledDataTable
               data={phase1.segmentLoudness}
               columns={[
                 {
                   key: 'segmentIndex',
                   label: 'Segment',
-                  format: (v) => String(v !== undefined ? v : '—'),
+                  monospace: true,
+                  render: (row) => String(row.segmentIndex !== undefined ? row.segmentIndex : '—'),
                 },
                 {
                   key: 'start',
                   label: 'Start (s)',
-                  format: (v) => formatNumber(v as number, 1),
+                  monospace: true,
+                  render: (row) => formatNumber(row.start, 1),
                 },
                 {
                   key: 'end',
                   label: 'End (s)',
-                  format: (v) => formatNumber(v as number, 1),
+                  monospace: true,
+                  render: (row) => formatNumber(row.end, 1),
                 },
                 {
                   key: 'lufs',
                   label: 'LUFS',
-                  format: (v) => formatNumber(v as number, 1),
+                  render: (row) => (
+                    <span
+                      className="font-mono font-bold tabular-nums"
+                      style={{ color: loudnessToneColor(row.lufs) }}
+                    >
+                      {formatNumber(row.lufs, 1)}
+                    </span>
+                  ),
                 },
               ]}
             />
@@ -2360,33 +2621,62 @@ export function MeasurementDashboard({
                 Segment Spectral
               </span>
             </div>
-            <SimpleTable
+            <StyledDataTable
               data={phase1.segmentSpectral}
               columns={[
                 {
                   key: 'segmentIndex',
                   label: 'Segment',
-                  format: (v) => String(v !== undefined ? v : '—'),
+                  monospace: true,
+                  render: (row) => String(row.segmentIndex !== undefined ? row.segmentIndex : '—'),
                 },
                 {
-                  key: 'spectralCentroid',
+                  key: 'centroid',
                   label: 'Centroid (Hz)',
-                  format: (v) => formatNumber(v as number, 1),
+                  monospace: true,
+                  render: (row) => formatNumber(row.spectralCentroid, 1),
                 },
                 {
-                  key: 'spectralRolloff',
+                  key: 'rolloff',
                   label: 'Rolloff (Hz)',
-                  format: (v) => formatNumber(v as number, 1),
+                  monospace: true,
+                  render: (row) => formatNumber(row.spectralRolloff, 1),
                 },
                 {
-                  key: 'stereoWidth',
+                  key: 'width',
                   label: 'Width',
-                  format: (v) => formatNumber(v as number, 2),
+                  render: (row) => (
+                    <div className="space-y-1">
+                      <div className="text-right font-mono tabular-nums text-text-primary">
+                        {formatNumber(row.stereoWidth, 2)}
+                      </div>
+                      <MetricBar
+                        value={row.stereoWidth}
+                        min={0}
+                        max={1}
+                        color="#38bdf8"
+                        heightClassName="h-1.5"
+                      />
+                    </div>
+                  ),
                 },
                 {
-                  key: 'stereoCorrelation',
+                  key: 'corr',
                   label: 'Corr',
-                  format: (v) => formatNumber(v as number, 2),
+                  render: (row) => (
+                    <div className="space-y-1">
+                      <div className="text-right font-mono tabular-nums text-text-primary">
+                        {formatNumber(row.stereoCorrelation, 2)}
+                      </div>
+                      <MetricBar
+                        value={row.stereoCorrelation}
+                        min={-1}
+                        max={1}
+                        color="#ff6b00"
+                        heightClassName="h-1.5"
+                      />
+                    </div>
+                  ),
                 },
               ]}
             />
@@ -2396,269 +2686,376 @@ export function MeasurementDashboard({
 
       {/* 9. Synthesis & Timbre */}
       <Section id="section-meas-synthesis" number={9} title="Synthesis & Timbre">
-        {phase1.synthesisCharacter && (
-          <>
-            {phase1.synthesisCharacter.inharmonicity !== undefined &&
-              phase1.synthesisCharacter.inharmonicity !== null && (
-                <MetricRow
-                  label="Inharmonicity"
-                  value={formatNumber(phase1.synthesisCharacter.inharmonicity, 3)}
-                />
-              )}
-            {phase1.synthesisCharacter.oddToEvenRatio !== undefined &&
-              phase1.synthesisCharacter.oddToEvenRatio !== null && (
-                <MetricRow
-                  label="Odd-to-Even Ratio"
-                  value={formatNumber(phase1.synthesisCharacter.oddToEvenRatio, 2)}
-                />
-              )}
-            {phase1.synthesisCharacter.analogLike !== undefined &&
-              phase1.synthesisCharacter.analogLike !== null && (
-                <MetricRow
-                  label="Analog-Like"
-                  value={phase1.synthesisCharacter.analogLike ? 'Yes' : 'No'}
-                />
-              )}
-          </>
-        )}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {phase1.synthesisCharacter && (
+            <div className="bg-bg-surface-dark border border-border-light border-l-2 border-accent rounded-sm p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+                  Synthesis Character
+                </span>
+                {phase1.synthesisCharacter.analogLike !== undefined &&
+                  phase1.synthesisCharacter.analogLike !== null && (
+                    <StatusBadge
+                      label={phase1.synthesisCharacter.analogLike ? 'Analog-Like' : 'Digital-Like'}
+                      tone={phase1.synthesisCharacter.analogLike ? 'success' : 'muted'}
+                      compact
+                    />
+                  )}
+              </div>
+              {phase1.synthesisCharacter.inharmonicity !== undefined &&
+                phase1.synthesisCharacter.inharmonicity !== null && (
+                  <MetricBarRow
+                    label="Inharmonicity"
+                    value={phase1.synthesisCharacter.inharmonicity}
+                    min={0}
+                    max={1}
+                    color="#ff6b00"
+                    valueLabel={formatNumber(phase1.synthesisCharacter.inharmonicity, 3)}
+                  />
+                )}
+              {phase1.synthesisCharacter.oddToEvenRatio !== undefined &&
+                phase1.synthesisCharacter.oddToEvenRatio !== null && (
+                  <MetricBarRow
+                    label="Odd-to-Even Ratio"
+                    value={phase1.synthesisCharacter.oddToEvenRatio}
+                    min={0}
+                    max={3}
+                    color="#f59e0b"
+                    valueLabel={formatNumber(phase1.synthesisCharacter.oddToEvenRatio, 2)}
+                  />
+                )}
+            </div>
+          )}
 
-        {phase1.perceptual && (
-          <>
-            <div className="border-t border-border pt-3">
+          {phase1.perceptual && (
+            <div className="bg-bg-surface-dark border border-border-light border-l-2 border-accent rounded-sm p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] space-y-3">
               <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
                 Perceptual
               </span>
-            </div>
-            <MetricRow
-              label="Sharpness"
-              value={formatNumber(phase1.perceptual.sharpness, 2)}
-            />
-            <MetricRow
-              label="Roughness"
-              value={formatNumber(phase1.perceptual.roughness, 2)}
-            />
-          </>
-        )}
-
-        {phase1.sidechainDetail && (
-          <>
-            <div className="border-t border-border pt-3">
-              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
-                Sidechain / Pumping
-              </span>
-            </div>
-            <MetricRow
-              label="Pumping Strength"
-              value={formatNumber(phase1.sidechainDetail.pumpingStrength, 2)}
-            />
-            <MetricRow
-              label="Pumping Regularity"
-              value={formatNumber(phase1.sidechainDetail.pumpingRegularity, 2)}
-            />
-            {phase1.sidechainDetail.pumpingRate && (
-              <MetricRow label="Pumping Rate" value={phase1.sidechainDetail.pumpingRate} />
-            )}
-            <MetricRow
-              label="Pumping Confidence"
-              value={formatNumber(phase1.sidechainDetail.pumpingConfidence, 2)}
-            />
-            {phase1.sidechainDetail.envelopeShape &&
-              phase1.sidechainDetail.envelopeShape.length > 0 && (
-                <BarChart
-                  values={phase1.sidechainDetail.envelopeShape.slice(0, 16)}
-                  count={16}
-                  label="Pumping Shape"
-                  height="h-8"
-                />
-              )}
-          </>
-        )}
-
-        {phase1.effectsDetail && (
-          <>
-            <div className="border-t border-border pt-3">
-              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
-                Effects
-              </span>
-            </div>
-            {phase1.effectsDetail.gatingDetected !== undefined &&
-              phase1.effectsDetail.gatingDetected !== null && (
-                <MetricRow
-                  label="Gating Detected"
-                  value={phase1.effectsDetail.gatingDetected ? 'Yes' : 'No'}
-                />
-              )}
-            {phase1.effectsDetail.gatingRate !== undefined &&
-              phase1.effectsDetail.gatingRate !== null && (
-                <MetricRow
-                  label="Gating Rate"
-                  value={formatNumber(phase1.effectsDetail.gatingRate, 2)}
-                />
-              )}
-            {phase1.effectsDetail.gatingRegularity !== undefined &&
-              phase1.effectsDetail.gatingRegularity !== null && (
-                <MetricRow
-                  label="Gating Regularity"
-                  value={formatNumber(phase1.effectsDetail.gatingRegularity, 2)}
-                />
-              )}
-            {phase1.effectsDetail.gatingEventCount !== undefined &&
-              phase1.effectsDetail.gatingEventCount !== null && (
-                <MetricRow
-                  label="Gating Event Count"
-                  value={formatNumber(phase1.effectsDetail.gatingEventCount, 0)}
-                />
-              )}
-          </>
-        )}
-
-        {phase1.vocalDetail && (
-          <>
-            <div className="border-t border-border pt-3">
-              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
-                Vocals
-              </span>
-            </div>
-            <MetricRow
-              label="Vocals Detected"
-              value={phase1.vocalDetail.hasVocals ? 'Yes' : 'No'}
-            />
-            <MetricRow
-              label="Vocal Confidence"
-              value={formatNumber(phase1.vocalDetail.confidence, 2)}
-            />
-            <MetricRow
-              label="Vocal Energy Ratio"
-              value={formatNumber(phase1.vocalDetail.vocalEnergyRatio, 3)}
-            />
-          </>
-        )}
-
-        {phase1.acidDetail && (
-          <>
-            <div className="border-t border-border pt-3">
-              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
-                Acid
-              </span>
-            </div>
-            <MetricRow
-              label="Acid Detected"
-              value={phase1.acidDetail.isAcid ? 'Yes' : 'No'}
-            />
-            <MetricRow
-              label="Acid Confidence"
-              value={formatNumber(phase1.acidDetail.confidence, 2)}
-            />
-            <MetricRow
-              label="Resonance Level"
-              value={formatNumber(phase1.acidDetail.resonanceLevel, 3)}
-            />
-          </>
-        )}
-
-        {phase1.supersawDetail && (
-          <>
-            <div className="border-t border-border pt-3">
-              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
-                Supersaw
-              </span>
-            </div>
-            <MetricRow
-              label="Supersaw Detected"
-              value={phase1.supersawDetail.isSupersaw ? 'Yes' : 'No'}
-            />
-            <MetricRow
-              label="Supersaw Confidence"
-              value={formatNumber(phase1.supersawDetail.confidence, 2)}
-            />
-            <MetricRow
-              label="Voice Count"
-              value={formatNumber(phase1.supersawDetail.voiceCount, 0)}
-            />
-            <MetricRow
-              label="Avg Detune"
-              value={`${formatNumber(phase1.supersawDetail.avgDetuneCents, 1)} cents`}
-            />
-          </>
-        )}
-
-        {phase1.bassDetail && (
-          <>
-            <div className="border-t border-border pt-3">
-              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
-                Bass Character
-              </span>
-            </div>
-            <MetricRow label="Bass Type" value={phase1.bassDetail.type} />
-            <MetricRow
-              label="Avg Decay"
-              value={`${formatNumber(phase1.bassDetail.averageDecayMs, 0)} ms`}
-            />
-            <MetricRow
-              label="Swing"
-              value={`${formatNumber(phase1.bassDetail.swingPercent, 1)}%`}
-            />
-            <MetricRow label="Groove Type" value={phase1.bassDetail.grooveType} />
-            {phase1.bassDetail.fundamentalHz != null && (
-              <MetricRow
-                label="Fundamental"
-                value={`${formatNumber(phase1.bassDetail.fundamentalHz, 1)} Hz`}
+              <MetricBarRow
+                label="Sharpness"
+                value={phase1.perceptual.sharpness}
+                min={0}
+                max={1}
+                color="#38bdf8"
+                valueLabel={formatNumber(phase1.perceptual.sharpness, 2)}
               />
-            )}
-          </>
-        )}
-
-        {phase1.kickDetail && (
-          <>
-            <div className="border-t border-border pt-3">
-              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
-                Kick
-              </span>
-            </div>
-            <MetricRow
-              label="Distorted"
-              value={phase1.kickDetail.isDistorted ? 'Yes' : 'No'}
-            />
-            <MetricRow
-              label="THD"
-              value={formatNumber(phase1.kickDetail.thd, 3)}
-            />
-            <MetricRow
-              label="Kick Count"
-              value={formatNumber(phase1.kickDetail.kickCount, 0)}
-            />
-            {phase1.kickDetail.fundamentalHz != null && (
-              <MetricRow
-                label="Fundamental"
-                value={`${formatNumber(phase1.kickDetail.fundamentalHz, 1)} Hz`}
+              <MetricBarRow
+                label="Roughness"
+                value={phase1.perceptual.roughness}
+                min={0}
+                max={1}
+                color="#ef4444"
+                valueLabel={formatNumber(phase1.perceptual.roughness, 2)}
               />
-            )}
-          </>
-        )}
-
-        {phase1.reverbDetail && (
-          <>
-            <div className="border-t border-border pt-3">
-              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
-                Reverb
-              </span>
             </div>
-            <MetricRow
-              label="Wet"
-              value={phase1.reverbDetail.isWet ? 'Yes' : 'No'}
-            />
-            {phase1.reverbDetail.rt60 != null && (
-              <MetricRow
-                label="RT60"
-                value={`${formatNumber(phase1.reverbDetail.rt60, 2)} s`}
+          )}
+
+          {phase1.sidechainDetail && (
+            <div className="bg-bg-surface-dark border border-border-light border-l-2 border-accent rounded-sm p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+                  Sidechain / Pumping
+                </span>
+                {phase1.sidechainDetail.pumpingRate && (
+                  <StatusBadge label={phase1.sidechainDetail.pumpingRate} tone="info" compact />
+                )}
+              </div>
+              <MetricBarRow
+                label="Pumping Strength"
+                value={phase1.sidechainDetail.pumpingStrength}
+                min={0}
+                max={1}
+                color="#a78bfa"
+                valueLabel={formatNumber(phase1.sidechainDetail.pumpingStrength, 2)}
               />
-            )}
-            <MetricRow
-              label="Measured"
-              value={phase1.reverbDetail.measured ? 'Yes' : 'No'}
-            />
-          </>
-        )}
+              <MetricBarRow
+                label="Pumping Regularity"
+                value={phase1.sidechainDetail.pumpingRegularity}
+                min={0}
+                max={1}
+                color="#60a5fa"
+                valueLabel={formatNumber(phase1.sidechainDetail.pumpingRegularity, 2)}
+              />
+              <MetricBarRow
+                label="Pumping Confidence"
+                value={phase1.sidechainDetail.pumpingConfidence}
+                min={0}
+                max={1}
+                color="#34d399"
+                valueLabel={formatNumber(phase1.sidechainDetail.pumpingConfidence, 2)}
+              />
+              {phase1.sidechainDetail.envelopeShape &&
+                phase1.sidechainDetail.envelopeShape.length > 0 && (
+                  <BarChart
+                    values={phase1.sidechainDetail.envelopeShape.slice(0, 16)}
+                    count={16}
+                    label="Pumping Shape"
+                    height="h-8"
+                    colors={['#a78bfa', '#c084fc', '#60a5fa', '#34d399']}
+                  />
+                )}
+            </div>
+          )}
+
+          {phase1.effectsDetail && (
+            <div className="bg-bg-surface-dark border border-border-light border-l-2 border-accent rounded-sm p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+                  Effects
+                </span>
+                {phase1.effectsDetail.gatingDetected !== undefined &&
+                  phase1.effectsDetail.gatingDetected !== null && (
+                    <StatusBadge
+                      label={phase1.effectsDetail.gatingDetected ? 'Yes' : 'No'}
+                      tone={phase1.effectsDetail.gatingDetected ? 'success' : 'error'}
+                      compact
+                    />
+                  )}
+              </div>
+              {phase1.effectsDetail.gatingRate !== undefined &&
+                phase1.effectsDetail.gatingRate !== null && (
+                  <MetricBarRow
+                    label="Gating Rate"
+                    value={phase1.effectsDetail.gatingRate}
+                    min={0}
+                    max={8}
+                    color="#f59e0b"
+                    valueLabel={formatNumber(phase1.effectsDetail.gatingRate, 2)}
+                  />
+                )}
+              {phase1.effectsDetail.gatingRegularity !== undefined &&
+                phase1.effectsDetail.gatingRegularity !== null && (
+                  <MetricBarRow
+                    label="Gating Regularity"
+                    value={phase1.effectsDetail.gatingRegularity}
+                    min={0}
+                    max={1}
+                    color="#ffd166"
+                    valueLabel={formatNumber(phase1.effectsDetail.gatingRegularity, 2)}
+                  />
+                )}
+              {phase1.effectsDetail.gatingEventCount !== undefined &&
+                phase1.effectsDetail.gatingEventCount !== null && (
+                  <MetricRow
+                    label="Gating Event Count"
+                    value={<span className="font-mono tabular-nums">{formatNumber(phase1.effectsDetail.gatingEventCount, 0)}</span>}
+                  />
+                )}
+            </div>
+          )}
+
+          {phase1.vocalDetail && (
+            <div className="bg-bg-surface-dark border border-border-light border-l-2 border-accent rounded-sm p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+                  Vocals
+                </span>
+                <StatusBadge
+                  label={phase1.vocalDetail.hasVocals ? 'Yes' : 'No'}
+                  tone={phase1.vocalDetail.hasVocals ? 'success' : 'error'}
+                  compact
+                />
+              </div>
+              <MetricBarRow
+                label="Confidence"
+                value={phase1.vocalDetail.confidence}
+                min={0}
+                max={1}
+                color="#ff6b00"
+                valueLabel={formatNumber(phase1.vocalDetail.confidence, 2)}
+              />
+              <MetricBarRow
+                label="Vocal Energy Ratio"
+                value={phase1.vocalDetail.vocalEnergyRatio}
+                min={0}
+                max={1}
+                color="#38bdf8"
+                valueLabel={formatNumber(phase1.vocalDetail.vocalEnergyRatio, 3)}
+              />
+              <MetricRow
+                label="Formant Strength"
+                value={<span className="font-mono tabular-nums">{formatNumber(phase1.vocalDetail.formantStrength, 3)}</span>}
+              />
+            </div>
+          )}
+
+          {phase1.acidDetail && (
+            <div className="bg-bg-surface-dark border border-border-light border-l-2 border-accent rounded-sm p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+                  Acid
+                </span>
+                <StatusBadge
+                  label={phase1.acidDetail.isAcid ? 'Yes' : 'No'}
+                  tone={phase1.acidDetail.isAcid ? 'success' : 'error'}
+                  compact
+                />
+              </div>
+              <MetricBarRow
+                label="Confidence"
+                value={phase1.acidDetail.confidence}
+                min={0}
+                max={1}
+                color="#f97316"
+                valueLabel={formatNumber(phase1.acidDetail.confidence, 2)}
+              />
+              <MetricBarRow
+                label="Resonance Level"
+                value={phase1.acidDetail.resonanceLevel}
+                min={0}
+                max={1}
+                color="#ef4444"
+                valueLabel={formatNumber(phase1.acidDetail.resonanceLevel, 3)}
+              />
+              <MetricRow
+                label="Bass Rhythm Density"
+                value={<span className="font-mono tabular-nums">{formatNumber(phase1.acidDetail.bassRhythmDensity, 3)}</span>}
+              />
+            </div>
+          )}
+
+          {phase1.supersawDetail && (
+            <div className="bg-bg-surface-dark border border-border-light border-l-2 border-accent rounded-sm p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+                  Supersaw
+                </span>
+                <StatusBadge
+                  label={phase1.supersawDetail.isSupersaw ? 'Yes' : 'No'}
+                  tone={phase1.supersawDetail.isSupersaw ? 'success' : 'error'}
+                  compact
+                />
+              </div>
+              <MetricBarRow
+                label="Confidence"
+                value={phase1.supersawDetail.confidence}
+                min={0}
+                max={1}
+                color="#a78bfa"
+                valueLabel={formatNumber(phase1.supersawDetail.confidence, 2)}
+              />
+              <MetricRow
+                label="Voice Count"
+                value={<span className="font-mono tabular-nums">{formatNumber(phase1.supersawDetail.voiceCount, 0)}</span>}
+              />
+              <MetricRow
+                label="Avg Detune"
+                value={
+                  <span className="font-mono tabular-nums">
+                    {formatNumber(phase1.supersawDetail.avgDetuneCents, 1)}
+                    <span className="ml-1 text-[10px] text-text-secondary/50">cents</span>
+                  </span>
+                }
+              />
+            </div>
+          )}
+
+          {phase1.bassDetail && (
+            <div className="bg-bg-surface-dark border border-border-light border-l-2 border-accent rounded-sm p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+                  Bass Character
+                </span>
+                <StatusBadge label={phase1.bassDetail.type} tone="accent" compact />
+              </div>
+              <MetricRow
+                label="Avg Decay"
+                value={
+                  <span className="font-mono tabular-nums">
+                    {formatNumber(phase1.bassDetail.averageDecayMs, 0)}
+                    <span className="ml-1 text-[10px] text-text-secondary/50">ms</span>
+                  </span>
+                }
+              />
+              <MetricBarRow
+                label="Swing"
+                value={phase1.bassDetail.swingPercent}
+                min={0}
+                max={100}
+                color="#ff6b00"
+                valueLabel={`${formatNumber(phase1.bassDetail.swingPercent, 1)}%`}
+              />
+              <MetricRow label="Groove Type" value={phase1.bassDetail.grooveType} />
+              {phase1.bassDetail.fundamentalHz != null && (
+                <MetricRow
+                  label="Fundamental"
+                  value={
+                    <span className="font-mono tabular-nums">
+                      {formatNumber(phase1.bassDetail.fundamentalHz, 1)}
+                      <span className="ml-1 text-[10px] text-text-secondary/50">Hz</span>
+                    </span>
+                  }
+                />
+              )}
+            </div>
+          )}
+
+          {phase1.kickDetail && (
+            <div className="bg-bg-surface-dark border border-border-light border-l-2 border-accent rounded-sm p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+                  Kick
+                </span>
+                <StatusBadge
+                  label={phase1.kickDetail.isDistorted ? 'Yes' : 'No'}
+                  tone={phase1.kickDetail.isDistorted ? 'warning' : 'success'}
+                  compact
+                />
+              </div>
+              <MetricRow
+                label="THD"
+                value={<span className="font-mono tabular-nums">{formatNumber(phase1.kickDetail.thd, 3)}</span>}
+              />
+              <MetricRow
+                label="Kick Count"
+                value={<span className="font-mono tabular-nums">{formatNumber(phase1.kickDetail.kickCount, 0)}</span>}
+              />
+              {phase1.kickDetail.fundamentalHz != null && (
+                <MetricRow
+                  label="Fundamental"
+                  value={
+                    <span className="font-mono tabular-nums">
+                      {formatNumber(phase1.kickDetail.fundamentalHz, 1)}
+                      <span className="ml-1 text-[10px] text-text-secondary/50">Hz</span>
+                    </span>
+                  }
+                />
+              )}
+            </div>
+          )}
+
+          {phase1.reverbDetail && (
+            <div className="bg-bg-surface-dark border border-border-light border-l-2 border-accent rounded-sm p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+                  Reverb
+                </span>
+                <StatusBadge
+                  label={phase1.reverbDetail.isWet ? 'Yes' : 'No'}
+                  tone={phase1.reverbDetail.isWet ? 'success' : 'error'}
+                  compact
+                />
+              </div>
+              {phase1.reverbDetail.rt60 != null && (
+                <MetricBarRow
+                  label="RT60"
+                  value={phase1.reverbDetail.rt60}
+                  min={0}
+                  max={8}
+                  color="#38bdf8"
+                  leftLabel="dry"
+                  rightLabel="spacious"
+                  valueLabel={`${formatNumber(phase1.reverbDetail.rt60, 2)} s`}
+                />
+              )}
+              <MetricRow
+                label="Measured"
+                value={<StatusBadge label={phase1.reverbDetail.measured ? 'Yes' : 'No'} tone={phase1.reverbDetail.measured ? 'success' : 'muted'} compact />}
+              />
+            </div>
+          )}
+        </div>
       </Section>
     </div>
   );

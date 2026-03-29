@@ -163,6 +163,9 @@ describe('analysisResultsViewModel helpers', () => {
         {
           order: 1,
           device: 'Drum Buss',
+          deviceFamily: 'NATIVE',
+          trackContext: 'Drum Group',
+          workflowStage: 'MIX',
           parameter: 'Drive',
           value: '6 dB',
           reason: 'Adds drum bite and transient character.',
@@ -170,6 +173,9 @@ describe('analysisResultsViewModel helpers', () => {
         {
           order: 2,
           device: 'EQ Eight',
+          deviceFamily: 'NATIVE',
+          trackContext: 'Bass Group',
+          workflowStage: 'MIX',
           parameter: 'Low Cut',
           value: '30 Hz',
           reason: 'Cleans up sub energy in bass layers.',
@@ -177,6 +183,9 @@ describe('analysisResultsViewModel helpers', () => {
         {
           order: 3,
           device: 'Auto Filter',
+          deviceFamily: 'NATIVE',
+          trackContext: 'Return:Return A',
+          workflowStage: 'ARRANGEMENT',
           parameter: 'High Shelf',
           value: '+2.0 dB @ 10 kHz',
           reason: 'Adds sparkle to hi-hats and vocal chops in the top end.',
@@ -213,6 +222,15 @@ describe('analysisResultsViewModel helpers', () => {
     expect(groups[2]?.annotation).toContain('Annotated high-end focus');
     expect(groups.some((group) => group.name.includes('DRUM PROCESSING /'))).toBe(false);
     expect(groups.some((group) => group.name.includes('HIGH-END DETAIL /'))).toBe(false);
+    expect(groups[0]?.cards[0]).toMatchObject({
+      deviceFamily: 'NATIVE',
+      trackContext: 'Drum Group',
+      workflowStage: 'MIX',
+    });
+    expect(groups[2]?.cards[0]).toMatchObject({
+      trackContext: 'Return:Return A',
+      workflowStage: 'ARRANGEMENT',
+    });
   });
 
   it('merges only adjacent unprotected singleton groups and caps merges at two groups', () => {
@@ -280,6 +298,9 @@ describe('analysisResultsViewModel helpers', () => {
       abletonRecommendations: [
         {
           device: 'Operator',
+          deviceFamily: 'NATIVE',
+          trackContext: 'Bass Group',
+          workflowStage: 'SOUND_DESIGN',
           category: 'Synth',
           parameter: 'Coarse',
           value: '1.00',
@@ -302,6 +323,11 @@ describe('analysisResultsViewModel helpers', () => {
     expect(cards[0].whyThisWorks.length).toBeGreaterThan(10);
     expect(cards.some((card) => /stereo|width/i.test(card.device))).toBe(true);
     expect(cards.some((card) => card.transcriptionDerived)).toBe(true);
+    expect(cards[0]).toMatchObject({
+      deviceFamily: 'NATIVE',
+      trackContext: 'Bass Group',
+      workflowStage: 'SOUND_DESIGN',
+    });
   });
 
   it('builds melody insights from phase1 transcription payload', () => {
