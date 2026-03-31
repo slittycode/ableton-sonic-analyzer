@@ -5,6 +5,7 @@ import {
   StatusBadge,
   StyledDataTable,
 } from './MeasurementPrimitives';
+import { formatDisplayText, getTextRoleClassName } from '../utils/displayText';
 
 interface MixDoctorPanelProps {
   report: MixDoctorReport;
@@ -54,11 +55,11 @@ export function MixDoctorPanel({ report }: MixDoctorPanelProps) {
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <div className="rounded-sm border border-border-light border-l-2 border-accent bg-bg-surface-dark p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-          <span className="text-[9px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+          <span data-text-role="eyebrow" className={getTextRoleClassName('eyebrow')}>
             Target Genre
           </span>
-          <div className="mt-3 text-xl font-display font-bold text-text-primary">
-            {report.genreName}
+          <div data-text-role="item-title" className={`mt-3 ${getTextRoleClassName('item-title')}`}>
+            {formatDisplayText(report.genreName, 'title')}
           </div>
           <div className="mt-2">
             <StatusBadge label={report.genreId} tone="muted" compact />
@@ -66,7 +67,7 @@ export function MixDoctorPanel({ report }: MixDoctorPanelProps) {
         </div>
 
         <div className="rounded-sm border border-border-light border-l-2 border-accent bg-bg-surface-dark p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-          <span className="text-[9px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+          <span data-text-role="eyebrow" className={getTextRoleClassName('eyebrow')}>
             Health Score
           </span>
           <div className="mt-3">
@@ -78,7 +79,7 @@ export function MixDoctorPanel({ report }: MixDoctorPanelProps) {
         </div>
 
         <div className="rounded-sm border border-border-light border-l-2 border-accent bg-bg-surface-dark p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-          <span className="text-[9px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+          <span data-text-role="eyebrow" className={getTextRoleClassName('eyebrow')}>
             Loudness Offset
           </span>
           <div className="mt-3">
@@ -94,7 +95,7 @@ export function MixDoctorPanel({ report }: MixDoctorPanelProps) {
       </div>
 
       <div className="border-t border-border pt-3">
-        <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+        <span data-text-role="eyebrow" className={getTextRoleClassName('eyebrow')}>
           Advisory Summary
         </span>
         <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -127,7 +128,7 @@ export function MixDoctorPanel({ report }: MixDoctorPanelProps) {
       </div>
 
       <div className="border-t border-border pt-3">
-        <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+        <span data-text-role="eyebrow" className={getTextRoleClassName('eyebrow')}>
           Band Diagnostics
         </span>
         <div className="mt-3">
@@ -137,6 +138,8 @@ export function MixDoctorPanel({ report }: MixDoctorPanelProps) {
               {
                 key: 'band',
                 label: 'Band',
+                displayCase: 'eyebrow',
+                textRole: 'eyebrow',
                 render: (row) => row.band,
               },
               {

@@ -112,8 +112,17 @@ const PHASE2_STUB = {
     melodicArp: 'Arp.',
     grooveAndTiming: 'Groove.',
     effectsAndTexture: 'FX.',
+    harmonicContent: 'Harmony.',
   },
-  mixAndMasterChain: [],
+  mixAndMasterChain: [
+    {
+      order: 1,
+      device: 'Drum Buss',
+      parameter: 'Drive',
+      value: '5 dB',
+      reason: 'Adds punch to drums.',
+    },
+  ],
   secretSauce: {
     title: 'Smoke Sauce',
     explanation: 'Smoke explanation.',
@@ -500,6 +509,21 @@ test('top metric cards show TEMPO, KEY SIG, METER, CHARACTER after analysis', as
   await expect(page.getByText('126', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('F minor', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('4/4', { exact: true }).first()).toBeVisible();
+});
+
+test('results panels expose shared typography roles for spectral, band diagnostics, and mix chain content', async ({ page }) => {
+  await stubRoutes(page);
+  await page.goto('/', { waitUntil: 'networkidle' });
+  await page.setInputFiles('#audio-upload', fixturePath());
+  await page.getByRole('button', { name: /Run Analysis/i }).click();
+
+  await expect(page.getByText('Analysis Results')).toBeVisible();
+
+  await expect(page.locator('[data-text-role="eyebrow"]').filter({ hasText: 'SPECTRAL BALANCE' }).first()).toBeVisible();
+  await expect(page.locator('[data-text-role="eyebrow"]').filter({ hasText: 'SUB BASS' }).first()).toBeVisible();
+  await expect(page.locator('[data-text-role="item-title"]').filter({ hasText: 'Harmonic Content' }).first()).toBeVisible();
+  await expect(page.locator('[data-text-role="item-title"]').filter({ hasText: 'Drum Buss' }).first()).toBeVisible();
+  await expect(page.locator('[data-text-role="section-title"]').filter({ hasText: 'Mix & Master Chain' }).first()).toBeVisible();
 });
 
 test('header shows SonicAnalyzer brand and Local DSP Engine version label', async ({ page }) => {

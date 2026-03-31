@@ -44,6 +44,11 @@ import {
   truncateAtSentenceBoundary,
   truncateBySentenceCount,
 } from './analysisResultsViewModel';
+import {
+  formatDisplayText,
+  getTextRoleClassName,
+  type TextRole,
+} from '../utils/displayText';
 
 export interface AnalysisResultsProps {
   phase1: Phase1Result | null;
@@ -153,6 +158,10 @@ function withAlpha(hexColor: string, alphaHex: string): string {
 }
 
 const LOW_CONFIDENCE_TITLE = "Low confidence — treat this as approximate.";
+
+function textRoleClassName(role: TextRole, className = ''): string {
+  return [getTextRoleClassName(role), className].filter(Boolean).join(' ');
+}
 
 function lowConfidenceIndicator(show: boolean) {
   if (!show) return null;
@@ -388,11 +397,17 @@ export function AnalysisResults({
     >
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-border relative">
         <div>
-          <h1 className="text-2xl font-display font-bold tracking-tight text-text-primary uppercase flex items-center">
+          <h1
+            data-text-role="page-title"
+            className={textRoleClassName('page-title', 'flex items-center')}
+          >
             <Activity className="w-6 h-6 mr-3 text-accent" />
-            Analysis Results
+            {formatDisplayText('Analysis Results', 'title')}
           </h1>
-          <p className="text-text-secondary font-mono text-xs mt-1 tracking-wider uppercase opacity-70">
+          <p
+            data-text-role="meta"
+            className={textRoleClassName('meta', 'mt-1 opacity-70')}
+          >
             SESSION ID: {sessionId} // PHASE COMPLETE
           </p>
         </div>
@@ -635,13 +650,16 @@ export function AnalysisResults({
       {phase2?.trackCharacter && (
         <section className="space-y-3">
           <div className="flex items-center justify-between border-b border-border pb-2">
-            <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
+            <h2
+              data-text-role="section-title"
+              className={textRoleClassName('section-title', 'flex items-center')}
+            >
               <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
-              Track Character
+              {formatDisplayText('Track Character', 'title')}
             </h2>
             <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">AI INTERP</span>
           </div>
-          <p className="text-xs text-text-secondary font-mono leading-relaxed opacity-80">
+          <p data-text-role="body" className={textRoleClassName('body', 'opacity-80')}>
             {truncateAtSentenceBoundary(phase2.trackCharacter, 900)}
           </p>
         </section>
@@ -767,14 +785,19 @@ export function AnalysisResults({
                       {item.order}
                     </span>
                     <div className="min-w-0">
-                      <h3 className="text-sm font-bold text-text-primary truncate">{item.name}</h3>
-                      <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
-                        {item.type}
+                      <h3
+                        data-text-role="item-title"
+                        className={textRoleClassName('item-title', 'truncate')}
+                      >
+                        {formatDisplayText(item.name, 'title')}
+                      </h3>
+                      <p data-text-role="eyebrow" className={getTextRoleClassName('eyebrow')}>
+                        {formatDisplayText(item.type, 'eyebrow')}
                       </p>
                     </div>
                   </div>
                 </div>
-                <p className="text-xs font-mono text-text-secondary leading-relaxed">
+                <p data-text-role="body" className={textRoleClassName('body')}>
                   {truncateAtSentenceBoundary(item.purpose, 220)}
                 </p>
                 <div className="space-y-2">
@@ -806,11 +829,13 @@ export function AnalysisResults({
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="rounded-sm border border-border bg-bg-card p-4 space-y-2">
-              <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">Sidechain Source</p>
-              <p className="text-sm font-bold text-text-primary">{routingBlueprint.sidechainSource ?? 'Not specified'}</p>
+              <p data-text-role="eyebrow" className={getTextRoleClassName('eyebrow')}>Sidechain Source</p>
+              <p data-text-role="item-title" className={getTextRoleClassName('item-title')}>
+                {formatDisplayText(routingBlueprint.sidechainSource ?? 'Not specified', 'title')}
+              </p>
             </div>
             <div className="rounded-sm border border-border bg-bg-card p-4 space-y-2 md:col-span-2">
-              <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">Sidechain Targets</p>
+              <p data-text-role="eyebrow" className={getTextRoleClassName('eyebrow')}>Sidechain Targets</p>
               <div className="flex flex-wrap gap-1.5">
                 {routingBlueprint.sidechainTargets.map((target) => (
                   <span
@@ -829,12 +854,14 @@ export function AnalysisResults({
               {routingBlueprint.returns.map((returnTrack) => (
                 <div key={returnTrack.name} className="rounded-sm border border-border bg-bg-card p-4 space-y-3">
                   <div className="flex items-center justify-between gap-3">
-                    <h3 className="text-sm font-bold text-text-primary">{returnTrack.name}</h3>
+                    <h3 data-text-role="item-title" className={getTextRoleClassName('item-title')}>
+                      {formatDisplayText(returnTrack.name, 'title')}
+                    </h3>
                     <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-border text-text-secondary">
                       {returnTrack.deviceFocus}
                     </span>
                   </div>
-                  <p className="text-xs font-mono text-text-secondary leading-relaxed">
+                  <p data-text-role="body" className={textRoleClassName('body')}>
                     {truncateAtSentenceBoundary(returnTrack.purpose, 220)}
                   </p>
                   <MetaBadgeList
@@ -920,7 +947,12 @@ export function AnalysisResults({
               >
                 <div className="absolute top-0 left-0 w-1 h-full bg-accent"></div>
                 <div className="flex items-center justify-between mb-3 pl-2">
-                  <h3 className="font-bold tracking-wide text-sm truncate pr-2">{item.name}</h3>
+                  <h3
+                    data-text-role="item-title"
+                    className={textRoleClassName('item-title', 'truncate pr-2')}
+                  >
+                    {formatDisplayText(item.name, 'title')}
+                  </h3>
                   <span
                     className={`flex items-center text-[10px] font-mono font-bold px-2 py-1 rounded-sm border ${
                       item.confidence === 'HIGH'
@@ -1174,10 +1206,13 @@ export function AnalysisResults({
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h3 className="text-sm font-bold uppercase tracking-wide text-text-primary">
-                      {stem.label}
+                    <h3
+                      data-text-role="item-title"
+                      className={textRoleClassName('item-title')}
+                    >
+                      {formatDisplayText(stem.label, 'title')}
                     </h3>
-                    <p className="mt-2 text-xs font-mono text-text-secondary leading-relaxed">
+                    <p data-text-role="body" className={textRoleClassName('body', 'mt-2')}>
                       {truncateAtSentenceBoundary(stem.summary, 220)}
                     </p>
                   </div>
@@ -1258,9 +1293,12 @@ export function AnalysisResults({
       {sonicCards.length > 0 && (
         <section id="section-sonic-elements" className="space-y-6 scroll-mt-24">
           <div className="flex items-center justify-between border-b border-border pb-2">
-            <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
+            <h2
+              data-text-role="section-title"
+              className={textRoleClassName('section-title', 'flex items-center')}
+            >
               <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
-              Sonic Elements & Reconstruction
+              {formatDisplayText('Sonic Elements & Reconstruction', 'title')}
             </h2>
             <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">COLLAPSIBLE</span>
           </div>
@@ -1281,7 +1319,12 @@ export function AnalysisResults({
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <span className="text-sm">{card.icon}</span>
-                          <h3 className="text-sm font-bold uppercase tracking-wide truncate">{card.title}</h3>
+                          <h3
+                            data-text-role="item-title"
+                            className={textRoleClassName('item-title', 'truncate')}
+                          >
+                            {formatDisplayText(card.title, 'title')}
+                          </h3>
                           {card.id === 'harmonicContent' && lowConfidenceIndicator(chordsAreApproximate)}
                           {card.transcriptionDerived && (
                             <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-accent/40 text-accent whitespace-nowrap">
@@ -1289,7 +1332,9 @@ export function AnalysisResults({
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-text-secondary font-mono mt-1 truncate">{card.summary}</p>
+                        <p data-text-role="body" className={textRoleClassName('body', 'mt-1 truncate')}>
+                          {card.summary}
+                        </p>
                       </div>
                       <span className="text-text-secondary">
                         {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
@@ -1300,7 +1345,7 @@ export function AnalysisResults({
                   <Collapsible isOpen={isOpen}>
                     <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <p className="text-xs text-text-secondary font-mono leading-relaxed">
+                        <p data-text-role="body" className={textRoleClassName('body')}>
                           {card.description}
                         </p>
                       </div>
@@ -1349,9 +1394,12 @@ export function AnalysisResults({
       {mixGroups.length > 0 && (
         <section id="section-mix-chain" className="space-y-6 scroll-mt-24">
           <div className="flex items-center justify-between border-b border-border pb-2">
-            <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
+            <h2
+              data-text-role="section-title"
+              className={textRoleClassName('section-title', 'flex items-center')}
+            >
               <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
-              Mix & Master Chain
+              {formatDisplayText('Mix & Master Chain', 'title')}
             </h2>
             <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">SIGNAL FLOW</span>
           </div>
@@ -1361,11 +1409,14 @@ export function AnalysisResults({
               .filter((group) => group.cards.length > 0)
               .map((group) => (
               <section key={group.name} className="space-y-3">
-                <h3 className="text-xs font-mono uppercase tracking-widest text-text-secondary border-b border-border/70 pb-1">
-                  {groupIcon(group.name)} {group.name}
+                <h3
+                  data-text-role="meta"
+                  className={textRoleClassName('meta', 'border-b border-border/70 pb-1')}
+                >
+                  {groupIcon(group.name)} {formatDisplayText(group.name, 'eyebrow')}
                 </h3>
                 {group.annotation && (
-                  <p className="text-[10px] font-mono text-text-secondary/80 uppercase tracking-wide">
+                  <p data-text-role="meta" className={textRoleClassName('meta')}>
                     {group.annotation}
                   </p>
                 )}
@@ -1388,12 +1439,19 @@ export function AnalysisResults({
                                 <span className="w-6 h-6 rounded-sm bg-bg-app border border-border text-accent font-mono text-[10px] flex items-center justify-center">
                                   {card.order}
                                 </span>
-                                <h4 className="text-sm font-bold truncate">{card.device}</h4>
+                                <h4
+                                  data-text-role="item-title"
+                                  className={textRoleClassName('item-title', 'truncate')}
+                                >
+                                  {formatDisplayText(card.device, 'title')}
+                                </h4>
                                 <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-border text-text-secondary whitespace-nowrap">
                                   {card.category}
                                 </span>
                               </div>
-                              <p className="text-xs font-mono text-text-secondary mt-1 truncate">{card.role}</p>
+                              <p data-text-role="body" className={textRoleClassName('body', 'mt-1 truncate')}>
+                                {card.role}
+                              </p>
                               <div className="mt-2">
                                 <MetaBadgeList
                                   items={[
@@ -1412,7 +1470,7 @@ export function AnalysisResults({
 
                         <Collapsible isOpen={isOpen}>
                           <div className="p-4 space-y-3">
-                            <p className="text-xs font-mono text-text-secondary leading-relaxed">
+                            <p data-text-role="body" className={textRoleClassName('body')}>
                               {truncateAtSentenceBoundary(card.role, 320)}
                             </p>
 
@@ -1449,9 +1507,12 @@ export function AnalysisResults({
       {patchCards.length > 0 && (
         <section id="section-patches" className="space-y-6 scroll-mt-24">
           <div className="flex items-center justify-between border-b border-border pb-2">
-            <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
+            <h2
+              data-text-role="section-title"
+              className={textRoleClassName('section-title', 'flex items-center')}
+            >
               <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
-              Patch Framework
+              {formatDisplayText('Patch Framework', 'title')}
             </h2>
             <Sliders className="w-4 h-4 text-accent opacity-70" />
           </div>
@@ -1472,7 +1533,12 @@ export function AnalysisResults({
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <Settings2 className="w-4 h-4 text-accent" />
-                          <h4 className="text-sm font-bold truncate">{patch.device}</h4>
+                          <h4
+                            data-text-role="item-title"
+                            className={textRoleClassName('item-title', 'truncate')}
+                          >
+                            {formatDisplayText(patch.device, 'title')}
+                          </h4>
                           {patch.transcriptionDerived && (
                             <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-accent/40 text-accent whitespace-nowrap">
                               Transcription-derived
@@ -1482,7 +1548,9 @@ export function AnalysisResults({
                             {patch.category}
                           </span>
                         </div>
-                        <p className="text-xs font-mono text-text-secondary mt-1 truncate">{patch.patchRole}</p>
+                        <p data-text-role="body" className={textRoleClassName('body', 'mt-1 truncate')}>
+                          {patch.patchRole}
+                        </p>
                         <div className="mt-2">
                           <MetaBadgeList
                             items={[
@@ -1501,7 +1569,7 @@ export function AnalysisResults({
 
                   <Collapsible isOpen={isOpen}>
                     <div className="p-4 space-y-3">
-                      <p className="text-xs font-mono text-text-secondary leading-relaxed">
+                      <p data-text-role="body" className={textRoleClassName('body')}>
                         {truncateAtSentenceBoundary(patch.whyThisWorks, 600)}
                       </p>
 
@@ -1539,7 +1607,12 @@ export function AnalysisResults({
               <div className="bg-accent text-bg-app p-1.5 rounded-sm">
                 <Sparkles className="w-4 h-4" />
               </div>
-              <h2 className="text-sm font-bold tracking-wide uppercase text-accent">Secret Sauce Protocol</h2>
+              <h2
+                data-text-role="section-title"
+                className={textRoleClassName('section-title', 'text-accent')}
+              >
+                {formatDisplayText('Secret Sauce Protocol', 'title')}
+              </h2>
             </div>
             <span className="text-[10px] font-mono bg-accent/20 text-accent px-2 py-1 rounded-sm border border-accent/30">
               CONFIDENTIAL
@@ -1553,8 +1626,13 @@ export function AnalysisResults({
 
             <div className="relative z-10 space-y-6">
               <div className="space-y-2">
-                <h3 className="text-lg font-bold text-text-primary">{phase2.secretSauce.title}</h3>
-                <p className="text-sm font-mono text-text-secondary leading-relaxed max-w-3xl border-l-2 border-accent/30 pl-4">
+                <h3
+                  data-text-role="item-title"
+                  className={[getTextRoleClassName('item-title'), 'text-lg'].join(' ')}
+                >
+                  {formatDisplayText(phase2.secretSauce.title, 'title')}
+                </h3>
+                <p data-text-role="body" className={textRoleClassName('body', 'max-w-3xl border-l-2 border-accent/30 pl-4')}>
                   {truncateAtSentenceBoundary(phase2.secretSauce.explanation, 600)}
                 </p>
               </div>
@@ -1568,8 +1646,13 @@ export function AnalysisResults({
                           {step.step}
                         </span>
                         <div className="min-w-0">
-                          <p className="text-sm font-bold text-text-primary truncate">{step.device}</p>
-                          <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+                          <p
+                            data-text-role="item-title"
+                            className={textRoleClassName('item-title', 'truncate')}
+                          >
+                            {formatDisplayText(step.device, 'title')}
+                          </p>
+                          <p data-text-role="eyebrow" className={getTextRoleClassName('eyebrow')}>
                             {step.parameter}: {step.value}
                           </p>
                         </div>

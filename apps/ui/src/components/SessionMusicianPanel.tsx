@@ -15,6 +15,7 @@ import { downloadMidiFile } from '../services/midi/midiExport';
 import { previewNotes, PreviewHandle } from '../services/midi/midiPreview';
 import { gridLabel, quantizeNotes } from '../services/midi/quantization';
 import { MidiDisplayNote, QuantizeGrid, QuantizeOptions } from '../services/midi/types';
+import { formatDisplayText, getTextRoleClassName } from '../utils/displayText';
 
 const GRID_OPTIONS: QuantizeGrid[] = ['off', '1/4', '1/8', '1/16', '1/32'];
 const PIANO_ROLL_HEIGHT = 240;
@@ -373,9 +374,12 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
   return (
     <section data-testid="session-musician-panel" className="space-y-4">
       <div className="flex items-center justify-between border-b border-border pb-2">
-        <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
+        <h2
+          data-text-role="section-title"
+          className={[getTextRoleClassName('section-title'), 'flex items-center'].join(' ')}
+        >
           <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
-          SESSION MUSICIAN
+          {formatDisplayText('Session Musician', 'title')}
           {melodyIsApproximate && (
             <span
               className="ml-2 text-[10px] font-mono text-warning"
@@ -396,12 +400,14 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
               <Music2 className="w-4 h-4 text-accent" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold uppercase tracking-wider">SESSION MUSICIAN</h3>
-              <p className="text-[10px] font-mono uppercase tracking-widest text-text-secondary opacity-70">
-                Pitch detection and melody guide
+              <h3 data-text-role="item-title" className={getTextRoleClassName('item-title')}>
+                {formatDisplayText('Session Musician', 'title')}
+              </h3>
+              <p data-text-role="eyebrow" className={[getTextRoleClassName('eyebrow'), 'opacity-70'].join(' ')}>
+                {formatDisplayText('Pitch detection and melody guide', 'eyebrow')}
               </p>
-              <p className="text-[10px] font-mono uppercase tracking-widest text-accent/80">
-                Draft notes for MIDI cleanup
+              <p data-text-role="meta" className={[getTextRoleClassName('meta'), 'text-accent/80'].join(' ')}>
+                {formatDisplayText('Draft notes for MIDI cleanup', 'none')}
               </p>
             </div>
           </div>

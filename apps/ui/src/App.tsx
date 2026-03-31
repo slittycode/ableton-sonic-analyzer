@@ -46,6 +46,7 @@ import {
   loadPhase2RequestedPreference,
   savePhase2RequestedPreference,
 } from './utils/phase2Preference';
+import { getAppViewHref } from './utils/appView';
 import { startRenderBenchmarkCycle } from './utils/renderBenchmark';
 
 const MODELS = [
@@ -910,40 +911,48 @@ export default function App() {
             </div>
           </div>
 
-          <div className="hidden sm:flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <label className="text-[10px] font-mono text-text-secondary uppercase">Interpretation Model</label>
-              <select
-                data-testid="phase2-model-desktop"
-                value={selectedModel}
-                onChange={(e) => setSelectedModel(e.target.value)}
-                disabled={phase2ModelSelectorDisabled}
-                className="appearance-none bg-bg-card border border-border text-text-primary text-[10px] font-mono py-1 pl-2 pr-6 rounded-sm focus:outline-none focus:border-accent cursor-pointer disabled:opacity-50"
-              >
-                {MODELS.map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {phase2StatusBadge && (
-              <span
-                data-testid="phase2-status-badge"
-                className="text-[10px] font-mono text-text-secondary uppercase"
-              >
-                {phase2StatusBadge}
-              </span>
-            )}
-            <div className="h-4 w-px bg-border"></div>
-            <div className="flex items-center space-x-1">
-              <span className="text-[10px] font-mono text-text-secondary uppercase">CPU</span>
-              <div className="w-16 h-3 bg-bg-card border border-border rounded-sm overflow-hidden flex items-end p-[1px]">
-                <div
-                  data-testid="cpu-meter-fill"
-                  className={`w-full bg-accent transition-[height] duration-200 ${isAnalyzing ? 'animate-pulse' : ''}`}
-                  style={{ height: `${cpuMeterPercent}%` }}
-                />
+          <div className="flex items-center gap-2 sm:gap-4">
+            <a
+              href={getAppViewHref('daw-concept')}
+              className="inline-flex items-center rounded-full border border-accent/35 bg-accent/10 px-3 py-1 text-[10px] font-mono uppercase tracking-[0.18em] text-accent transition-colors hover:border-accent hover:bg-accent/15 hover:text-[#ffd7b5]"
+            >
+              Dense DAW Lab
+            </a>
+            <div className="hidden sm:flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <label className="text-[10px] font-mono text-text-secondary uppercase">Interpretation Model</label>
+                <select
+                  data-testid="phase2-model-desktop"
+                  value={selectedModel}
+                  onChange={(e) => setSelectedModel(e.target.value)}
+                  disabled={phase2ModelSelectorDisabled}
+                  className="appearance-none bg-bg-card border border-border text-text-primary text-[10px] font-mono py-1 pl-2 pr-6 rounded-sm focus:outline-none focus:border-accent cursor-pointer disabled:opacity-50"
+                >
+                  {MODELS.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {phase2StatusBadge && (
+                <span
+                  data-testid="phase2-status-badge"
+                  className="text-[10px] font-mono text-text-secondary uppercase"
+                >
+                  {phase2StatusBadge}
+                </span>
+              )}
+              <div className="h-4 w-px bg-border"></div>
+              <div className="flex items-center space-x-1">
+                <span className="text-[10px] font-mono text-text-secondary uppercase">CPU</span>
+                <div className="w-16 h-3 bg-bg-card border border-border rounded-sm overflow-hidden flex items-end p-[1px]">
+                  <div
+                    data-testid="cpu-meter-fill"
+                    className={`w-full bg-accent transition-[height] duration-200 ${isAnalyzing ? 'animate-pulse' : ''}`}
+                    style={{ height: `${cpuMeterPercent}%` }}
+                  />
+                </div>
               </div>
             </div>
           </div>

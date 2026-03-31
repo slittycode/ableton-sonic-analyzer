@@ -1,5 +1,12 @@
 import React from 'react';
 
+import {
+  formatDisplayText,
+  getTextRoleClassName,
+  type DisplayTextCase,
+  type TextRole,
+} from '../utils/displayText';
+
 type PrimitiveTone =
   | 'accent'
   | 'success'
@@ -213,12 +220,23 @@ export function MetricBarRow({
   return (
     <div className={['space-y-1.5', className].filter(Boolean).join(' ')}>
       <div className="flex items-center justify-between gap-3">
-        <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
-          {label}
+        <span
+          data-text-role="eyebrow"
+          className={getTextRoleClassName('eyebrow')}
+        >
+          {formatDisplayText(label, 'eyebrow')}
         </span>
         <div className="flex items-center gap-2">
           {sparkline && <span className="shrink-0">{sparkline}</span>}
-          <span className={monospaceValue ? 'text-sm font-mono font-bold text-text-primary tabular-nums' : 'text-sm font-display font-bold text-text-primary'}>
+          <span
+            data-text-role="value"
+            className={[
+              getTextRoleClassName('value'),
+              monospaceValue ? 'tabular-nums' : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+          >
             {valueLabel}
           </span>
         </div>
@@ -267,14 +285,29 @@ export function AccentMetricCard({
         .join(' ')}
     >
       <div className="flex items-start justify-between gap-3">
-        <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+        <span
+          data-text-role="eyebrow"
+          className={getTextRoleClassName('eyebrow')}
+        >
           {label}
         </span>
         {headerRight}
       </div>
       <div className="mt-3 flex items-baseline gap-2">
-        <span className="text-3xl font-display font-bold text-text-primary">{value}</span>
-        {unit && <span className="text-[10px] font-mono text-text-secondary/60">{unit}</span>}
+        <span
+          data-text-role="value"
+          className={[getTextRoleClassName('value'), 'text-3xl'].join(' ')}
+        >
+          {value}
+        </span>
+        {unit && (
+          <span
+            data-text-role="meta"
+            className={getTextRoleClassName('meta')}
+          >
+            {unit}
+          </span>
+        )}
       </div>
       {footer && <div className="mt-4">{footer}</div>}
     </div>
@@ -309,6 +342,8 @@ export interface StyledDataTableColumn<T> {
   label: string;
   align?: 'left' | 'right';
   monospace?: boolean;
+  displayCase?: DisplayTextCase;
+  textRole?: TextRole;
   render?: (row: T) => React.ReactNode;
 }
 
@@ -325,6 +360,25 @@ export function StyledDataTable<T>({
   rowClassName,
   className = '',
 }: StyledDataTableProps<T>) {
+  const renderTextValue = (
+    value: string | number,
+    textRole: TextRole,
+    displayCase: DisplayTextCase,
+    monospace = false,
+  ) => (
+    <span
+      data-text-role={textRole}
+      className={[
+        getTextRoleClassName(textRole),
+        monospace ? 'tabular-nums' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
+      {typeof value === 'string' ? formatDisplayText(value, displayCase) : value}
+    </span>
+  );
+
   return (
     <div className={['overflow-x-auto rounded-sm border border-border-light', className].filter(Boolean).join(' ')}>
       <table className="w-full border-collapse">
@@ -334,11 +388,13 @@ export function StyledDataTable<T>({
               <th
                 key={column.key}
                 className={[
-                  'px-3 py-2 text-[10px] font-mono uppercase tracking-[0.16em] text-text-secondary font-normal',
+                  'px-3 py-2 font-normal',
+                  getTextRoleClassName('eyebrow'),
                   column.align === 'right' ? 'text-right' : 'text-left',
                 ].join(' ')}
+                data-text-role="eyebrow"
               >
-                {column.label}
+                {formatDisplayText(column.label, 'eyebrow')}
               </th>
             ))}
           </tr>
@@ -362,15 +418,21 @@ export function StyledDataTable<T>({
                   <td
                     key={`${rowIndex}-${column.key}`}
                     className={[
-                      'px-3 py-2 text-sm text-text-primary align-top',
+                      'px-3 py-2 align-top',
                       column.align === 'right' ? 'text-right' : 'text-left',
-                      column.monospace ? 'font-mono tabular-nums' : 'font-display font-medium',
                       rowClassName?.(row, rowIndex) ?? '',
                     ]
                       .filter(Boolean)
                       .join(' ')}
                   >
-                    {value}
+                    {typeof value === 'string' || typeof value === 'number'
+                      ? renderTextValue(
+                          value,
+                          column.textRole ?? (column.monospace ? 'value' : 'body'),
+                          column.displayCase ?? 'none',
+                          column.monospace,
+                        )
+                      : value}
                   </td>
                 );
               })}

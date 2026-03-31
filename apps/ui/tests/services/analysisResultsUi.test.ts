@@ -423,6 +423,27 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).not.toContain('data-testid="patch-grid"');
   });
 
+  it('uses shared typography roles for section titles, item titles, labels, and body copy', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: baseMeasurement,
+        phase2: basePhase2,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).toContain('data-text-role="section-title"');
+    expect(html).toContain('>Mix &amp; Master Chain</h2>');
+    expect(html).toContain('data-text-role="item-title"');
+    expect(html).toContain('>Harmonic Content</h3>');
+    expect(html).toContain('>Drum Buss</h4>');
+    expect(html).toContain('data-text-role="eyebrow"');
+    expect(html).toContain('>SPECTRAL BALANCE</span>');
+    expect(html).toContain('>SUB BASS</span>');
+    expect(html).toContain('data-text-role="body"');
+    expect(html).toContain('Shapes drum impact by adds punch to drums.');
+  });
+
   it('renders character pills from the first four detected characteristics with shortened names', () => {
     const phase2WithTags: Phase2Result = {
       ...basePhase2,
@@ -731,7 +752,7 @@ describe('AnalysisResults UI wiring', () => {
 
     expect(html).toContain('Rhythm &amp; Groove');
     expect(html).toContain('1.24');
-    expect(html).toContain('DFA (Rhythmic Complexity)');
+    expect(html).toContain('DFA (RHYTHMIC COMPLEXITY)');
     expect(html).toContain('0.870');
   });
 
@@ -866,8 +887,8 @@ describe('AnalysisResults UI wiring', () => {
     );
 
     expect(html).toContain('Dynamics &amp; Texture');
-    expect(html).toContain('Estimated Loudness');
-    expect(html).toContain('Texture Score');
+    expect(html).toContain('ESTIMATED LOUDNESS');
+    expect(html).toContain('TEXTURE SCORE');
     expect(html).not.toContain('Dynamic Character');
     expect(html).not.toContain('Measurements not included in this run');
   });
@@ -897,7 +918,7 @@ describe('AnalysisResults UI wiring', () => {
     );
 
     expect(html).toContain('Dynamics');
-    expect(html).toContain('Estimated Loudness');
+    expect(html).toContain('ESTIMATED LOUDNESS');
     expect(html).toContain('Texture unavailable');
     expect(html).toContain('This full run did not include texture measurements.');
     expect(html).not.toContain('Measurements not included in this run');
@@ -927,7 +948,7 @@ describe('AnalysisResults UI wiring', () => {
     );
 
     expect(html).toContain('Texture');
-    expect(html).toContain('Texture Score');
+    expect(html).toContain('TEXTURE SCORE');
     expect(html).toContain('Dynamics unavailable');
     expect(html).toContain('This standard run did not include dynamics measurements.');
     expect(html).not.toContain('Measurements not included in this run');
@@ -1191,7 +1212,7 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).toContain('href="#section-meas-synthesis"');
     expect(html).toContain('id="section-meas-synthesis"');
     expect(html).toContain('Sidechain / Pumping');
-    expect(html).toContain('Pumping Strength');
+    expect(html).toContain('PUMPING STRENGTH');
   });
 
   it('renders an effects field panel in rhythm section when gating data is present', () => {
@@ -1333,6 +1354,6 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).toContain('257 BARS');
     expect(html).not.toContain('110 BARS');
     expect(html).toContain('C Major (Bridge)');
-    expect(html).toMatch(/<td[^>]*>0<\/td>/);
+    expect(html).toContain('data-text-role="value" class="text-role-value tabular-nums">0</span>');
   });
 });

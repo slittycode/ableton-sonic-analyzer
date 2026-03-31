@@ -35,6 +35,7 @@ import {
 } from './MeasurementPrimitives';
 import { Sparkline } from './Sparkline';
 import { SpectralCursorProvider } from '../hooks/useSpectralCursorBus';
+import { formatDisplayText, getTextRoleClassName } from '../utils/displayText';
 
 interface MeasurementDashboardProps {
   phase1: Phase1Result;
@@ -262,12 +263,18 @@ const MetricRow = ({
   sparkline?: React.ReactNode;
 }) => (
   <div className="flex justify-between items-center gap-4">
-    <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
-      {label}
+    <span
+      data-text-role="eyebrow"
+      className={getTextRoleClassName('eyebrow')}
+    >
+      {formatDisplayText(label, 'eyebrow')}
     </span>
     <div className="flex items-center gap-2">
       {sparkline && <span className="flex-shrink-0">{sparkline}</span>}
-      <span className="text-sm font-display font-bold text-text-primary">
+      <span
+        data-text-role="value"
+        className={getTextRoleClassName('value')}
+      >
         {value}
       </span>
     </div>
@@ -289,11 +296,14 @@ const SectionHeader = ({
     onClick={onToggle}
     className="w-full text-left flex items-center gap-2 hover:opacity-80 transition-opacity"
   >
-    <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+    <span data-text-role="meta" className={getTextRoleClassName('meta')}>
       {number.toString().padStart(2, '0')}
     </span>
-    <span className="text-lg font-display font-bold text-text-primary flex-1">
-      {title}
+    <span
+      data-text-role="section-title"
+      className={[getTextRoleClassName('section-title'), 'flex-1'].join(' ')}
+    >
+      {formatDisplayText(title, 'title')}
     </span>
     <span className="text-text-secondary text-sm">{isOpen ? '−' : '+'}</span>
   </button>
@@ -1870,8 +1880,8 @@ export function MeasurementDashboard({
       <Section id="section-meas-spectral" testId="spectral-section" number={4} title="Spectral">
         <div className="space-y-3">
           <div>
-            <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
-              Spectral Balance
+            <span data-text-role="eyebrow" className={getTextRoleClassName('eyebrow')}>
+              {formatDisplayText('Spectral Balance', 'eyebrow')}
             </span>
             <div className="mt-2 space-y-3">
               {SPECTRAL_ROW_CONFIG.map((row) => (

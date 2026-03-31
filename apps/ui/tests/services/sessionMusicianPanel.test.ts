@@ -62,7 +62,8 @@ describe('SessionMusicianPanel confidence helpers', () => {
       }),
     );
 
-    expect(html).toContain('SESSION MUSICIAN');
+    expect(html).toContain('Session Musician');
+    expect(html).toContain('data-text-role="section-title"');
     expect(html).toContain('title="Low confidence — treat this as approximate."');
     expect(html).toContain('⚠');
   });

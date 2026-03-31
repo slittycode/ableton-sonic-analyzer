@@ -51,7 +51,7 @@ describe('MixDoctorPanel', () => {
     expect(html).toContain(report.genreName);
     expect(html).toContain('Advisory Summary');
     expect(html).toContain('Band Diagnostics');
-    expect(html).toContain('Low Mids');
+    expect(html).toContain('LOW MIDS');
   });
 
   it('renders score, issue, and delta values as styled badges instead of plain text rows', () => {
@@ -131,5 +131,16 @@ describe('MixDoctorPanel', () => {
     expect(html).toContain('border-warning/30 bg-warning/10');
     expect(html).toContain('border-error/30 bg-error/10');
     expect(html).toContain('-1.8');
+  });
+
+  it('uses the shared mono text roles inside band diagnostics instead of display-font table rows', () => {
+    const report = generateMixDoctorReport(basePhase1);
+    const html = renderToStaticMarkup(React.createElement(MixDoctorPanel, { report }));
+
+    expect(html).toContain('data-text-role="eyebrow"');
+    expect(html).toContain('>SUB BASS<');
+    expect(html).toContain('>LOW BASS<');
+    expect(html).toContain('data-text-role="value"');
+    expect(html).not.toContain('font-display font-medium');
   });
 });
