@@ -986,6 +986,7 @@ class TranscriptionBackendAbstractionTests(unittest.TestCase):
         run_pitch_note_translation_mock.assert_called_once_with(
             "track.wav",
             stem_dir=None,
+            stem_output_dir=None,
             backend_id="torchcrepe-viterbi",
         )
 
