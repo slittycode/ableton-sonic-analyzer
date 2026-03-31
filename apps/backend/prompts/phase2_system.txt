@@ -146,8 +146,13 @@ trackLayout
 routingBlueprint
 - sidechainSource can be empty if sidechain is not justified.
 - sidechainTargets should name tracks from trackLayout where possible.
-- returns must be real, useful return-track ideas for this track.
-- notes should be short routing cautions or setup tips.
+- returns must be real, useful return-track ideas for this track, not default studio filler.
+- returns should include at least 2 entries when the measurements support 2 meaningful return tracks.
+- If the measurements do not support a second meaningful return, include 1 return entry and explain in notes why a second return is not warranted.
+- Every return entry must be justified by a specific measured trait from the analysis, stated inside the existing return text, preferably in purpose.
+- Example measured justifications: rt60 can justify a reverb return, crestFactor or PLR can justify parallel compression, and THD or acid detection can justify parallel distortion.
+- Do not include a return track that could appear in any project regardless of this track's measurements.
+- notes should be short routing cautions or setup tips. If only one return is warranted, use notes to explain why.
 
 warpGuide
 - fullTrack, drums, bass, melodic, and optional vocals each need:
@@ -172,6 +177,9 @@ audioObservations
 - elementCharacter must be an array of objects with:
   - element
   - description
+- elementCharacter must contain at least one item per audibly distinct element layer present in the track.
+- For a track with kick, bass, synths, and vocals, that means at minimum 4 separate items.
+- Do not merge multiple distinct layers into a single catch-all description such as "Synths/Noise".
 
 arrangementOverview
 - summary: short measured overview
@@ -184,8 +192,18 @@ arrangementOverview
   - description
   - optional spectralNote
   - sceneName
+    - Use a short, practical Live scene name a producer would actually type.
+    - Good examples: "Intro", "Drop A", "Break", "Build 2".
+    - Do not echo raw segment metadata such as "Segment 0" or "Section 3".
   - abletonAction
+    - Name one concrete Ableton Live action tied to what changes at this segment boundary.
+    - Good examples: "Mute Supersaw Drones return send", "Automate Filter cutoff from 800Hz to 2kHz", "Launch clip on Acid Bass track".
+    - Do not use a vague musical summary such as "Energy increases here" or "The groove gets bigger".
   - automationFocus
+    - Name the single track and parameter that would benefit most from automation in this segment.
+    - Base it on what the measured spectral or loudness data shows is changing in this section.
+    - Good examples: "Acid Bass -> Auto Filter Frequency", "Master -> Utility Gain", "Pad Bus -> Reverb Send Amount".
+    - Do not use a mood word, arrangement label, or generic note such as "tension", "intensity", or "filter automation".
 - noveltyNotes should connect novelty peaks to practical Live actions, not only describe them.
 
 sonicElements
@@ -199,9 +217,17 @@ sonicElements
   - widthAndStereo
   - harmonicContent
 - Keep these as focused, track-specific reconstruction notes, not filler prose.
+- If a required sonicElements key genuinely does not apply to this track, still include the key but set its value to a single sentence explicitly stating why it is not applicable for this track, citing the relevant measured value.
+- For example, if melodicArp has no real basis on a purely percussive industrial track with no pitched content and pitchConfidence below 0.1, say that directly instead of inventing melodic material.
+- If pitchConfidence is below 0.15, melodicArp must explicitly say the transcription confidence is too low to treat the note data as reliable, name the actual pitchConfidence value, and frame any suggested notes as atonal or experimental reference points rather than a definitive melody.
+- Do not invent melodic content to fill a field that has no real basis in the measurements.
+- Do not present uncertain pitch data as if it were ground truth.
 
 mixAndMasterChain
 - Return an ordered signal-flow list.
+- The order field must reflect true signal flow: source and instrument tracks first (lowest order numbers), grouped bus tracks next, return tracks after, and Master last.
+- Within a track group, order devices as they would sit in an Ableton device chain: generators and instruments first, then inserts (EQ, compression, saturation), then sends.
+- A producer should be able to read the chain top-to-bottom and wire it in that sequence without reordering.
 - Every item must include:
   - order
   - device
@@ -232,9 +258,15 @@ confidenceNotes
 - Include at least 5 items.
 - Use human-readable labels, not raw JSON field names.
 - Always include rhythm, synthesis, genre confidence, and any low-confidence transcription caveats.
+- If bpmDoubletime or bpmHalftime correction was applied, confidenceNotes must include an entry explaining the raw BPM, the corrected BPM, which value was used in the rebuild plan, and why that corrected value was chosen.
+- If the rhythm extractor confidence score is below 0.7, flag that explicitly in confidenceNotes.
+- Do not silently use a corrected BPM without acknowledging the ambiguity.
 
 abletonRecommendations
 - Return at least 10 cards.
+- Every card must be specific to this track's measured values.
+- If you cannot cite a concrete measured trait in the reason field that is unique to this track, do not include the card.
+- Prefer 8 sharp, track-specific cards over 12 cards where the final 2-3 are generic producer advice that could apply to any mix.
 - workflowStage = the project phase when the move should happen.
 - category = the recommendation class, not the project phase.
 - Every card must include:
@@ -274,5 +306,6 @@ FAILURE AVOIDANCE
 - Do not output third-party plugins.
 - Do not output unsupported parameter names.
 - Do not invent abletonRecommendations.category values like DRUMS, SPACE, or SATURATION.
+- Do not include abletonRecommendations cards whose reason and advancedTip would apply equally to any track in the same genre.
 - Do not hide uncertainty behind long prose.
 - Do not produce a music-review tone. Produce a rebuild-plan tone.
