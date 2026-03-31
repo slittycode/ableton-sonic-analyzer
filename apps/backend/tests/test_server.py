@@ -254,6 +254,22 @@ class ServerContractTests(unittest.TestCase):
         schema_name = schema_ref.split("/")[-1]
         return openapi["components"]["schemas"][schema_name]["properties"]
 
+    def _find_analyze_subprocess_call(self, run_mock) -> tuple[list[str], dict]:
+        observed_commands: list[object] = []
+        for call in reversed(run_mock.call_args_list):
+            command = call.args[0] if call.args else call.kwargs.get("args", [])
+            observed_commands.append(command)
+            if (
+                isinstance(command, list)
+                and len(command) >= 2
+                and command[0] == "./venv/bin/python"
+                and command[1] == "analyze.py"
+            ):
+                return command, call.kwargs
+        self.fail(
+            f"Did not find analyze.py subprocess call. Observed subprocess calls: {observed_commands}"
+        )
+
     def test_phase2_prompt_template_loaded(self) -> None:
         self.assertIsInstance(server.PHASE2_PROMPT_TEMPLATE, str)
         self.assertGreater(len(server.PHASE2_PROMPT_TEMPLATE), 100)
@@ -1149,7 +1165,7 @@ class ServerContractTests(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 200)
-        command = run_mock.call_args.args[0]
+        command, call_kwargs = self._find_analyze_subprocess_call(run_mock)
         self.assertEqual(
             command,
             [
@@ -1160,7 +1176,7 @@ class ServerContractTests(unittest.TestCase):
                 "--separate",
             ],
         )
-        self.assertEqual(run_mock.call_args.kwargs["timeout"], 526)
+        self.assertEqual(call_kwargs["timeout"], 526)
         build_estimate_mock.assert_called_once_with(214.6, True, False)
         payload = self._decode_json_response(response)
         self.assertEqual(payload["diagnostics"]["backendDurationMs"], 200.0)
@@ -1246,7 +1262,7 @@ class ServerContractTests(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 200)
-        command = run_mock.call_args.args[0]
+        command, _call_kwargs = self._find_analyze_subprocess_call(run_mock)
         self.assertIn("--fast", command)
         payload = self._decode_json_response(response)
         self.assertIn("--fast", payload["diagnostics"]["timings"]["flagsUsed"])
@@ -1300,7 +1316,7 @@ class ServerContractTests(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 200)
-        command = run_mock.call_args.args[0]
+        command, _call_kwargs = self._find_analyze_subprocess_call(run_mock)
         self.assertNotIn("--fast", command)
         payload = self._decode_json_response(response)
         self.assertNotIn("--fast", payload["diagnostics"]["timings"]["flagsUsed"])
