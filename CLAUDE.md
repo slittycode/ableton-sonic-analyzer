@@ -2,6 +2,22 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Purpose — Read This First
+
+**Read `PURPOSE.md` before making any changes.** It defines why ASA exists, who it serves, and how to evaluate whether a change is worthwhile.
+
+The short version: ASA helps intermediate Ableton Live 12 producers answer "how do I make something that sounds like this?" by running deterministic DSP measurements (Phase 1) and feeding them to an AI interpreter (Phase 2) that produces specific, measurement-cited Ableton device recommendations. The chain of custody from number to recommendation is the product. Every change should make that chain sturdier, more specific, or more useful.
+
+**Before implementing any feature, fix, or refactor, ask:** Does this improve the reconstruction blueprint the user receives? If the answer is not clearly yes, read the decision framework in `PURPOSE.md` and reconsider.
+
+**Quality invariants (from `PURPOSE.md` — non-negotiable):**
+1. Phase 1 measurements are ground truth. Phase 2 never overrides them.
+2. Every Phase 2 recommendation cites the specific measurement(s) that justify it.
+3. Recommendations name exact Ableton Live 12 devices, parameters, and values.
+4. Low-confidence measurements produce hedged recommendations, not confident guesses.
+5. Phase 2 covers the full production surface (kick, bass, melody, groove, effects, stereo, mastering).
+6. Results are accessible to intermediate producers without DSP expertise.
+
 ## Commands
 
 ### Full Stack
@@ -84,7 +100,7 @@ Frontend polling: `src/services/analysisRunsClient.ts` creates runs and polls st
 
 The subprocess isolation means `analyze.py` works as a standalone CLI. Check `apps/backend/JSON_SCHEMA.md` before adding new analyzer output fields. Check `apps/backend/ARCHITECTURE.md` for the full HTTP flow and contract details.
 
-**Phase 2 (`POST /api/phase2`):** Uploads audio to Gemini inline if ≤20MiB, or via the Gemini Files API if larger. Phase 1 JSON is appended to the system prompt from `prompts/phase2_system.txt`.
+**Phase 2 (`POST /api/phase2`):** Uploads audio to Gemini inline if ≤100MiB, or via the Gemini Files API if larger. Phase 1 JSON is appended to the system prompt from `prompts/phase2_system.txt`.
 
 **Python version constraint:** Python 3.11.x required on macOS arm64. Essentia 2.1b6 wheels are only published for 3.11; this constraint may be relaxable if Essentia publishes 3.12+ wheels.
 
