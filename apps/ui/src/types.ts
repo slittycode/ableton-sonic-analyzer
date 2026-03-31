@@ -569,7 +569,9 @@ export interface StemSummaryBar {
   uncertaintyReason: string;
 }
 
-export interface StemSummaryResult {
+export interface StemSummaryStem {
+  stem: 'bass' | 'other';
+  label: string;
   summary: string;
   bars: StemSummaryBar[];
   globalPatterns: {
@@ -577,6 +579,12 @@ export interface StemSummaryResult {
     melodicRole: string;
     pumpingOrModulation: string;
   };
+  uncertaintyFlags: string[];
+}
+
+export interface StemSummaryResult {
+  summary: string;
+  stems: StemSummaryStem[];
   uncertaintyFlags: string[];
 }
 
@@ -759,6 +767,15 @@ export interface InterpretationStageSnapshot {
   provenance: Record<string, unknown> | null;
   diagnostics: Record<string, unknown> | null;
   error: AnalysisStageError | null;
+  profiles?: Record<string, {
+    attemptId: string;
+    status: AnalysisStageStatus;
+    modelName: string | null;
+    result: InterpretationResult | null;
+    provenance: Record<string, unknown> | null;
+    diagnostics: Record<string, unknown> | null;
+    error: AnalysisStageError | null;
+  }>;
 }
 
 export interface AnalysisRunSnapshot {
@@ -766,6 +783,7 @@ export interface AnalysisRunSnapshot {
   requestedStages: AnalysisRunRequestedStages;
   artifacts: {
     sourceAudio: AnalysisRunArtifact;
+    stems?: AnalysisRunArtifact[];
     spectral?: SpectralArtifacts;
   };
   stages: {

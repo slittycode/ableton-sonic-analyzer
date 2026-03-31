@@ -400,6 +400,9 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
               <p className="text-[10px] font-mono uppercase tracking-widest text-text-secondary opacity-70">
                 Pitch detection and melody guide
               </p>
+              <p className="text-[10px] font-mono uppercase tracking-widest text-accent/80">
+                Draft notes for MIDI cleanup
+              </p>
             </div>
           </div>
 

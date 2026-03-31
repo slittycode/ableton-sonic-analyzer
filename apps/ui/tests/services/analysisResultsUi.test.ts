@@ -2,7 +2,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { AnalysisResults, toggleOpenKeySet } from '../../src/components/AnalysisResults';
 import { MIDI_DOWNLOAD_FILE_NAME } from '../../src/components/SessionMusicianPanel';
-import { MeasurementResult, Phase2Result, TranscriptionDetail } from '../../src/types';
+import { MeasurementResult, Phase2Result, StemSummaryResult, TranscriptionDetail } from '../../src/types';
 
 const buildStepPattern = (
   bars: number,
@@ -269,6 +269,61 @@ const phase2V2: Phase2Result = {
   ],
 };
 
+const baseStemSummary: StemSummaryResult = {
+  summary: 'Bass stem: Bass pulses anchor the groove. Musical stem: Upper motion stays approximate.',
+  stems: [
+    {
+      stem: 'bass',
+      label: 'Bass stem',
+      summary: 'Bass pulses anchor the groove.',
+      bars: [
+        {
+          barStart: 1,
+          barEnd: 2,
+          startTime: 0,
+          endTime: 3.75,
+          noteHypotheses: ['C3 pedal'],
+          scaleDegreeHypotheses: ['1'],
+          rhythmicPattern: 'Short off-beat bass pulses.',
+          uncertaintyLevel: 'LOW',
+          uncertaintyReason: 'Pitch/note translation and measured downbeats agree.',
+        },
+      ],
+      globalPatterns: {
+        bassRole: 'Anchors the groove in the low register.',
+        melodicRole: 'Leaves space for the upper material.',
+        pumpingOrModulation: 'Measured pumping suggests compressor-led movement.',
+      },
+      uncertaintyFlags: ['Upper melodic detail is approximate.'],
+    },
+    {
+      stem: 'other',
+      label: 'Musical stem',
+      summary: 'Upper motion stays approximate.',
+      bars: [
+        {
+          barStart: 1,
+          barEnd: 2,
+          startTime: 0,
+          endTime: 3.75,
+          noteHypotheses: ['unclear lead tone'],
+          scaleDegreeHypotheses: [],
+          rhythmicPattern: 'Loose syncopated upper accents.',
+          uncertaintyLevel: 'HIGH',
+          uncertaintyReason: 'Dense harmonic overlap reduces note certainty.',
+        },
+      ],
+      globalPatterns: {
+        bassRole: 'Not a bass layer.',
+        melodicRole: 'Sparse upper-register punctuation.',
+        pumpingOrModulation: 'Subtle movement follows the measured pump.',
+      },
+      uncertaintyFlags: ['Dense harmonic overlap reduces note certainty.'],
+    },
+  ],
+  uncertaintyFlags: ['Upper melodic detail is approximate.'],
+};
+
 const phase2V2WithAudioObservations: Phase2Result = {
   ...phase2V2,
   audioObservations: {
@@ -436,6 +491,26 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).toContain('SCANNING...');
     expect(html).toContain('AI Interpretation');
     expect(html).toContain('Draft — AI interpretation is incomplete or unavailable.');
+  });
+
+  it('renders stem summary cards next to Session Musician with plain-language labels', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults as React.ComponentType<Record<string, unknown>>, {
+        phase1: {
+          ...baseMeasurement,
+          transcriptionDetail: basePitchNote,
+        },
+        phase2: basePhase2,
+        stemSummary: baseStemSummary,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).toContain('Draft notes for MIDI cleanup');
+    expect(html).toContain('AI stem summary for musical understanding');
+    expect(html).toContain('Bass stem');
+    expect(html).toContain('Musical stem');
+    expect(html).toContain('Upper melodic detail is approximate.');
   });
 
   it('renders v2-only Live session setup sections when interpretation.v2 is active', () => {

@@ -463,6 +463,14 @@ def analyze_fast(mono: np.ndarray, sample_rate: int) -> dict:
 1. Checked off deliverables already present in the repo (shipped in v1.2.0+): `calibrate_confidence.py`, `phase2Validator.ts`, `fieldAnalytics.ts`, `analyze_fast.py`, `confidence_calibration_results.md`, `field_utilization_report.md`. Remaining: `Phase2ConsistencyReport.tsx`, `tests/ground_truth/README.md`.
 2. Struck through HOLD gates (Implementation Order + Dependencies) — Codex DSP preflight reframe validation landed and is superseded by `ARCHITECTURE_STRATEGY.md`.
 
+**2026-03-31 — Status sync:**
+1. `Phase2ConsistencyReport.tsx` wired into `AnalysisResults.tsx` — renders after Phase 2 content when violations exist. Validator runs via `useMemo` on phase1+phase2 data.
+2. `types.ts` `StructureData.segments` typed from `unknown[]` to `StructureSegment[]`.
+3. Stem summary feature (Experiment B) implemented end-to-end by Codex: stem files persist as run artifacts, `stem_summary` interpretation profile runs Gemini against separated stems, frontend auto-queues after pitch/note and renders results.
+4. Review fix: `_interpretation_stage_snapshot` now checks all attempts across all profiles — if any is still queued/running, stage status stays non-terminal. This prevents the frontend polling loop from exiting before `stem_summary` completes.
+5. Review fix: stem_summary failure now logged to console and final snapshot emitted for UI inspection.
+6. Review fix: fallback parser no longer duplicates top-level summary as per-stem summary.
+
 ---
 
 ## Notes for Coding Agents

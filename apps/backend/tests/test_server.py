@@ -214,9 +214,9 @@ def _valid_audio_observations() -> dict:
     }
 
 
-def _valid_stem_summary_result() -> dict:
+def _valid_single_stem_summary_result(summary: str = "Bass pulses anchor the section while the upper stem stays approximate.") -> dict:
     return {
-        "summary": "Bass pulses anchor the section while the upper stem stays approximate.",
+        "summary": summary,
         "bars": [
             {
                 "barStart": 1,
@@ -2514,12 +2514,62 @@ class Phase2EndpointTests(unittest.TestCase):
         self.assertEqual(body["analysisRunId"], run_id)
 
     def test_stem_summary_profile_uses_dedicated_prompt_schema_and_hooks(self) -> None:
-        mock_client = self._mock_successful_gemini(json.dumps(_valid_stem_summary_result()))
+        source_audio = b"source-audio"
+        bass_audio = b"bass-audio"
+        other_audio = b"other-audio"
         from analysis_runtime import AnalysisRuntime
 
         with tempfile.TemporaryDirectory(prefix="asa_phase2_runtime_") as temp_dir:
             runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
-            run_id = self._make_completed_run(runtime)
+            created = runtime.create_run(
+                filename="track.mp3",
+                content=source_audio,
+                mime_type="audio/mpeg",
+                pitch_note_mode="stem_notes",
+                pitch_note_backend="auto",
+                interpretation_mode="off",
+                interpretation_profile="producer_summary",
+                interpretation_model=None,
+            )
+            run_id = created["runId"]
+            runtime.complete_measurement(
+                run_id,
+                payload={
+                    "bpm": 128,
+                    "key": "A minor",
+                    "durationSeconds": 60.0,
+                    "rhythmDetail": {"downbeats": [0.0, 1.875, 3.75]},
+                    "segmentLoudness": [],
+                    "sidechainDetail": {
+                        "pumpingStrength": 0.7,
+                        "pumpingRegularity": 0.8,
+                        "pumpingRate": "1/4",
+                        "pumpingConfidence": 0.9,
+                    },
+                },
+                provenance={"schemaVersion": "measurement.v1", "engineVersion": "analyze.py"},
+                diagnostics={"backendDurationMs": 1000},
+            )
+            bass_path = Path(temp_dir) / "bass.wav"
+            bass_path.write_bytes(bass_audio)
+            runtime.record_artifact(
+                run_id,
+                kind="stem_bass",
+                source_path=str(bass_path),
+                filename="bass.wav",
+                mime_type="audio/wav",
+                provenance={"generator": "test"},
+            )
+            other_path = Path(temp_dir) / "other.wav"
+            other_path.write_bytes(other_audio)
+            runtime.record_artifact(
+                run_id,
+                kind="stem_other",
+                source_path=str(other_path),
+                filename="other.wav",
+                mime_type="audio/wav",
+                provenance={"generator": "test"},
+            )
             runtime.create_pitch_note_attempt(
                 run_id,
                 backend_id="torchcrepe-viterbi",
@@ -2556,6 +2606,21 @@ class Phase2EndpointTests(unittest.TestCase):
                 patch.object(server, "_genai") as mock_genai,
                 patch.object(server, "_genai_types") as mock_genai_types,
             ):
+                mock_response_bass = unittest.mock.MagicMock()
+                mock_response_bass.text = json.dumps(
+                    _valid_single_stem_summary_result("Bass stem summary.")
+                )
+                mock_response_other = unittest.mock.MagicMock()
+                mock_response_other.text = json.dumps(
+                    _valid_single_stem_summary_result("Other stem summary.")
+                )
+                mock_model = unittest.mock.MagicMock()
+                mock_model.generate_content.side_effect = [
+                    mock_response_bass,
+                    mock_response_other,
+                ]
+                mock_client = unittest.mock.MagicMock()
+                mock_client.models = mock_model
                 mock_genai.Client.return_value = mock_client
                 mock_genai_types.GenerateContentConfig.return_value = unittest.mock.MagicMock()
                 execution = server._execute_interpretation_attempt(
@@ -2569,17 +2634,91 @@ class Phase2EndpointTests(unittest.TestCase):
                 )
 
             self.assertTrue(execution["ok"])
-            self.assertEqual(
-                mock_genai_types.GenerateContentConfig.call_args.kwargs["response_schema"],
-                server.STEM_SUMMARY_RESPONSE_SCHEMA,
-            )
-            prompt = mock_client.models.generate_content.call_args.kwargs["contents"][0]["parts"][1]["text"]
+            self.assertEqual(mock_model.generate_content.call_count, 2)
+            for call in mock_genai_types.GenerateContentConfig.call_args_list:
+                self.assertEqual(
+                    call.kwargs["response_schema"],
+                    server.STEM_SUMMARY_RESPONSE_SCHEMA,
+                )
+            prompt = mock_model.generate_content.call_args_list[0].kwargs["contents"][0]["parts"][1]["text"]
             self.assertIn("MEASUREMENT_DERIVED_DESCRIPTOR_HOOKS", prompt)
             self.assertIn("stableBarGrid", prompt)
             self.assertIn("pumpingOrModulationDescriptor", prompt)
+            payloads = []
+            for call in mock_model.generate_content.call_args_list:
+                media_part = call.kwargs["contents"][0]["parts"][0]
+                payloads.append(media_part["inline_data"]["data"])
+            decoded_payloads = {json.loads(json.dumps(payload)) if False else __import__("base64").b64decode(payload) for payload in payloads}
+            self.assertEqual(decoded_payloads, {bass_audio, other_audio})
             snapshot = runtime.get_run(run_id)
             self.assertEqual(snapshot["stages"]["interpretation"]["attemptsSummary"][0]["profileId"], "stem_summary")
-            self.assertEqual(snapshot["stages"]["interpretation"]["result"]["summary"], _valid_stem_summary_result()["summary"])
+            self.assertEqual(
+                [stem["stem"] for stem in snapshot["stages"]["interpretation"]["result"]["stems"]],
+                ["bass", "other"],
+            )
+            self.assertEqual(
+                snapshot["stages"]["interpretation"]["result"]["stems"][0]["summary"],
+                "Bass stem summary.",
+            )
+
+    def test_pitch_note_worker_persists_stem_artifacts_from_subprocess_output(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+
+        mock_result = json.dumps({"transcriptionDetail": None})
+
+        with tempfile.TemporaryDirectory(prefix="asa_pitch_note_runtime_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            created = runtime.create_run(
+                filename="track.mp3",
+                content=b"fake-audio",
+                mime_type="audio/mpeg",
+                pitch_note_mode="stem_notes",
+                pitch_note_backend="torchcrepe-viterbi",
+                interpretation_mode="off",
+                interpretation_profile="producer_summary",
+                interpretation_model=None,
+            )
+            attempt_id = runtime.create_pitch_note_attempt(
+                created["runId"],
+                backend_id="torchcrepe-viterbi",
+                mode="stem_notes",
+                status="queued",
+            )
+            runtime.reserve_pitch_note_attempt(attempt_id)
+
+            def fake_subprocess_run(command, **kwargs):
+                stem_output_dir = None
+                if "--stem-output-dir" in command:
+                    idx = command.index("--stem-output-dir")
+                    stem_output_dir = command[idx + 1]
+                if stem_output_dir:
+                    Path(stem_output_dir).mkdir(parents=True, exist_ok=True)
+                    (Path(stem_output_dir) / "bass.wav").write_bytes(b"bass-audio")
+                    (Path(stem_output_dir) / "other.wav").write_bytes(b"other-audio")
+                return subprocess.CompletedProcess(
+                    args=command,
+                    returncode=0,
+                    stdout=mock_result,
+                    stderr="",
+                )
+
+            with patch.object(server.subprocess, "run", side_effect=fake_subprocess_run) as subprocess_mock:
+                server._execute_pitch_note_attempt(
+                    runtime,
+                    {
+                        "attemptId": attempt_id,
+                        "runId": created["runId"],
+                        "backendId": "torchcrepe-viterbi",
+                        "mode": "stem_notes",
+                    },
+                )
+
+                subprocess_mock.assert_called_once()
+                cmd = subprocess_mock.call_args[0][0]
+                self.assertIn("--stem-output-dir", cmd)
+                snapshot = runtime.get_run(created["runId"])
+                stem_kinds = [artifact["kind"] for artifact in snapshot["artifacts"]["stems"]]
+                self.assertEqual(stem_kinds, ["stem_bass", "stem_other"])
 
     def test_openapi_schema_exposes_phase2_route(self) -> None:
         spec = server.app.openapi()

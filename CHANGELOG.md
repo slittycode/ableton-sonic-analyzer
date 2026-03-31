@@ -5,6 +5,12 @@ All notable changes to `asa` are documented here.
 ## Unreleased
 
 ### Added
+- **Stem summary interpretation** (Experiment B): Gemini stem listening via Structured Outputs on separated bass and musical stems, producing bar-aligned musical descriptions with scale degrees, rhythmic patterns, and uncertainty flags
+  - Backend: stem files persist as run artifacts during pitch/note work; `stem_summary` profile runs against persisted `stem_bass` and `stem_other` audio; per-stem Gemini outputs combined into one product-facing result
+  - Frontend: polling loop auto-queues `stem_summary` after pitch/note translation completes; renders separate "AI stem summary" section alongside Session Musician draft notes
+  - Run snapshots expose stem artifacts and per-profile interpretation payloads
+- **Phase2ConsistencyReport** wired into results flow: runs `phase2Validator` against Phase 1 + Phase 2 data, renders violation table after Phase 2 content when issues detected
+- `StructureSegment` interface replaces `unknown[]` in `StructureData.segments`
 - **Genre classification** card in Phase 1 detector grid (genreDetail with family, confidence, topScores)
 - **Sidechain detection** card showing pump depth and timing
 - **Synthesis character** card with three-tier inharmonicity + harmonic shape labels
@@ -26,6 +32,10 @@ All notable changes to `asa` are documented here.
 - UI truthfulness pass: surfaced Phase 2 `trackCharacter`; labeled assumed meter from `timeSignatureSource` / `timeSignatureConfidence`; replaced fake BPM-confidence percentages with raw score + source; made arrangement bars prefer backend `phraseGrid.totalBars` with derived fallback only when absent; fixed segment-key rendering so index `0` and string keys survive; split Session Musician `Total note time` from track duration and exposed melody MIDI/source/vibrato provenance; and made System Diagnostics fall back to persisted stage diagnostics when transient live logs are empty.
 
 ### Fixed
+- **Interpretation stage status** now reflects all in-flight attempts: if any profile (e.g. `stem_summary`) is still queued/running, the stage reports non-terminal status so the frontend polling loop waits for it to complete
+- **Stem summary failure surfacing**: console warning when `stem_summary` fails, with final snapshot emitted for UI inspection
+- **Fallback parser duplicate text**: legacy flat stem-summary response no longer duplicates the top-level summary as the per-stem summary
+- **TypeScript limiter fallback card**: `deviceFamily` and `workflowStage` narrowed with `as const` to satisfy `DeviceFamily` / `WorkflowStage` union types in the `satisfies` clause
 - MixDoctor null-genre fallback: prompts for manual selection instead of silently using first profile
 - Genre abstention logic with tests for empty, sparse, ambiguous, and fast-mode inputs
 - **Confidence calibration invalidated**: `docs/confidence_calibration_results.md` was generated from hand-crafted cache stubs with no real audio. All F1=1.0 results and threshold recommendations were artefacts of the stub data. Thresholds reverted to original engineering-judgment values (`pitchConfidence=0.15`, `chordStrength=0.70`, `pumpingConfidence=0.40`) in `apps/backend/prompts/phase2_system.txt`. Calibration script now aborts if all tracks are cache-only with no audio files present, and warns when only a partial real-audio subset is available.

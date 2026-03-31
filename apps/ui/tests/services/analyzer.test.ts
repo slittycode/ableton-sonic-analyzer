@@ -9,11 +9,13 @@ import type {
 
 const {
   createAnalysisRunMock,
+  createInterpretationAttemptMock,
   getAnalysisRunMock,
   isGeminiPhase2ConfigEnabledMock,
   validatePhase2ConsistencyMock,
 } = vi.hoisted(() => ({
   createAnalysisRunMock: vi.fn(),
+  createInterpretationAttemptMock: vi.fn(),
   getAnalysisRunMock: vi.fn(),
   isGeminiPhase2ConfigEnabledMock: vi.fn(() => true),
   validatePhase2ConsistencyMock: vi.fn(),
@@ -46,6 +48,7 @@ vi.mock('../../src/services/analysisRunsClient', async () => {
   return {
     ...actual,
     createAnalysisRun: createAnalysisRunMock,
+    createInterpretationAttempt: createInterpretationAttemptMock,
     getAnalysisRun: getAnalysisRunMock,
   };
 });
@@ -131,10 +134,12 @@ const phase2Result: Phase2Result = {
 
 afterEach(() => {
   createAnalysisRunMock.mockReset();
+  createInterpretationAttemptMock.mockReset();
   getAnalysisRunMock.mockReset();
   isGeminiPhase2ConfigEnabledMock.mockReset();
   validatePhase2ConsistencyMock.mockReset();
   isGeminiPhase2ConfigEnabledMock.mockReturnValue(true);
+  createInterpretationAttemptMock.mockResolvedValue(makeRunSnapshot());
 });
 
 function makeRunSnapshot(overrides?: Partial<AnalysisRunSnapshot>): AnalysisRunSnapshot {
@@ -215,6 +220,8 @@ function makeRunSnapshot(overrides?: Partial<AnalysisRunSnapshot>): AnalysisRunS
     ...overrides,
   };
 }
+
+createInterpretationAttemptMock.mockResolvedValue(makeRunSnapshot());
 
 describe('analyzeAudio', () => {
   it('creates and polls a canonical analysis run instead of calling legacy wrapper endpoints', async () => {
@@ -322,6 +329,68 @@ describe('analyzeAudio', () => {
     expect(getAnalysisRunMock).toHaveBeenCalledWith('run_123', expect.any(Object));
     expect(onRunUpdate).toHaveBeenCalled();
     expect(phase1Log?.phase).toContain('Measurement');
+  });
+
+  it('queues a stem summary interpretation after pitch notes complete', async () => {
+    const initialRun = makeRunSnapshot({
+      stages: {
+        ...makeRunSnapshot().stages,
+        interpretation: {
+          ...makeRunSnapshot().stages.interpretation,
+          status: 'running',
+          preferredAttemptId: 'int_123',
+        },
+      },
+    });
+    const followupRun = makeRunSnapshot({
+      stages: {
+        ...makeRunSnapshot().stages,
+        interpretation: {
+          ...makeRunSnapshot().stages.interpretation,
+          preferredAttemptId: 'int_stem_123',
+          attemptsSummary: [
+            ...makeRunSnapshot().stages.interpretation.attemptsSummary,
+            {
+              attemptId: 'int_stem_123',
+              profileId: 'stem_summary',
+              modelName: 'gemini-2.5-pro',
+              status: 'queued',
+            },
+          ],
+        },
+      },
+    });
+
+    createAnalysisRunMock.mockResolvedValue(initialRun);
+    getAnalysisRunMock
+      .mockResolvedValueOnce(initialRun)
+      .mockResolvedValueOnce(followupRun);
+    createInterpretationAttemptMock.mockResolvedValue(followupRun);
+
+    const onPhase1Complete = vi.fn();
+    const onPhase2Complete = vi.fn();
+    const onError = vi.fn();
+
+    await analyzeAudio(
+      new File(['audio-data'], 'track.mp3', { type: 'audio/mpeg' }),
+      'gemini-2.5-pro',
+      null,
+      onPhase1Complete,
+      onPhase2Complete,
+      onError,
+      {
+        interpretationRequested: true,
+        interpretationConfigEnabled: true,
+        pitchNoteRequested: true,
+      },
+    );
+
+    expect(createInterpretationAttemptMock).toHaveBeenCalledWith('run_123', {
+      apiBaseUrl: 'http://127.0.0.1:8100',
+      interpretationProfile: 'stem_summary',
+      interpretationModel: 'gemini-2.5-pro',
+      signal: undefined,
+    });
   });
 
   it('passes projected phase 1 and phase 2 results to completion callbacks', async () => {

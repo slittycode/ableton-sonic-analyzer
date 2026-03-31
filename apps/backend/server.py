@@ -1730,6 +1730,7 @@ def _execute_pitch_note_attempt(
         "backendId": attempt["backendId"],
         "mode": attempt["mode"],
     }
+    stem_output_dir: str | None = None
     try:
         # Build the subprocess command
         command = [
@@ -1760,6 +1761,12 @@ def _execute_pitch_note_attempt(
                 if len(stem_dirs) == 1:
                     stem_dir = stem_dirs.pop()
                     command.extend(["--stem-dir", stem_dir])
+            if stem_dir is None:
+                stem_output_dir = tempfile.mkdtemp(
+                    prefix="asa_pitch_note_stems_",
+                    dir=str(runtime.runtime_dir),
+                )
+                command.extend(["--stem-output-dir", stem_output_dir])
 
         result = subprocess.run(
             command,
@@ -1781,11 +1788,24 @@ def _execute_pitch_note_attempt(
             transcription_detail = pitch_note_payload.get("transcriptionDetail")
 
         # If subprocess ran separation, record new stem artifacts
-        if stem_dir is None and attempt["mode"] == "stem_notes":
-            # Stems were created inside the subprocess's temp dir and
-            # already cleaned up — we don't persist them here.
-            # Future: pass --stem-output-dir to persist stems.
-            pass
+        if stem_output_dir is not None and attempt["mode"] == "stem_notes":
+            for stem_name in ("bass", "other"):
+                stem_path = os.path.join(stem_output_dir, f"{stem_name}.wav")
+                if not os.path.isfile(stem_path):
+                    continue
+                runtime.record_artifact(
+                    run_id,
+                    kind=f"stem_{stem_name}",
+                    source_path=stem_path,
+                    filename=f"{stem_name}.wav",
+                    mime_type="audio/wav",
+                    provenance={
+                        "schemaVersion": "artifact.v1",
+                        "sourceArtifactId": source_artifact["artifactId"],
+                        "generator": "pitch_note_translation_subprocess",
+                        "stemName": stem_name,
+                    },
+                )
 
         diagnostics = {
             "backendDurationMs": round(_elapsed_ms(started_at, _current_time()), 2),
@@ -1817,6 +1837,9 @@ def _execute_pitch_note_attempt(
                 "isolationMode": "subprocess",
             },
         )
+    finally:
+        if stem_output_dir is not None:
+            shutil.rmtree(stem_output_dir, ignore_errors=True)
 
 
 def _run_interpretation_request(
@@ -1854,6 +1877,140 @@ def _run_interpretation_request(
         model_name=model_name,
         request_id=request_id,
     )
+
+
+def _stem_summary_label(stem_kind: str) -> str:
+    if stem_kind == "bass":
+        return "Bass stem"
+    if stem_kind == "other":
+        return "Musical stem"
+    return f"{stem_kind.title()} stem"
+
+
+def _build_combined_stem_summary_result(stem_results: list[dict[str, Any]]) -> dict[str, Any]:
+    combined_uncertainty: list[str] = []
+    combined_summary_parts: list[str] = []
+    stems_payload: list[dict[str, Any]] = []
+
+    for stem_result in stem_results:
+        stem_kind = str(stem_result["stem"])
+        single_result = stem_result["result"]
+        stems_payload.append(
+            {
+                "stem": stem_kind,
+                "label": _stem_summary_label(stem_kind),
+                "summary": single_result["summary"],
+                "bars": single_result["bars"],
+                "globalPatterns": single_result["globalPatterns"],
+                "uncertaintyFlags": single_result["uncertaintyFlags"],
+            }
+        )
+        combined_summary_parts.append(f"{_stem_summary_label(stem_kind)}: {single_result['summary']}")
+        for flag in single_result["uncertaintyFlags"]:
+            if flag not in combined_uncertainty:
+                combined_uncertainty.append(flag)
+
+    return {
+        "summary": " ".join(combined_summary_parts),
+        "stems": stems_payload,
+        "uncertaintyFlags": combined_uncertainty,
+    }
+
+
+def _run_combined_stem_summary_request(
+    *,
+    runtime: AnalysisRuntime,
+    run_id: str,
+    measurement_result: dict[str, Any],
+    pitch_note_result: dict[str, Any] | None,
+    grounding_metadata: dict[str, Any],
+    model_name: str,
+    request_id: str,
+) -> dict[str, Any]:
+    stem_artifacts = runtime.get_artifacts_by_kind(run_id, "stem_")
+    usable_stems = [
+        artifact
+        for artifact in stem_artifacts
+        if artifact.get("kind") in {"stem_bass", "stem_other"}
+        and isinstance(artifact.get("path"), str)
+        and os.path.isfile(str(artifact["path"]))
+    ]
+    usable_stems.sort(key=lambda artifact: artifact["kind"])
+    if not usable_stems:
+        return {
+            "ok": True,
+            "interpretationResult": None,
+            "message": "Stem summary skipped because no persisted stem artifacts were available.",
+            "diagnostics": {"backendDurationMs": 0, "stemCalls": []},
+        }
+
+    profile_config = _resolve_interpretation_profile_config("stem_summary")
+    stem_results: list[dict[str, Any]] = []
+    diagnostics_by_stem: list[dict[str, Any]] = []
+
+    for artifact in usable_stems:
+        stem_kind = str(artifact["kind"]).removeprefix("stem_")
+        stem_grounding_metadata = {
+            **grounding_metadata,
+            "stemKind": stem_kind,
+            "stemArtifactId": artifact["artifactId"],
+        }
+        execution = _run_interpretation_request_with_profile_config(
+            source_path=str(artifact["path"]),
+            filename=str(artifact["filename"]),
+            file_size_bytes=int(artifact["sizeBytes"]),
+            profile_id="stem_summary",
+            profile_config=profile_config,
+            measurement_result=measurement_result,
+            pitch_note_result=pitch_note_result,
+            grounding_metadata=stem_grounding_metadata,
+            model_name=model_name,
+            request_id=f"{request_id}:{stem_kind}",
+        )
+        diagnostics_by_stem.append(
+            {
+                "stem": stem_kind,
+                "artifactId": artifact["artifactId"],
+                "diagnostics": execution.get("diagnostics"),
+                "message": execution.get("message"),
+                "ok": execution.get("ok"),
+            }
+        )
+        if not execution["ok"]:
+            execution["diagnostics"] = {
+                "backendDurationMs": 0,
+                "stemCalls": diagnostics_by_stem,
+            }
+            return execution
+        if isinstance(execution.get("interpretationResult"), dict):
+            stem_results.append(
+                {
+                    "stem": stem_kind,
+                    "artifactId": artifact["artifactId"],
+                    "result": execution["interpretationResult"],
+                }
+            )
+
+    if not stem_results:
+        return {
+            "ok": True,
+            "interpretationResult": None,
+            "message": "Stem summary skipped because Gemini did not return usable stem results.",
+            "diagnostics": {
+                "backendDurationMs": 0,
+                "stemCalls": diagnostics_by_stem,
+            },
+        }
+
+    return {
+        "ok": True,
+        "interpretationResult": _build_combined_stem_summary_result(stem_results),
+        "message": "Stem summary complete.",
+        "diagnostics": {
+            "backendDurationMs": 0,
+            "stemCalls": diagnostics_by_stem,
+        },
+    }
 
 
 def _run_interpretation_request_with_profile_config(
@@ -2063,7 +2220,6 @@ def _execute_interpretation_attempt(
 ) -> dict[str, Any]:
     run_id = str(attempt["runId"])
     profile_id = _coerce_string(attempt.get("profileId"), "producer_summary")
-    source_artifact = runtime.get_source_artifact(run_id)
     grounding = runtime.get_interpretation_grounding(run_id)
     measurement_result = grounding["measurementResult"] or {}
     pitch_note_result = grounding["pitchNoteResult"]
@@ -2076,17 +2232,29 @@ def _execute_interpretation_attempt(
         "profileId": profile_id,
     }
     model_name = _coerce_string(attempt.get("modelName"), "gemini-2.5-flash")
-    execution = _run_interpretation_request(
-        source_path=source_artifact["path"],
-        filename=source_artifact["filename"],
-        file_size_bytes=source_artifact["sizeBytes"],
-        profile_id=profile_id,
-        measurement_result=measurement_result,
-        pitch_note_result=pitch_note_result,
-        grounding_metadata=grounding_metadata,
-        model_name=model_name,
-        request_id=str(attempt["attemptId"]),
-    )
+    if profile_id == "stem_summary":
+        execution = _run_combined_stem_summary_request(
+            runtime=runtime,
+            run_id=run_id,
+            measurement_result=measurement_result,
+            pitch_note_result=pitch_note_result,
+            grounding_metadata=grounding_metadata,
+            model_name=model_name,
+            request_id=str(attempt["attemptId"]),
+        )
+    else:
+        source_artifact = runtime.get_source_artifact(run_id)
+        execution = _run_interpretation_request(
+            source_path=source_artifact["path"],
+            filename=source_artifact["filename"],
+            file_size_bytes=source_artifact["sizeBytes"],
+            profile_id=profile_id,
+            measurement_result=measurement_result,
+            pitch_note_result=pitch_note_result,
+            grounding_metadata=grounding_metadata,
+            model_name=model_name,
+            request_id=str(attempt["attemptId"]),
+        )
     profile_config = _resolve_interpretation_profile_config(profile_id)
     provenance = {
         "schemaVersion": str(

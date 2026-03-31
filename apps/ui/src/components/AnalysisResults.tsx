@@ -6,6 +6,7 @@ import {
   Phase1Result,
   Phase2Result,
   SpectralArtifacts,
+  StemSummaryResult,
 } from '../types';
 import {
   Activity,
@@ -47,6 +48,7 @@ import {
 export interface AnalysisResultsProps {
   phase1: Phase1Result | null;
   phase2: Phase2Result | null;
+  stemSummary?: StemSummaryResult | null;
   phase2SchemaVersion?: InterpretationSchemaVersion | null;
   phase2ValidationWarnings?: InterpretationValidationWarning[] | null;
   phase2StatusMessage?: string | null;
@@ -251,6 +253,7 @@ function formatBpmScore(value: number): string {
 export function AnalysisResults({
   phase1,
   phase2,
+  stemSummary = null,
   phase2SchemaVersion = null,
   phase2ValidationWarnings = null,
   phase2StatusMessage = null,
@@ -319,6 +322,9 @@ export function AnalysisResults({
   const routingBlueprint = isPhase2V2 ? phase2?.routingBlueprint ?? null : null;
   const warpGuide = isPhase2V2 ? phase2?.warpGuide ?? null : null;
   const audioObservations = phase2?.audioObservations ?? null;
+  const stemSummaryStems = Array.isArray(stemSummary?.stems) ? stemSummary.stems : [];
+  const stemSummaryFlags = Array.isArray(stemSummary?.uncertaintyFlags) ? stemSummary.uncertaintyFlags : [];
+  const hasStemSummaryContent = stemSummaryStems.length > 0;
   const warpTargets = warpGuide
     ? [
         { label: 'Full Track', target: warpGuide.fullTrack },
@@ -366,6 +372,7 @@ export function AnalysisResults({
     audioObservations ? { id: 'section-audio-observations', label: 'Audio' } : null,
     arrangement ? { id: 'section-arrangement', label: 'Arrangement' } : null,
     { id: 'section-session', label: 'Session' },
+    hasStemSummaryContent ? { id: 'section-stem-summary', label: 'Stem Summary' } : null,
     sonicCards.length > 0 ? { id: 'section-sonic-elements', label: 'Sonic' } : null,
     mixGroups.length > 0 ? { id: 'section-mix-chain', label: 'Mix Chain' } : null,
     patchCards.length > 0 ? { id: 'section-patches', label: 'Patches' } : null,
@@ -1119,6 +1126,134 @@ export function AnalysisResults({
       <div id="section-session" className="scroll-mt-24">
         <SessionMusicianPanel phase1={phase1} sourceFileName={sourceFileName} />
       </div>
+
+      {hasStemSummaryContent && (
+        <section id="section-stem-summary" className="space-y-6 scroll-mt-24">
+          <div className="flex items-center justify-between border-b border-border pb-2">
+            <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
+              <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
+              AI stem summary for musical understanding
+            </h2>
+            <span className="text-[10px] font-mono bg-bg-panel border border-accent/30 text-accent px-2 py-1 rounded font-bold">
+              BEST EFFORT
+            </span>
+          </div>
+
+          <div className="rounded-sm border border-accent/20 bg-accent/5 p-4 space-y-2">
+            <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-accent">
+              What this is for
+            </p>
+            <p className="text-xs font-mono text-text-secondary leading-relaxed">
+              This is a plain-language musical summary of the separated stems. It is useful for understanding the role of the bass and upper material, not for exact MIDI truth.
+            </p>
+            {stemSummary?.summary && (
+              <p className="text-xs font-mono text-text-secondary leading-relaxed">
+                {truncateAtSentenceBoundary(stemSummary.summary, 320)}
+              </p>
+            )}
+          </div>
+
+          {stemSummaryFlags.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {stemSummaryFlags.map((flag, index) => (
+                <span
+                  key={`${flag}-${index}`}
+                  className="text-[10px] font-mono rounded-sm border border-warning/30 bg-warning/10 px-2 py-1 text-warning"
+                >
+                  {flag}
+                </span>
+              ))}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {stemSummaryStems.map((stem) => (
+              <div
+                key={stem.stem}
+                className="rounded-sm border border-border bg-bg-card p-4 space-y-4"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-bold uppercase tracking-wide text-text-primary">
+                      {stem.label}
+                    </h3>
+                    <p className="mt-2 text-xs font-mono text-text-secondary leading-relaxed">
+                      {truncateAtSentenceBoundary(stem.summary, 220)}
+                    </p>
+                  </div>
+                  <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-accent/30 bg-accent/5 text-accent">
+                    {stem.stem}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3">
+                  {stem.bars.map((bar, index) => (
+                    <div
+                      key={`${stem.stem}-bar-${bar.barStart}-${index}`}
+                      className="rounded-sm border border-border/80 bg-bg-panel/50 p-3 space-y-2"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+                          Bars {bar.barStart}-{bar.barEnd}
+                        </span>
+                        <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-border text-text-secondary">
+                          {bar.uncertaintyLevel} certainty
+                        </span>
+                      </div>
+                      {bar.noteHypotheses.length > 0 && (
+                        <p className="text-xs font-mono text-text-secondary leading-relaxed">
+                          Notes: {bar.noteHypotheses.join(', ')}
+                        </p>
+                      )}
+                      {bar.scaleDegreeHypotheses.length > 0 && (
+                        <p className="text-xs font-mono text-text-secondary leading-relaxed">
+                          Scale degrees: {bar.scaleDegreeHypotheses.join(', ')}
+                        </p>
+                      )}
+                      <p className="text-xs font-mono text-text-secondary leading-relaxed">
+                        Rhythm: {truncateAtSentenceBoundary(bar.rhythmicPattern, 180)}
+                      </p>
+                      <p className="text-xs font-mono text-warning leading-relaxed">
+                        Uncertainty: {truncateAtSentenceBoundary(bar.uncertaintyReason, 180)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+                    Global pattern
+                  </p>
+                  <div className="space-y-1">
+                    <p className="text-xs font-mono text-text-secondary leading-relaxed">
+                      Bass role: {truncateAtSentenceBoundary(stem.globalPatterns.bassRole, 180)}
+                    </p>
+                    <p className="text-xs font-mono text-text-secondary leading-relaxed">
+                      Musical role: {truncateAtSentenceBoundary(stem.globalPatterns.melodicRole, 180)}
+                    </p>
+                    <p className="text-xs font-mono text-text-secondary leading-relaxed">
+                      Movement: {truncateAtSentenceBoundary(stem.globalPatterns.pumpingOrModulation, 180)}
+                    </p>
+                  </div>
+                </div>
+
+                {stem.uncertaintyFlags.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {stem.uncertaintyFlags.map((flag, index) => (
+                      <span
+                        key={`${stem.stem}-flag-${index}`}
+                        className="text-[10px] font-mono rounded-sm border border-warning/30 bg-warning/10 px-2 py-1 text-warning"
+                      >
+                        {flag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {sonicCards.length > 0 && (
         <section id="section-sonic-elements" className="space-y-6 scroll-mt-24">

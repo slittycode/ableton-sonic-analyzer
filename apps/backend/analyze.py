@@ -5538,6 +5538,7 @@ def analyze_transcription(
 def _run_pitch_note_translation(
     audio_path: str,
     stem_dir: str | None = None,
+    stem_output_dir: str | None = None,
     backend_id: str | None = None,
 ):
     """Run pitch/note translation only and print JSON to stdout.
@@ -5562,7 +5563,7 @@ def _run_pitch_note_translation(
     temp_dir = None
 
     if need_separation:
-        temp_dir = tempfile.mkdtemp(prefix="asa_pitch_note_stems_")
+        temp_dir = stem_output_dir or tempfile.mkdtemp(prefix="asa_pitch_note_stems_")
         separated = separate_stems(audio_path, output_dir=temp_dir)
         if isinstance(separated, dict) and separated:
             stem_paths = separated
@@ -5576,14 +5577,14 @@ def _run_pitch_note_translation(
         json.dump(result, sys.stdout, indent=2)
         sys.stdout.write("\n")
     finally:
-        if temp_dir is not None:
+        if temp_dir is not None and stem_output_dir is None:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 def main():
     if len(sys.argv) < 2:
         print(
-            "Usage: ./venv/bin/python analyze.py <audio_file> [--separate] [--fast] [--standard] [--transcribe] [--yes] [--pitch-note-only] [--stem-dir DIR] [--pitch-note-backend BACKEND]",
+            "Usage: ./venv/bin/python analyze.py <audio_file> [--separate] [--fast] [--standard] [--transcribe] [--yes] [--pitch-note-only] [--stem-dir DIR] [--stem-output-dir DIR] [--pitch-note-backend BACKEND]",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -5601,16 +5602,26 @@ def main():
     # --pitch-note-only: run pitch/note translation, print JSON, exit
     if pitch_note_only:
         stem_dir = None
+        stem_output_dir = None
         backend_id = None
         if "--stem-dir" in optional_args:
             idx = optional_args.index("--stem-dir")
             if idx + 1 < len(optional_args):
                 stem_dir = optional_args[idx + 1]
+        if "--stem-output-dir" in optional_args:
+            idx = optional_args.index("--stem-output-dir")
+            if idx + 1 < len(optional_args):
+                stem_output_dir = optional_args[idx + 1]
         if "--pitch-note-backend" in optional_args:
             idx = optional_args.index("--pitch-note-backend")
             if idx + 1 < len(optional_args):
                 backend_id = optional_args[idx + 1]
-        _run_pitch_note_translation(audio_path, stem_dir=stem_dir, backend_id=backend_id)
+        _run_pitch_note_translation(
+            audio_path,
+            stem_dir=stem_dir,
+            stem_output_dir=stem_output_dir,
+            backend_id=backend_id,
+        )
         sys.exit(0)
     stems = None
 

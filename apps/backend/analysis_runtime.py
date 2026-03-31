@@ -404,6 +404,14 @@ class AnalysisRuntime:
             artifact_row = conn.execute(
                 "SELECT * FROM run_artifacts WHERE id = ?", (run_row["source_artifact_id"],)
             ).fetchone()
+            stem_rows = conn.execute(
+                """
+                SELECT * FROM run_artifacts
+                WHERE run_id = ? AND kind LIKE 'stem_%'
+                ORDER BY created_at ASC
+                """,
+                (run_id,),
+            ).fetchall()
             measurement_row = conn.execute(
                 "SELECT * FROM measurement_outputs WHERE run_id = ?", (run_id,)
             ).fetchone()
@@ -448,7 +456,19 @@ class AnalysisRuntime:
                     "sizeBytes": artifact_row["size_bytes"],
                     "contentSha256": artifact_row["content_sha256"],
                     "path": artifact_row["path"],
-                }
+                },
+                "stems": [
+                    {
+                        "artifactId": row["id"],
+                        "kind": row["kind"],
+                        "filename": row["filename"],
+                        "mimeType": row["mime_type"],
+                        "sizeBytes": row["size_bytes"],
+                        "contentSha256": row["content_sha256"],
+                        "path": row["path"],
+                    }
+                    for row in stem_rows
+                ],
             },
             "stages": {
                 "measurement": {
@@ -1466,7 +1486,18 @@ class AnalysisRuntime:
         preferred_row: sqlite3.Row | None,
         rows: list[sqlite3.Row],
     ) -> dict[str, Any]:
-        if preferred_row is not None:
+        # If any attempt across any profile is still in-flight, the stage
+        # is not terminal — even if the preferred (first-completed) profile
+        # is done.  Without this, the frontend polling loop exits before
+        # later profiles (e.g. stem_summary) finish.
+        any_running = any(row["status"] == "running" for row in rows)
+        any_queued = any(row["status"] == "queued" for row in rows)
+
+        if any_running:
+            status = "running"
+        elif any_queued:
+            status = "queued"
+        elif preferred_row is not None:
             status = preferred_row["status"]
         elif requested_mode == "off":
             status = "not_requested"
@@ -1476,6 +1507,21 @@ class AnalysisRuntime:
             status = "ready"
         else:
             status = "blocked"
+
+        profiles: dict[str, Any] = {}
+        for row in rows:
+            profile_id = str(row["profile_id"])
+            if profile_id in profiles:
+                continue
+            profiles[profile_id] = {
+                "attemptId": row["id"],
+                "status": row["status"],
+                "modelName": row["model_name"],
+                "result": _json_loads(row["result_json"]),
+                "provenance": _json_loads(row["provenance_json"]),
+                "diagnostics": _json_loads(row["diagnostics_json"]),
+                "error": _json_loads(row["error_json"]),
+            }
 
         return {
             "status": status,
@@ -1494,4 +1540,5 @@ class AnalysisRuntime:
             "provenance": _json_loads(preferred_row["provenance_json"]) if preferred_row is not None else None,
             "diagnostics": _json_loads(preferred_row["diagnostics_json"]) if preferred_row is not None else None,
             "error": _json_loads(preferred_row["error_json"]) if preferred_row is not None else None,
+            "profiles": profiles,
         }

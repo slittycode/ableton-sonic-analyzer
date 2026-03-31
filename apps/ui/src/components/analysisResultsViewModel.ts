@@ -789,16 +789,16 @@ function buildProTip(group: ProcessingGroup): string {
   return tips[group];
 }
 
-function makeLimiterFallbackCard(phase1: Phase1Result, nextOrder: number): MixChainCardViewModel {
+function makeLimiterFallbackCard(phase1: Phase1Result, nextOrder: number) {
   return {
     id: "fallback-limiter",
     order: nextOrder,
     device: "Limiter",
     category: "MASTERING",
     role: "Finalizes loudness control so peaks stay contained while preserving punch.",
-    deviceFamily: "NATIVE",
+    deviceFamily: "NATIVE" as const,
     trackContext: "Master",
-    workflowStage: "MASTER",
+    workflowStage: "MASTER" as const,
     parameters: [
       { label: "Ceiling", value: `${Math.min(-0.3, phase1.truePeak - 0.1).toFixed(1)} dB` },
       { label: "Integrated Loudness", value: `${phase1.lufsIntegrated.toFixed(1)} LUFS` },

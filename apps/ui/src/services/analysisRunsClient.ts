@@ -204,22 +204,22 @@ export function projectPhase1FromRun(snapshot: AnalysisRunSnapshot): Phase1Resul
 }
 
 export function projectPhase2FromRun(snapshot: AnalysisRunSnapshot): Phase2Result | null {
-  const preferredProfileId = getPreferredInterpretationProfileId(snapshot.stages.interpretation);
-  if (preferredProfileId !== 'producer_summary') {
+  const profile = getInterpretationProfileSnapshot(snapshot.stages.interpretation, 'producer_summary');
+  if (!profile) {
     return null;
   }
-  return snapshot.stages.interpretation.result as Phase2Result | null;
+  return profile.result as Phase2Result | null;
 }
 
 export function getPhase2SchemaVersionFromRun(
   snapshot: AnalysisRunSnapshot,
 ): InterpretationSchemaVersion | null {
-  const preferredProfileId = getPreferredInterpretationProfileId(snapshot.stages.interpretation);
-  if (preferredProfileId !== 'producer_summary') {
+  const profile = getInterpretationProfileSnapshot(snapshot.stages.interpretation, 'producer_summary');
+  if (!profile) {
     return null;
   }
 
-  const provenance = parseNullableRecord(snapshot.stages.interpretation.provenance);
+  const provenance = parseNullableRecord(profile.provenance);
   const schemaVersion = asString(provenance?.schemaVersion);
   if (schemaVersion === 'interpretation.v1' || schemaVersion === 'interpretation.v2') {
     return schemaVersion;
@@ -230,12 +230,12 @@ export function getPhase2SchemaVersionFromRun(
 export function projectPhase2ValidationWarningsFromRun(
   snapshot: AnalysisRunSnapshot,
 ): InterpretationValidationWarning[] {
-  const preferredProfileId = getPreferredInterpretationProfileId(snapshot.stages.interpretation);
-  if (preferredProfileId !== 'producer_summary') {
+  const profile = getInterpretationProfileSnapshot(snapshot.stages.interpretation, 'producer_summary');
+  if (!profile) {
     return [];
   }
 
-  const diagnostics = parseNullableRecord(snapshot.stages.interpretation.diagnostics);
+  const diagnostics = parseNullableRecord(profile.diagnostics);
   const rawWarnings = Array.isArray(diagnostics?.validationWarnings)
     ? diagnostics.validationWarnings
     : [];
@@ -260,11 +260,11 @@ export function projectPhase2ValidationWarningsFromRun(
 }
 
 export function projectStemSummaryFromRun(snapshot: AnalysisRunSnapshot): StemSummaryResult | null {
-  const preferredProfileId = getPreferredInterpretationProfileId(snapshot.stages.interpretation);
-  if (preferredProfileId !== 'stem_summary') {
+  const profile = getInterpretationProfileSnapshot(snapshot.stages.interpretation, 'stem_summary');
+  if (!profile) {
     return null;
   }
-  return snapshot.stages.interpretation.result as StemSummaryResult | null;
+  return profile.result as StemSummaryResult | null;
 }
 
 async function fetchJson(url: string, init: RequestInit): Promise<unknown> {
@@ -331,6 +331,13 @@ function parseAnalysisRunSnapshot(value: unknown): AnalysisRunSnapshot {
     requestedStages: parseRequestedStages(root.requestedStages),
     artifacts: {
       sourceAudio: parseArtifact(expectRecord(artifactsRaw.sourceAudio, 'sourceAudio')),
+      ...(Array.isArray(artifactsRaw.stems)
+        ? {
+            stems: artifactsRaw.stems.map((artifact, index) =>
+              parseArtifact(expectRecord(artifact, `stem artifact ${index}`)),
+            ),
+          }
+        : {}),
       ...(artifactsRaw.spectral ? { spectral: parseSpectralArtifacts(artifactsRaw.spectral) } : {}),
     },
     stages: {
@@ -428,6 +435,15 @@ function parseInterpretationStage(value: Record<string, unknown>): Interpretatio
     preferredAttemptId: asString(value.preferredAttemptId),
     attemptsSummary,
   });
+  const profilesRaw = parseNullableRecord(value.profiles);
+  const profiles = profilesRaw
+    ? Object.fromEntries(
+        Object.entries(profilesRaw).map(([profileId, profileValue]) => [
+          profileId,
+          parseInterpretationProfileSnapshot(profileValue, profileId),
+        ]),
+      )
+    : undefined;
   return {
     status: expectStageStatus(value.status),
     authoritative: false,
@@ -437,6 +453,26 @@ function parseInterpretationStage(value: Record<string, unknown>): Interpretatio
     provenance: parseNullableRecord(value.provenance),
     diagnostics: parseNullableRecord(value.diagnostics),
     error: parseNullableError(value.error),
+    profiles,
+  };
+}
+
+function parseInterpretationProfileSnapshot(
+  value: unknown,
+  profileId: string,
+): NonNullable<InterpretationStageSnapshot['profiles']>[string] {
+  const profile = expectRecord(value, `interpretation profile ${profileId}`);
+  return {
+    attemptId: expectString(profile.attemptId, `${profileId} attemptId`),
+    status: expectStageStatus(profile.status),
+    modelName: asString(profile.modelName),
+    result:
+      profile.result == null
+        ? null
+        : parseInterpretationResult(profile.result, profileId),
+    provenance: parseNullableRecord(profile.provenance),
+    diagnostics: parseNullableRecord(profile.diagnostics),
+    error: parseNullableError(profile.error),
   };
 }
 
@@ -472,38 +508,117 @@ function parseInterpretationResult(
 
 function parseStemSummaryResult(value: unknown): StemSummaryResult {
   const result = expectRecord(value, 'stem summary result');
+  const stems = Array.isArray(result.stems)
+    ? result.stems.map((entry) => {
+        const stem = expectRecord(entry, 'stem summary stem');
+        const globalPatterns = expectRecord(stem.globalPatterns, 'stem summary globalPatterns');
+        return {
+          stem: expectString(stem.stem, 'stem summary stem kind') as StemSummaryResult['stems'][number]['stem'],
+          label: expectString(stem.label, 'stem summary label'),
+          summary: expectString(stem.summary, 'stem summary summary'),
+          bars: Array.isArray(stem.bars)
+            ? stem.bars.map((barEntry) => {
+                const bar = expectRecord(barEntry, 'stem summary bar');
+                return {
+                  barStart: expectNumber(bar.barStart, 'stem summary barStart'),
+                  barEnd: expectNumber(bar.barEnd, 'stem summary barEnd'),
+                  startTime: expectNumber(bar.startTime, 'stem summary startTime'),
+                  endTime: expectNumber(bar.endTime, 'stem summary endTime'),
+                  noteHypotheses: Array.isArray(bar.noteHypotheses) ? bar.noteHypotheses.map((item) => String(item)) : [],
+                  scaleDegreeHypotheses: Array.isArray(bar.scaleDegreeHypotheses)
+                    ? bar.scaleDegreeHypotheses.map((item) => String(item))
+                    : [],
+                  rhythmicPattern: expectString(bar.rhythmicPattern, 'stem summary rhythmicPattern'),
+                  uncertaintyLevel: expectString(bar.uncertaintyLevel, 'stem summary uncertaintyLevel') as StemSummaryResult['stems'][number]['bars'][number]['uncertaintyLevel'],
+                  uncertaintyReason: expectString(bar.uncertaintyReason, 'stem summary uncertaintyReason'),
+                };
+              })
+            : [],
+          globalPatterns: {
+            bassRole: expectString(globalPatterns.bassRole, 'stem summary bassRole'),
+            melodicRole: expectString(globalPatterns.melodicRole, 'stem summary melodicRole'),
+            pumpingOrModulation: expectString(globalPatterns.pumpingOrModulation, 'stem summary pumpingOrModulation'),
+          },
+          uncertaintyFlags: Array.isArray(stem.uncertaintyFlags)
+            ? stem.uncertaintyFlags.map((item) => String(item))
+            : [],
+        };
+      })
+    : [];
+
+  if (stems.length > 0) {
+    return {
+      summary: expectString(result.summary, 'stem summary summary'),
+      stems,
+      uncertaintyFlags: Array.isArray(result.uncertaintyFlags)
+        ? result.uncertaintyFlags.map((item) => String(item))
+        : [],
+    };
+  }
+
+  const globalPatterns = expectRecord(result.globalPatterns, 'stem summary globalPatterns');
   return {
     summary: expectString(result.summary, 'stem summary summary'),
-    bars: Array.isArray(result.bars)
-      ? result.bars.map((entry) => {
-          const bar = expectRecord(entry, 'stem summary bar');
-          return {
-            barStart: expectNumber(bar.barStart, 'stem summary barStart'),
-            barEnd: expectNumber(bar.barEnd, 'stem summary barEnd'),
-            startTime: expectNumber(bar.startTime, 'stem summary startTime'),
-            endTime: expectNumber(bar.endTime, 'stem summary endTime'),
-            noteHypotheses: Array.isArray(bar.noteHypotheses) ? bar.noteHypotheses.map((item) => String(item)) : [],
-            scaleDegreeHypotheses: Array.isArray(bar.scaleDegreeHypotheses)
-              ? bar.scaleDegreeHypotheses.map((item) => String(item))
-              : [],
-            rhythmicPattern: expectString(bar.rhythmicPattern, 'stem summary rhythmicPattern'),
-            uncertaintyLevel: expectString(bar.uncertaintyLevel, 'stem summary uncertaintyLevel') as StemSummaryResult['bars'][number]['uncertaintyLevel'],
-            uncertaintyReason: expectString(bar.uncertaintyReason, 'stem summary uncertaintyReason'),
-          };
-        })
-      : [],
-    globalPatterns: {
-      bassRole: expectString(expectRecord(result.globalPatterns, 'stem summary globalPatterns').bassRole, 'stem summary bassRole'),
-      melodicRole: expectString(expectRecord(result.globalPatterns, 'stem summary globalPatterns').melodicRole, 'stem summary melodicRole'),
-      pumpingOrModulation: expectString(
-        expectRecord(result.globalPatterns, 'stem summary globalPatterns').pumpingOrModulation,
-        'stem summary pumpingOrModulation',
-      ),
-    },
+    stems: [
+      {
+        stem: 'other',
+        label: 'Musical stem',
+        summary: expectString(result.stemSummary ?? result.summary, 'stem summary per-stem summary'),
+        bars: Array.isArray(result.bars)
+          ? result.bars.map((entry) => {
+              const bar = expectRecord(entry, 'stem summary bar');
+              return {
+                barStart: expectNumber(bar.barStart, 'stem summary barStart'),
+                barEnd: expectNumber(bar.barEnd, 'stem summary barEnd'),
+                startTime: expectNumber(bar.startTime, 'stem summary startTime'),
+                endTime: expectNumber(bar.endTime, 'stem summary endTime'),
+                noteHypotheses: Array.isArray(bar.noteHypotheses) ? bar.noteHypotheses.map((item) => String(item)) : [],
+                scaleDegreeHypotheses: Array.isArray(bar.scaleDegreeHypotheses)
+                  ? bar.scaleDegreeHypotheses.map((item) => String(item))
+                  : [],
+                rhythmicPattern: expectString(bar.rhythmicPattern, 'stem summary rhythmicPattern'),
+                uncertaintyLevel: expectString(bar.uncertaintyLevel, 'stem summary uncertaintyLevel') as StemSummaryResult['stems'][number]['bars'][number]['uncertaintyLevel'],
+                uncertaintyReason: expectString(bar.uncertaintyReason, 'stem summary uncertaintyReason'),
+              };
+            })
+          : [],
+        globalPatterns: {
+          bassRole: expectString(globalPatterns.bassRole, 'stem summary bassRole'),
+          melodicRole: expectString(globalPatterns.melodicRole, 'stem summary melodicRole'),
+          pumpingOrModulation: expectString(globalPatterns.pumpingOrModulation, 'stem summary pumpingOrModulation'),
+        },
+        uncertaintyFlags: Array.isArray(result.uncertaintyFlags)
+          ? result.uncertaintyFlags.map((item) => String(item))
+          : [],
+      },
+    ],
     uncertaintyFlags: Array.isArray(result.uncertaintyFlags)
       ? result.uncertaintyFlags.map((item) => String(item))
       : [],
   };
+}
+
+function getInterpretationProfileSnapshot(
+  stage: InterpretationStageSnapshot,
+  profileId: string,
+): NonNullable<InterpretationStageSnapshot['profiles']>[string] | null {
+  const directProfile = stage.profiles?.[profileId];
+  if (directProfile) {
+    return directProfile;
+  }
+  const preferredProfileId = getPreferredInterpretationProfileId(stage);
+  if (preferredProfileId === profileId) {
+    return {
+      attemptId: stage.preferredAttemptId ?? '',
+      status: stage.status,
+      modelName: null,
+      result: stage.result,
+      provenance: stage.provenance,
+      diagnostics: stage.diagnostics,
+      error: stage.error,
+    };
+  }
+  return null;
 }
 
 function parsePitchNoteResult(value: unknown): PitchNoteTranslationStageSnapshot['result'] {

@@ -3,9 +3,11 @@ import { AnalysisRunSnapshot, DiagnosticLogEntry, Phase1Result, Phase2Result } f
 import { getAudioMimeTypeOrDefault } from './audioFile';
 import {
   createAnalysisRun,
+  createInterpretationAttempt,
   getAnalysisRun,
   projectPhase1FromRun,
   projectPhase2FromRun,
+  projectStemSummaryFromRun,
 } from './analysisRunsClient';
 import { createUserCancelledError, mapBackendError } from './backendPhase1Client';
 import { MEASUREMENT_LABEL, INTERPRETATION_LABEL, INTERPRETATION_SKIPPED_LABEL } from './phaseLabels';
@@ -147,6 +149,31 @@ function isRunTerminal(snapshot: AnalysisRunSnapshot): boolean {
   return pitchNoteDone && interpretationDone;
 }
 
+function hasInterpretationProfileAttempt(snapshot: AnalysisRunSnapshot, profileId: string): boolean {
+  return snapshot.stages.interpretation.attemptsSummary.some((attempt) => attempt.profileId === profileId);
+}
+
+function shouldQueueStemSummary(
+  snapshot: AnalysisRunSnapshot,
+  pitchNoteRequested: boolean,
+  interpretationRequested: boolean,
+  interpretationConfigEnabled: boolean,
+): boolean {
+  if (!pitchNoteRequested || !interpretationRequested || !interpretationConfigEnabled) {
+    return false;
+  }
+
+  if (snapshot.stages.pitchNoteTranslation.status !== 'completed') {
+    return false;
+  }
+
+  if (projectStemSummaryFromRun(snapshot)) {
+    return false;
+  }
+
+  return !hasInterpretationProfileAttempt(snapshot, 'stem_summary');
+}
+
 export async function analyzeAudio(
   file: File,
   modelName: string,
@@ -208,27 +235,42 @@ export async function monitorAnalysisRun(
     type: getAudioMimeTypeOrDefault(file),
   };
   const interpretationRequested = resolveInterpretationRequested(analysisOptions);
+  const pitchNoteRequested = resolvePitchNoteRequested(analysisOptions);
+  const interpretationConfigEnabled =
+    analysisOptions?.interpretationConfigEnabled ??
+    analysisOptions?.phase2ConfigEnabled ??
+    isGeminiPhase2ConfigEnabled(appConfig);
 
   let measurementReported = false;
   let interpretationReported = false;
+  let stemSummaryQueued = false;
 
   try {
     while (true) {
       throwIfUserCancelled(analysisOptions?.signal);
-      const snapshot = await getAnalysisRun(runId, {
+      let snapshot = await getAnalysisRun(runId, {
         apiBaseUrl: appConfig.apiBaseUrl,
         signal: analysisOptions?.signal,
       });
       throwIfUserCancelled(analysisOptions?.signal);
 
+      if (hasInterpretationProfileAttempt(snapshot, 'stem_summary')) {
+        stemSummaryQueued = true;
+      }
+
+      const emitRunUpdate = (nextSnapshot: AnalysisRunSnapshot) => {
+        analysisOptions?.onRunUpdate?.({
+          runId,
+          snapshot: nextSnapshot,
+          displayPhase1: projectPhase1FromRun(nextSnapshot),
+          displayPhase2: projectPhase2FromRun(nextSnapshot),
+        });
+      };
+
+      emitRunUpdate(snapshot);
+
       const displayPhase1 = projectPhase1FromRun(snapshot);
       const displayPhase2 = projectPhase2FromRun(snapshot);
-      analysisOptions?.onRunUpdate?.({
-        runId,
-        snapshot,
-        displayPhase1,
-        displayPhase2,
-      });
 
       if (!measurementReported && displayPhase1 && snapshot.stages.measurement.status === 'completed') {
         onPhase1Complete(displayPhase1, buildMeasurementLog(runId, displayPhase1, audioMetadata, snapshot));
@@ -260,7 +302,39 @@ export async function monitorAnalysisRun(
         }
       }
 
+      if (
+        !stemSummaryQueued &&
+        shouldQueueStemSummary(
+          snapshot,
+          pitchNoteRequested,
+          interpretationRequested,
+          interpretationConfigEnabled,
+        )
+      ) {
+        snapshot = await createInterpretationAttempt(runId, {
+          apiBaseUrl: appConfig.apiBaseUrl,
+          interpretationProfile: 'stem_summary',
+          interpretationModel: modelName,
+          signal: analysisOptions?.signal,
+        });
+        stemSummaryQueued = true;
+        emitRunUpdate(snapshot);
+      }
+
       if (isRunTerminal(snapshot)) {
+        // Emit final snapshot so App.tsx can inspect stem_summary state.
+        emitRunUpdate(snapshot);
+
+        // Log stem_summary failure so it's visible in dev tools.
+        if (stemSummaryQueued && !projectStemSummaryFromRun(snapshot)) {
+          const stemProfile = snapshot.stages.interpretation.profiles?.stem_summary;
+          if (stemProfile?.status === 'failed') {
+            console.warn(
+              '[analyzer] stem_summary failed:',
+              stemProfile.error?.message ?? 'unknown error',
+            );
+          }
+        }
         return;
       }
 

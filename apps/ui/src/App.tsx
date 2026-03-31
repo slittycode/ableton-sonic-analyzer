@@ -25,6 +25,7 @@ import {
   projectPhase1FromRun,
   projectPhase2FromRun,
   projectPhase2ValidationWarningsFromRun,
+  projectStemSummaryFromRun,
 } from './services/analysisRunsClient';
 import { buildDisplayDiagnosticLogs } from './services/diagnosticLogs';
 import {
@@ -883,6 +884,7 @@ export default function App() {
   const shouldShowStatusPanel = Boolean(audioUrl && audioFile && analysisRun && (isAnalyzing || hasRetryableRunStage));
   const phase1ForRender: Phase1Result | null = analysisRun ? projectPhase1FromRun(analysisRun) : null;
   const phase2ForRender = analysisRun ? projectPhase2FromRun(analysisRun) : null;
+  const stemSummaryForRender = analysisRun ? projectStemSummaryFromRun(analysisRun) : null;
   const phase2SchemaVersion = analysisRun ? getPhase2SchemaVersionFromRun(analysisRun) : null;
   const phase2ValidationWarnings = analysisRun ? projectPhase2ValidationWarningsFromRun(analysisRun) : [];
 
@@ -1207,6 +1209,7 @@ export default function App() {
                 <AnalysisResults
                   phase1={phase1ForRender}
                   phase2={phase2ForRender}
+                  stemSummary={stemSummaryForRender}
                   phase2SchemaVersion={phase2SchemaVersion}
                   phase2ValidationWarnings={phase2ValidationWarnings}
                   phase2StatusMessage={phase2StatusMessage}

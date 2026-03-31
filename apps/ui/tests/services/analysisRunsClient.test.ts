@@ -575,15 +575,17 @@ describe('analysisRunsClient', () => {
   it('keeps stem summary additive and out of the producer-summary projection path', async () => {
     const stemSummarySnapshot = {
       ...baseRunSnapshot,
-      requestedStages: {
-        ...baseRunSnapshot.requestedStages,
-        interpretationProfile: 'stem_summary',
-      },
       stages: {
         ...baseRunSnapshot.stages,
         interpretation: {
           ...baseRunSnapshot.stages.interpretation,
           attemptsSummary: [
+            {
+              attemptId: 'int_123',
+              profileId: 'producer_summary',
+              modelName: 'gemini-2.5-flash',
+              status: 'completed',
+            },
             {
               attemptId: 'int_stem_123',
               profileId: 'stem_summary',
@@ -593,26 +595,95 @@ describe('analysisRunsClient', () => {
           ],
           preferredAttemptId: 'int_stem_123',
           result: {
-            summary: 'Bass pulses anchor the groove while the upper stem stays approximate.',
-            bars: [
+            summary: 'Bass stem: Bass pulses anchor the groove. Musical stem: Upper motion stays approximate.',
+            stems: [
               {
-                barStart: 1,
-                barEnd: 2,
-                startTime: 0,
-                endTime: 3.75,
-                noteHypotheses: ['C3 pedal'],
-                scaleDegreeHypotheses: ['1'],
-                rhythmicPattern: 'Short off-beat bass pulses.',
-                uncertaintyLevel: 'LOW',
-                uncertaintyReason: 'Pitch/Note Translation and measured bar grid agree.',
+                stem: 'bass',
+                label: 'Bass stem',
+                summary: 'Bass pulses anchor the groove.',
+                bars: [
+                  {
+                    barStart: 1,
+                    barEnd: 2,
+                    startTime: 0,
+                    endTime: 3.75,
+                    noteHypotheses: ['C3 pedal'],
+                    scaleDegreeHypotheses: ['1'],
+                    rhythmicPattern: 'Short off-beat bass pulses.',
+                    uncertaintyLevel: 'LOW',
+                    uncertaintyReason: 'Pitch/Note Translation and measured bar grid agree.',
+                  },
+                ],
+                globalPatterns: {
+                  bassRole: 'Anchors the groove.',
+                  melodicRole: 'Sparse upper register punctuation.',
+                  pumpingOrModulation: 'Measured pumping suggests compressor-driven movement.',
+                },
+                uncertaintyFlags: ['Upper melodic content is approximate.'],
+              },
+              {
+                stem: 'other',
+                label: 'Musical stem',
+                summary: 'Upper motion stays approximate.',
+                bars: [],
+                globalPatterns: {
+                  bassRole: 'Not applicable.',
+                  melodicRole: 'Sparse upper register punctuation.',
+                  pumpingOrModulation: 'Measured pumping suggests compressor-driven movement.',
+                },
+                uncertaintyFlags: ['Upper melodic content is approximate.'],
               },
             ],
-            globalPatterns: {
-              bassRole: 'Anchors the groove.',
-              melodicRole: 'Sparse upper register punctuation.',
-              pumpingOrModulation: 'Measured pumping suggests compressor-driven movement.',
-            },
             uncertaintyFlags: ['Upper melodic content is approximate.'],
+          },
+          profiles: {
+            producer_summary: {
+              attemptId: 'int_123',
+              status: 'completed',
+              modelName: 'gemini-2.5-flash',
+              result: baseRunSnapshot.stages.interpretation.result,
+              provenance: { schemaVersion: 'interpretation.v2' },
+              diagnostics: null,
+              error: null,
+            },
+            stem_summary: {
+              attemptId: 'int_stem_123',
+              status: 'completed',
+              modelName: 'gemini-2.5-flash',
+              result: {
+                summary: 'Bass stem: Bass pulses anchor the groove. Musical stem: Upper motion stays approximate.',
+                stems: [
+                  {
+                    stem: 'bass',
+                    label: 'Bass stem',
+                    summary: 'Bass pulses anchor the groove.',
+                    bars: [
+                      {
+                        barStart: 1,
+                        barEnd: 2,
+                        startTime: 0,
+                        endTime: 3.75,
+                        noteHypotheses: ['C3 pedal'],
+                        scaleDegreeHypotheses: ['1'],
+                        rhythmicPattern: 'Short off-beat bass pulses.',
+                        uncertaintyLevel: 'LOW',
+                        uncertaintyReason: 'Pitch/Note Translation and measured bar grid agree.',
+                      },
+                    ],
+                    globalPatterns: {
+                      bassRole: 'Anchors the groove.',
+                      melodicRole: 'Sparse upper register punctuation.',
+                      pumpingOrModulation: 'Measured pumping suggests compressor-driven movement.',
+                    },
+                    uncertaintyFlags: ['Upper melodic content is approximate.'],
+                  },
+                ],
+                uncertaintyFlags: ['Upper melodic content is approximate.'],
+              },
+              provenance: { schemaVersion: 'interpretation.v1' },
+              diagnostics: null,
+              error: null,
+            },
           },
         },
       },
@@ -629,8 +700,8 @@ describe('analysisRunsClient', () => {
       apiBaseUrl: 'http://127.0.0.1:8100',
     });
 
-    expect(projectPhase2FromRun(snapshot)).toBeNull();
-    expect(projectStemSummaryFromRun(snapshot)?.bars[0].noteHypotheses).toEqual(['C3 pedal']);
+    expect(projectPhase2FromRun(snapshot)?.trackCharacter).toBe('Tight modern electronic mix.');
+    expect(projectStemSummaryFromRun(snapshot)?.stems[0].bars[0].noteHypotheses).toEqual(['C3 pedal']);
   });
 
   it('creates pitch/note retry attempts against the canonical endpoint', async () => {
