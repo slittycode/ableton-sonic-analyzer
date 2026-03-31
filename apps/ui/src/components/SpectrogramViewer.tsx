@@ -1,6 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { appConfig } from '../config';
 import type { SpectralArtifactRef } from '../types';
-import { buildArtifactUrl } from '../services/spectralArtifactsClient';
+import {
+  buildArtifactUrl,
+  fetchArtifactImageObjectUrl,
+} from '../services/spectralArtifactsClient';
 import { useSpectralCursor } from '../hooks/useSpectralCursorBus';
 import { useImageZoom } from '../hooks/useImageZoom';
 import {
@@ -69,10 +73,55 @@ export function SpectrogramViewer({
     () => spectrograms.find((s) => s.kind === activeKind) ?? spectrograms[0] ?? null,
     [spectrograms, activeKind],
   );
-  const imageUrl = useMemo(
+  const directImageUrl = useMemo(
     () => (activeSpec ? buildArtifactUrl(apiBaseUrl, runId, activeSpec.artifactId) : ''),
     [activeSpec, apiBaseUrl, runId],
   );
+  const [imageUrl, setImageUrl] = useState(directImageUrl);
+
+  useEffect(() => {
+    if (!activeSpec) {
+      setImageUrl('');
+      return;
+    }
+
+    if (Object.keys(appConfig.requestHeaders).length === 0) {
+      setImageUrl(directImageUrl);
+      return;
+    }
+
+    const controller = new AbortController();
+    let released = false;
+    let loadedImage: { url: string; revoke: () => void } | null = null;
+
+    setImageUrl('');
+
+    fetchArtifactImageObjectUrl(
+      apiBaseUrl,
+      runId,
+      activeSpec.artifactId,
+      { signal: controller.signal },
+    )
+      .then((loaded) => {
+        if (released) {
+          loaded.revoke();
+          return;
+        }
+        loadedImage = loaded;
+        setImageUrl(loaded.url);
+      })
+      .catch(() => {
+        if (!released) {
+          setImageUrl('');
+        }
+      });
+
+    return () => {
+      released = true;
+      controller.abort();
+      loadedImage?.revoke();
+    };
+  }, [activeSpec, apiBaseUrl, directImageUrl, runId]);
 
   const drawOverlay = useCallback(() => {
     const canvas = overlayRef.current;

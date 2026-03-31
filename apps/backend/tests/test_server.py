@@ -716,6 +716,56 @@ class ServerContractTests(unittest.TestCase):
         self.assertEqual(payload["stages"]["measurement"]["status"], "queued")
         self.assertEqual(payload["stages"]["pitchNoteTranslation"]["status"], "blocked")
         self.assertEqual(payload["stages"]["interpretation"]["status"], "blocked")
+        self.assertNotIn("path", payload["artifacts"]["sourceAudio"])
+
+    def test_analysis_runs_endpoint_requires_user_header_in_hosted_mode(self) -> None:
+        with patch.dict(server.os.environ, {"SONIC_ANALYZER_RUNTIME_PROFILE": "hosted"}, clear=False):
+            response = asyncio.run(
+                server.create_analysis_run(
+                    track=self._upload_file(),
+                    analysis_mode="standard",
+                    pitch_note_mode="stem_notes",
+                    pitch_note_backend="auto",
+                    interpretation_mode="async",
+                    interpretation_profile="producer_summary",
+                    interpretation_model="gemini-2.5-flash",
+                )
+            )
+
+        payload = self._decode_json_response(response)
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(payload["error"]["code"], "AUTHENTICATION_REQUIRED")
+
+    def test_get_analysis_run_rejects_wrong_owner_in_hosted_mode(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_server_runtime_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            created = runtime.create_run(
+                filename="track.mp3",
+                content=b"fake-audio",
+                mime_type="audio/mpeg",
+                owner_user_id="user_owner",
+                pitch_note_mode="off",
+                pitch_note_backend="auto",
+                interpretation_mode="off",
+                interpretation_profile="producer_summary",
+                interpretation_model=None,
+            )
+            with (
+                patch.object(server, "get_analysis_runtime", return_value=runtime),
+                patch.dict(server.os.environ, {"SONIC_ANALYZER_RUNTIME_PROFILE": "hosted"}, clear=False),
+            ):
+                response = asyncio.run(
+                    server.get_analysis_run(
+                        created["runId"],
+                        x_asa_user_id="other_user",
+                    )
+                )
+
+        payload = self._decode_json_response(response)
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(payload["error"]["code"], "RUN_NOT_FOUND")
 
     @patch.object(server, "get_audio_duration_seconds", return_value=214.6, create=True)
     @patch.object(
@@ -912,6 +962,46 @@ class ServerContractTests(unittest.TestCase):
             payload["interrupt"]["stagesTerminated"],
             ["measurement", "pitchNoteTranslation"],
         )
+
+    def test_delete_analysis_run_removes_owned_run(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_server_runtime_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            created = runtime.create_run(
+                filename="track.mp3",
+                content=b"fake-audio",
+                mime_type="audio/mpeg",
+                owner_user_id="user_owner",
+                analysis_mode="full",
+                pitch_note_mode="off",
+                pitch_note_backend="auto",
+                interpretation_mode="off",
+                interpretation_profile="producer_summary",
+                interpretation_model=None,
+            )
+            with (
+                patch.object(server, "get_analysis_runtime", return_value=runtime),
+                patch.object(
+                    server,
+                    "_interrupt_active_child_processes",
+                    return_value=["measurement"],
+                ),
+                patch.dict(server.os.environ, {"SONIC_ANALYZER_RUNTIME_PROFILE": "hosted"}, clear=False),
+            ):
+                response = asyncio.run(
+                    server.delete_analysis_run(
+                        created["runId"],
+                        x_asa_user_id="user_owner",
+                    )
+                )
+
+            with self.assertRaises(KeyError):
+                runtime.get_run(created["runId"])
+
+        payload = self._decode_json_response(response)
+        self.assertEqual(response.status_code, 202)
+        self.assertTrue(payload["deleted"])
 
     @patch.object(server, "get_audio_duration_seconds", return_value=214.6, create=True)
     @patch.object(

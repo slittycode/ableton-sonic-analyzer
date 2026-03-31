@@ -140,6 +140,37 @@ class CleanupStartupHookTests(unittest.TestCase):
         warning_mock.assert_called_once()
         self.assertIn("artifact cleanup failed", warning_mock.call_args.args[0].lower())
 
+    def test_hosted_startup_skips_in_process_worker_loops_by_default(self) -> None:
+        runtime = Mock()
+        runtime.runtime_dir = Path("/tmp/asa-runtime")
+        thread = Mock()
+        captured_target = {}
+
+        def build_thread(*args, **kwargs):
+            captured_target["target"] = kwargs["target"]
+            return thread
+
+        created_coroutines = []
+
+        def fake_create_task(coro):
+            created_coroutines.append(coro)
+            coro.close()
+            return Mock(name="task")
+
+        with (
+            patch.object(server, "_BACKGROUND_TASKS", []),
+            patch.object(server, "get_analysis_runtime", return_value=runtime),
+            patch.dict(server.os.environ, {"SONIC_ANALYZER_RUNTIME_PROFILE": "hosted"}, clear=False),
+            patch.object(server.threading, "Thread", side_effect=build_thread),
+            patch.object(server.asyncio, "create_task", side_effect=fake_create_task),
+            patch.object(server, "cleanup_artifacts", create=True),
+        ):
+            asyncio.run(server._start_cache_eviction())
+
+        runtime.recover_incomplete_attempts.assert_not_called()
+        self.assertEqual(len(created_coroutines), 1)
+        self.assertEqual(created_coroutines[0].cr_code.co_name, "_evict_loop")
+
 
 if __name__ == "__main__":
     unittest.main()

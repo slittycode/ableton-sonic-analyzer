@@ -5,7 +5,12 @@
 | Component | Role |
 | --- | --- |
 | `analyze.py` | Raw CLI analyzer. Loads audio, runs DSP, optionally separates stems and transcribes notes through torchcrepe, then prints JSON to `stdout`. |
-| `server.py` | FastAPI wrapper. Accepts uploads, computes an estimate, shells out to `analyze.py`, normalizes the result into the HTTP `phase1` contract, and returns diagnostics or structured errors. |
+| `server.py` | FastAPI wrapper. Accepts uploads, computes estimates, manages the canonical staged run API, normalizes measurement results, and serves artifact access. |
+| `analysis_runtime.py` | Run-state persistence and staged-analysis orchestration. Owns run snapshots, stage status, artifact metadata, and ownership checks. |
+| `artifact_storage.py` | Artifact storage boundary. The current implementation uses the local filesystem, but the runtime now talks to a storage service interface instead of assuming every artifact is a local disk path forever. |
+| `runtime_profile.py` | Runtime/profile switchboard for `local` vs `hosted` behavior and `all` vs `api` vs `worker` process roles. |
+| `auth_context.py` | Hosted-mode user-context resolution. Establishes the current run owner in the canonical API path. |
+| `worker.py` | Dedicated worker-process entry point for hosted-style background stage execution. |
 | `tests/test_server.py` | Contract tests for estimate, timeout, and success envelopes. |
 | `spectral_viz.py` | Librosa-based spectrogram generation and spectral time-series extraction. Produces mel/chroma PNG spectrograms and per-frame spectral evolution JSON. Called after successful measurement; failures are non-critical. |
 | `tests/test_analyze.py` | Structural snapshot tests for the raw analyzer JSON output. |
@@ -34,18 +39,20 @@ Interface:
 Responsibilities:
 
 - receive multipart uploads
-- write the upload to a temporary file
-- compute a backend estimate and timeout
-- invoke `analyze.py` with `--yes`
-- translate raw analyzer output into the HTTP `phase1` envelope
-- return structured error diagnostics when the subprocess fails
-- clean up temporary files
+- write uploads to the runtime through the canonical run path
+- compute backend estimates and timeouts
+- invoke `analyze.py` with `--yes` through worker-owned stage execution
+- translate raw analyzer output into the canonical measurement envelope
+- enforce hosted-mode ownership on canonical run routes
+- serve artifact metadata and artifact downloads without leaking internal paths
+- return structured error diagnostics when subprocess execution fails
 
 Custom routes:
 
 - `POST /api/analysis-runs/estimate`
 - `POST /api/analysis-runs`
 - `GET /api/analysis-runs/{run_id}`
+- `DELETE /api/analysis-runs/{run_id}`
 - `POST /api/analyze` (legacy compatibility)
 - `POST /api/analyze/estimate` (legacy compatibility)
 - `POST /api/phase2` (legacy compatibility)
@@ -118,6 +125,15 @@ Important sections:
 8. Emit a `[TIMING]` summary line to `stderr` for every completed request, including structured errors.
 9. On success, normalize the raw payload into `phase1` and attach diagnostics.
 10. Close the upload and delete the temporary file.
+
+### Hosted foundation additions
+
+The backend now has an explicit local-versus-hosted runtime split.
+
+- `local` mode preserves the current local-first behavior.
+- `hosted` mode enables hosted-only guardrails such as user ownership and API/worker separation.
+
+In plain English: the analysis engine is still the same, but the service wrapper around it can now behave like a hosted app without forcing the local app to work that way too.
 
 ## HTTP Contract
 

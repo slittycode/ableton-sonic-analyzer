@@ -19,6 +19,7 @@ import {
   PitchNoteTranslationAttemptSummary,
   PitchNoteTranslationStageSnapshot,
 } from '../types';
+import { appConfig, buildConfiguredRequestInit } from '../config';
 import { BackendClientError, createUserCancelledError, parsePhase1Result } from './backendPhase1Client';
 import { requestBackendEstimate } from './backendPhase1Client';
 
@@ -270,7 +271,7 @@ export function projectStemSummaryFromRun(snapshot: AnalysisRunSnapshot): StemSu
 async function fetchJson(url: string, init: RequestInit): Promise<unknown> {
   let response: Response;
   try {
-    response = await fetch(url, init);
+    response = await fetch(url, buildConfiguredRequestInit(init));
   } catch (error) {
     if (init.signal?.aborted) {
       throw createUserCancelledError();
@@ -278,7 +279,9 @@ async function fetchJson(url: string, init: RequestInit): Promise<unknown> {
     if (error instanceof TypeError) {
       throw new BackendClientError(
         'NETWORK_UNREACHABLE',
-        'Cannot reach the local DSP backend. Confirm it is running and the API base URL is correct.',
+        appConfig.runtimeProfile === 'hosted'
+          ? 'Cannot reach the ASA backend service. Confirm the hosted API URL and deployment are available.'
+          : 'Cannot reach the local DSP backend. Confirm it is running and the API base URL is correct.',
         { cause: error },
       );
     }
@@ -386,7 +389,6 @@ function parseArtifact(value: Record<string, unknown>): AnalysisRunArtifact {
     mimeType: expectString(value.mimeType, 'mimeType'),
     sizeBytes: expectNumber(value.sizeBytes, 'sizeBytes'),
     contentSha256: expectString(value.contentSha256, 'contentSha256'),
-    path: expectString(value.path, 'path'),
   };
 }
 
