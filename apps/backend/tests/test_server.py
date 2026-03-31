@@ -397,6 +397,95 @@ class ServerContractTests(unittest.TestCase):
         self.assertIn("abletonRecommendations[0].trackContext", warning_paths)
         self.assertIn("secretSauce.workflowSteps[0].trackContext", warning_paths)
 
+    def test_parse_phase2_result_debug_repairs_abbreviated_return_name(self) -> None:
+        payload = _valid_phase2_result()
+        payload["routingBlueprint"]["returns"][0]["name"] = "Long Reverb"
+        payload["mixAndMasterChain"][0]["trackContext"] = "Return:Reverb"
+        payload["abletonRecommendations"][0]["trackContext"] = "Return:Reverb"
+        payload["secretSauce"]["workflowSteps"][0]["trackContext"] = "Return:Reverb"
+
+        debug = server._parse_phase2_result_debug(json.dumps(payload))
+
+        self.assertIsNone(debug["skipReason"])
+        self.assertEqual(debug["result"]["mixAndMasterChain"][0]["trackContext"], "Return:Long Reverb")
+        self.assertEqual(debug["result"]["abletonRecommendations"][0]["trackContext"], "Return:Long Reverb")
+        self.assertEqual(
+            debug["result"]["secretSauce"]["workflowSteps"][0]["trackContext"],
+            "Return:Long Reverb",
+        )
+        coerced = [w for w in debug["validationWarnings"] if w["code"] == "COERCED_TRACK_CONTEXT"]
+        self.assertEqual(len(coerced), 3)
+
+    def test_parse_phase2_result_debug_repairs_case_insensitive_return_name(self) -> None:
+        payload = _valid_phase2_result()
+        payload["routingBlueprint"]["returns"][0]["name"] = "Long Reverb"
+        payload["mixAndMasterChain"][0]["trackContext"] = "Return:long reverb"
+
+        debug = server._parse_phase2_result_debug(json.dumps(payload))
+
+        self.assertIsNone(debug["skipReason"])
+        self.assertEqual(debug["result"]["mixAndMasterChain"][0]["trackContext"], "Return:Long Reverb")
+        coerced = [w for w in debug["validationWarnings"] if w["code"] == "COERCED_TRACK_CONTEXT"]
+        self.assertTrue(len(coerced) >= 1)
+
+    def test_parse_phase2_result_debug_no_repair_when_ambiguous_substring(self) -> None:
+        payload = _valid_phase2_result()
+        payload["routingBlueprint"]["returns"] = [
+            {
+                "name": "Long Reverb",
+                "purpose": "Spatial depth.",
+                "sendSources": ["Drum Group"],
+                "deviceFocus": "Hybrid Reverb",
+                "levelGuidance": "-18 dB send baseline",
+            },
+            {
+                "name": "Short Reverb",
+                "purpose": "Tight space.",
+                "sendSources": ["Drum Group"],
+                "deviceFocus": "Reverb",
+                "levelGuidance": "-12 dB send baseline",
+            },
+        ]
+        payload["mixAndMasterChain"][0]["trackContext"] = "Return:Reverb"
+
+        debug = server._parse_phase2_result_debug(json.dumps(payload))
+
+        self.assertIsNone(debug["skipReason"])
+        # No repair — ambiguous match, value stays as-is
+        self.assertEqual(debug["result"]["mixAndMasterChain"][0]["trackContext"], "Return:Reverb")
+        coerced = [w for w in debug["validationWarnings"] if w["code"] == "COERCED_TRACK_CONTEXT"]
+        # No coercion warning from the repair pass for this field
+        coerced_mix = [w for w in coerced if "mixAndMasterChain" in w["path"]]
+        self.assertEqual(len(coerced_mix), 0)
+
+    def test_parse_phase2_result_debug_no_repair_when_exact_match_exists(self) -> None:
+        payload = _valid_phase2_result()
+        payload["routingBlueprint"]["returns"][0]["name"] = "Reverb"
+        payload["mixAndMasterChain"][0]["trackContext"] = "Return:Reverb"
+
+        debug = server._parse_phase2_result_debug(json.dumps(payload))
+
+        self.assertIsNone(debug["skipReason"])
+        self.assertEqual(debug["result"]["mixAndMasterChain"][0]["trackContext"], "Return:Reverb")
+        coerced = [w for w in debug["validationWarnings"] if w["code"] == "COERCED_TRACK_CONTEXT"]
+        coerced_mix = [w for w in coerced if "mixAndMasterChain" in w["path"]]
+        self.assertEqual(len(coerced_mix), 0)
+
+    def test_parse_phase2_result_debug_repairs_after_spacing_normalization(self) -> None:
+        payload = _valid_phase2_result()
+        payload["routingBlueprint"]["returns"][0]["name"] = "Long Reverb"
+        # Space after colon AND abbreviated — both normalizers should chain
+        payload["mixAndMasterChain"][0]["trackContext"] = "Return: Reverb"
+
+        debug = server._parse_phase2_result_debug(json.dumps(payload))
+
+        self.assertIsNone(debug["skipReason"])
+        self.assertEqual(debug["result"]["mixAndMasterChain"][0]["trackContext"], "Return:Long Reverb")
+        coerced = [w for w in debug["validationWarnings"] if w["code"] == "COERCED_TRACK_CONTEXT"]
+        coerced_mix = [w for w in coerced if "mixAndMasterChain" in w["path"]]
+        # Two coercion warnings: spacing fix + fuzzy repair
+        self.assertEqual(len(coerced_mix), 2)
+
     def test_parse_phase2_result_drops_single_invalid_ableton_recommendation_item(self) -> None:
         payload = _valid_phase2_result()
         payload["abletonRecommendations"].append(

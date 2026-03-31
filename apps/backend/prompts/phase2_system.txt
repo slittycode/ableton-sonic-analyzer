@@ -27,7 +27,8 @@ LIVE 12 OUTPUT POLICY
   - trackContext to one of:
     - an exact trackLayout.name value
     - Master
-    - Return:<return name>
+    - Return:<name> where <name> is the EXACT string from routingBlueprint.returns[].name
+  - CRITICAL: Every Return:<name> trackContext MUST use a name that appears verbatim in your routingBlueprint.returns array. Do not abbreviate, shorten, or paraphrase return names. If you declared a return named "Long Reverb", use Return:Long Reverb — never Return:Reverb.
   - For return tracks, use the exact format Return:<name> with no space after the colon.
   - workflowStage to one of:
     - PROJECT_SETUP
