@@ -28,6 +28,19 @@ Migration note:
 - `GET /api/analysis-runs/{run_id}`
 - `GET /api/analysis-runs/{run_id}/artifacts...`
 
+Runtime profiles:
+
+- `local`: current local/dev mode with SQLite + local artifact files + in-process workers.
+- `hosted`: hosted-service mode with auth hooks and worker separation boundaries.
+
+In plain English: the analysis engine is still shared, but the repo now has an explicit split between local mode and hosted mode so public-hosting work does not have to change the local product path.
+
+Artifact storage now sits behind a backend storage service boundary. In plain English: ASA still writes files locally today, but the code is no longer hard-wired to assume that every stored artifact is just a disk path on the same machine.
+
+Implementation record:
+
+- see `docs/PUBLIC_HOSTING_FOUNDATION.md` for the full summary of the hosted-foundation work, the follow-up fixes, the verification that was run, and the remaining work before any true public deployment.
+
 Legacy `POST /api/analyze`, `POST /api/analyze/estimate`, and `POST /api/phase2` remain available only as temporary compatibility wrappers during the migration window.
 
 ## Local Setup
@@ -89,6 +102,12 @@ VITE_API_BASE_URL="http://127.0.0.1:8100"
 VITE_ENABLE_PHASE2_GEMINI="true"
 ```
 
+Optional hosted-mode request-header bootstrap for private beta testing:
+
+```bash
+VITE_API_REQUEST_HEADERS_JSON='{"X-ASA-User-Id":"beta-user-123"}'
+```
+
 Supported shell-based overrides:
 
 ```bash
@@ -113,6 +132,13 @@ Manual equivalent:
 ```bash
 cd apps/backend
 SONIC_ANALYZER_PORT=8100 ./venv/bin/python server.py
+```
+
+Hosted worker process:
+
+```bash
+cd apps/backend
+SONIC_ANALYZER_RUNTIME_PROFILE=hosted SONIC_ANALYZER_PROCESS_ROLE=worker ./venv/bin/python worker.py
 ```
 
 ```bash

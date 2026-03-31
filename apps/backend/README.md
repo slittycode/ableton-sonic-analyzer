@@ -169,6 +169,21 @@ Override the port when needed:
 SONIC_ANALYZER_PORT=8456 ./venv/bin/python server.py
 ```
 
+Runtime profile and process role:
+
+- `SONIC_ANALYZER_RUNTIME_PROFILE=local` keeps the current local-first behavior.
+- `SONIC_ANALYZER_RUNTIME_PROFILE=hosted` turns on hosted-only guardrails such as required user identity headers on the run APIs.
+- `SONIC_ANALYZER_PROCESS_ROLE=all` is the local default and starts the API plus in-process workers together.
+- `SONIC_ANALYZER_PROCESS_ROLE=api` is the hosted default and starts the API without in-process workers.
+- `SONIC_ANALYZER_PROCESS_ROLE=worker` is reserved for dedicated worker processes.
+
+Hosted worker entry point:
+
+```bash
+cd apps/backend
+SONIC_ANALYZER_RUNTIME_PROFILE=hosted SONIC_ANALYZER_PROCESS_ROLE=worker ./venv/bin/python worker.py
+```
+
 Current bind:
 
 - host: `0.0.0.0`
@@ -182,6 +197,16 @@ Current CORS allow list:
 - `http://127.0.0.1:3100`
 - `http://localhost:5173`
 - `http://127.0.0.1:5173`
+
+Hosted auth hook:
+
+- In hosted mode, canonical run endpoints require `X-ASA-User-Id`.
+- In plain English: the backend now expects the hosted platform to tell ASA which signed-in user owns the run before it will create, fetch, interrupt, or delete that run.
+
+Artifact storage boundary:
+
+- Run artifacts are now written through `artifact_storage.py` instead of being created inline directly from every runtime call site.
+- In plain English: the backend still stores files on local disk today, but the read/write boundary is now isolated so hosted object storage can replace it later without rewriting every analysis path.
 
 ## HTTP API
 
@@ -201,6 +226,7 @@ Multipart form fields:
 - `interpretation_mode` optional string
 - `interpretation_profile` optional string
 - `interpretation_model` optional string
+- `X-ASA-User-Id` required in hosted mode
 
 Response shape:
 
@@ -242,6 +268,7 @@ Multipart form fields:
 - `track` required file upload
 - `dsp_json_override` optional string, accepted but ignored
 - `transcribe` optional boolean-like form value; when true the server appends `--transcribe`
+- `X-ASA-User-Id` required in hosted mode
 
 Query parameters:
 
