@@ -3427,6 +3427,71 @@ def _normalize_track_context_value(
     ]
 
 
+def _declared_return_names(data: dict[str, Any]) -> list[str]:
+    routing_blueprint = _as_record(data.get("routingBlueprint"))
+    returns = routing_blueprint.get("returns") if routing_blueprint else None
+    if not isinstance(returns, list):
+        return []
+    names: list[str] = []
+    for item in returns:
+        record = _as_record(item)
+        if record and _is_str(record.get("name")):
+            names.append(record["name"])
+    return names
+
+
+def _repair_return_track_context(
+    value: str,
+    *,
+    path: str,
+    declared_returns: list[str],
+) -> tuple[str, list[dict[str, Any]]]:
+    if not isinstance(value, str) or not value.startswith("Return:"):
+        return value, []
+    suffix = value[len("Return:"):]
+    if not suffix:
+        return value, []
+    exact_set = {f"Return:{name}" for name in declared_returns}
+    if value in exact_set:
+        return value, []
+    # Case-insensitive exact match
+    suffix_lower = suffix.lower()
+    ci_matches = [name for name in declared_returns if suffix_lower == name.lower()]
+    if len(ci_matches) == 1:
+        repaired = f"Return:{ci_matches[0]}"
+        return repaired, [
+            _build_phase2_validation_warning(
+                code="COERCED_TRACK_CONTEXT",
+                path=path,
+                message=(
+                    f"Coerced trackContext '{value}' to '{repaired}' by matching "
+                    "against declared routingBlueprint return names."
+                ),
+                original_value=value,
+                coerced_value=repaired,
+            )
+        ]
+    # Substring match (suffix is a substring of a declared return name)
+    sub_matches = [
+        name for name in declared_returns if suffix_lower in name.lower()
+    ]
+    if len(sub_matches) == 1:
+        repaired = f"Return:{sub_matches[0]}"
+        return repaired, [
+            _build_phase2_validation_warning(
+                code="COERCED_TRACK_CONTEXT",
+                path=path,
+                message=(
+                    f"Coerced trackContext '{value}' to '{repaired}' by matching "
+                    "against declared routingBlueprint return names."
+                ),
+                original_value=value,
+                coerced_value=repaired,
+            )
+        ]
+    return value, []
+
+
 def _salvage_phase2_array_items(
     items: Any,
     *,
@@ -3471,6 +3536,7 @@ def _normalize_and_salvage_phase2_result(
     normalized = dict(data)
     warnings: list[dict[str, Any]] = []
     emptied_required_arrays: set[str] = set()
+    declared_returns = _declared_return_names(data)
 
     recommendations = normalized.get("abletonRecommendations")
     if isinstance(recommendations, list):
@@ -3486,9 +3552,15 @@ def _normalize_and_salvage_phase2_result(
                     normalized_record.get("trackContext"),
                     path=f"abletonRecommendations[{index}].trackContext",
                 )
+                track_context, repair_warnings = _repair_return_track_context(
+                    track_context,
+                    path=f"abletonRecommendations[{index}].trackContext",
+                    declared_returns=declared_returns,
+                )
                 normalized_item = dict(normalized_record)
                 normalized_item["trackContext"] = track_context
                 warnings.extend(track_context_warnings)
+                warnings.extend(repair_warnings)
             normalized_recommendations.append(normalized_item)
             warnings.extend(item_warnings)
         normalized["abletonRecommendations"] = normalized_recommendations
@@ -3506,9 +3578,15 @@ def _normalize_and_salvage_phase2_result(
                 normalized_item.get("trackContext"),
                 path=f"mixAndMasterChain[{index}].trackContext",
             )
+            track_context, repair_warnings = _repair_return_track_context(
+                track_context,
+                path=f"mixAndMasterChain[{index}].trackContext",
+                declared_returns=declared_returns,
+            )
             normalized_item["trackContext"] = track_context
             normalized_mix_chain.append(normalized_item)
             warnings.extend(track_context_warnings)
+            warnings.extend(repair_warnings)
         normalized["mixAndMasterChain"] = normalized_mix_chain
 
     secret_sauce = _as_record(normalized.get("secretSauce"))
@@ -3525,9 +3603,15 @@ def _normalize_and_salvage_phase2_result(
                 normalized_item.get("trackContext"),
                 path=f"secretSauce.workflowSteps[{index}].trackContext",
             )
+            track_context, repair_warnings = _repair_return_track_context(
+                track_context,
+                path=f"secretSauce.workflowSteps[{index}].trackContext",
+                declared_returns=declared_returns,
+            )
             normalized_item["trackContext"] = track_context
             normalized_steps.append(normalized_item)
             warnings.extend(track_context_warnings)
+            warnings.extend(repair_warnings)
         normalized_secret_sauce = dict(secret_sauce)
         normalized_secret_sauce["workflowSteps"] = normalized_steps
         normalized["secretSauce"] = normalized_secret_sauce
