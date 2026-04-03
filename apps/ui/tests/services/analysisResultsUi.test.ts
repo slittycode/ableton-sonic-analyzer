@@ -437,8 +437,9 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).toContain('data-text-role="item-title"');
     expect(html).toContain('>Harmonic Content</h3>');
     expect(html).toContain('>Drum Buss</h4>');
+    expect(html).toContain('data-text-role="subsection-title"');
+    expect(html).toContain('>Spectral Balance</span>');
     expect(html).toContain('data-text-role="eyebrow"');
-    expect(html).toContain('>SPECTRAL BALANCE</span>');
     expect(html).toContain('>SUB BASS</span>');
     expect(html).toContain('data-text-role="body"');
     expect(html).toContain('Shapes drum impact by adds punch to drums.');
@@ -496,8 +497,8 @@ describe('AnalysisResults UI wiring', () => {
     );
 
     expect((html.match(/border-l-2 border-accent/g) ?? []).length).toBeGreaterThanOrEqual(4);
-    expect(html).toContain('>HOUSE<');
-    expect(html).toContain('>TECHNO<');
+    expect(html).toContain('>house<');
+    expect(html).toContain('>techno<');
   });
 
   it('renders character scanning fallback when phase2 is unavailable', () => {

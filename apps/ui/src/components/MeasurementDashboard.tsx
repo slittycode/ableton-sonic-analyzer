@@ -1433,9 +1433,9 @@ export function MeasurementDashboard({
                 <TokenBadgeList
                   className="mt-2"
                   items={[
-                    { label: phase1.genreDetail.genreFamily.toUpperCase(), tone: 'accent' },
+                    { label: phase1.genreDetail.genreFamily, tone: 'accent' },
                     ...(phase1.genreDetail.secondaryGenre
-                      ? [{ label: phase1.genreDetail.secondaryGenre.toUpperCase(), tone: 'muted' as const }]
+                      ? [{ label: phase1.genreDetail.secondaryGenre, tone: 'muted' as const }]
                       : []),
                   ]}
                 />
@@ -1659,13 +1659,13 @@ export function MeasurementDashboard({
 
         {/* Zone 3 — Dynamics & Texture */}
         <div className="border-t border-border pt-3">
-          <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary block mb-3">
+          <span data-text-role="subsection-title" className={[getTextRoleClassName('subsection-title'), 'block mb-3'].join(' ')}>
             Dynamics & Texture
           </span>
           {dynamicCharacter && textureCharacter ? (
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="space-y-3 rounded-sm border border-border-light/60 bg-bg-surface-dark/70 p-4">
-                <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-text-secondary block">
+                <span data-text-role="subsection-title" className={[getTextRoleClassName('subsection-title'), 'block'].join(' ')}>
                   Dynamics
                 </span>
                 <MetricBarRow
@@ -1702,7 +1702,7 @@ export function MeasurementDashboard({
                 />
               </div>
               <div className="space-y-3 rounded-sm border border-border-light/60 bg-bg-surface-dark/70 p-4">
-                <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-text-secondary block">
+                <span data-text-role="subsection-title" className={[getTextRoleClassName('subsection-title'), 'block'].join(' ')}>
                   Texture
                 </span>
                 <MetricBarRow
@@ -1880,8 +1880,8 @@ export function MeasurementDashboard({
       <Section id="section-meas-spectral" testId="spectral-section" number={4} title="Spectral">
         <div className="space-y-3">
           <div>
-            <span data-text-role="eyebrow" className={getTextRoleClassName('eyebrow')}>
-              {formatDisplayText('Spectral Balance', 'eyebrow')}
+            <span data-text-role="subsection-title" className={getTextRoleClassName('subsection-title')}>
+              Spectral Balance
             </span>
             <div className="mt-2 space-y-3">
               {SPECTRAL_ROW_CONFIG.map((row) => (
@@ -2082,7 +2082,7 @@ export function MeasurementDashboard({
         {phase1.essentiaFeatures && (
           <>
             <div className="border-t border-border pt-3">
-              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+              <span data-text-role="subsection-title" className={getTextRoleClassName('subsection-title')}>
                 Essentia Features
               </span>
             </div>
@@ -2583,7 +2583,7 @@ export function MeasurementDashboard({
         {phase1.segmentLoudness && phase1.segmentLoudness.length > 0 && (
           <>
             <div className="border-t border-border pt-3 mt-3">
-              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+              <span data-text-role="subsection-title" className={getTextRoleClassName('subsection-title')}>
                 Segment Loudness
               </span>
             </div>
@@ -2700,7 +2700,7 @@ export function MeasurementDashboard({
           {phase1.synthesisCharacter && (
             <div className="bg-bg-surface-dark border border-border-light border-l-2 border-accent rounded-sm p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] space-y-3">
               <div className="flex items-start justify-between gap-3">
-                <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+                <span data-text-role="subsection-title" className={getTextRoleClassName('subsection-title')}>
                   Synthesis Character
                 </span>
                 {phase1.synthesisCharacter.analogLike !== undefined &&
@@ -2739,7 +2739,7 @@ export function MeasurementDashboard({
 
           {phase1.perceptual && (
             <div className="bg-bg-surface-dark border border-border-light border-l-2 border-accent rounded-sm p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] space-y-3">
-              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+              <span data-text-role="subsection-title" className={getTextRoleClassName('subsection-title')}>
                 Perceptual
               </span>
               <MetricBarRow
@@ -2764,7 +2764,7 @@ export function MeasurementDashboard({
           {phase1.sidechainDetail && (
             <div className="bg-bg-surface-dark border border-border-light border-l-2 border-accent rounded-sm p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] space-y-3">
               <div className="flex items-start justify-between gap-3">
-                <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+                <span data-text-role="subsection-title" className={getTextRoleClassName('subsection-title')}>
                   Sidechain / Pumping
                 </span>
                 {phase1.sidechainDetail.pumpingRate && (

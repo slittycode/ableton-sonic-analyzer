@@ -399,15 +399,12 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
             <div className="p-2 rounded-full border border-accent/30 bg-accent/10">
               <Music2 className="w-4 h-4 text-accent" />
             </div>
-            <div>
-              <h3 data-text-role="item-title" className={getTextRoleClassName('item-title')}>
-                {formatDisplayText('Session Musician', 'title')}
-              </h3>
-              <p data-text-role="eyebrow" className={[getTextRoleClassName('eyebrow'), 'opacity-70'].join(' ')}>
-                {formatDisplayText('Pitch detection and melody guide', 'eyebrow')}
+            <div className="space-y-2">
+              <p data-text-role="body" className={[getTextRoleClassName('body'), 'opacity-80'].join(' ')}>
+                Pitch detection and melody guide
               </p>
-              <p data-text-role="meta" className={[getTextRoleClassName('meta'), 'text-accent/80'].join(' ')}>
-                {formatDisplayText('Draft notes for MIDI cleanup', 'none')}
+              <p data-text-role="body" className={[getTextRoleClassName('body'), 'text-accent/70'].join(' ')}>
+                Draft notes for MIDI cleanup
               </p>
             </div>
           </div>

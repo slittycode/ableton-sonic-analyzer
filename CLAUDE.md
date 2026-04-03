@@ -76,11 +76,12 @@ Frontend polling: `src/services/analysisRunsClient.ts` creates runs and polls st
 
 ### Backend (`apps/backend`)
 
-**Two-file core plus runtime:**
+**Core files:**
 
 1. **`analyze.py`** (~112KB): Pure DSP pipeline. Runs as a subprocess invoked by `server.py`. Extracts BPM, key, LUFS, stereo width, spectral balance, rhythm/melody detail, transcription, stem separation. **Writes JSON to stdout, diagnostics to stderr** — this contract is load-bearing.
 2. **`server.py`** (~24KB): FastAPI HTTP wrapper. Accepts multipart uploads, invokes `analyze.py` as a subprocess, normalizes raw output into the `phase1` HTTP contract, returns structured JSON. Also hosts the staged run endpoints.
 3. **`analysis_runtime.py`**: SQLite-backed run state and stage queue management. Artifacts stored in `.runtime/artifacts/`.
+4. **`analyze_fast.py`**: Streamlined analysis pipeline (BPM, key, loudness, basic dynamics) invoked when `--fast` is passed to `analyze.py`.
 
 The subprocess isolation means `analyze.py` works as a standalone CLI. Check `apps/backend/JSON_SCHEMA.md` before adding new analyzer output fields. Check `apps/backend/ARCHITECTURE.md` for the full HTTP flow and contract details.
 
@@ -99,7 +100,12 @@ Single-page React 19 + Vite + TypeScript + Tailwind CSS v4 app with no router. V
 3. **`src/services/backendPhase2Client.ts`**: Phase 2 transport to `/api/phase2`.
 4. **`src/services/analyzer.ts`**: Phase orchestration entry point — sequences run creation, polling, and display payload projection.
 5. **`src/types.ts`**: Source of truth for `Phase1Result`, `Phase2Result`, `AnalysisRunSnapshot`, and all backend response shapes.
-6. **`src/config.ts`**: Runtime resolution of `VITE_API_BASE_URL` and feature flags; falls back to `http://127.0.0.1:8100`.
+6. **`src/config.ts`**: Runtime resolution of `VITE_API_BASE_URL` and feature flags; falls back to `http://127.0.0.1:8100`. Supports window-level overrides (`window.__VITE_API_BASE_URL_OVERRIDE__`, `window.__VITE_ENABLE_PHASE2_GEMINI_OVERRIDE__`) for hosted deployments that inject config at runtime without a rebuild.
+
+7. **`src/services/spectralArtifactsClient.ts`**: Fetches spectral artifact payloads from the backend.
+8. **`src/services/mixDoctor.ts`**: Mix advisory logic — client-side scoring and suggestions.
+9. **`src/services/phase2Validator.ts`**: Validates Phase 2 consistency against Phase 1.
+10. **`src/services/midi/`**: MIDI export, preview, and quantization utilities (`midiExport.ts`, `midiPreview.ts`, `quantization.ts`).
 
 `AnalysisResults.tsx` (~45KB) is lazy-loaded via Suspense. Manual vendor chunks in `vite.config.ts` control bundle splitting.
 
@@ -113,6 +119,8 @@ Single-page React 19 + Vite + TypeScript + Tailwind CSS v4 app with no router. V
 # apps/ui/.env (copy from .env.example)
 VITE_API_BASE_URL="http://127.0.0.1:8100"
 VITE_ENABLE_PHASE2_GEMINI="true"
+RUN_GEMINI_LIVE_SMOKE="false"    # set "true" to run live Playwright tests against real Gemini Files API
+DISABLE_HMR="false"              # set "true" for dev environments that need HMR disabled
 
 # Backend (env var, no .env file)
 SONIC_ANALYZER_PORT=8100
@@ -129,7 +137,7 @@ Phase 2 is gated by `VITE_ENABLE_PHASE2_GEMINI`. `GEMINI_API_KEY` is backend-onl
 - **Backend tests use stdlib `unittest`**, not pytest. Frontend tests use Vitest in `node` environment (not jsdom).
 - **`npm run lint`** only type-checks `src/`; test files and `playwright.config.ts` are excluded from `tsconfig.json`.
 - **Canonical ports:** UI on 3100, backend on 8100. `./scripts/dev.sh` fails loudly if either port is occupied.
-- **`--fast` flag** is currently a no-op in `analyze.py` but is forwarded through the HTTP API via form field or query param.
+- **`--fast` flag** runs a streamlined pipeline (BPM, key, loudness, basic dynamics) via `analyze_fast.py`. It is forwarded through the HTTP API via form field or query param.
 - **`dsp_json_override`** is accepted by the server but ignored.
 
 ## Backport Candidates

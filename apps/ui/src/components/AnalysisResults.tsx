@@ -517,9 +517,9 @@ export function AnalysisResults({
               <div className="space-y-2">
                 <TokenBadgeList
                   items={[
-                    { label: phase1.genreDetail.genreFamily.toUpperCase(), tone: 'accent' },
+                    { label: phase1.genreDetail.genreFamily, tone: 'accent' },
                     ...(phase1.genreDetail.secondaryGenre
-                      ? [{ label: phase1.genreDetail.secondaryGenre.toUpperCase(), tone: 'muted' as const }]
+                      ? [{ label: phase1.genreDetail.secondaryGenre, tone: 'muted' as const }]
                       : []),
                   ]}
                 />
@@ -789,10 +789,10 @@ export function AnalysisResults({
                         data-text-role="item-title"
                         className={textRoleClassName('item-title', 'truncate')}
                       >
-                        {formatDisplayText(item.name, 'title')}
+                        {item.name}
                       </h3>
                       <p data-text-role="eyebrow" className={getTextRoleClassName('eyebrow')}>
-                        {formatDisplayText(item.type, 'eyebrow')}
+                        {item.type}
                       </p>
                     </div>
                   </div>
@@ -831,7 +831,7 @@ export function AnalysisResults({
             <div className="rounded-sm border border-border bg-bg-card p-4 space-y-2">
               <p data-text-role="eyebrow" className={getTextRoleClassName('eyebrow')}>Sidechain Source</p>
               <p data-text-role="item-title" className={getTextRoleClassName('item-title')}>
-                {formatDisplayText(routingBlueprint.sidechainSource ?? 'Not specified', 'title')}
+                {routingBlueprint.sidechainSource ?? 'Not specified'}
               </p>
             </div>
             <div className="rounded-sm border border-border bg-bg-card p-4 space-y-2 md:col-span-2">
@@ -855,7 +855,7 @@ export function AnalysisResults({
                 <div key={returnTrack.name} className="rounded-sm border border-border bg-bg-card p-4 space-y-3">
                   <div className="flex items-center justify-between gap-3">
                     <h3 data-text-role="item-title" className={getTextRoleClassName('item-title')}>
-                      {formatDisplayText(returnTrack.name, 'title')}
+                      {returnTrack.name}
                     </h3>
                     <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-border text-text-secondary">
                       {returnTrack.deviceFocus}
@@ -951,7 +951,7 @@ export function AnalysisResults({
                     data-text-role="item-title"
                     className={textRoleClassName('item-title', 'truncate pr-2')}
                   >
-                    {formatDisplayText(item.name, 'title')}
+                    {item.name}
                   </h3>
                   <span
                     className={`flex items-center text-[10px] font-mono font-bold px-2 py-1 rounded-sm border ${
@@ -1210,7 +1210,7 @@ export function AnalysisResults({
                       data-text-role="item-title"
                       className={textRoleClassName('item-title')}
                     >
-                      {formatDisplayText(stem.label, 'title')}
+                      {stem.label}
                     </h3>
                     <p data-text-role="body" className={textRoleClassName('body', 'mt-2')}>
                       {truncateAtSentenceBoundary(stem.summary, 220)}
@@ -1323,7 +1323,7 @@ export function AnalysisResults({
                             data-text-role="item-title"
                             className={textRoleClassName('item-title', 'truncate')}
                           >
-                            {formatDisplayText(card.title, 'title')}
+                            {card.title}
                           </h3>
                           {card.id === 'harmonicContent' && lowConfidenceIndicator(chordsAreApproximate)}
                           {card.transcriptionDerived && (
@@ -1413,7 +1413,7 @@ export function AnalysisResults({
                   data-text-role="meta"
                   className={textRoleClassName('meta', 'border-b border-border/70 pb-1')}
                 >
-                  {groupIcon(group.name)} {formatDisplayText(group.name, 'eyebrow')}
+                  {groupIcon(group.name)} {group.name}
                 </h3>
                 {group.annotation && (
                   <p data-text-role="meta" className={textRoleClassName('meta')}>
@@ -1443,7 +1443,7 @@ export function AnalysisResults({
                                   data-text-role="item-title"
                                   className={textRoleClassName('item-title', 'truncate')}
                                 >
-                                  {formatDisplayText(card.device, 'title')}
+                                  {card.device}
                                 </h4>
                                 <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-border text-text-secondary whitespace-nowrap">
                                   {card.category}
@@ -1537,7 +1537,7 @@ export function AnalysisResults({
                             data-text-role="item-title"
                             className={textRoleClassName('item-title', 'truncate')}
                           >
-                            {formatDisplayText(patch.device, 'title')}
+                            {patch.device}
                           </h4>
                           {patch.transcriptionDerived && (
                             <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-accent/40 text-accent whitespace-nowrap">
@@ -1630,7 +1630,7 @@ export function AnalysisResults({
                   data-text-role="item-title"
                   className={[getTextRoleClassName('item-title'), 'text-lg'].join(' ')}
                 >
-                  {formatDisplayText(phase2.secretSauce.title, 'title')}
+                  {phase2.secretSauce.title}
                 </h3>
                 <p data-text-role="body" className={textRoleClassName('body', 'max-w-3xl border-l-2 border-accent/30 pl-4')}>
                   {truncateAtSentenceBoundary(phase2.secretSauce.explanation, 600)}
@@ -1650,7 +1650,7 @@ export function AnalysisResults({
                             data-text-role="item-title"
                             className={textRoleClassName('item-title', 'truncate')}
                           >
-                            {formatDisplayText(step.device, 'title')}
+                            {step.device}
                           </p>
                           <p data-text-role="eyebrow" className={getTextRoleClassName('eyebrow')}>
                             {step.parameter}: {step.value}

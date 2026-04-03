@@ -59,7 +59,7 @@ export function MixDoctorPanel({ report }: MixDoctorPanelProps) {
             Target Genre
           </span>
           <div data-text-role="item-title" className={`mt-3 ${getTextRoleClassName('item-title')}`}>
-            {formatDisplayText(report.genreName, 'title')}
+            {report.genreName}
           </div>
           <div className="mt-2">
             <StatusBadge label={report.genreId} tone="muted" compact />

@@ -95,10 +95,20 @@ body {
 
 .text-role-section-title {
   font-family: var(--font-mono);
-  font-size: 0.875rem;
+  font-size: 1.125rem;
   font-weight: 500;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   line-height: 1.3;
+  color: var(--color-text-primary);
+}
+
+.text-role-subsection-title {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  line-height: 1.3;
+  text-transform: uppercase;
   color: var(--color-text-secondary);
 }
 

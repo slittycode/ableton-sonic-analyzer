@@ -519,7 +519,7 @@ test('results panels expose shared typography roles for spectral, band diagnosti
 
   await expect(page.getByText('Analysis Results')).toBeVisible();
 
-  await expect(page.locator('[data-text-role="eyebrow"]').filter({ hasText: 'SPECTRAL BALANCE' }).first()).toBeVisible();
+  await expect(page.locator('[data-text-role="subsection-title"]').filter({ hasText: /spectral balance/i }).first()).toBeVisible();
   await expect(page.locator('[data-text-role="eyebrow"]').filter({ hasText: 'SUB BASS' }).first()).toBeVisible();
   await expect(page.locator('[data-text-role="item-title"]').filter({ hasText: 'Harmonic Content' }).first()).toBeVisible();
   await expect(page.locator('[data-text-role="item-title"]').filter({ hasText: 'Drum Buss' }).first()).toBeVisible();

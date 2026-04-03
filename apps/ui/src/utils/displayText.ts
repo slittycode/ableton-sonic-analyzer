@@ -1,6 +1,7 @@
 export type TextRole =
   | 'page-title'
   | 'section-title'
+  | 'subsection-title'
   | 'item-title'
   | 'eyebrow'
   | 'body'
