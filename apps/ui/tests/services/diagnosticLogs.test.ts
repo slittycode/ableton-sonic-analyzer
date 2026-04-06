@@ -26,7 +26,6 @@ function makeSnapshot(): AnalysisRunSnapshot {
         mimeType: 'audio/mpeg',
         sizeBytes: 4096,
         contentSha256: 'abc123',
-        path: '/tmp/track.mp3',
       },
     },
     stages: {

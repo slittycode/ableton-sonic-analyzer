@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import sqlite3
 from datetime import UTC, datetime
@@ -8,8 +7,11 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from artifact_storage import ArtifactStorage, FilesystemArtifactStorage
+
 SQLITE_BUSY_TIMEOUT_MS = 5_000
 MEASUREMENT_PIPELINE_PROGRESS_STATUSES = {"pending", "running", "completed"}
+LOCAL_RUNTIME_OWNER_USER_ID = "local-dev"
 
 
 def _utc_now_iso() -> str:
@@ -41,13 +43,19 @@ class UnsupportedPitchNoteBackendError(ValueError):
 
 
 class AnalysisRuntime:
-    def __init__(self, runtime_dir: Path, max_pending_per_stage: int = 4):
+    def __init__(
+        self,
+        runtime_dir: Path,
+        max_pending_per_stage: int = 4,
+        artifact_storage: ArtifactStorage | None = None,
+    ):
         self.runtime_dir = Path(runtime_dir)
         self.max_pending_per_stage = max_pending_per_stage
         self.artifacts_dir = self.runtime_dir / "artifacts"
         self.db_path = self.runtime_dir / "analysis_runs.sqlite3"
         self.runtime_dir.mkdir(parents=True, exist_ok=True)
         self.artifacts_dir.mkdir(parents=True, exist_ok=True)
+        self.artifact_storage = artifact_storage or FilesystemArtifactStorage(self.artifacts_dir)
         self._ensure_schema()
 
     def _connect(self) -> sqlite3.Connection:
@@ -139,12 +147,26 @@ class AnalysisRuntime:
                 "requested_analysis_mode",
                 "TEXT",
             )
+            self._ensure_column(
+                conn,
+                "analysis_runs",
+                "owner_user_id",
+                "TEXT",
+            )
             conn.execute(
                 """
                 UPDATE analysis_runs
                 SET requested_analysis_mode = 'full'
                 WHERE requested_analysis_mode IS NULL
                 """
+            )
+            conn.execute(
+                """
+                UPDATE analysis_runs
+                SET owner_user_id = ?
+                WHERE owner_user_id IS NULL OR TRIM(owner_user_id) = ''
+                """,
+                (LOCAL_RUNTIME_OWNER_USER_ID,),
             )
             self._ensure_column(
                 conn,
@@ -180,6 +202,7 @@ class AnalysisRuntime:
         filename: str,
         content: bytes,
         mime_type: str,
+        owner_user_id: str = LOCAL_RUNTIME_OWNER_USER_ID,
         pitch_note_mode: str,
         pitch_note_backend: str,
         interpretation_mode: str,
@@ -189,241 +212,174 @@ class AnalysisRuntime:
         analysis_mode: str = "full",
     ) -> dict[str, Any]:
         artifact_id = str(uuid4())
-        artifact_path, size_bytes, content_sha256 = self._write_source_artifact_bytes(
+        created_at = _utc_now_iso()
+        stored_artifact = self.artifact_storage.store_bytes(
             artifact_id=artifact_id,
             filename=filename,
             content=content,
         )
-        return self._create_run_with_persisted_source_artifact(
-            artifact_id=artifact_id,
-            artifact_path=artifact_path,
-            filename=filename,
-            mime_type=mime_type,
-            size_bytes=size_bytes,
-            content_sha256=content_sha256,
-            pitch_note_mode=pitch_note_mode,
-            pitch_note_backend=pitch_note_backend,
-            interpretation_mode=interpretation_mode,
-            interpretation_profile=interpretation_profile,
-            interpretation_model=interpretation_model,
-            legacy_request_id=legacy_request_id,
-            analysis_mode=analysis_mode,
-        )
 
-    def create_run_from_source_path(
-        self,
-        *,
-        filename: str,
-        source_path: str,
-        mime_type: str,
-        pitch_note_mode: str,
-        pitch_note_backend: str,
-        interpretation_mode: str,
-        interpretation_profile: str,
-        interpretation_model: str | None,
-        legacy_request_id: str | None = None,
-        analysis_mode: str = "full",
-    ) -> dict[str, Any]:
-        artifact_id = str(uuid4())
-        artifact_path, size_bytes, content_sha256 = self._copy_source_artifact(
-            artifact_id=artifact_id,
-            filename=filename,
-            source_path=source_path,
-        )
-        return self._create_run_with_persisted_source_artifact(
-            artifact_id=artifact_id,
-            artifact_path=artifact_path,
-            filename=filename,
-            mime_type=mime_type,
-            size_bytes=size_bytes,
-            content_sha256=content_sha256,
-            pitch_note_mode=pitch_note_mode,
-            pitch_note_backend=pitch_note_backend,
-            interpretation_mode=interpretation_mode,
-            interpretation_profile=interpretation_profile,
-            interpretation_model=interpretation_model,
-            legacy_request_id=legacy_request_id,
-            analysis_mode=analysis_mode,
-        )
-
-    def _create_run_with_persisted_source_artifact(
-        self,
-        *,
-        artifact_id: str,
-        artifact_path: Path,
-        filename: str,
-        mime_type: str,
-        size_bytes: int,
-        content_sha256: str,
-        pitch_note_mode: str,
-        pitch_note_backend: str,
-        interpretation_mode: str,
-        interpretation_profile: str,
-        interpretation_model: str | None,
-        legacy_request_id: str | None,
-        analysis_mode: str,
-    ) -> dict[str, Any]:
-        try:
-            if self._count_active_measurement_runs() >= self.max_pending_per_stage:
-                raise RuntimeError("Measurement queue is full.")
-
-            resolved_analysis_mode = self._resolve_analysis_mode(analysis_mode)
-            self._resolve_pitch_note_backend(pitch_note_backend)
-            run_id = str(uuid4())
-            created_at = _utc_now_iso()
-
-            with self._connect() as conn:
-                conn.execute(
-                    """
-                    INSERT INTO analysis_runs (
-                        id,
-                        source_artifact_id,
-                        requested_analysis_mode,
-                        requested_pitch_note_mode,
-                        requested_pitch_note_backend,
-                        requested_interpretation_mode,
-                        requested_interpretation_profile,
-                        requested_interpretation_model,
-                        legacy_request_id,
-                        created_at,
-                        updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        run_id,
-                        artifact_id,
-                        resolved_analysis_mode,
-                        pitch_note_mode,
-                        pitch_note_backend,
-                        interpretation_mode,
-                        interpretation_profile,
-                        interpretation_model,
-                        legacy_request_id,
-                        created_at,
-                        created_at,
-                    ),
-                )
-                conn.execute(
-                    """
-                    INSERT INTO run_artifacts (
-                        id,
-                        run_id,
-                        kind,
-                        filename,
-                        mime_type,
-                        size_bytes,
-                        content_sha256,
-                        path,
-                        provenance_json,
-                        created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        artifact_id,
-                        run_id,
-                        "source_audio",
-                        filename,
-                        mime_type,
-                        size_bytes,
-                        content_sha256,
-                        str(artifact_path),
-                        None,
-                        created_at,
-                    ),
-                )
-                conn.execute(
-                    """
-                    INSERT INTO measurement_outputs (
-                        id,
-                        run_id,
-                        status,
-                        result_json,
-                        provenance_json,
-                        diagnostics_json,
-                        error_json,
-                        created_at,
-                        updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        str(uuid4()),
-                        run_id,
-                        "queued",
-                        None,
-                        None,
-                        None,
-                        None,
-                        created_at,
-                        created_at,
-                    ),
-                )
-        except Exception:
-            artifact_path.unlink(missing_ok=True)
-            raise
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO analysis_runs (
+                    id,
+                    source_artifact_id,
+                    requested_analysis_mode,
+                    owner_user_id,
+                    requested_pitch_note_mode,
+                    requested_pitch_note_backend,
+                    requested_interpretation_mode,
+                    requested_interpretation_profile,
+                    requested_interpretation_model,
+                    legacy_request_id,
+                    created_at,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    run_id,
+                    artifact_id,
+                    resolved_analysis_mode,
+                    owner_user_id or LOCAL_RUNTIME_OWNER_USER_ID,
+                    pitch_note_mode,
+                    pitch_note_backend,
+                    interpretation_mode,
+                    interpretation_profile,
+                    interpretation_model,
+                    legacy_request_id,
+                    created_at,
+                    created_at,
+                ),
+            )
+            conn.execute(
+                """
+                INSERT INTO run_artifacts (
+                    id,
+                    run_id,
+                    kind,
+                    filename,
+                    mime_type,
+                    size_bytes,
+                    content_sha256,
+                    path,
+                    provenance_json,
+                    created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    artifact_id,
+                    run_id,
+                    "source_audio",
+                    filename,
+                    mime_type,
+                    stored_artifact.size_bytes,
+                    stored_artifact.content_sha256,
+                    stored_artifact.storage_ref,
+                    None,
+                    created_at,
+                ),
+            )
+            conn.execute(
+                """
+                INSERT INTO measurement_outputs (
+                    id,
+                    run_id,
+                    status,
+                    result_json,
+                    provenance_json,
+                    diagnostics_json,
+                    error_json,
+                    created_at,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    str(uuid4()),
+                    run_id,
+                    "queued",
+                    None,
+                    None,
+                    None,
+                    None,
+                    created_at,
+                    created_at,
+                ),
+            )
 
         return {"runId": run_id}
 
-    def _write_source_artifact_bytes(
+    def get_run_by_legacy_request_id(
         self,
+        legacy_request_id: str,
         *,
-        artifact_id: str,
-        filename: str,
-        content: bytes,
-    ) -> tuple[Path, int, str]:
-        suffix = Path(filename).suffix or ".bin"
-        artifact_path = self.artifacts_dir / f"{artifact_id}{suffix}"
-        try:
-            artifact_path.write_bytes(content)
-        except Exception:
-            artifact_path.unlink(missing_ok=True)
-            raise
-        return artifact_path, len(content), hashlib.sha256(content).hexdigest()
-
-    def _copy_source_artifact(
-        self,
-        *,
-        artifact_id: str,
-        filename: str,
-        source_path: str,
-    ) -> tuple[Path, int, str]:
-        source = Path(source_path)
-        suffix = source.suffix or Path(filename).suffix or ".bin"
-        destination = self.artifacts_dir / f"{artifact_id}{suffix}"
-        digest = hashlib.sha256()
-        size_bytes = 0
-        try:
-            with source.open("rb") as src, destination.open("wb") as dest:
-                while True:
-                    chunk = src.read(1024 * 1024)
-                    if not chunk:
-                        break
-                    dest.write(chunk)
-                    digest.update(chunk)
-                    size_bytes += len(chunk)
-        except Exception:
-            destination.unlink(missing_ok=True)
-            raise
-        return destination, size_bytes, digest.hexdigest()
-
-    def get_run_by_legacy_request_id(self, legacy_request_id: str) -> dict[str, Any]:
+        owner_user_id: str | None = None,
+    ) -> dict[str, Any]:
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT id FROM analysis_runs WHERE legacy_request_id = ?",
+                "SELECT id, owner_user_id FROM analysis_runs WHERE legacy_request_id = ?",
                 (legacy_request_id,),
             ).fetchone()
         if row is None:
             raise KeyError(f"Unknown legacy request {legacy_request_id}")
-        return self.get_run(row["id"])
+        self._assert_run_owner(row, owner_user_id)
+        return self.get_run(row["id"], owner_user_id=owner_user_id)
 
-    def get_run_id_by_legacy_request_id(self, legacy_request_id: str) -> str:
+    def get_run_id_by_legacy_request_id(
+        self,
+        legacy_request_id: str,
+        *,
+        owner_user_id: str | None = None,
+    ) -> str:
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT id FROM analysis_runs WHERE legacy_request_id = ?",
+                "SELECT id, owner_user_id FROM analysis_runs WHERE legacy_request_id = ?",
                 (legacy_request_id,),
             ).fetchone()
         if row is None:
             raise KeyError(f"Unknown legacy request {legacy_request_id}")
+        self._assert_run_owner(row, owner_user_id)
         return str(row["id"])
+
+    @staticmethod
+    def _public_artifact_record(row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
+        return {
+            "artifactId": row["id"] if isinstance(row, sqlite3.Row) else row["artifactId"],
+            "filename": row["filename"] if isinstance(row, sqlite3.Row) else row["filename"],
+            "mimeType": row["mime_type"] if isinstance(row, sqlite3.Row) else row["mimeType"],
+            "sizeBytes": row["size_bytes"] if isinstance(row, sqlite3.Row) else row["sizeBytes"],
+            "contentSha256": (
+                row["content_sha256"] if isinstance(row, sqlite3.Row) else row["contentSha256"]
+            ),
+            **(
+                {"kind": row["kind"] if isinstance(row, sqlite3.Row) else row["kind"]}
+                if (row["kind"] if isinstance(row, sqlite3.Row) else row.get("kind")) is not None
+                else {}
+            ),
+        }
+
+    @staticmethod
+    def _internal_artifact_record(row: sqlite3.Row) -> dict[str, Any]:
+        return {
+            "artifactId": row["id"],
+            "kind": row["kind"],
+            "filename": row["filename"],
+            "mimeType": row["mime_type"],
+            "sizeBytes": row["size_bytes"],
+            "contentSha256": row["content_sha256"],
+            "path": row["path"],
+            "provenance": _json_loads(row["provenance_json"]),
+        }
+
+    @staticmethod
+    def _assert_run_owner(row: sqlite3.Row, owner_user_id: str | None) -> None:
+        if owner_user_id is None:
+            return
+        stored_owner = str(row["owner_user_id"] or LOCAL_RUNTIME_OWNER_USER_ID)
+        if stored_owner != owner_user_id:
+            raise PermissionError(
+                f"Run '{row['id']}' does not belong to user '{owner_user_id}'."
+            )
 
     def get_source_artifact(self, run_id: str) -> dict[str, Any]:
         with self._connect() as conn:
@@ -469,6 +425,17 @@ class AnalysisRuntime:
             raise KeyError(f"Unknown run {run_id}")
         return str(row["status"])
 
+    def resolve_artifact_local_path(self, storage_ref: str | None) -> Path | None:
+        if not isinstance(storage_ref, str) or not storage_ref:
+            return None
+        return self.artifact_storage.resolve_local_path(storage_ref)
+
+    def require_local_artifact_path(self, storage_ref: str | None, *, purpose: str) -> str:
+        local_path = self.resolve_artifact_local_path(storage_ref)
+        if local_path is None or not local_path.is_file():
+            raise FileNotFoundError(f"{purpose} is not available as a local file.")
+        return str(local_path)
+
     def is_run_interrupted(self, run_id: str) -> bool:
         return self.get_measurement_status(run_id) == "interrupted"
 
@@ -510,13 +477,14 @@ class AnalysisRuntime:
             ),
         }
 
-    def get_run(self, run_id: str) -> dict[str, Any]:
+    def get_run(self, run_id: str, *, owner_user_id: str | None = None) -> dict[str, Any]:
         with self._connect() as conn:
             run_row = conn.execute(
                 "SELECT * FROM analysis_runs WHERE id = ?", (run_id,)
             ).fetchone()
             if run_row is None:
                 raise KeyError(f"Unknown run {run_id}")
+            self._assert_run_owner(run_row, owner_user_id)
 
             artifact_row = conn.execute(
                 "SELECT * FROM run_artifacts WHERE id = ?", (run_row["source_artifact_id"],)
@@ -572,20 +540,8 @@ class AnalysisRuntime:
                     "mimeType": artifact_row["mime_type"],
                     "sizeBytes": artifact_row["size_bytes"],
                     "contentSha256": artifact_row["content_sha256"],
-                    "path": artifact_row["path"],
                 },
-                "stems": [
-                    {
-                        "artifactId": row["id"],
-                        "kind": row["kind"],
-                        "filename": row["filename"],
-                        "mimeType": row["mime_type"],
-                        "sizeBytes": row["size_bytes"],
-                        "contentSha256": row["content_sha256"],
-                        "path": row["path"],
-                    }
-                    for row in stem_rows
-                ],
+                "stems": [self._public_artifact_record(row) for row in stem_rows],
             },
             "stages": {
                 "measurement": {
@@ -660,6 +616,16 @@ class AnalysisRuntime:
             "requestedPitchNoteMode": row["requested_pitch_note_mode"],
             "requestedPitchNoteBackend": row["requested_pitch_note_backend"],
         }
+
+    def get_run_owner_user_id(self, run_id: str) -> str:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT owner_user_id FROM analysis_runs WHERE id = ?",
+                (run_id,),
+            ).fetchone()
+        if row is None:
+            raise KeyError(f"Unknown run {run_id}")
+        return str(row["owner_user_id"] or LOCAL_RUNTIME_OWNER_USER_ID)
 
     def complete_measurement(
         self,
@@ -1044,19 +1010,11 @@ class AnalysisRuntime:
     ) -> dict[str, Any]:
         artifact_id = str(uuid4())
         created_at = _utc_now_iso()
-        source = Path(source_path)
-        suffix = source.suffix or Path(filename).suffix or ".bin"
-        destination = self.artifacts_dir / f"{artifact_id}{suffix}"
-        digest = hashlib.sha256()
-        size_bytes = 0
-        with source.open("rb") as src, destination.open("wb") as dest:
-            while True:
-                chunk = src.read(1024 * 1024)
-                if not chunk:
-                    break
-                dest.write(chunk)
-                digest.update(chunk)
-                size_bytes += len(chunk)
+        stored_artifact = self.artifact_storage.store_file(
+            artifact_id=artifact_id,
+            filename=filename,
+            source_path=source_path,
+        )
         with self._connect() as conn:
             conn.execute(
                 """
@@ -1079,23 +1037,29 @@ class AnalysisRuntime:
                     kind,
                     filename,
                     mime_type,
-                    size_bytes,
-                    digest.hexdigest(),
-                    str(destination),
+                    stored_artifact.size_bytes,
+                    stored_artifact.content_sha256,
+                    stored_artifact.storage_ref,
                     _json_dumps(provenance),
                     created_at,
                 ),
             )
         return {
             "artifactId": artifact_id,
-            "path": str(destination),
+            "path": stored_artifact.storage_ref,
             "kind": kind,
             "filename": filename,
             "mimeType": mime_type,
-            "sizeBytes": size_bytes,
+            "sizeBytes": stored_artifact.size_bytes,
         }
 
     def get_artifacts_by_kind(self, run_id: str, kind_prefix: str) -> list[dict[str, Any]]:
+        return [
+            self._public_artifact_record(record)
+            for record in self.get_internal_artifacts_by_kind(run_id, kind_prefix)
+        ]
+
+    def get_internal_artifacts_by_kind(self, run_id: str, kind_prefix: str) -> list[dict[str, Any]]:
         with self._connect() as conn:
             rows = conn.execute(
                 """
@@ -1105,19 +1069,15 @@ class AnalysisRuntime:
                 """,
                 (run_id, f"{kind_prefix}%"),
             ).fetchall()
-        return [
-            {
-                "artifactId": row["id"],
-                "kind": row["kind"],
-                "filename": row["filename"],
-                "mimeType": row["mime_type"],
-                "sizeBytes": row["size_bytes"],
-                "contentSha256": row["content_sha256"],
-                "path": row["path"],
-                "provenance": _json_loads(row["provenance_json"]),
-            }
-            for row in rows
+        return [self._internal_artifact_record(row) for row in rows]
+
+    def get_internal_artifact(self, run_id: str, artifact_id: str) -> dict[str, Any] | None:
+        matches = [
+            artifact
+            for artifact in self.get_internal_artifacts_by_kind(run_id, "")
+            if artifact["artifactId"] == artifact_id
         ]
+        return matches[0] if matches else None
 
     def recover_incomplete_attempts(self) -> None:
         now = _utc_now_iso()
@@ -1218,12 +1178,33 @@ class AnalysisRuntime:
         for row in artifact_rows:
             artifact_path = row["path"]
             if isinstance(artifact_path, str) and artifact_path:
-                try:
-                    Path(artifact_path).unlink(missing_ok=True)
-                except OSError:
-                    pass
+                self.artifact_storage.delete(artifact_path)
 
         return self.get_run(run_id)
+
+    def delete_run(self, run_id: str) -> None:
+        with self._connect() as conn:
+            run_row = conn.execute(
+                "SELECT id FROM analysis_runs WHERE id = ?",
+                (run_id,),
+            ).fetchone()
+            if run_row is None:
+                raise KeyError(f"Unknown run {run_id}")
+
+            artifact_rows = conn.execute(
+                "SELECT path FROM run_artifacts WHERE run_id = ?",
+                (run_id,),
+            ).fetchall()
+            conn.execute("DELETE FROM interpretation_attempts WHERE run_id = ?", (run_id,))
+            conn.execute("DELETE FROM pitch_note_translation_attempts WHERE run_id = ?", (run_id,))
+            conn.execute("DELETE FROM measurement_outputs WHERE run_id = ?", (run_id,))
+            conn.execute("DELETE FROM run_artifacts WHERE run_id = ?", (run_id,))
+            conn.execute("DELETE FROM analysis_runs WHERE id = ?", (run_id,))
+
+        for row in artifact_rows:
+            artifact_path = row["path"]
+            if isinstance(artifact_path, str) and artifact_path:
+                self.artifact_storage.delete(artifact_path)
 
     def update_measurement_progress(
         self,

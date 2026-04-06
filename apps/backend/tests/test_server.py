@@ -255,6 +255,22 @@ class ServerContractTests(unittest.TestCase):
         schema_name = schema_ref.split("/")[-1]
         return openapi["components"]["schemas"][schema_name]["properties"]
 
+    def _find_analyze_subprocess_call(self, run_mock) -> tuple[list[str], dict]:
+        observed_commands: list[object] = []
+        for call in reversed(run_mock.call_args_list):
+            command = call.args[0] if call.args else call.kwargs.get("args", [])
+            observed_commands.append(command)
+            if (
+                isinstance(command, list)
+                and len(command) >= 2
+                and command[0] == "./venv/bin/python"
+                and command[1] == "analyze.py"
+            ):
+                return command, call.kwargs
+        self.fail(
+            f"Did not find analyze.py subprocess call. Observed subprocess calls: {observed_commands}"
+        )
+
     def test_phase2_prompt_template_loaded(self) -> None:
         self.assertIsInstance(server.PHASE2_PROMPT_TEMPLATE, str)
         self.assertGreater(len(server.PHASE2_PROMPT_TEMPLATE), 100)
@@ -717,6 +733,56 @@ class ServerContractTests(unittest.TestCase):
         self.assertEqual(payload["stages"]["measurement"]["status"], "queued")
         self.assertEqual(payload["stages"]["pitchNoteTranslation"]["status"], "blocked")
         self.assertEqual(payload["stages"]["interpretation"]["status"], "blocked")
+        self.assertNotIn("path", payload["artifacts"]["sourceAudio"])
+
+    def test_analysis_runs_endpoint_requires_user_header_in_hosted_mode(self) -> None:
+        with patch.dict(server.os.environ, {"SONIC_ANALYZER_RUNTIME_PROFILE": "hosted"}, clear=False):
+            response = asyncio.run(
+                server.create_analysis_run(
+                    track=self._upload_file(),
+                    analysis_mode="standard",
+                    pitch_note_mode="stem_notes",
+                    pitch_note_backend="auto",
+                    interpretation_mode="async",
+                    interpretation_profile="producer_summary",
+                    interpretation_model="gemini-2.5-flash",
+                )
+            )
+
+        payload = self._decode_json_response(response)
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(payload["error"]["code"], "AUTHENTICATION_REQUIRED")
+
+    def test_get_analysis_run_rejects_wrong_owner_in_hosted_mode(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_server_runtime_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            created = runtime.create_run(
+                filename="track.mp3",
+                content=b"fake-audio",
+                mime_type="audio/mpeg",
+                owner_user_id="user_owner",
+                pitch_note_mode="off",
+                pitch_note_backend="auto",
+                interpretation_mode="off",
+                interpretation_profile="producer_summary",
+                interpretation_model=None,
+            )
+            with (
+                patch.object(server, "get_analysis_runtime", return_value=runtime),
+                patch.dict(server.os.environ, {"SONIC_ANALYZER_RUNTIME_PROFILE": "hosted"}, clear=False),
+            ):
+                response = asyncio.run(
+                    server.get_analysis_run(
+                        created["runId"],
+                        x_asa_user_id="other_user",
+                    )
+                )
+
+        payload = self._decode_json_response(response)
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(payload["error"]["code"], "RUN_NOT_FOUND")
 
     def test_analysis_runs_endpoint_rejects_oversized_upload(self) -> None:
         with patch.object(server.upload_limits, "MAX_UPLOAD_SIZE_BYTES", 4):
@@ -976,6 +1042,46 @@ class ServerContractTests(unittest.TestCase):
             ["measurement", "pitchNoteTranslation"],
         )
 
+    def test_delete_analysis_run_removes_owned_run(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_server_runtime_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            created = runtime.create_run(
+                filename="track.mp3",
+                content=b"fake-audio",
+                mime_type="audio/mpeg",
+                owner_user_id="user_owner",
+                analysis_mode="full",
+                pitch_note_mode="off",
+                pitch_note_backend="auto",
+                interpretation_mode="off",
+                interpretation_profile="producer_summary",
+                interpretation_model=None,
+            )
+            with (
+                patch.object(server, "get_analysis_runtime", return_value=runtime),
+                patch.object(
+                    server,
+                    "_interrupt_active_child_processes",
+                    return_value=["measurement"],
+                ),
+                patch.dict(server.os.environ, {"SONIC_ANALYZER_RUNTIME_PROFILE": "hosted"}, clear=False),
+            ):
+                response = asyncio.run(
+                    server.delete_analysis_run(
+                        created["runId"],
+                        x_asa_user_id="user_owner",
+                    )
+                )
+
+            with self.assertRaises(KeyError):
+                runtime.get_run(created["runId"])
+
+        payload = self._decode_json_response(response)
+        self.assertEqual(response.status_code, 202)
+        self.assertTrue(payload["deleted"])
+
     @patch.object(server, "get_audio_duration_seconds", return_value=214.6, create=True)
     @patch.object(
         server,
@@ -1122,7 +1228,7 @@ class ServerContractTests(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 200)
-        command = run_mock.call_args.args[0]
+        command, call_kwargs = self._find_analyze_subprocess_call(run_mock)
         self.assertEqual(
             command,
             [
@@ -1133,7 +1239,7 @@ class ServerContractTests(unittest.TestCase):
                 "--separate",
             ],
         )
-        self.assertEqual(run_mock.call_args.kwargs["timeout"], 526)
+        self.assertEqual(call_kwargs["timeout"], 526)
         build_estimate_mock.assert_called_once_with(214.6, True, False)
         payload = self._decode_json_response(response)
         self.assertEqual(payload["diagnostics"]["backendDurationMs"], 200.0)
@@ -1219,7 +1325,7 @@ class ServerContractTests(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 200)
-        command = run_mock.call_args.args[0]
+        command, _call_kwargs = self._find_analyze_subprocess_call(run_mock)
         self.assertIn("--fast", command)
         payload = self._decode_json_response(response)
         self.assertIn("--fast", payload["diagnostics"]["timings"]["flagsUsed"])
@@ -1273,7 +1379,7 @@ class ServerContractTests(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 200)
-        command = run_mock.call_args.args[0]
+        command, _call_kwargs = self._find_analyze_subprocess_call(run_mock)
         self.assertNotIn("--fast", command)
         payload = self._decode_json_response(response)
         self.assertNotIn("--fast", payload["diagnostics"]["timings"]["flagsUsed"])

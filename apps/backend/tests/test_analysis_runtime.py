@@ -79,6 +79,7 @@ class AnalysisRuntimeTests(unittest.TestCase):
             filename="track.mp3",
             content=b"fake-audio",
             mime_type="audio/mpeg",
+            owner_user_id="user_123",
             pitch_note_mode="stem_notes",
             pitch_note_backend="auto",
             interpretation_mode="async",
@@ -90,6 +91,7 @@ class AnalysisRuntimeTests(unittest.TestCase):
         snapshot = runtime.get_run(created["runId"])
 
         self.assertEqual(snapshot["artifacts"]["sourceAudio"]["filename"], "track.mp3")
+        self.assertNotIn("path", snapshot["artifacts"]["sourceAudio"])
         self.assertEqual(snapshot["stages"]["measurement"]["status"], "queued")
         self.assertTrue(snapshot["stages"]["measurement"]["authoritative"])
         self.assertEqual(snapshot["stages"]["pitchNoteTranslation"]["status"], "blocked")
@@ -97,6 +99,87 @@ class AnalysisRuntimeTests(unittest.TestCase):
         self.assertEqual(snapshot["stages"]["interpretation"]["status"], "blocked")
         self.assertEqual(snapshot["requestedStages"]["pitchNoteMode"], "stem_notes")
         self.assertEqual(snapshot["requestedStages"]["interpretationMode"], "async")
+        self.assertEqual(runtime.get_run_owner_user_id(created["runId"]), "user_123")
+
+    def test_get_run_rejects_wrong_owner(self) -> None:
+        runtime = self._runtime()
+        created = runtime.create_run(
+            filename="track.mp3",
+            content=b"fake-audio",
+            mime_type="audio/mpeg",
+            owner_user_id="user_123",
+            pitch_note_mode="off",
+            pitch_note_backend="auto",
+            interpretation_mode="off",
+            interpretation_profile="producer_summary",
+            interpretation_model=None,
+        )
+
+        with self.assertRaisesRegex(PermissionError, "does not belong to user"):
+            runtime.get_run(created["runId"], owner_user_id="user_456")
+
+    def test_runtime_uses_injected_artifact_storage_for_create_and_delete(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+        from artifact_storage import StoredArtifact
+
+        class RecordingArtifactStorage:
+            def __init__(self) -> None:
+                self.deleted_refs: list[str] = []
+
+            def store_bytes(
+                self,
+                *,
+                artifact_id: str,
+                filename: str,
+                content: bytes,
+            ) -> StoredArtifact:
+                return StoredArtifact(
+                    storage_ref=f"memory://{artifact_id}/{filename}",
+                    size_bytes=len(content),
+                    content_sha256="sha-from-storage",
+                )
+
+            def store_file(
+                self,
+                *,
+                artifact_id: str,
+                filename: str,
+                source_path: str,
+            ) -> StoredArtifact:
+                return StoredArtifact(
+                    storage_ref=f"memory://{artifact_id}/{filename}",
+                    size_bytes=0,
+                    content_sha256="sha-from-storage",
+                )
+
+            def delete(self, storage_ref: str) -> None:
+                self.deleted_refs.append(storage_ref)
+
+            def resolve_local_path(self, storage_ref: str) -> Path | None:
+                return None
+
+        storage = RecordingArtifactStorage()
+        runtime = AnalysisRuntime(
+            Path(self.temp_dir.name) / "runtime",
+            artifact_storage=storage,
+        )
+        created = runtime.create_run(
+            filename="track.mp3",
+            content=b"fake-audio",
+            mime_type="audio/mpeg",
+            pitch_note_mode="off",
+            pitch_note_backend="auto",
+            interpretation_mode="off",
+            interpretation_profile="producer_summary",
+            interpretation_model=None,
+        )
+
+        source = runtime.get_source_artifact(created["runId"])
+        self.assertEqual(source["path"], f"memory://{source['artifactId']}/track.mp3")
+        self.assertEqual(source["contentSha256"], "sha-from-storage")
+
+        runtime.delete_run(created["runId"])
+        self.assertEqual(storage.deleted_refs, [f"memory://{source['artifactId']}/track.mp3"])
 
     def test_create_run_from_source_path_persists_streamed_source_artifact(self) -> None:
         runtime = self._runtime()
