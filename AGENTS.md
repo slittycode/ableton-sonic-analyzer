@@ -333,7 +333,7 @@ Backend allows these origins:
 
 - Temporary files are written to disk during analysis
 - Files are cleaned up after processing (success or error)
-- Maximum inline upload size: 100MB (base64 encoded)
+- Raw audio files at or below 100 MiB go inline to Gemini
 - Larger files use Gemini Files API
 
 ### Local Development Only

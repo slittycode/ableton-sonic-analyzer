@@ -14,6 +14,7 @@
     "test": "vitest run",
     "test:unit": "vitest run tests/services",
     "test:e2e": "playwright test --config=playwright.full.config.ts --reporter=list",
+    "test:e2e:integration": "playwright test tests/e2e/analysis-runs-integration.spec.ts --config=playwright.integration.config.ts --reporter=list",
     "test:e2e:headed": "playwright test --config=playwright.full.config.ts --headed --reporter=list",
     "test:smoke": "playwright test --reporter=list",
     "test:smoke:live-gemini": "playwright test tests/smoke/upload-phase2-live-gemini.spec.ts --reporter=list",

@@ -166,7 +166,7 @@ python3.11 -m venv venv
 
 ## Known Gotchas
 
-- `--fast` is accepted by `analyze.py` but is currently a no-op.
+- `--fast` runs the reduced fast-analysis preset: core fields stay populated, while most detail-heavy fields remain `null`.
 - `dsp_json_override` is accepted by the server but ignored.
 - The server always appends `--yes` when invoking `analyze.py`.
 - README CORS docs have drifted before; trust `server.py` constants over prose if they disagree.

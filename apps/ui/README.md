@@ -307,15 +307,29 @@ Notes about tests:
 
 - most smoke tests stub the backend and Gemini calls
 - `tests/smoke` remains the mocked, CI-friendly UI-contract layer
-- `tests/e2e` is the canonical always-live suite and uses the current staged runtime contract: `POST /api/analysis-runs/estimate`, `POST /api/analysis-runs`, `GET /api/analysis-runs/{run_id}`, and artifact endpoints
-- the live E2E suite is local-only and requires:
+- `tests/e2e/analysis-runs-integration.spec.ts` is the canonical no-Gemini integration proof and uses the current staged runtime contract: `POST /api/analysis-runs/estimate`, `POST /api/analysis-runs`, `GET /api/analysis-runs/{run_id}`, and artifact endpoints
+- the no-Gemini integration lane generates its own local WAV, boots the real backend, and keeps AI interpretation off
+- the full live Gemini lane stays separate and requires:
   - `TEST_FLAC_PATH` pointing at a readable audio file
   - `GEMINI_API_KEY` in the backend environment
   - `VITE_ENABLE_PHASE2_GEMINI=true`
 - `tests/smoke/upload-phase1-live.spec.ts` is a lightweight opt-in proof against the canonical `analysis-runs` flow
 - `tests/smoke/upload-phase2-live-gemini.spec.ts` is an opt-in Files API proof using a generated `>100MB` WAV and backend-mediated Gemini
 
-Run the canonical local-only live suite:
+Run the canonical no-Gemini local integration suite:
+
+```bash
+./scripts/test-e2e-integration.sh
+```
+
+Run the same no-Gemini lane directly from `apps/ui` when the backend is already up on `http://127.0.0.1:8100`:
+
+```bash
+VITE_API_BASE_URL=http://127.0.0.1:8100 \
+npm run test:e2e:integration
+```
+
+Run the separate full live Gemini suite:
 
 ```bash
 TEST_FLAC_PATH=/path/to/track.flac \

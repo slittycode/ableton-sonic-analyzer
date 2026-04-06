@@ -5,9 +5,12 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  assertIntegrationE2EPreflight,
+  backendSupportsCanonicalAnalysisRunRoutes,
   assertLiveE2EPreflight,
   backendSupportsLiveE2ERoutes,
   isPlaceholderGeminiApiKey,
+  validateIntegrationE2EEnv,
   validateLiveE2EEnv,
 } from '../e2e/support/preflight';
 
@@ -26,6 +29,16 @@ afterEach(async () => {
 });
 
 describe('e2e preflight', () => {
+  it('accepts missing Gemini credentials and track path for the no-Gemini integration lane', async () => {
+    expect(
+      await validateIntegrationE2EEnv({
+        TEST_FLAC_PATH: '',
+        VITE_ENABLE_PHASE2_GEMINI: 'false',
+        GEMINI_API_KEY: '',
+      }),
+    ).toEqual([]);
+  });
+
   it('treats empty and placeholder Gemini keys as invalid', () => {
     expect(isPlaceholderGeminiApiKey('')).toBe(true);
     expect(isPlaceholderGeminiApiKey('   ')).toBe(true);
@@ -86,8 +99,31 @@ describe('e2e preflight', () => {
       }),
     });
 
+    await expect(backendSupportsCanonicalAnalysisRunRoutes('http://127.0.0.1:8100', fetchImpl)).resolves.toBe(true);
     await expect(backendSupportsLiveE2ERoutes('http://127.0.0.1:8100', fetchImpl)).resolves.toBe(true);
     expect(fetchImpl).toHaveBeenCalledWith('http://127.0.0.1:8100/openapi.json', expect.any(Object));
+  });
+
+  it('fails fast for the integration lane when the backend is unreachable or missing canonical routes', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        paths: {
+          '/api/analysis-runs/estimate': {},
+        },
+      }),
+    });
+
+    await expect(
+      assertIntegrationE2EPreflight({
+        env: {
+          VITE_API_BASE_URL: 'http://127.0.0.1:8100',
+        },
+        fetchImpl,
+      }),
+    ).rejects.toThrow(
+      'Backend at http://127.0.0.1:8100 must expose /api/analysis-runs/estimate, /api/analysis-runs, and /api/analysis-runs/{run_id} for the local integration E2E suite.',
+    );
   });
 
   it('fails fast when the backend is unreachable or missing required routes', async () => {

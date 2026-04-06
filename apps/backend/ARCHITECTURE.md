@@ -34,12 +34,16 @@ Interface:
 Responsibilities:
 
 - receive multipart uploads
+- reject oversized request envelopes before form parsing
+- enforce the shared raw audio limit against the `track` file part
 - write the upload to a temporary file
 - compute a backend estimate and timeout
 - invoke `analyze.py` with `--yes`
 - translate raw analyzer output into the HTTP `phase1` envelope
 - return structured error diagnostics when the subprocess fails
 - clean up temporary files
+- derive operator-facing proxy guidance from the shared upload limit contract in
+  `upload_limits.py`, surfaced by `./venv/bin/python scripts/render_upload_limit_contract.py`
 
 Custom routes:
 
@@ -51,6 +55,11 @@ Custom routes:
 - `POST /api/phase2` (legacy compatibility)
 
 FastAPI-generated routes remain available at `/openapi.json`, `/docs`, and `/redoc`.
+
+The upload limit contract is the canonical source for the raw-audio limit, the
+request-envelope limit, the protected route list, and the edge proxy examples.
+In plain English: if those numbers ever change, operators should regenerate the
+contract instead of trusting old documentation.
 
 ## CLI Flow
 
@@ -82,42 +91,46 @@ Important sections:
 
 ### `POST /api/analysis-runs/estimate`
 
-1. Persist the uploaded file to a temporary path.
-2. Read duration metadata with `get_audio_duration_seconds()`.
-3. Resolve staged estimate flags from the requested run shape.
-4. Call `build_analysis_estimate(duration, run_separation, run_transcribe)`.
-5. Normalize stage keys into the server contract:
+1. Reject requests above the `101 MiB` request-envelope limit when `Content-Length` is present.
+2. For valid multipart uploads, count only the `track` part bytes toward the shared `100 MiB` raw-audio limit.
+3. Persist the uploaded file to a temporary path.
+4. Read duration metadata with `get_audio_duration_seconds()`.
+5. Resolve staged estimate flags from the requested run shape.
+6. Call `build_analysis_estimate(duration, run_separation, run_transcribe)`.
+7. Normalize stage keys into the server contract:
    - `dsp` -> `local_dsp`
    - `separation` -> `demucs_separation`
-6. Return:
+8. Return:
    - `requestId`
    - `estimate.durationSeconds`
    - `estimate.totalLowMs`
    - `estimate.totalHighMs`
    - `estimate.stages[]`
-7. Close the upload and delete the temporary file.
+9. Close the upload and delete the temporary file.
 
 ### `POST /api/analyze` (legacy compatibility wrapper)
 
-1. Persist the uploaded file to a temporary path.
-2. Build the same estimate object used by the estimate route.
-3. Convert the estimated upper bound into a timeout with a 15-second buffer.
-4. Build the subprocess command:
+1. Reject requests above the `101 MiB` request-envelope limit when `Content-Length` is present.
+2. For valid multipart uploads, count only the `track` part bytes toward the shared `100 MiB` raw-audio limit.
+3. Persist the uploaded file to a temporary path.
+4. Build the same estimate object used by the estimate route.
+5. Convert the estimated upper bound into a timeout with a 15-second buffer.
+6. Build the subprocess command:
    - base command: `./venv/bin/python analyze.py <temp_path> --yes`
    - add `--separate` when the query parameter is present
    - add `--transcribe` when the multipart form field is truthy
-5. Run the subprocess with `capture_output=True`.
-6. Handle failures with structured JSON error envelopes:
+7. Run the subprocess with `capture_output=True`.
+8. Handle failures with structured JSON error envelopes:
    - timeout
    - internal subprocess launch failure
    - non-zero exit
    - empty stdout
    - malformed JSON
    - non-object JSON
-7. Build `diagnostics.timings` from request wall time, subprocess wall time, flag usage, upload size, and analyzer-reported duration.
-8. Emit a `[TIMING]` summary line to `stderr` for every completed request, including structured errors.
-9. On success, normalize the raw payload into `phase1` and attach diagnostics.
-10. Close the upload and delete the temporary file.
+9. Build `diagnostics.timings` from request wall time, subprocess wall time, flag usage, upload size, and analyzer-reported duration.
+10. Emit a `[TIMING]` summary line to `stderr` for every completed request, including structured errors.
+11. On success, normalize the raw payload into `phase1` and attach diagnostics.
+12. Close the upload and delete the temporary file.
 
 ## HTTP Contract
 
@@ -239,14 +252,15 @@ When the analyzer never produces a valid JSON object, `timings.fileDurationSecon
 
 ### `POST /api/phase2` (legacy compatibility wrapper)
 
-1. Optionally use a cached temp file from a prior Phase 1 request (keyed by `phase1_request_id` form field); fall back to persisting the uploaded file if no cache hit.
-2. Parse `phase1_json` form field — used as-is (already normalized by the frontend).
-3. Build the Gemini prompt: system prompt from `prompts/phase2_system.txt` + Phase 1 JSON appended.
-4. Upload the audio inline (≤100 MiB) or via the Gemini Files API (>100 MiB).
-5. Call `generateContent` with structured output schema; retry on transient errors.
-6. Parse and validate the response against the Phase 2 schema.
-7. Return `{ requestId, phase2: Phase2Result | null, message, diagnostics }`.
-8. Clean up the temporary file in the `finally` block.
+1. Validate the uploaded audio against the shared backend upload limit.
+2. Resolve the server-owned analysis run from `analysis_run_id` or `phase1_request_id`.
+3. Parse `phase1_json` form field for compatibility only; canonical grounding comes from the server-owned run state.
+4. Build the Gemini prompt: system prompt from `prompts/phase2_system.txt` + grounded analysis data.
+5. Upload the audio inline (≤100 MiB) or via the Gemini Files API (>100 MiB).
+6. Call `generateContent` with structured output schema; retry on transient errors.
+7. Parse and validate the response against the Phase 2 schema.
+8. Return `{ requestId, phase2: Phase2Result | null, message, diagnostics }`.
+9. Clean up the temporary file in the `finally` block.
 
 ## Transcription Pipeline
 

@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import server
 
@@ -88,57 +88,81 @@ class CleanupStartupHookTests(unittest.TestCase):
         coro.close()
         return Mock(name="task")
 
-    def test_startup_schedules_artifact_cleanup_in_daemon_thread(self) -> None:
+    def test_artifact_cleanup_loop_runs_immediately_and_then_hourly(self) -> None:
         runtime = Mock()
         runtime.runtime_dir = Path("/tmp/asa-runtime")
-        thread = Mock()
-        captured_target = {}
 
-        def build_thread(*args, **kwargs):
-            captured_target["target"] = kwargs["target"]
-            return thread
+        async def run_to_thread(func, *args):
+            func(*args)
 
-        with patch.object(server, "_BACKGROUND_TASKS", []):
-            with patch.object(server, "get_analysis_runtime", return_value=runtime):
-                with patch.object(server.threading, "Thread", side_effect=build_thread) as thread_cls:
-                    with patch.object(server.asyncio, "create_task", side_effect=self._close_coro_and_return_task):
-                        with patch.object(server, "cleanup_artifacts", create=True) as cleanup_mock:
-                            asyncio.run(server._start_cache_eviction())
-                            captured_target["target"]()
+        with (
+            patch.object(server, "cleanup_artifacts") as cleanup_mock,
+            patch.object(server.asyncio, "to_thread", side_effect=run_to_thread),
+            patch.object(
+                server.asyncio,
+                "sleep",
+                side_effect=[None, asyncio.CancelledError()],
+            ),
+        ):
+            with self.assertRaises(asyncio.CancelledError):
+                asyncio.run(server._artifact_cleanup_loop(runtime.runtime_dir))
 
-        runtime.recover_incomplete_attempts.assert_called_once_with()
-        thread_cls.assert_called_once()
-        self.assertTrue(thread_cls.call_args.kwargs["daemon"])
-        self.assertEqual(thread_cls.call_args.kwargs["name"], "artifact-cleanup")
-        thread.start.assert_called_once_with()
-        cleanup_mock.assert_called_once_with(runtime.runtime_dir)
+        cleanup_mock.assert_any_call(runtime.runtime_dir)
+        self.assertEqual(cleanup_mock.call_count, 2)
 
-    def test_startup_cleanup_target_swallows_exceptions_with_warning_log(self) -> None:
+    def test_artifact_cleanup_loop_swallows_exceptions_with_warning_log(self) -> None:
         runtime = Mock()
         runtime.runtime_dir = Path("/tmp/asa-runtime")
-        thread = Mock()
-        captured_target = {}
 
-        def build_thread(*args, **kwargs):
-            captured_target["target"] = kwargs["target"]
-            return thread
+        cleanup_mock = Mock(side_effect=[RuntimeError("boom"), None])
 
-        with patch.object(server, "_BACKGROUND_TASKS", []):
-            with patch.object(server, "get_analysis_runtime", return_value=runtime):
-                with patch.object(server.threading, "Thread", side_effect=build_thread):
-                    with patch.object(server.asyncio, "create_task", side_effect=self._close_coro_and_return_task):
-                        with patch.object(
-                            server,
-                            "cleanup_artifacts",
-                            side_effect=RuntimeError("boom"),
-                            create=True,
-                        ):
-                            with patch.object(server.logger, "warning") as warning_mock:
-                                asyncio.run(server._start_cache_eviction())
-                                captured_target["target"]()
+        async def run_to_thread(func, *args):
+            return func(*args)
 
+        with (
+            patch.object(server, "cleanup_artifacts", cleanup_mock),
+            patch.object(server.asyncio, "to_thread", side_effect=run_to_thread),
+            patch.object(
+                server.asyncio,
+                "sleep",
+                side_effect=[None, asyncio.CancelledError()],
+            ),
+            patch.object(server.logger, "warning") as warning_mock,
+        ):
+            with self.assertRaises(asyncio.CancelledError):
+                asyncio.run(server._artifact_cleanup_loop(runtime.runtime_dir))
+
+        self.assertEqual(cleanup_mock.call_count, 2)
         warning_mock.assert_called_once()
         self.assertIn("artifact cleanup failed", warning_mock.call_args.args[0].lower())
+
+    def test_startup_schedules_recurring_cleanup_task_and_no_file_cache(self) -> None:
+        runtime = Mock()
+        runtime.runtime_dir = Path("/tmp/asa-runtime")
+        cleanup_loop = AsyncMock(return_value=None)
+
+        with patch.object(server, "_BACKGROUND_TASKS", []):
+            with patch.object(server, "get_analysis_runtime", return_value=runtime):
+                with patch.object(server, "_artifact_cleanup_loop", cleanup_loop, create=True):
+                    with (
+                        patch.object(
+                            server.asyncio,
+                            "create_task",
+                            side_effect=self._close_coro_and_return_task,
+                        ) as create_task_mock,
+                        patch.object(server.logger, "info") as info_mock,
+                    ):
+                        asyncio.run(server._start_background_tasks())
+
+        runtime.recover_incomplete_attempts.assert_called_once_with()
+        cleanup_loop.assert_called_once_with(runtime.runtime_dir)
+        self.assertEqual(create_task_mock.call_count, 4)
+        info_mock.assert_called_once_with(
+            "Upload limits configured: raw_audio_limit_bytes=%s edge_request_limit_bytes=%s",
+            server.upload_limits.MAX_UPLOAD_SIZE_BYTES,
+            server.upload_limits.MAX_UPLOAD_REQUEST_BYTES,
+        )
+        self.assertFalse(hasattr(server, "_FILE_CACHE"))
 
 
 if __name__ == "__main__":

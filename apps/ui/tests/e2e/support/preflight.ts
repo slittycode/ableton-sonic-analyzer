@@ -77,7 +77,32 @@ export async function validateLiveE2EEnv(env: Record<string, string | undefined>
   return issues;
 }
 
-export async function backendSupportsLiveE2ERoutes(
+interface LiveE2EPreflightOptions {
+  env?: Record<string, string | undefined>;
+  fetchImpl?: FetchLike;
+}
+
+async function assertCanonicalAnalysisRunsBackend(
+  backendBaseUrl: string,
+  suiteLabel: string,
+  fetchImpl: FetchLike = fetch,
+): Promise<void> {
+  const backendReady = await backendSupportsCanonicalAnalysisRunRoutes(backendBaseUrl, fetchImpl);
+
+  if (!backendReady) {
+    throw new Error(
+      `Backend at ${backendBaseUrl} must expose /api/analysis-runs/estimate, /api/analysis-runs, and /api/analysis-runs/{run_id} for ${suiteLabel}.`,
+    );
+  }
+}
+
+export async function validateIntegrationE2EEnv(
+  _env: Record<string, string | undefined>,
+): Promise<string[]> {
+  return [];
+}
+
+export async function backendSupportsCanonicalAnalysisRunRoutes(
   baseUrl: string,
   fetchImpl: FetchLike = fetch,
 ): Promise<boolean> {
@@ -103,9 +128,11 @@ export async function backendSupportsLiveE2ERoutes(
   }
 }
 
-interface LiveE2EPreflightOptions {
-  env?: Record<string, string | undefined>;
-  fetchImpl?: FetchLike;
+export async function backendSupportsLiveE2ERoutes(
+  baseUrl: string,
+  fetchImpl: FetchLike = fetch,
+): Promise<boolean> {
+  return backendSupportsCanonicalAnalysisRunRoutes(baseUrl, fetchImpl);
 }
 
 export async function assertLiveE2EPreflight(options: LiveE2EPreflightOptions = {}): Promise<void> {
@@ -117,11 +144,19 @@ export async function assertLiveE2EPreflight(options: LiveE2EPreflightOptions = 
   }
 
   const backendBaseUrl = resolveLiveBackendBaseUrl(env);
-  const backendReady = await backendSupportsLiveE2ERoutes(backendBaseUrl, options.fetchImpl);
+  await assertCanonicalAnalysisRunsBackend(backendBaseUrl, 'the full live E2E suite', options.fetchImpl);
+}
 
-  if (!backendReady) {
-    throw new Error(
-      `Backend at ${backendBaseUrl} must expose /api/analysis-runs/estimate, /api/analysis-runs, and /api/analysis-runs/{run_id} for the full live E2E suite.`,
-    );
+export async function assertIntegrationE2EPreflight(
+  options: LiveE2EPreflightOptions = {},
+): Promise<void> {
+  const env = options.env ?? (process.env as Record<string, string | undefined>);
+  const issues = await validateIntegrationE2EEnv(env);
+
+  if (issues.length > 0) {
+    throw new Error(issues.join('\n'));
   }
+
+  const backendBaseUrl = resolveLiveBackendBaseUrl(env);
+  await assertCanonicalAnalysisRunsBackend(backendBaseUrl, 'the local integration E2E suite', options.fetchImpl);
 }

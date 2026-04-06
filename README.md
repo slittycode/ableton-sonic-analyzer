@@ -136,7 +136,13 @@ cd apps/backend
 ./venv/bin/python -m unittest discover -s tests
 ```
 
-Canonical live end-to-end verification is local-only and requires a real audio file plus backend Gemini credentials:
+Canonical local end-to-end verification is local-only, boots the real backend, drives the UI against the canonical `analysis-runs` routes, and does not require Gemini credentials or a user-provided track:
+
+```bash
+./scripts/test-e2e-integration.sh
+```
+
+Full live Gemini end-to-end verification stays separate and requires a real audio file plus backend Gemini credentials:
 
 ```bash
 TEST_FLAC_PATH=/path/to/track.flac \
@@ -144,6 +150,29 @@ GEMINI_API_KEY=your_real_key_here \
 VITE_ENABLE_PHASE2_GEMINI=true \
 ./scripts/test-e2e.sh
 ```
+
+## Upload Limits
+
+For the backend upload routes, ASA now distinguishes between:
+
+- raw audio limit: `100 MiB`
+- HTTP request envelope limit: `101 MiB`
+
+In plain English: the audio file itself must stay at or below 100 MiB, but the
+whole multipart request is allowed to be slightly larger so filenames and form
+wrapping do not cause false `413` errors.
+
+The canonical operator view is generated from backend code, not maintained by
+hand. To see the current edge contract and proxy examples:
+
+```bash
+cd apps/backend
+./venv/bin/python scripts/render_upload_limit_contract.py
+```
+
+If you later put this local stack behind a reverse proxy or load balancer,
+mirror the generated `101 MiB` request-body limit there for the protected
+upload routes instead of copying stale numbers from old docs.
 
 ## Release Position
 

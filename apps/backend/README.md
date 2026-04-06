@@ -73,7 +73,7 @@ Bootstrap contract for this monorepo `v1.0.0` cut:
 | `--separate` | Runs Demucs before melody analysis. If `--transcribe` is also enabled, the selected pitch backend uses the `bass` and `other` stems when they exist. |
 | `--transcribe` | Runs the selected pitch backend and returns `transcriptionDetail`. Without Demucs it transcribes the full mix; with Demucs it transcribes `bass` and `other` separately and merges the notes. |
 | `--pitch-note-backend BACKEND` | Selects the Layer 2 backend for `--pitch-note-only`. Supported values are `auto`, `torchcrepe-viterbi`, and alias `torchcrepe`. |
-| `--fast` | Accepted, but currently a no-op parser stub. |
+| `--fast` | Runs the reduced fast-analysis preset. Core fields such as BPM, key, duration, LUFS, true peak, and crest factor are populated; most detail-heavy fields remain `null`. |
 | `--yes` | Skips the interactive confirmation prompt after the CLI prints its runtime estimate. |
 
 ### Runtime Behavior
@@ -182,6 +182,83 @@ Current CORS allow list:
 - `http://127.0.0.1:3100`
 - `http://localhost:5173`
 - `http://127.0.0.1:5173`
+
+## Upload Size Limits
+
+The canonical upload limit contract is generated from code in
+`upload_limits.py`, not maintained by hand in the docs.
+
+To render the current contract, protected route list, and proxy snippets:
+
+```bash
+./venv/bin/python scripts/render_upload_limit_contract.py
+```
+
+The current generated values are:
+
+- raw audio limit: `104857600` bytes (`100 MiB`)
+- request envelope limit: `105906176` bytes (`101 MiB`)
+
+In plain English: the uploaded audio itself is capped at 100 MiB, but the full
+HTTP request is allowed to be 1 MiB larger so multipart boundaries, filenames,
+and small form fields do not cause false `413` rejections.
+
+In plain English: the uploaded audio itself is capped at 100 MiB, but the full
+HTTP request is allowed to be 1 MiB larger so multipart boundaries, filenames,
+and small form fields do not cause false `413` rejections.
+
+Current backend behavior:
+
+- the ASGI middleware rejects any request whose declared `Content-Length`
+  exceeds `105906176`
+- for valid `multipart/form-data`, the middleware counts only the `track`
+  file part toward the 100 MiB audio limit
+- malformed multipart requests still fail as parse errors instead of being
+  mislabeled as `UPLOAD_TOO_LARGE`
+- `_persist_upload()` still enforces the same 100 MiB raw file limit after the
+  middleware as defense in depth
+
+### Edge Proxy Guidance
+
+This repo does not include live deploy or reverse-proxy config.
+
+If you put ASA behind a proxy or load balancer later, treat the generated
+contract output as the source of truth and mirror the request envelope limit of
+`105906176` bytes (`101 MiB`) on these routes:
+
+- `POST /api/analysis-runs`
+- `POST /api/analysis-runs/estimate`
+- `POST /api/analyze`
+- `POST /api/analyze/estimate`
+- `POST /api/phase2`
+
+Generated examples:
+
+```nginx
+client_max_body_size 101m;
+```
+
+```caddy
+request_body {
+  max_size 105906176
+}
+```
+
+```yaml
+http:
+  middlewares:
+    asa-upload-limit:
+      buffering:
+        maxRequestBodyBytes: 105906176
+```
+
+### Future Hosted Deployment Checklist
+
+- Run `./venv/bin/python scripts/render_upload_limit_contract.py` and confirm the
+  edge request-body limit matches `105906176` bytes (`101 MiB`).
+- Confirm only these five upload POST routes are capped at the edge.
+- Confirm the backend startup log shows the same raw and edge limits after deploy.
+- Confirm a near-limit valid upload succeeds and an oversized upload returns HTTP `413`.
 
 ## HTTP API
 
@@ -347,7 +424,7 @@ When the analyzer does not produce a valid payload, `diagnostics.timings.fileDur
 - `dsp_json_override` is accepted by both endpoints but is currently ignored by the backend.
 - The server timeout budget is derived from the estimate path and now reflects requested separation and transcription work.
 - `transcriptionDetail` is only present when `analyze.py` runs with `--transcribe`; otherwise it is `null`.
-- `--fast` is accepted by the CLI but does not change analysis behavior yet.
+- `--fast` runs the reduced fast-analysis preset instead of the full descriptor pass.
 
 ## Validation
 
@@ -356,7 +433,13 @@ When the analyzer does not produce a valid payload, `diagnostics.timings.fileDur
 ./venv/bin/python -m unittest discover -s tests
 ```
 
-Canonical live end-to-end verification is local-only and runs from the repo root with a real audio fixture plus backend Gemini credentials:
+Canonical local end-to-end verification is local-only and runs from the repo root without Gemini credentials or a user-provided audio file:
+
+```bash
+./scripts/test-e2e-integration.sh
+```
+
+The separate full live Gemini end-to-end verification still requires a real audio fixture plus backend Gemini credentials:
 
 ```bash
 TEST_FLAC_PATH=/path/to/track.flac \

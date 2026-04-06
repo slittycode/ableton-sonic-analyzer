@@ -192,8 +192,6 @@ export async function analyzeAudio(
       analysisMode: analysisOptions?.analysisMode ?? 'full',
       pitchNoteMode: resolvePitchNoteRequested(analysisOptions) ? 'stem_notes' : 'off',
       pitchNoteBackend: 'auto',
-      symbolicMode: resolvePitchNoteRequested(analysisOptions) ? 'stem_notes' : 'off',
-      symbolicBackend: 'auto',
       interpretationMode: resolveInterpretationMode(analysisOptions),
       interpretationProfile: 'producer_summary',
       interpretationModel: resolveInterpretationMode(analysisOptions) === 'off' ? null : modelName,

@@ -188,105 +188,222 @@ class AnalysisRuntime:
         legacy_request_id: str | None = None,
         analysis_mode: str = "full",
     ) -> dict[str, Any]:
-        if self._count_active_measurement_runs() >= self.max_pending_per_stage:
-            raise RuntimeError("Measurement queue is full.")
-        resolved_analysis_mode = self._resolve_analysis_mode(analysis_mode)
-        self._resolve_pitch_note_backend(pitch_note_backend)
-        run_id = str(uuid4())
         artifact_id = str(uuid4())
-        created_at = _utc_now_iso()
-        content_sha256 = hashlib.sha256(content).hexdigest()
-        suffix = Path(filename).suffix or ".bin"
-        artifact_path = self.artifacts_dir / f"{artifact_id}{suffix}"
-        artifact_path.write_bytes(content)
+        artifact_path, size_bytes, content_sha256 = self._write_source_artifact_bytes(
+            artifact_id=artifact_id,
+            filename=filename,
+            content=content,
+        )
+        return self._create_run_with_persisted_source_artifact(
+            artifact_id=artifact_id,
+            artifact_path=artifact_path,
+            filename=filename,
+            mime_type=mime_type,
+            size_bytes=size_bytes,
+            content_sha256=content_sha256,
+            pitch_note_mode=pitch_note_mode,
+            pitch_note_backend=pitch_note_backend,
+            interpretation_mode=interpretation_mode,
+            interpretation_profile=interpretation_profile,
+            interpretation_model=interpretation_model,
+            legacy_request_id=legacy_request_id,
+            analysis_mode=analysis_mode,
+        )
 
-        with self._connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO analysis_runs (
-                    id,
-                    source_artifact_id,
-                    requested_analysis_mode,
-                    requested_pitch_note_mode,
-                    requested_pitch_note_backend,
-                    requested_interpretation_mode,
-                    requested_interpretation_profile,
-                    requested_interpretation_model,
-                    legacy_request_id,
-                    created_at,
-                    updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    run_id,
-                    artifact_id,
-                    resolved_analysis_mode,
-                    pitch_note_mode,
-                    pitch_note_backend,
-                    interpretation_mode,
-                    interpretation_profile,
-                    interpretation_model,
-                    legacy_request_id,
-                    created_at,
-                    created_at,
-                ),
-            )
-            conn.execute(
-                """
-                INSERT INTO run_artifacts (
-                    id,
-                    run_id,
-                    kind,
-                    filename,
-                    mime_type,
-                    size_bytes,
-                    content_sha256,
-                    path,
-                    provenance_json,
-                    created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    artifact_id,
-                    run_id,
-                    "source_audio",
-                    filename,
-                    mime_type,
-                    len(content),
-                    content_sha256,
-                    str(artifact_path),
-                    None,
-                    created_at,
-                ),
-            )
-            conn.execute(
-                """
-                INSERT INTO measurement_outputs (
-                    id,
-                    run_id,
-                    status,
-                    result_json,
-                    provenance_json,
-                    diagnostics_json,
-                    error_json,
-                    created_at,
-                    updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    str(uuid4()),
-                    run_id,
-                    "queued",
-                    None,
-                    None,
-                    None,
-                    None,
-                    created_at,
-                    created_at,
-                ),
-            )
+    def create_run_from_source_path(
+        self,
+        *,
+        filename: str,
+        source_path: str,
+        mime_type: str,
+        pitch_note_mode: str,
+        pitch_note_backend: str,
+        interpretation_mode: str,
+        interpretation_profile: str,
+        interpretation_model: str | None,
+        legacy_request_id: str | None = None,
+        analysis_mode: str = "full",
+    ) -> dict[str, Any]:
+        artifact_id = str(uuid4())
+        artifact_path, size_bytes, content_sha256 = self._copy_source_artifact(
+            artifact_id=artifact_id,
+            filename=filename,
+            source_path=source_path,
+        )
+        return self._create_run_with_persisted_source_artifact(
+            artifact_id=artifact_id,
+            artifact_path=artifact_path,
+            filename=filename,
+            mime_type=mime_type,
+            size_bytes=size_bytes,
+            content_sha256=content_sha256,
+            pitch_note_mode=pitch_note_mode,
+            pitch_note_backend=pitch_note_backend,
+            interpretation_mode=interpretation_mode,
+            interpretation_profile=interpretation_profile,
+            interpretation_model=interpretation_model,
+            legacy_request_id=legacy_request_id,
+            analysis_mode=analysis_mode,
+        )
+
+    def _create_run_with_persisted_source_artifact(
+        self,
+        *,
+        artifact_id: str,
+        artifact_path: Path,
+        filename: str,
+        mime_type: str,
+        size_bytes: int,
+        content_sha256: str,
+        pitch_note_mode: str,
+        pitch_note_backend: str,
+        interpretation_mode: str,
+        interpretation_profile: str,
+        interpretation_model: str | None,
+        legacy_request_id: str | None,
+        analysis_mode: str,
+    ) -> dict[str, Any]:
+        try:
+            if self._count_active_measurement_runs() >= self.max_pending_per_stage:
+                raise RuntimeError("Measurement queue is full.")
+
+            resolved_analysis_mode = self._resolve_analysis_mode(analysis_mode)
+            self._resolve_pitch_note_backend(pitch_note_backend)
+            run_id = str(uuid4())
+            created_at = _utc_now_iso()
+
+            with self._connect() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO analysis_runs (
+                        id,
+                        source_artifact_id,
+                        requested_analysis_mode,
+                        requested_pitch_note_mode,
+                        requested_pitch_note_backend,
+                        requested_interpretation_mode,
+                        requested_interpretation_profile,
+                        requested_interpretation_model,
+                        legacy_request_id,
+                        created_at,
+                        updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        run_id,
+                        artifact_id,
+                        resolved_analysis_mode,
+                        pitch_note_mode,
+                        pitch_note_backend,
+                        interpretation_mode,
+                        interpretation_profile,
+                        interpretation_model,
+                        legacy_request_id,
+                        created_at,
+                        created_at,
+                    ),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO run_artifacts (
+                        id,
+                        run_id,
+                        kind,
+                        filename,
+                        mime_type,
+                        size_bytes,
+                        content_sha256,
+                        path,
+                        provenance_json,
+                        created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        artifact_id,
+                        run_id,
+                        "source_audio",
+                        filename,
+                        mime_type,
+                        size_bytes,
+                        content_sha256,
+                        str(artifact_path),
+                        None,
+                        created_at,
+                    ),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO measurement_outputs (
+                        id,
+                        run_id,
+                        status,
+                        result_json,
+                        provenance_json,
+                        diagnostics_json,
+                        error_json,
+                        created_at,
+                        updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        str(uuid4()),
+                        run_id,
+                        "queued",
+                        None,
+                        None,
+                        None,
+                        None,
+                        created_at,
+                        created_at,
+                    ),
+                )
+        except Exception:
+            artifact_path.unlink(missing_ok=True)
+            raise
 
         return {"runId": run_id}
+
+    def _write_source_artifact_bytes(
+        self,
+        *,
+        artifact_id: str,
+        filename: str,
+        content: bytes,
+    ) -> tuple[Path, int, str]:
+        suffix = Path(filename).suffix or ".bin"
+        artifact_path = self.artifacts_dir / f"{artifact_id}{suffix}"
+        try:
+            artifact_path.write_bytes(content)
+        except Exception:
+            artifact_path.unlink(missing_ok=True)
+            raise
+        return artifact_path, len(content), hashlib.sha256(content).hexdigest()
+
+    def _copy_source_artifact(
+        self,
+        *,
+        artifact_id: str,
+        filename: str,
+        source_path: str,
+    ) -> tuple[Path, int, str]:
+        source = Path(source_path)
+        suffix = source.suffix or Path(filename).suffix or ".bin"
+        destination = self.artifacts_dir / f"{artifact_id}{suffix}"
+        digest = hashlib.sha256()
+        size_bytes = 0
+        try:
+            with source.open("rb") as src, destination.open("wb") as dest:
+                while True:
+                    chunk = src.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    dest.write(chunk)
+                    digest.update(chunk)
+                    size_bytes += len(chunk)
+        except Exception:
+            destination.unlink(missing_ok=True)
+            raise
+        return destination, size_bytes, digest.hexdigest()
 
     def get_run_by_legacy_request_id(self, legacy_request_id: str) -> dict[str, Any]:
         with self._connect() as conn:

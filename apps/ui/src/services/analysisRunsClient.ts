@@ -31,8 +31,6 @@ interface CreateAnalysisRunOptions extends AnalysisRunsClientOptions {
   analysisMode?: 'full' | 'standard';
   pitchNoteMode: string;
   pitchNoteBackend: string;
-  symbolicMode?: string;
-  symbolicBackend?: string;
   interpretationMode: string;
   interpretationProfile: string;
   interpretationModel?: string | null;
@@ -70,8 +68,6 @@ export async function estimateAnalysisRun(
   body.append('analysis_mode', options.analysisMode ?? 'full');
   body.append('pitch_note_mode', options.pitchNoteMode);
   body.append('pitch_note_backend', options.pitchNoteBackend);
-  body.append('symbolic_mode', options.symbolicMode ?? options.pitchNoteMode);
-  body.append('symbolic_backend', options.symbolicBackend ?? options.pitchNoteBackend);
   body.append('interpretation_mode', options.interpretationMode);
   body.append('interpretation_profile', options.interpretationProfile);
   if (options.interpretationModel) {
@@ -96,8 +92,6 @@ export async function createAnalysisRun(
   body.append('analysis_mode', options.analysisMode ?? 'full');
   body.append('pitch_note_mode', options.pitchNoteMode);
   body.append('pitch_note_backend', options.pitchNoteBackend);
-  body.append('symbolic_mode', options.symbolicMode ?? options.pitchNoteMode);
-  body.append('symbolic_backend', options.symbolicBackend ?? options.pitchNoteBackend);
   body.append('interpretation_mode', options.interpretationMode);
   body.append('interpretation_profile', options.interpretationProfile);
   if (options.interpretationModel) {
@@ -367,12 +361,6 @@ function parseRequestedStages(value: unknown): AnalysisRunRequestedStages {
       requested.analysisMode == null ? 'full' : expectAnalysisMode(requested.analysisMode),
     pitchNoteMode: expectString(requested.pitchNoteMode, 'requestedStages.pitchNoteMode'),
     pitchNoteBackend: expectString(requested.pitchNoteBackend, 'requestedStages.pitchNoteBackend'),
-    symbolicMode:
-      asString(requested.symbolicMode) ??
-      expectString(requested.pitchNoteMode, 'requestedStages.pitchNoteMode'),
-    symbolicBackend:
-      asString(requested.symbolicBackend) ??
-      expectString(requested.pitchNoteBackend, 'requestedStages.pitchNoteBackend'),
     interpretationMode: expectString(requested.interpretationMode, 'requestedStages.interpretationMode'),
     interpretationProfile: expectString(requested.interpretationProfile, 'requestedStages.interpretationProfile'),
     interpretationModel: asString(requested.interpretationModel),

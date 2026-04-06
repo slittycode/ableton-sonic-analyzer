@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi.responses import JSONResponse
 from fastapi import UploadFile
+from starlette.testclient import TestClient
 
 import server
 
@@ -717,6 +718,49 @@ class ServerContractTests(unittest.TestCase):
         self.assertEqual(payload["stages"]["pitchNoteTranslation"]["status"], "blocked")
         self.assertEqual(payload["stages"]["interpretation"]["status"], "blocked")
 
+    def test_analysis_runs_endpoint_rejects_oversized_upload(self) -> None:
+        with patch.object(server.upload_limits, "MAX_UPLOAD_SIZE_BYTES", 4):
+            response = asyncio.run(
+                server.create_analysis_run(
+                    track=UploadFile(filename="track.mp3", file=io.BytesIO(b"12345")),
+                    pitch_note_mode="off",
+                    pitch_note_backend="auto",
+                    interpretation_mode="off",
+                    interpretation_profile="producer_summary",
+                    interpretation_model=None,
+                )
+            )
+
+        self.assertEqual(response.status_code, 413)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["error"]["code"], "UPLOAD_TOO_LARGE")
+        self.assertIn("4", payload["error"]["message"])
+
+    def test_analysis_runs_endpoint_streams_upload_without_async_read(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_server_runtime_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            track = UploadFile(filename="track.mp3", file=io.BytesIO(b"fake-audio"))
+            track.read = AsyncMock(side_effect=AssertionError("track.read should not be used"))
+            with patch.object(server, "get_analysis_runtime", return_value=runtime):
+                response = asyncio.run(
+                    server.create_analysis_run(
+                        track=track,
+                        analysis_mode="full",
+                        pitch_note_mode="off",
+                        pitch_note_backend="auto",
+                        interpretation_mode="off",
+                        interpretation_profile="producer_summary",
+                        interpretation_model=None,
+                    )
+                )
+
+        self.assertEqual(response.status_code, 200)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["stages"]["measurement"]["status"], "queued")
+        track.read.assert_not_awaited()
+
     @patch.object(server, "get_audio_duration_seconds", return_value=214.6, create=True)
     @patch.object(
         server,
@@ -767,6 +811,25 @@ class ServerContractTests(unittest.TestCase):
             ["local_dsp", "demucs_separation", "transcription_stems"],
         )
         build_estimate_mock.assert_called_once_with(214.6, True, True, run_standard=True)
+
+    def test_analysis_runs_estimate_endpoint_rejects_oversized_upload(self) -> None:
+        with patch.object(server.upload_limits, "MAX_UPLOAD_SIZE_BYTES", 4):
+            response = asyncio.run(
+                server.estimate_analysis_run(
+                    track=UploadFile(filename="track.mp3", file=io.BytesIO(b"12345")),
+                    analysis_mode="full",
+                    pitch_note_mode="off",
+                    pitch_note_backend="auto",
+                    interpretation_mode="off",
+                    interpretation_profile="producer_summary",
+                    interpretation_model=None,
+                )
+            )
+
+        self.assertEqual(response.status_code, 413)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["error"]["code"], "UPLOAD_TOO_LARGE")
+        self.assertIn("4", payload["error"]["message"])
 
     def test_analysis_runs_estimate_rejects_unknown_pitch_note_mode(self) -> None:
         response = asyncio.run(
@@ -2749,6 +2812,363 @@ class Phase2EndpointTests(unittest.TestCase):
         self.assertIsInstance(body["requestId"], str)
         self.assertGreater(len(body["requestId"]), 0)
 
+    def test_phase2_rejects_oversized_upload_with_legacy_error_envelope(self) -> None:
+        with patch.object(server.upload_limits, "MAX_UPLOAD_SIZE_BYTES", 4):
+            response = self._call(content=b"12345")
+
+        self.assertEqual(response.status_code, 413)
+        body = self._decode(response)
+        self.assertIn("requestId", body)
+        self.assertEqual(body["error"]["code"], "UPLOAD_TOO_LARGE")
+        self.assertEqual(body["error"]["phase"], server.ERROR_PHASE_GEMINI)
+        self.assertFalse(body["error"]["retryable"])
+
+
+class UploadSizeLimitMiddlewareTests(unittest.TestCase):
+    _ALLOWED_ORIGIN = "http://127.0.0.1:3100"
+
+    def _client(self) -> TestClient:
+        return TestClient(
+            server.app,
+            raise_server_exceptions=False,
+            headers={"origin": self._ALLOWED_ORIGIN},
+        )
+
+    def _post_file(
+        self,
+        client: TestClient,
+        path: str,
+        *,
+        content: bytes = b"12345",
+        data: dict[str, str] | None = None,
+    ):
+        return client.post(
+            path,
+            data=data or {},
+            files={"track": ("track.mp3", content, "audio/mpeg")},
+        )
+
+    def _chunked_multipart_body(self, boundary: str, file_chunks: list[bytes]) -> list[bytes]:
+        return [
+            (
+                f"--{boundary}\r\n"
+                'Content-Disposition: form-data; name="track"; filename="track.mp3"\r\n'
+                "Content-Type: audio/mpeg\r\n\r\n"
+            ).encode("utf-8"),
+            *file_chunks,
+            f"\r\n--{boundary}--\r\n".encode("utf-8"),
+        ]
+
+    def _dispatch_asgi(
+        self,
+        *,
+        path: str,
+        headers: list[tuple[bytes, bytes]],
+        request_messages: list[dict[str, object]],
+    ) -> tuple[int, dict[str, str], bytes]:
+        sent_messages: list[dict[str, object]] = []
+
+        async def invoke() -> None:
+            pending_messages = list(request_messages)
+
+            async def receive() -> dict[str, object]:
+                if pending_messages:
+                    return pending_messages.pop(0)
+                return {"type": "http.disconnect"}
+
+            async def send(message: dict[str, object]) -> None:
+                sent_messages.append(message)
+
+            await server.app(
+                {
+                    "type": "http",
+                    "asgi": {"version": "3.0"},
+                    "http_version": "1.1",
+                    "method": "POST",
+                    "scheme": "http",
+                    "path": path,
+                    "raw_path": path.encode("utf-8"),
+                    "query_string": b"",
+                    "headers": headers,
+                    "client": ("testclient", 50000),
+                    "server": ("testserver", 80),
+                },
+                receive,
+                send,
+            )
+
+        asyncio.run(invoke())
+
+        start_message = next(
+            message for message in sent_messages if message["type"] == "http.response.start"
+        )
+        body = b"".join(
+            message.get("body", b"")
+            for message in sent_messages
+            if message["type"] == "http.response.body"
+        )
+        response_headers = {
+            name.decode("latin-1"): value.decode("latin-1")
+            for name, value in start_message["headers"]
+        }
+        return start_message["status"], response_headers, body
+
+    def test_middleware_rejects_header_based_oversized_upload_for_analysis_runs(self) -> None:
+        with (
+            patch.object(server.upload_limits, "MAX_UPLOAD_SIZE_BYTES", 1_024),
+            patch.object(server.upload_limits, "MAX_UPLOAD_REQUEST_BYTES", 4),
+            patch.object(
+                server,
+                "_persist_upload",
+                side_effect=AssertionError("_persist_upload should not be called"),
+            ),
+        ):
+            client = self._client()
+            response = self._post_file(client, "/api/analysis-runs")
+            client.close()
+
+        self.assertEqual(response.status_code, 413)
+        self.assertEqual(
+            response.headers["access-control-allow-origin"],
+            self._ALLOWED_ORIGIN,
+        )
+        payload = response.json()
+        self.assertEqual(payload["error"]["code"], "UPLOAD_TOO_LARGE")
+        self.assertNotIn("requestId", payload)
+
+    def test_middleware_rejects_header_based_oversized_upload_for_analysis_run_estimate(self) -> None:
+        with (
+            patch.object(server.upload_limits, "MAX_UPLOAD_SIZE_BYTES", 1_024),
+            patch.object(server.upload_limits, "MAX_UPLOAD_REQUEST_BYTES", 4),
+            patch.object(
+                server,
+                "_persist_upload",
+                side_effect=AssertionError("_persist_upload should not be called"),
+            ),
+        ):
+            client = self._client()
+            response = self._post_file(client, "/api/analysis-runs/estimate")
+            client.close()
+
+        self.assertEqual(response.status_code, 413)
+        self.assertEqual(
+            response.headers["access-control-allow-origin"],
+            self._ALLOWED_ORIGIN,
+        )
+        payload = response.json()
+        self.assertEqual(payload["error"]["code"], "UPLOAD_TOO_LARGE")
+        self.assertNotIn("requestId", payload)
+
+    def test_middleware_rejects_header_based_oversized_upload_for_analyze(self) -> None:
+        with (
+            patch.object(server.upload_limits, "MAX_UPLOAD_SIZE_BYTES", 1_024),
+            patch.object(server.upload_limits, "MAX_UPLOAD_REQUEST_BYTES", 4),
+        ):
+            client = self._client()
+            response = self._post_file(client, "/api/analyze")
+            client.close()
+
+        self.assertEqual(response.status_code, 413)
+        self.assertEqual(
+            response.headers["access-control-allow-origin"],
+            self._ALLOWED_ORIGIN,
+        )
+        self.assertEqual(response.headers["Deprecation"], "true")
+        payload = response.json()
+        self.assertEqual(payload["error"]["code"], "UPLOAD_TOO_LARGE")
+        self.assertEqual(payload["error"]["phase"], server.ERROR_PHASE_LOCAL_DSP)
+        self.assertFalse(payload["error"]["retryable"])
+        self.assertIn("requestId", payload)
+
+    def test_middleware_rejects_header_based_oversized_upload_for_analyze_estimate(self) -> None:
+        with (
+            patch.object(server.upload_limits, "MAX_UPLOAD_SIZE_BYTES", 1_024),
+            patch.object(server.upload_limits, "MAX_UPLOAD_REQUEST_BYTES", 4),
+        ):
+            client = self._client()
+            response = self._post_file(client, "/api/analyze/estimate")
+            client.close()
+
+        self.assertEqual(response.status_code, 413)
+        self.assertEqual(
+            response.headers["access-control-allow-origin"],
+            self._ALLOWED_ORIGIN,
+        )
+        self.assertEqual(response.headers["Deprecation"], "true")
+        payload = response.json()
+        self.assertEqual(payload["error"]["code"], "UPLOAD_TOO_LARGE")
+        self.assertIn("requestId", payload)
+
+    def test_middleware_rejects_header_based_oversized_upload_for_phase2(self) -> None:
+        with (
+            patch.object(server.upload_limits, "MAX_UPLOAD_SIZE_BYTES", 1_024),
+            patch.object(server.upload_limits, "MAX_UPLOAD_REQUEST_BYTES", 4),
+        ):
+            client = self._client()
+            response = self._post_file(client, "/api/phase2")
+            client.close()
+
+        self.assertEqual(response.status_code, 413)
+        self.assertEqual(
+            response.headers["access-control-allow-origin"],
+            self._ALLOWED_ORIGIN,
+        )
+        self.assertEqual(response.headers["Deprecation"], "true")
+        payload = response.json()
+        self.assertEqual(payload["error"]["code"], "UPLOAD_TOO_LARGE")
+        self.assertEqual(payload["error"]["phase"], server.ERROR_PHASE_GEMINI)
+        self.assertFalse(payload["error"]["retryable"])
+        self.assertIn("requestId", payload)
+
+    def test_middleware_rejects_streamed_overage_without_content_length(self) -> None:
+        boundary = "transport-limit-boundary"
+        stream_chunks = self._chunked_multipart_body(
+            boundary,
+            [b"a" * 100, b"b" * 100, b"c" * 100],
+        )
+        request_messages = [
+            {
+                "type": "http.request",
+                "body": chunk,
+                "more_body": index < len(stream_chunks) - 1,
+            }
+            for index, chunk in enumerate(stream_chunks)
+        ]
+        with (
+            patch.object(server.upload_limits, "MAX_UPLOAD_SIZE_BYTES", 256),
+            patch.object(server.upload_limits, "MAX_UPLOAD_REQUEST_BYTES", 4_096),
+            patch.object(
+                server,
+                "_persist_upload",
+                side_effect=AssertionError("_persist_upload should not be called"),
+            ),
+        ):
+            status_code, headers, body = self._dispatch_asgi(
+                path="/api/analysis-runs",
+                headers=[
+                    (b"origin", self._ALLOWED_ORIGIN.encode("utf-8")),
+                    (
+                        b"content-type",
+                        f"multipart/form-data; boundary={boundary}".encode("utf-8"),
+                    ),
+                ],
+                request_messages=request_messages,
+            )
+
+        self.assertEqual(status_code, 413)
+        self.assertEqual(headers["access-control-allow-origin"], self._ALLOWED_ORIGIN)
+        payload = json.loads(body.decode("utf-8"))
+        self.assertEqual(payload["error"]["code"], "UPLOAD_TOO_LARGE")
+
+    def test_middleware_allows_near_limit_track_even_with_multipart_overhead(self) -> None:
+        with (
+            patch.object(server.upload_limits, "MAX_UPLOAD_SIZE_BYTES", 256),
+            patch.object(server.upload_limits, "MAX_UPLOAD_REQUEST_BYTES", 1_024),
+            patch.object(server, "_persist_upload", return_value=("/tmp/near-limit.wav", 256)),
+            patch.object(server, "get_audio_duration_seconds", return_value=60.0, create=True),
+            patch.object(
+                server,
+                "build_analysis_estimate",
+                return_value={
+                    "durationSeconds": 60.0,
+                    "totalSeconds": {"min": 10, "max": 20},
+                    "stages": [
+                        {
+                            "key": "dsp",
+                            "label": "DSP analysis",
+                            "seconds": {"min": 10, "max": 20},
+                        }
+                    ],
+                },
+                create=True,
+            ),
+        ):
+            client = self._client()
+            response = client.post(
+                "/api/analysis-runs/estimate",
+                data={"analysis_mode": "full", "note": "x" * 40},
+                files={
+                    "track": (
+                        "track-with-extra-multipart-overhead-and-a-very-long-name.mp3",
+                        b"a" * 256,
+                        "audio/mpeg",
+                    )
+                },
+            )
+            client.close()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.headers["access-control-allow-origin"],
+            self._ALLOWED_ORIGIN,
+        )
+
+    def test_middleware_rejects_track_one_byte_over_raw_limit_for_canonical_route(self) -> None:
+        with (
+            patch.object(server.upload_limits, "MAX_UPLOAD_SIZE_BYTES", 256),
+            patch.object(server.upload_limits, "MAX_UPLOAD_REQUEST_BYTES", 2_048),
+            patch.object(
+                server,
+                "_persist_upload",
+                side_effect=AssertionError("_persist_upload should not be called"),
+            ),
+        ):
+            client = self._client()
+            response = self._post_file(
+                client,
+                "/api/analysis-runs",
+                content=b"a" * 257,
+            )
+            client.close()
+
+        self.assertEqual(response.status_code, 413)
+        payload = response.json()
+        self.assertEqual(payload["error"]["code"], "UPLOAD_TOO_LARGE")
+        self.assertNotIn("requestId", payload)
+
+    def test_middleware_rejects_track_one_byte_over_raw_limit_for_legacy_route(self) -> None:
+        with (
+            patch.object(server.upload_limits, "MAX_UPLOAD_SIZE_BYTES", 256),
+            patch.object(server.upload_limits, "MAX_UPLOAD_REQUEST_BYTES", 2_048),
+            patch.object(
+                server,
+                "_persist_upload",
+                side_effect=AssertionError("_persist_upload should not be called"),
+            ),
+        ):
+            client = self._client()
+            response = self._post_file(
+                client,
+                "/api/analyze",
+                content=b"a" * 257,
+            )
+            client.close()
+
+        self.assertEqual(response.status_code, 413)
+        payload = response.json()
+        self.assertEqual(payload["error"]["code"], "UPLOAD_TOO_LARGE")
+        self.assertEqual(payload["error"]["phase"], server.ERROR_PHASE_LOCAL_DSP)
+        self.assertFalse(payload["error"]["retryable"])
+        self.assertIn("requestId", payload)
+
+    def test_middleware_leaves_malformed_multipart_as_parse_error(self) -> None:
+        with (
+            patch.object(server.upload_limits, "MAX_UPLOAD_SIZE_BYTES", 256),
+            patch.object(server.upload_limits, "MAX_UPLOAD_REQUEST_BYTES", 2_048),
+        ):
+            client = self._client()
+            response = client.post(
+                "/api/analysis-runs",
+                content=b"not-a-valid-multipart-body",
+                headers={"content-type": "multipart/form-data"},
+            )
+            client.close()
+
+        self.assertEqual(response.status_code, 400)
+        payload = response.json()
+        self.assertIn("detail", payload)
+        self.assertNotIn("error", payload)
+
 
 class AnalysisRunCompatibilityTests(unittest.TestCase):
     """Tests for legacy wrappers backed by analysis runs."""
@@ -2821,6 +3241,51 @@ class AnalysisRunCompatibilityTests(unittest.TestCase):
             snapshot = runtime.get_run(payload["analysisRunId"])
             self.assertEqual(snapshot["stages"]["measurement"]["status"], "completed")
             self.assertEqual(snapshot["stages"]["measurement"]["result"]["bpm"], 128)
+
+    def test_analyze_rejects_oversized_upload_with_legacy_error_envelope(self) -> None:
+        with patch.object(server.upload_limits, "MAX_UPLOAD_SIZE_BYTES", 4):
+            response = asyncio.run(
+                server.analyze_audio(
+                    track=UploadFile(filename="track.mp3", file=io.BytesIO(b"12345")),
+                    dsp_json_override=None,
+                    analysis_mode="full",
+                    transcribe=False,
+                    separate=False,
+                    separate_query=False,
+                    separate_flag=False,
+                    fast=False,
+                    fast_query=False,
+                )
+            )
+
+        self.assertEqual(response.status_code, 413)
+        payload = self._decode(response)
+        self.assertIn("requestId", payload)
+        self.assertEqual(payload["error"]["code"], "UPLOAD_TOO_LARGE")
+        self.assertEqual(payload["error"]["phase"], server.ERROR_PHASE_LOCAL_DSP)
+        self.assertFalse(payload["error"]["retryable"])
+        self.assertEqual(response.headers["Deprecation"], "true")
+
+    def test_analyze_estimate_rejects_oversized_upload_with_legacy_headers(self) -> None:
+        with patch.object(server.upload_limits, "MAX_UPLOAD_SIZE_BYTES", 4):
+            response = asyncio.run(
+                server.estimate_analysis(
+                    track=UploadFile(filename="track.mp3", file=io.BytesIO(b"12345")),
+                    dsp_json_override=None,
+                    analysis_mode="full",
+                    transcribe=False,
+                    separate=False,
+                    separate_query=False,
+                    separate_flag=False,
+                )
+            )
+
+        self.assertEqual(response.status_code, 413)
+        payload = self._decode(response)
+        self.assertIn("requestId", payload)
+        self.assertEqual(payload["error"]["code"], "UPLOAD_TOO_LARGE")
+        self.assertEqual(response.headers["Deprecation"], "true")
+        self.assertEqual(response.headers["Link"], '</api/analysis-runs>; rel="successor-version"')
 
     @patch.object(server, "get_audio_duration_seconds", return_value=60.0, create=True)
     @patch.object(

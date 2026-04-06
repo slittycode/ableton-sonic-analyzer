@@ -10,7 +10,7 @@ import subprocess
 import sys
 import tempfile
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime
 from math import ceil
 from math import isfinite
 from pathlib import Path
@@ -29,6 +29,7 @@ except ImportError:
 from fastapi import FastAPI, File, Form, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
+from python_multipart.multipart import MultipartParseError, MultipartParser, parse_options_header
 
 from analysis_runtime import (
     AnalysisRuntime,
@@ -39,6 +40,7 @@ from analyze import (
     build_analysis_estimate,
     get_audio_duration_seconds,
 )
+import upload_limits
 from utils.cleanup import cleanup_artifacts
 
 
@@ -55,6 +57,7 @@ MAX_SNIPPET_LENGTH = 2000
 DEFAULT_SERVER_HOST = "0.0.0.0"
 DEFAULT_SERVER_PORT = 8100
 INLINE_SIZE_LIMIT = 104_857_600  # 100 MiB — confirmed by Google on 2026-01-12
+ARTIFACT_CLEANUP_INTERVAL_SECONDS = 3_600
 WORKER_IDLE_SECONDS = 0.25
 ALLOWED_GEMINI_MODELS = {
     "gemini-2.5-flash",
@@ -122,6 +125,14 @@ _ALLOWED_PHASE2_WARP_MODES = {
 }
 
 LEGACY_ENDPOINT_SUNSET = "Wed, 31 Dec 2026 23:59:59 GMT"
+
+
+class UploadTooLargeError(ValueError):
+    def __init__(self, limit_bytes: int):
+        self.limit_bytes = limit_bytes
+        super().__init__(
+            f"Uploaded audio exceeds the backend upload limit of {limit_bytes} bytes."
+        )
 
 
 def _load_prompt_template(name: str) -> str:
@@ -203,6 +214,180 @@ def _mark_legacy_endpoint_response(response: JSONResponse, *, endpoint: str) -> 
         f'299 - "{endpoint} is deprecated; use /api/analysis-runs instead."'
     )
     return response
+
+
+def _scope_header_value(scope: dict[str, Any], header_name: bytes) -> str | None:
+    for name, value in scope.get("headers", []):
+        if name.lower() != header_name:
+            continue
+        try:
+            return value.decode("latin-1")
+        except UnicodeDecodeError:
+            return None
+    return None
+
+
+class _MultipartTrackSizeCounter:
+    def __init__(self, *, content_type_header: str | None, track_field_name: str, limit_bytes: int) -> None:
+        self.limit_bytes = limit_bytes
+        self.track_field_name = track_field_name
+        self.track_bytes = 0
+        self.overflowed = False
+        self.disabled = False
+        self._current_headers: dict[bytes, bytes] = {}
+        self._current_header_field = bytearray()
+        self._current_header_value = bytearray()
+        self._current_part_is_track_file = False
+        self._parser = self._build_parser(content_type_header)
+
+    def _build_parser(self, content_type_header: str | None) -> MultipartParser | None:
+        content_type, options = parse_options_header(content_type_header)
+        if content_type != b"multipart/form-data":
+            return None
+        boundary = options.get(b"boundary")
+        if not boundary:
+            return None
+        return MultipartParser(
+            boundary,
+            callbacks={
+                "on_part_begin": self.on_part_begin,
+                "on_header_begin": self.on_header_begin,
+                "on_header_field": self.on_header_field,
+                "on_header_value": self.on_header_value,
+                "on_header_end": self.on_header_end,
+                "on_headers_finished": self.on_headers_finished,
+                "on_part_data": self.on_part_data,
+                "on_part_end": self.on_part_end,
+            },
+        )
+
+    def feed(self, chunk: bytes) -> None:
+        if not chunk or self._parser is None or self.disabled or self.overflowed:
+            return
+        try:
+            self._parser.write(chunk)
+        except MultipartParseError:
+            self.disabled = True
+
+    def on_part_begin(self) -> None:
+        self._current_headers = {}
+        self._current_header_field = bytearray()
+        self._current_header_value = bytearray()
+        self._current_part_is_track_file = False
+
+    def on_header_begin(self) -> None:
+        self._current_header_field = bytearray()
+        self._current_header_value = bytearray()
+
+    def on_header_field(self, data: bytes, start: int, end: int) -> None:
+        self._current_header_field.extend(data[start:end])
+
+    def on_header_value(self, data: bytes, start: int, end: int) -> None:
+        self._current_header_value.extend(data[start:end])
+
+    def on_header_end(self) -> None:
+        if not self._current_header_field:
+            return
+        self._current_headers[
+            bytes(self._current_header_field).lower()
+        ] = bytes(self._current_header_value)
+
+    def on_headers_finished(self) -> None:
+        disposition = self._current_headers.get(b"content-disposition")
+        if disposition is None:
+            return
+        _, options = parse_options_header(disposition)
+        field_name = options.get(b"name")
+        self._current_part_is_track_file = (
+            field_name == self.track_field_name.encode("utf-8")
+            and b"filename" in options
+        )
+
+    def on_part_data(self, data: bytes, start: int, end: int) -> None:
+        if not self._current_part_is_track_file:
+            return
+        self.track_bytes += end - start
+        if self.track_bytes > self.limit_bytes:
+            self.overflowed = True
+
+    def on_part_end(self) -> None:
+        self._current_part_is_track_file = False
+
+
+class UploadSizeLimitMiddleware:
+    def __init__(self, app: Callable[..., Any]) -> None:
+        self.app = app
+
+    async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
+        if (
+            scope.get("type") != "http"
+            or scope.get("method") != "POST"
+            or scope.get("path") not in upload_limits.UPLOAD_LIMITED_POST_PATHS
+        ):
+            await self.app(scope, receive, send)
+            return
+
+        raw_limit_bytes = upload_limits.MAX_UPLOAD_SIZE_BYTES
+        request_limit_bytes = upload_limits.MAX_UPLOAD_REQUEST_BYTES
+        content_length = _scope_header_value(scope, b"content-length")
+        try:
+            declared_length = int(content_length) if content_length is not None else None
+        except ValueError:
+            declared_length = None
+        if declared_length is not None and declared_length > request_limit_bytes:
+            response = _upload_too_large_response_for_path(scope["path"], limit_bytes=raw_limit_bytes)
+            await response(scope, receive, send)
+            return
+
+        size_counter = _MultipartTrackSizeCounter(
+            content_type_header=_scope_header_value(scope, b"content-type"),
+            track_field_name="track",
+            limit_bytes=raw_limit_bytes,
+        )
+        overflowed = False
+        response_started = False
+        synthetic_response_sent = False
+
+        def send_upload_limit_response() -> JSONResponse:
+            return _upload_too_large_response_for_path(scope["path"], limit_bytes=raw_limit_bytes)
+
+        async def limited_receive() -> dict[str, Any]:
+            nonlocal overflowed
+            if overflowed:
+                return {"type": "http.disconnect"}
+            message = await receive()
+            if message.get("type") != "http.request":
+                return message
+            body = message.get("body", b"")
+            if isinstance(body, bytes):
+                size_counter.feed(body)
+            if size_counter.overflowed:
+                overflowed = True
+                return {"type": "http.disconnect"}
+            return message
+
+        async def tracked_send(message: dict[str, Any]) -> None:
+            nonlocal response_started, synthetic_response_sent
+            if overflowed:
+                if not synthetic_response_sent:
+                    synthetic_response_sent = True
+                    response_started = True
+                    await send_upload_limit_response()(scope, receive, send)
+                return
+            if message.get("type") == "http.response.start":
+                response_started = True
+            await send(message)
+
+        try:
+            await self.app(scope, limited_receive, tracked_send)
+        except UploadTooLargeError:
+            if response_started:
+                raise
+            await send_upload_limit_response()(scope, receive, send)
+            return
+
+        if overflowed and not synthetic_response_sent and not response_started:
+            await send_upload_limit_response()(scope, receive, send)
 
 
 def _register_active_child_process(
@@ -661,6 +846,7 @@ ALLOWED_ORIGINS = [
     "http://127.0.0.1:5173",
 ]
 
+app.add_middleware(UploadSizeLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -670,73 +856,34 @@ app.add_middleware(
 )
 
 
-_FILE_CACHE: dict[str, tuple[str, datetime]] = {}
-_FILE_CACHE_TTL_SECONDS = 900  # 15 minutes
-_FILE_CACHE_LOCK = threading.Lock()
-
-
-def _cache_temp_file(request_id: str, temp_path: str, now: datetime | None = None) -> None:
-    if now is None:
-        now = _current_time()
-    expires_at = now + timedelta(seconds=_FILE_CACHE_TTL_SECONDS)
-    with _FILE_CACHE_LOCK:
-        _FILE_CACHE[request_id] = (temp_path, expires_at)
-
-
-def _pop_cached_temp_file(request_id: str | None) -> str | None:
-    if not request_id:
-        return None
-    with _FILE_CACHE_LOCK:
-        entry = _FILE_CACHE.pop(request_id, None)
-    if entry is None:
-        return None
-    temp_path, expires_at = entry
-    if _current_time() > expires_at:
-        _cleanup_temp_path(temp_path)
-        return None
-    return temp_path
-
-
-def _evict_expired_cache_entries() -> None:
-    now = _current_time()
-    with _FILE_CACHE_LOCK:
-        expired = [rid for rid, (_, exp) in _FILE_CACHE.items() if now > exp]
-        for rid in expired:
-            path, _ = _FILE_CACHE.pop(rid)
-            _cleanup_temp_path(path)
-
-
 @app.on_event("startup")
-async def _start_cache_eviction() -> None:
+async def _start_background_tasks() -> None:
     runtime = get_analysis_runtime()
     runtime.recover_incomplete_attempts()
-
-    def _run_artifact_cleanup() -> None:
-        try:
-            cleanup_artifacts(runtime.runtime_dir)
-        except Exception as exc:
-            logger.warning("[warn] artifact cleanup failed: %s", exc)
-
-    threading.Thread(
-        target=_run_artifact_cleanup,
-        name="artifact-cleanup",
-        daemon=True,
-    ).start()
-
-    async def _evict_loop() -> None:
-        while True:
-            await asyncio.sleep(300)
-            _evict_expired_cache_entries()
+    logger.info(
+        "Upload limits configured: raw_audio_limit_bytes=%s edge_request_limit_bytes=%s",
+        upload_limits.MAX_UPLOAD_SIZE_BYTES,
+        upload_limits.MAX_UPLOAD_REQUEST_BYTES,
+    )
 
     if not _BACKGROUND_TASKS:
         _BACKGROUND_TASKS.extend(
             [
-                asyncio.create_task(_evict_loop()),
+                asyncio.create_task(_artifact_cleanup_loop(runtime.runtime_dir)),
                 asyncio.create_task(_measurement_worker_loop()),
                 asyncio.create_task(_pitch_note_worker_loop()),
                 asyncio.create_task(_interpretation_worker_loop()),
             ]
         )
+
+
+async def _artifact_cleanup_loop(runtime_dir: Path) -> None:
+    while True:
+        try:
+            await asyncio.to_thread(cleanup_artifacts, runtime_dir)
+        except Exception as exc:
+            logger.warning("[warn] artifact cleanup failed: %s", exc)
+        await asyncio.sleep(ARTIFACT_CLEANUP_INTERVAL_SECONDS)
 
 
 @app.on_event("shutdown")
@@ -998,18 +1145,36 @@ def _build_phase1(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _persist_upload(track: UploadFile) -> tuple[str, int]:
+def _persist_upload(
+    track: UploadFile,
+    *,
+    max_bytes: int | None = None,
+) -> tuple[str, int]:
+    effective_max_bytes = (
+        upload_limits.MAX_UPLOAD_SIZE_BYTES if max_bytes is None else max_bytes
+    )
     suffix = Path(track.filename or "upload.bin").suffix or ".bin"
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
-        temp_path = temp_file.name
-        total_bytes = 0
-        while True:
-            chunk = track.file.read(1024 * 1024)
-            if not chunk:
-                break
-            total_bytes += len(chunk)
-            temp_file.write(chunk)
-    return temp_path, total_bytes
+    temp_path: str | None = None
+    try:
+        track.file.seek(0)
+    except Exception:
+        pass
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+            temp_path = temp_file.name
+            total_bytes = 0
+            while True:
+                chunk = track.file.read(1024 * 1024)
+                if not chunk:
+                    break
+                total_bytes += len(chunk)
+                if total_bytes > effective_max_bytes:
+                    raise UploadTooLargeError(effective_max_bytes)
+                temp_file.write(chunk)
+        return temp_path, total_bytes
+    except Exception:
+        _cleanup_temp_path(temp_path)
+        raise
 
 
 def _cleanup_temp_path(temp_path: str | None) -> None:
@@ -1138,24 +1303,28 @@ async def _create_analysis_run_record(
     interpretation_model: str | None,
     legacy_request_id: str | None = None,
 ) -> tuple[AnalysisRuntime, str]:
-    content = await track.read()
+    temp_path: str | None = None
     runtime = get_analysis_runtime()
-    analysis_mode = _resolve_analysis_mode_value(analysis_mode)
-    if interpretation_mode != "off":
-        _resolve_interpretation_profile_config(interpretation_profile)
-    created = runtime.create_run(
-        filename=track.filename or "upload.bin",
-        content=content,
-        mime_type=track.content_type or _get_audio_mime_type(track.filename or "upload.bin"),
-        analysis_mode=analysis_mode,
-        pitch_note_mode=pitch_note_mode,
-        pitch_note_backend=pitch_note_backend,
-        interpretation_mode=interpretation_mode,
-        interpretation_profile=interpretation_profile,
-        interpretation_model=interpretation_model,
-        legacy_request_id=legacy_request_id,
-    )
-    return runtime, created["runId"]
+    try:
+        temp_path, _ = _persist_upload(track)
+        analysis_mode = _resolve_analysis_mode_value(analysis_mode)
+        if interpretation_mode != "off":
+            _resolve_interpretation_profile_config(interpretation_profile)
+        created = runtime.create_run_from_source_path(
+            filename=track.filename or "upload.bin",
+            source_path=temp_path,
+            mime_type=track.content_type or _get_audio_mime_type(track.filename or "upload.bin"),
+            analysis_mode=analysis_mode,
+            pitch_note_mode=pitch_note_mode,
+            pitch_note_backend=pitch_note_backend,
+            interpretation_mode=interpretation_mode,
+            interpretation_profile=interpretation_profile,
+            interpretation_model=interpretation_model,
+            legacy_request_id=legacy_request_id,
+        )
+        return runtime, created["runId"]
+    finally:
+        _cleanup_temp_path(temp_path)
 
 
 def _build_measurement_provenance(
@@ -1198,6 +1367,62 @@ def _value_error_code(value_error: ValueError) -> str:
     if "analysis mode" in message:
         return "ANALYSIS_MODE_UNSUPPORTED"
     return "INTERPRETATION_PROFILE_UNSUPPORTED"
+
+
+def _canonical_upload_too_large_response(exc: UploadTooLargeError) -> JSONResponse:
+    return JSONResponse(
+        status_code=413,
+        content={
+            "error": {
+                "code": "UPLOAD_TOO_LARGE",
+                "message": str(exc),
+            }
+        },
+    )
+
+
+def _legacy_upload_too_large_response(
+    *,
+    request_id: str,
+    phase: str,
+    endpoint: str,
+    analysis_run_id: str | None = None,
+) -> JSONResponse:
+    content: dict[str, Any] = {
+        "requestId": request_id,
+        "error": {
+            "code": "UPLOAD_TOO_LARGE",
+            "message": upload_limits.upload_too_large_message(),
+            "phase": phase,
+            "retryable": False,
+        },
+    }
+    if analysis_run_id is not None:
+        content["analysisRunId"] = analysis_run_id
+    return _mark_legacy_endpoint_response(
+        JSONResponse(status_code=413, content=content),
+        endpoint=endpoint,
+    )
+
+
+def _upload_too_large_response_for_path(
+    path: str,
+    *,
+    limit_bytes: int,
+) -> JSONResponse:
+    if path in {"/api/analyze", "/api/analyze/estimate"}:
+        return _legacy_upload_too_large_response(
+            request_id=str(uuid4()),
+            phase=ERROR_PHASE_LOCAL_DSP,
+            endpoint=path,
+        )
+    if path == "/api/phase2":
+        return _legacy_upload_too_large_response(
+            request_id=str(uuid4()),
+            phase=ERROR_PHASE_GEMINI,
+            endpoint=path,
+        )
+    return _canonical_upload_too_large_response(UploadTooLargeError(limit_bytes))
 
 
 def _resolve_analysis_mode_value(value: Any) -> str:
@@ -2397,6 +2622,8 @@ async def create_analysis_run(
             interpretation_model=interpretation_model,
         )
         return JSONResponse(content=_normalize_run_snapshot(runtime.get_run(run_id), runtime))
+    except UploadTooLargeError as exc:
+        return _canonical_upload_too_large_response(exc)
     except UnsupportedPitchNoteBackendError as exc:
         return JSONResponse(
             status_code=400,
@@ -2451,6 +2678,8 @@ async def estimate_analysis_run(
             interpretation_profile=interpretation_profile,
             interpretation_model=interpretation_model,
         )
+    except UploadTooLargeError as exc:
+        return _canonical_upload_too_large_response(exc)
     except UnsupportedPitchNoteModeError as exc:
         return JSONResponse(
             status_code=400,
@@ -4782,18 +5011,25 @@ async def estimate_analysis(
 ):
     logger.warning("Legacy compatibility endpoint hit: /api/analyze/estimate")
     _ = dsp_json_override
-    response = await _estimate_analysis_run(
-        track=track,
-        analysis_mode=analysis_mode,
-        pitch_note_mode=_resolve_pitch_note_mode_for_legacy(transcribe),
-        pitch_note_backend="auto",
-        interpretation_mode="off",
-        interpretation_profile="producer_summary",
-        interpretation_model=None,
-        run_separation_override=bool(separate or separate_query or separate_flag),
-        run_transcribe_override=bool(transcribe),
-    )
-    return _mark_legacy_endpoint_response(response, endpoint="/api/analyze/estimate")
+    try:
+        response = await _estimate_analysis_run(
+            track=track,
+            analysis_mode=analysis_mode,
+            pitch_note_mode=_resolve_pitch_note_mode_for_legacy(transcribe),
+            pitch_note_backend="auto",
+            interpretation_mode="off",
+            interpretation_profile="producer_summary",
+            interpretation_model=None,
+            run_separation_override=bool(separate or separate_query or separate_flag),
+            run_transcribe_override=bool(transcribe),
+        )
+        return _mark_legacy_endpoint_response(response, endpoint="/api/analyze/estimate")
+    except UploadTooLargeError:
+        return _legacy_upload_too_large_response(
+            request_id=str(uuid4()),
+            phase=ERROR_PHASE_LOCAL_DSP,
+            endpoint="/api/analyze/estimate",
+        )
 
 
 @app.post("/api/analyze")
@@ -4869,6 +5105,12 @@ async def analyze_audio(
                 "diagnostics": execution["diagnostics"],
             }
         ), endpoint="/api/analyze")
+    except UploadTooLargeError:
+        return _legacy_upload_too_large_response(
+            request_id=request_id,
+            phase=ERROR_PHASE_LOCAL_DSP,
+            endpoint="/api/analyze",
+        )
     except RuntimeError as exc:
         return _mark_legacy_endpoint_response(JSONResponse(
             status_code=429,
@@ -4916,8 +5158,11 @@ async def analyze_phase2(
     Infrastructure failures (timeout, auth, quota) return 4xx/5xx.
     """
     request_id = str(uuid4())
+    temp_path: str | None = None
     logger.warning("Legacy compatibility endpoint hit: /api/phase2 request_id=%s", request_id)
     try:
+        temp_path, _ = _persist_upload(track)
+
         if not _GENAI_AVAILABLE:
             return _mark_legacy_endpoint_response(JSONResponse(
                 status_code=500,
@@ -5053,6 +5298,12 @@ async def analyze_phase2(
             },
         ), endpoint="/api/phase2")
 
+    except UploadTooLargeError:
+        return _legacy_upload_too_large_response(
+            request_id=request_id,
+            phase=ERROR_PHASE_GEMINI,
+            endpoint="/api/phase2",
+        )
     except Exception as exc:
         return _build_phase2_error_response(
             request_id=request_id,
@@ -5069,6 +5320,7 @@ async def analyze_phase2(
             stderr=str(exc),
         )
     finally:
+        _cleanup_temp_path(temp_path)
         await track.close()
 
 

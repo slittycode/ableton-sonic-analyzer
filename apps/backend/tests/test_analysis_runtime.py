@@ -1,6 +1,9 @@
+import hashlib
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 class AnalysisRuntimeTests(unittest.TestCase):
@@ -94,6 +97,64 @@ class AnalysisRuntimeTests(unittest.TestCase):
         self.assertEqual(snapshot["stages"]["interpretation"]["status"], "blocked")
         self.assertEqual(snapshot["requestedStages"]["pitchNoteMode"], "stem_notes")
         self.assertEqual(snapshot["requestedStages"]["interpretationMode"], "async")
+
+    def test_create_run_from_source_path_persists_streamed_source_artifact(self) -> None:
+        runtime = self._runtime()
+        source_path = Path(self.temp_dir.name) / "source-track.mp3"
+        source_bytes = b"streamed-audio-data"
+        source_path.write_bytes(source_bytes)
+
+        created = runtime.create_run_from_source_path(
+            filename="track.mp3",
+            source_path=str(source_path),
+            mime_type="audio/mpeg",
+            pitch_note_mode="off",
+            pitch_note_backend="auto",
+            interpretation_mode="off",
+            interpretation_profile="producer_summary",
+            interpretation_model=None,
+        )
+
+        snapshot = runtime.get_run(created["runId"])
+        source_audio = snapshot["artifacts"]["sourceAudio"]
+        self.assertEqual(source_audio["filename"], "track.mp3")
+        self.assertEqual(source_audio["sizeBytes"], len(source_bytes))
+        self.assertEqual(
+            source_audio["contentSha256"],
+            hashlib.sha256(source_bytes).hexdigest(),
+        )
+        self.assertEqual(snapshot["stages"]["measurement"]["status"], "queued")
+        self.assertEqual(Path(source_audio["path"]).read_bytes(), source_bytes)
+
+    def test_create_run_from_source_path_removes_partial_artifact_on_db_failure(self) -> None:
+        runtime = self._runtime()
+        source_path = Path(self.temp_dir.name) / "source-track.mp3"
+        source_path.write_bytes(b"streamed-audio-data")
+
+        class FailingConnection:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def execute(self, *_args, **_kwargs):
+                raise sqlite3.OperationalError("db write failed")
+
+        with patch.object(runtime, "_connect", return_value=FailingConnection()):
+            with self.assertRaisesRegex(sqlite3.OperationalError, "db write failed"):
+                runtime.create_run_from_source_path(
+                    filename="track.mp3",
+                    source_path=str(source_path),
+                    mime_type="audio/mpeg",
+                    pitch_note_mode="off",
+                    pitch_note_backend="auto",
+                    interpretation_mode="off",
+                    interpretation_profile="producer_summary",
+                    interpretation_model=None,
+                )
+
+        self.assertEqual(list(runtime.artifacts_dir.iterdir()), [])
 
     def test_measurement_completion_strips_transcription_and_enqueues_pitch_note_stage(
         self,
