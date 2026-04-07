@@ -3,6 +3,7 @@
 .playwright-cli/
 .ruff_cache/
 .claude/worktrees/
+.superpowers/
 
 apps/ui/node_modules/
 apps/ui/build/

@@ -123,6 +123,46 @@ _ALLOWED_PHASE2_WARP_MODES = {
     "Complex",
     "Complex Pro",
 }
+_DEVICE_FAMILY_COERCION: dict[str, str] = {
+    "STOCK": "NATIVE",
+    "BUILT_IN": "NATIVE",
+    "BUILT-IN": "NATIVE",
+    "BUILTIN": "NATIVE",
+    "ABLETON": "NATIVE",
+    "LIVE": "NATIVE",
+    "THIRD_PARTY": "MAX_FOR_LIVE",
+    "PLUGIN": "MAX_FOR_LIVE",
+    "M4L": "MAX_FOR_LIVE",
+    "MAX4LIVE": "MAX_FOR_LIVE",
+}
+_WORKFLOW_STAGE_COERCION: dict[str, str] = {
+    "SYNTHESIS": "SOUND_DESIGN",
+    "PATCHING": "SOUND_DESIGN",
+    "PRODUCTION": "SOUND_DESIGN",
+    "COMPOSITION": "ARRANGEMENT",
+    "RECORDING": "PROJECT_SETUP",
+    "MIXING": "MIX",
+    "MASTERING": "MASTER",
+    "MIXDOWN": "MIX",
+}
+_RECOMMENDATION_CATEGORY_COERCION: dict[str, str] = {
+    "DRUMS": "DYNAMICS",
+    "COMPRESSION": "DYNAMICS",
+    "SATURATION": "DYNAMICS",
+    "SPACE": "EFFECTS",
+    "REVERB": "EFFECTS",
+    "DELAY": "EFFECTS",
+    "MODULATION": "EFFECTS",
+    "DISTORTION": "EFFECTS",
+    "FILTERING": "EQ",
+    "PANNING": "STEREO",
+    "IMAGING": "STEREO",
+    "WIDTH": "STEREO",
+    "LIMITING": "MASTERING",
+    "LOUDNESS": "MASTERING",
+    "SEQUENCING": "MIDI",
+    "AUTOMATION": "ROUTING",
+}
 
 LEGACY_ENDPOINT_SUNSET = "Wed, 31 Dec 2026 23:59:59 GMT"
 
@@ -3668,7 +3708,7 @@ def _sanitize_optional_phase2_fields(data: dict[str, Any]) -> dict[str, Any]:
 
 
 _PHASE2_DEBUG_SHAPE_ISSUE_LIMIT = 16
-_PHASE2_SALVAGE_WARNING_CODES = {"COERCED_ENUM_VALUE", "DROPPED_INVALID_ARRAY_ITEM"}
+_PHASE2_SALVAGE_WARNING_CODES = {"COERCED_ENUM_VALUE", "DROPPED_INVALID_ARRAY_ITEM", "BACKFILLED_FIELD"}
 _PHASE2_SALVAGE_REQUIRED_ARRAYS = {"abletonRecommendations", "mixAndMasterChain"}
 
 
@@ -3771,6 +3811,43 @@ def _collect_ableton_recommendation_item_issues(item: Any, path: str) -> list[di
     return issues
 
 
+def _coerce_enum_fields(
+    normalized: dict[str, Any],
+    *,
+    base_path: str,
+    fields: tuple[tuple[str, frozenset[str], dict[str, str]], ...],
+) -> list[dict[str, Any]]:
+    warnings: list[dict[str, Any]] = []
+    for field, allowed, coercion_map in fields:
+        value = normalized.get(field)
+        if isinstance(value, str) and value not in allowed:
+            coerced = coercion_map.get(value)
+            if coerced is not None:
+                normalized[field] = coerced
+                warnings.append(
+                    _build_phase2_validation_warning(
+                        code="COERCED_ENUM_VALUE",
+                        path=f"{base_path}.{field}",
+                        message=f"Coerced {field} '{value}' to '{coerced}' for {base_path.split('[')[0]}.",
+                        original_value=value,
+                        coerced_value=coerced,
+                    )
+                )
+    return warnings
+
+
+_RECOMMENDATION_ENUM_FIELDS: tuple[tuple[str, frozenset[str], dict[str, str]], ...] = (
+    ("deviceFamily", frozenset(_ALLOWED_LIVE12_DEVICE_FAMILIES), _DEVICE_FAMILY_COERCION),
+    ("workflowStage", frozenset(_ALLOWED_PHASE2_WORKFLOW_STAGES), _WORKFLOW_STAGE_COERCION),
+    ("category", frozenset(_ALLOWED_PHASE2_RECOMMENDATION_CATEGORIES), _RECOMMENDATION_CATEGORY_COERCION),
+)
+
+_MIX_CHAIN_ENUM_FIELDS: tuple[tuple[str, frozenset[str], dict[str, str]], ...] = (
+    ("deviceFamily", frozenset(_ALLOWED_LIVE12_DEVICE_FAMILIES), _DEVICE_FAMILY_COERCION),
+    ("workflowStage", frozenset(_ALLOWED_PHASE2_WORKFLOW_STAGES), _WORKFLOW_STAGE_COERCION),
+)
+
+
 def _normalize_phase2_recommendation_item(
     item: Any,
     *,
@@ -3780,21 +3857,39 @@ def _normalize_phase2_recommendation_item(
     if record is None:
         return item, []
     normalized = dict(record)
-    warnings: list[dict[str, Any]] = []
-    if normalized.get("workflowStage") == "SYNTHESIS":
-        normalized["workflowStage"] = "SOUND_DESIGN"
+    warnings = _coerce_enum_fields(
+        normalized,
+        base_path=f"abletonRecommendations[{index}]",
+        fields=_RECOMMENDATION_ENUM_FIELDS,
+    )
+    if not _is_str(normalized.get("advancedTip")) and _is_str(normalized.get("reason")):
+        normalized["advancedTip"] = normalized["reason"]
         warnings.append(
             _build_phase2_validation_warning(
-                code="COERCED_ENUM_VALUE",
-                path=f"abletonRecommendations[{index}].workflowStage",
-                message=(
-                    "Coerced workflowStage 'SYNTHESIS' to 'SOUND_DESIGN' for "
-                    "abletonRecommendations."
-                ),
-                original_value="SYNTHESIS",
-                coerced_value="SOUND_DESIGN",
+                code="BACKFILLED_FIELD",
+                path=f"abletonRecommendations[{index}].advancedTip",
+                message="Backfilled missing advancedTip from reason.",
+                original_value=None,
+                coerced_value=normalized["reason"],
             )
         )
+    return normalized, warnings
+
+
+def _normalize_mix_chain_item(
+    item: Any,
+    *,
+    index: int,
+) -> tuple[Any, list[dict[str, Any]]]:
+    record = _as_record(item)
+    if record is None:
+        return item, []
+    normalized = dict(record)
+    warnings = _coerce_enum_fields(
+        normalized,
+        base_path=f"mixAndMasterChain[{index}]",
+        fields=_MIX_CHAIN_ENUM_FIELDS,
+    )
     return normalized, warnings
 
 
@@ -3966,9 +4061,13 @@ def _normalize_and_salvage_phase2_result(
     if isinstance(mix_chain, list):
         normalized_mix_chain: list[Any] = []
         for index, item in enumerate(mix_chain):
-            record = _as_record(item)
+            normalized_item, item_enum_warnings = _normalize_mix_chain_item(
+                item, index=index,
+            )
+            warnings.extend(item_enum_warnings)
+            record = _as_record(normalized_item)
             if record is None:
-                normalized_mix_chain.append(item)
+                normalized_mix_chain.append(normalized_item)
                 continue
             normalized_item = dict(record)
             track_context, track_context_warnings = _normalize_track_context_value(

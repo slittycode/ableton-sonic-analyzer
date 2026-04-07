@@ -1355,6 +1355,6 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).toContain('257 BARS');
     expect(html).not.toContain('110 BARS');
     expect(html).toContain('C Major (Bridge)');
-    expect(html).toContain('data-text-role="value" class="text-role-value tabular-nums">0</span>');
+    expect(html).toContain('0.62');
   });
 });

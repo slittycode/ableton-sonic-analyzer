@@ -487,7 +487,7 @@ class ServerContractTests(unittest.TestCase):
         # Two coercion warnings: spacing fix + fuzzy repair
         self.assertEqual(len(coerced_mix), 2)
 
-    def test_parse_phase2_result_drops_single_invalid_ableton_recommendation_item(self) -> None:
+    def test_parse_phase2_result_coerces_known_invalid_recommendation_workflow_stage(self) -> None:
         payload = _valid_phase2_result()
         payload["abletonRecommendations"].append(
             {
@@ -498,7 +498,37 @@ class ServerContractTests(unittest.TestCase):
                 "category": "DYNAMICS",
                 "parameter": "Attack",
                 "value": "3 ms",
-                "reason": "Bad enum should drop this one item.",
+                "reason": "Known enum should be coerced, not dropped.",
+                "advancedTip": "Keep this card.",
+            }
+        )
+
+        debug = server._parse_phase2_result_debug(json.dumps(payload))
+
+        self.assertIsNone(debug["skipReason"])
+        self.assertIsNotNone(debug["result"])
+        self.assertEqual(len(debug["result"]["abletonRecommendations"]), 2)
+        coerced = debug["result"]["abletonRecommendations"][1]
+        self.assertEqual(coerced["workflowStage"], "SOUND_DESIGN")
+        warning = next(
+            w for w in debug["validationWarnings"]
+            if w["code"] == "COERCED_ENUM_VALUE"
+            and "PATCHING" in w.get("originalValue", "")
+        )
+        self.assertIn("workflowStage", warning["path"])
+
+    def test_parse_phase2_result_drops_truly_unknown_recommendation_enum(self) -> None:
+        payload = _valid_phase2_result()
+        payload["abletonRecommendations"].append(
+            {
+                "device": "Glue Compressor",
+                "deviceFamily": "NATIVE",
+                "trackContext": "Master",
+                "workflowStage": "BANANA",
+                "category": "DYNAMICS",
+                "parameter": "Attack",
+                "value": "3 ms",
+                "reason": "Unknown enum should still be dropped.",
                 "advancedTip": "Ignore this card.",
             }
         )
@@ -509,13 +539,62 @@ class ServerContractTests(unittest.TestCase):
         self.assertIsNotNone(debug["result"])
         self.assertEqual(len(debug["result"]["abletonRecommendations"]), 1)
         warning = next(
-            warning
-            for warning in debug["validationWarnings"]
-            if warning["code"] == "DROPPED_INVALID_ARRAY_ITEM"
+            w for w in debug["validationWarnings"]
+            if w["code"] == "DROPPED_INVALID_ARRAY_ITEM"
         )
         self.assertEqual(warning["path"], "abletonRecommendations[1]")
         self.assertIn("workflowStage", warning["dropReason"])
-        self.assertIn('"workflowStage": "PATCHING"', warning["originalValue"])
+
+    def test_parse_phase2_result_coerces_recommendation_category(self) -> None:
+        payload = _valid_phase2_result()
+        payload["abletonRecommendations"][0]["category"] = "DRUMS"
+
+        debug = server._parse_phase2_result_debug(json.dumps(payload))
+
+        self.assertIsNone(debug["skipReason"])
+        self.assertIsNotNone(debug["result"])
+        self.assertEqual(debug["result"]["abletonRecommendations"][0]["category"], "DYNAMICS")
+        warning = next(
+            w for w in debug["validationWarnings"]
+            if w["code"] == "COERCED_ENUM_VALUE" and "DRUMS" in w.get("originalValue", "")
+        )
+        self.assertIn("category", warning["path"])
+
+    def test_parse_phase2_result_coerces_recommendation_device_family(self) -> None:
+        payload = _valid_phase2_result()
+        payload["abletonRecommendations"][0]["deviceFamily"] = "STOCK"
+
+        debug = server._parse_phase2_result_debug(json.dumps(payload))
+
+        self.assertIsNone(debug["skipReason"])
+        self.assertIsNotNone(debug["result"])
+        self.assertEqual(debug["result"]["abletonRecommendations"][0]["deviceFamily"], "NATIVE")
+
+    def test_parse_phase2_result_backfills_missing_advanced_tip(self) -> None:
+        payload = _valid_phase2_result()
+        del payload["abletonRecommendations"][0]["advancedTip"]
+
+        debug = server._parse_phase2_result_debug(json.dumps(payload))
+
+        self.assertIsNone(debug["skipReason"])
+        self.assertIsNotNone(debug["result"])
+        rec = debug["result"]["abletonRecommendations"][0]
+        self.assertEqual(rec["advancedTip"], rec["reason"])
+        warning = next(
+            w for w in debug["validationWarnings"]
+            if w["code"] == "BACKFILLED_FIELD"
+        )
+        self.assertIn("advancedTip", warning["path"])
+
+    def test_parse_phase2_result_coerces_mix_chain_workflow_stage(self) -> None:
+        payload = _valid_phase2_result()
+        payload["mixAndMasterChain"][0]["workflowStage"] = "MIXING"
+
+        debug = server._parse_phase2_result_debug(json.dumps(payload))
+
+        self.assertIsNone(debug["skipReason"])
+        self.assertIsNotNone(debug["result"])
+        self.assertEqual(debug["result"]["mixAndMasterChain"][0]["workflowStage"], "MIX")
 
     def test_parse_phase2_result_drops_single_invalid_mix_chain_item(self) -> None:
         payload = _valid_phase2_result()
@@ -525,10 +604,10 @@ class ServerContractTests(unittest.TestCase):
                 "device": "EQ Eight",
                 "deviceFamily": "NATIVE",
                 "trackContext": "Master",
-                "workflowStage": "PATCHING",
+                "workflowStage": "BANANA",
                 "parameter": "Band 1 Frequency",
                 "value": "-1 dB @ 45 Hz",
-                "reason": "Bad stage should drop this one item.",
+                "reason": "Unknown stage should drop this one item.",
             }
         )
 
@@ -538,13 +617,11 @@ class ServerContractTests(unittest.TestCase):
         self.assertIsNotNone(debug["result"])
         self.assertEqual(len(debug["result"]["mixAndMasterChain"]), 1)
         warning = next(
-            warning
-            for warning in debug["validationWarnings"]
-            if warning["code"] == "DROPPED_INVALID_ARRAY_ITEM"
-            and warning["path"] == "mixAndMasterChain[1]"
+            w for w in debug["validationWarnings"]
+            if w["code"] == "DROPPED_INVALID_ARRAY_ITEM"
+            and w["path"] == "mixAndMasterChain[1]"
         )
         self.assertIn("workflowStage", warning["dropReason"])
-        self.assertIn('"workflowStage": "PATCHING"', warning["originalValue"])
 
     def test_parse_phase2_result_skips_when_required_recommendation_array_is_emptied(self) -> None:
         payload = _valid_phase2_result()
@@ -553,7 +630,7 @@ class ServerContractTests(unittest.TestCase):
                 "device": "Glue Compressor",
                 "deviceFamily": "NATIVE",
                 "trackContext": "Master",
-                "workflowStage": "PATCHING",
+                "workflowStage": "BANANA",
                 "category": "DYNAMICS",
                 "parameter": "Attack",
                 "value": "3 ms",
@@ -569,9 +646,8 @@ class ServerContractTests(unittest.TestCase):
         paths = {issue["path"] for issue in debug["shapeIssues"]}
         self.assertIn("abletonRecommendations", paths)
         warning = next(
-            warning
-            for warning in debug["validationWarnings"]
-            if warning["code"] == "DROPPED_INVALID_ARRAY_ITEM"
+            w for w in debug["validationWarnings"]
+            if w["code"] == "DROPPED_INVALID_ARRAY_ITEM"
         )
         self.assertEqual(warning["path"], "abletonRecommendations[0]")
         self.assertIn("workflowStage", warning["dropReason"])

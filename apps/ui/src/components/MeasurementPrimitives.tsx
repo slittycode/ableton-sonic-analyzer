@@ -482,3 +482,84 @@ export function OutlinePillButton({
     </button>
   );
 }
+
+/* ── DAW Lane Primitives ─────────────────────────────────────────────── */
+
+export function LaneContainer({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="bg-[#1a1a1a] border border-border rounded-sm overflow-hidden">
+      {children}
+    </div>
+  );
+}
+
+export interface LaneRowProps {
+  label: string;
+  height?: string;
+  children: React.ReactNode;
+}
+
+export function LaneRow({ label, height = 'h-8', children }: LaneRowProps) {
+  return (
+    <div className={`flex ${height} border-b border-[#2a2a2a] last:border-b-0`}>
+      <div className="w-[72px] min-w-[72px] bg-[#252525] flex items-center px-2 border-r border-[#333]">
+        <span className="text-[8px] font-mono text-[#777] uppercase tracking-[0.5px] truncate">
+          {label}
+        </span>
+      </div>
+      <div className="flex-1 relative bg-[#1e1e1e]">{children}</div>
+    </div>
+  );
+}
+
+export function TimeRuler({
+  durationSeconds,
+  label = 'Structure',
+}: {
+  durationSeconds: number;
+  label?: string;
+}) {
+  const markerCount = Math.min(Math.max(Math.floor(durationSeconds / 30) + 1, 3), 10);
+  const step = durationSeconds / (markerCount - 1);
+  const markers = Array.from({ length: markerCount }, (_, i) => {
+    const secs = Math.round(i * step);
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  });
+
+  return (
+    <div className="flex items-center h-6 bg-[#222] border-b border-[#333] px-2 gap-3">
+      <span className="text-[9px] font-mono text-accent uppercase tracking-[1px]">{label}</span>
+      <div className="flex-1 flex justify-between text-[8px] font-mono text-[#555]">
+        {markers.map((m, i) => (
+          <span key={i}>{m}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export interface StatsBarItem {
+  label: string;
+  value: React.ReactNode;
+  color?: string;
+}
+
+export function StatsBar({ items }: { items: StatsBarItem[] }) {
+  return (
+    <div className="flex h-7 bg-[#222] border-t border-[#333] px-2 items-center gap-4">
+      {items.map((item, i) => (
+        <div key={i} className="flex items-center gap-1">
+          <span className="text-[8px] font-mono text-[#555] uppercase">{item.label}</span>
+          <span
+            className="text-[10px] font-mono tabular-nums"
+            style={{ color: item.color || '#e6e6e6' }}
+          >
+            {item.value}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
