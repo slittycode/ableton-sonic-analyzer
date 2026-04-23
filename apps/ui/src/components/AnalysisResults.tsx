@@ -163,6 +163,38 @@ function textRoleClassName(role: TextRole, className = ''): string {
   return [getTextRoleClassName(role), className].filter(Boolean).join(' ');
 }
 
+interface ResultsSectionHeaderProps {
+  title: React.ReactNode;
+  rightSlot?: React.ReactNode;
+  titleRole?: TextRole;
+  titleClassName?: string;
+  className?: string;
+}
+
+function ResultsSectionHeader({
+  title,
+  rightSlot = null,
+  titleRole,
+  titleClassName = '',
+  className = '',
+}: ResultsSectionHeaderProps) {
+  const resolvedTitleClassName = titleRole
+    ? textRoleClassName(titleRole, `flex items-center gap-2 ${titleClassName}`.trim())
+    : ['text-sm font-mono uppercase tracking-wider text-text-secondary flex items-center gap-2', titleClassName]
+        .filter(Boolean)
+        .join(' ');
+
+  return (
+    <div className={['flex items-center justify-between gap-3 border-b border-border pb-2', className].filter(Boolean).join(' ')}>
+      <h2 data-text-role={titleRole} className={resolvedTitleClassName}>
+        <span className="w-2 h-2 bg-accent rounded-full flex-shrink-0"></span>
+        {title}
+      </h2>
+      {rightSlot ? <div className="flex items-center flex-shrink-0">{rightSlot}</div> : null}
+    </div>
+  );
+}
+
 function lowConfidenceIndicator(show: boolean) {
   if (!show) return null;
   return (
@@ -180,6 +212,18 @@ interface MetaBadgeItem {
   label: string;
   value?: string | null;
 }
+
+interface GroupedInterpretationWarning {
+  key: string;
+  code?: string;
+  count: number;
+  tone: 'adjustment' | 'warning';
+  title: string;
+  message: string;
+  paths: string[];
+}
+
+type StyleProfileSectionState = 'ready' | 'dropped' | 'omitted' | 'disabled' | 'pending';
 
 function MetaBadgeList({ items }: { items: MetaBadgeItem[] }) {
   const visibleItems = items.filter((item) => typeof item.value === 'string' && item.value.trim().length > 0);
@@ -227,6 +271,69 @@ function GroundingBadgeList({
         ))}
     </div>
   );
+}
+
+function describeInterpretationWarning(
+  warning: InterpretationValidationWarning,
+): Pick<GroupedInterpretationWarning, 'tone' | 'title' | 'message'> {
+  if (warning.code === 'COERCED_TRACK_CONTEXT') {
+    const originalValue = warning.originalValue ? `"${warning.originalValue}"` : 'the AI-generated routing label';
+    const coercedValue = warning.coercedValue ? `"${warning.coercedValue}"` : 'the detected return-track label';
+    return {
+      tone: 'adjustment',
+      title: 'Adjusted routing labels',
+      message: `The backend kept the result and corrected ${originalValue} to ${coercedValue} so the routing labels match the detected session structure.`,
+    };
+  }
+
+  return {
+    tone: 'warning',
+    title: warning.code ? warning.code.replace(/_/g, ' ') : 'Validation warning',
+    message: truncateAtSentenceBoundary(warning.message, 240),
+  };
+}
+
+function groupInterpretationWarnings(
+  warnings: InterpretationValidationWarning[],
+): GroupedInterpretationWarning[] {
+  const grouped = new Map<string, GroupedInterpretationWarning>();
+
+  warnings.forEach((warning, index) => {
+    const description = describeInterpretationWarning(warning);
+    const key = [
+      warning.code ?? 'warning',
+      description.tone,
+      description.title,
+      description.message,
+      warning.originalValue ?? '',
+      warning.coercedValue ?? '',
+      warning.dropReason ?? '',
+    ].join('::');
+    const existing = grouped.get(key);
+
+    if (existing) {
+      existing.count += 1;
+      if (warning.path) {
+        existing.paths.push(warning.path);
+      }
+      return;
+    }
+
+    grouped.set(key, {
+      key: `${key}::${index}`,
+      code: warning.code,
+      count: 1,
+      tone: description.tone,
+      title: description.title,
+      message: description.message,
+      paths: warning.path ? [warning.path] : [],
+    });
+  });
+
+  return Array.from(grouped.values()).map((warning) => ({
+    ...warning,
+    paths: Array.from(new Set(warning.paths)),
+  }));
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -320,6 +427,19 @@ export function AnalysisResults({
   const finalKey = phase1.key ?? 'Unknown';
   const isPhase2V2 = phase2SchemaVersion === 'interpretation.v2';
   const validationWarnings = Array.isArray(phase2ValidationWarnings) ? phase2ValidationWarnings : [];
+  const styleProfileDropped = validationWarnings.some(
+    (warning) => warning.code === 'DROPPED_INVALID_STYLE_PROFILE',
+  );
+  const groupedValidationWarnings = useMemo(
+    () => groupInterpretationWarnings(validationWarnings),
+    [validationWarnings],
+  );
+  const allValidationWarningsAreAdjustments =
+    groupedValidationWarnings.length > 0 &&
+    groupedValidationWarnings.every((warning) => warning.tone === 'adjustment');
+  const validationWarningCountLabel = allValidationWarningsAreAdjustments
+    ? `${validationWarnings.length} item${validationWarnings.length === 1 ? '' : 's'}`
+    : `${validationWarnings.length} warning${validationWarnings.length === 1 ? '' : 's'}`;
 
   const confidenceBadges = toConfidenceBadges(phase2?.confidenceNotes);
   const arrangement = buildArrangementViewModel(phase1, phase2?.arrangementOverview);
@@ -331,6 +451,16 @@ export function AnalysisResults({
   const routingBlueprint = isPhase2V2 ? phase2?.routingBlueprint ?? null : null;
   const warpGuide = isPhase2V2 ? phase2?.warpGuide ?? null : null;
   const audioObservations = phase2?.audioObservations ?? null;
+  const styleProfile = phase2?.styleProfile ?? null;
+  const styleProfileSectionState: StyleProfileSectionState = styleProfile
+    ? 'ready'
+    : phase2
+      ? styleProfileDropped
+        ? 'dropped'
+        : 'omitted'
+      : phase2StatusMessage
+        ? 'disabled'
+        : 'pending';
   const stemSummaryStems = Array.isArray(stemSummary?.stems) ? stemSummary.stems : [];
   const stemSummaryFlags = Array.isArray(stemSummary?.uncertaintyFlags) ? stemSummary.uncertaintyFlags : [];
   const hasStemSummaryContent = stemSummaryStems.length > 0;
@@ -359,6 +489,7 @@ export function AnalysisResults({
     Boolean(routingBlueprint) ||
     Boolean(warpGuide) ||
     Boolean(audioObservations) ||
+    Boolean(styleProfile) ||
     arrangement !== null ||
     sonicCards.length > 0 ||
     mixGroups.length > 0 ||
@@ -374,6 +505,7 @@ export function AnalysisResults({
     { id: 'section-meas-harmony', label: 'Harmony' },
     { id: 'section-meas-structure', label: 'Structure' },
     { id: 'section-meas-synthesis', label: 'Synthesis' },
+    { id: 'section-style-profile', label: 'Style' },
     projectSetup ? { id: 'section-project-setup', label: 'Setup' } : null,
     trackLayout.length > 0 ? { id: 'section-track-layout', label: 'Layout' } : null,
     routingBlueprint ? { id: 'section-routing-blueprint', label: 'Routing' } : null,
@@ -569,14 +701,15 @@ export function AnalysisResults({
         runId={runId}
       />
 
-      <section data-testid="interpretation-panel" className="space-y-2">
-        <div className="flex items-center justify-between border-b border-border pb-2">
-          <h2 className="text-sm font-mono uppercase tracking-wider flex items-center gap-2 text-text-secondary">
-            <span className="w-2 h-2 bg-accent rounded-full"></span>
-            {INTERPRETATION_LABEL}
-            <PhaseSourceBadge source="advisory" />
-          </h2>
-        </div>
+      <section data-testid="interpretation-panel" className="space-y-3">
+        <ResultsSectionHeader
+          title={
+            <>
+              {INTERPRETATION_LABEL}
+              <PhaseSourceBadge source="advisory" />
+            </>
+          }
+        />
         <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">
           Interpretive guidance generated from DSP measurements. Not a ground-truth measurement.
         </p>
@@ -592,42 +725,109 @@ export function AnalysisResults({
         )}
       </section>
 
-      {validationWarnings.length > 0 && (
-        <section className="space-y-3 rounded-sm border border-warning/30 bg-warning/10 p-4">
+      {groupedValidationWarnings.length > 0 && (
+        <section
+          data-testid="interpretation-warnings"
+          className={`space-y-3 rounded-sm border p-4 ${
+            allValidationWarningsAreAdjustments
+              ? 'border-accent/25 bg-bg-card'
+              : 'border-warning/25 bg-bg-card'
+          }`}
+        >
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h2 className="text-sm font-mono uppercase tracking-wider text-warning">
-                Interpretation Caution
+              <h2
+                className={`text-sm font-mono uppercase tracking-wider ${
+                  allValidationWarningsAreAdjustments ? 'text-accent' : 'text-warning'
+                }`}
+              >
+                {allValidationWarningsAreAdjustments ? 'Interpretation Adjustments' : 'Interpretation Caution'}
               </h2>
-              <p className="text-[10px] font-mono uppercase tracking-[0.16em] text-warning/80">
-                The backend kept the result, but flagged parts that may not match the approved Live catalog.
+              <p
+                className={`text-[10px] font-mono uppercase tracking-[0.16em] ${
+                  allValidationWarningsAreAdjustments ? 'text-accent/80' : 'text-warning/80'
+                }`}
+              >
+                {allValidationWarningsAreAdjustments
+                  ? 'The backend kept the result and auto-corrected a few AI-generated labels so they match the detected session structure.'
+                  : 'The backend kept the result, but flagged parts that may not match the approved Live catalog.'}
               </p>
             </div>
-            <span className="text-[10px] font-mono uppercase px-2 py-1 rounded border border-warning/30 text-warning">
-              {validationWarnings.length} warning{validationWarnings.length === 1 ? '' : 's'}
+            <span
+              className={`text-[10px] font-mono uppercase px-2 py-1 rounded border ${
+                allValidationWarningsAreAdjustments
+                  ? 'border-accent/30 text-accent'
+                  : 'border-warning/30 text-warning'
+              }`}
+            >
+              {validationWarningCountLabel}
             </span>
           </div>
           <div className="space-y-2">
-            {validationWarnings.map((warning, index) => (
+            {groupedValidationWarnings.map((warning) => (
               <div
-                key={`${warning.code ?? 'warning'}-${warning.path ?? index}`}
-                className="rounded-sm border border-warning/20 bg-bg-panel/60 p-3 space-y-1"
+                key={warning.key}
+                className={`rounded-sm border p-3 space-y-2 ${
+                  warning.tone === 'adjustment'
+                    ? 'border-accent/20 bg-bg-panel'
+                    : 'border-warning/20 bg-bg-panel'
+                }`}
               >
                 <div className="flex flex-wrap gap-1.5">
                   {warning.code && (
-                    <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-warning/30 text-warning">
+                    <span
+                      className={`text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border ${
+                        warning.tone === 'adjustment'
+                          ? 'border-accent/30 text-accent'
+                          : 'border-warning/30 text-warning'
+                      }`}
+                    >
                       {warning.code}
                     </span>
                   )}
-                  {warning.path && (
-                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-border text-text-secondary">
-                      {warning.path}
+                  {warning.count > 1 && (
+                    <span
+                      className={`text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border ${
+                        warning.tone === 'adjustment'
+                          ? 'border-accent/25 text-accent/90'
+                          : 'border-warning/25 text-warning/90'
+                      }`}
+                    >
+                      {warning.count} items
                     </span>
                   )}
                 </div>
-                <p className="text-xs font-mono text-text-secondary leading-relaxed">
-                  {truncateAtSentenceBoundary(warning.message, 240)}
-                </p>
+                <div className="space-y-1">
+                  <p
+                    className={`text-[10px] font-mono uppercase tracking-[0.16em] ${
+                      warning.tone === 'adjustment' ? 'text-accent/85' : 'text-warning/85'
+                    }`}
+                  >
+                    {warning.title}
+                  </p>
+                  <p className="text-xs font-mono text-text-secondary leading-relaxed">
+                    {warning.message}
+                  </p>
+                </div>
+                {warning.paths.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {warning.paths.map((path) => (
+                      <span
+                        key={`${warning.key}-${path}`}
+                        className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-border text-text-secondary"
+                      >
+                        {path}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {warning.paths.length === 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-border text-text-secondary">
+                      Result-level warning
+                    </span>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -649,33 +849,170 @@ export function AnalysisResults({
 
       {phase2?.trackCharacter && (
         <section className="space-y-3">
-          <div className="flex items-center justify-between border-b border-border pb-2">
-            <h2
-              data-text-role="section-title"
-              className={textRoleClassName('section-title', 'flex items-center')}
-            >
-              <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
-              {formatDisplayText('Track Character', 'title')}
-            </h2>
-            <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">AI INTERP</span>
-          </div>
+          <ResultsSectionHeader
+            title={formatDisplayText('Track Character', 'title')}
+            titleRole="section-title"
+            rightSlot={
+              <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">AI INTERP</span>
+            }
+          />
           <p data-text-role="body" className={textRoleClassName('body', 'opacity-80')}>
             {truncateAtSentenceBoundary(phase2.trackCharacter, 900)}
           </p>
         </section>
       )}
 
+      <section id="section-style-profile" className="space-y-6 scroll-mt-24">
+        <ResultsSectionHeader
+          title="Style Profile"
+          rightSlot={
+            styleProfileSectionState === 'ready' ? (
+              <span className="text-[10px] font-mono bg-bg-panel border border-accent/30 text-accent px-2 py-1 rounded font-bold">
+                STRUCTURED
+              </span>
+            ) : (
+              <span className="text-[10px] font-mono bg-bg-panel border border-border text-text-secondary px-2 py-1 rounded font-bold">
+                {styleProfileSectionState === 'disabled'
+                  ? 'DISABLED'
+                  : styleProfileSectionState === 'pending'
+                    ? 'PENDING'
+                    : styleProfileSectionState === 'omitted'
+                      ? 'NOT RETURNED'
+                      : 'DROPPED'}
+              </span>
+            )
+          }
+        />
+
+        {styleProfile ? (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <AccentMetricCard
+                label="Tempo"
+                value={styleProfile.authoritativeMeasurements.bpm ?? '—'}
+                unit={styleProfile.authoritativeMeasurements.bpm != null ? 'BPM' : undefined}
+              />
+              <AccentMetricCard
+                label="Key"
+                value={styleProfile.authoritativeMeasurements.key ?? '—'}
+              />
+              <AccentMetricCard
+                label="Meter"
+                value={styleProfile.authoritativeMeasurements.timeSignature ?? '—'}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="rounded-sm border border-border bg-bg-card p-4 space-y-3">
+                <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+                  Genre
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  <span className="text-[10px] font-mono rounded-sm border border-accent/30 bg-accent/5 px-2 py-1 text-accent">
+                    {styleProfile.genre}
+                  </span>
+                  {styleProfile.subGenre && (
+                    <span className="text-[10px] font-mono rounded-sm border border-border px-2 py-1 text-text-secondary">
+                      {styleProfile.subGenre}
+                    </span>
+                  )}
+                </div>
+                {styleProfile.mood.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+                      Mood
+                    </p>
+                    <TokenBadgeList
+                      items={styleProfile.mood.map((item) => ({ label: item, tone: 'accent' as const }))}
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-sm border border-border bg-bg-card p-4 space-y-3">
+                {styleProfile.instruments.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+                      Instruments
+                    </p>
+                    <TokenBadgeList
+                      items={styleProfile.instruments.map((item) => ({ label: item, tone: 'muted' as const }))}
+                    />
+                  </div>
+                )}
+                {styleProfile.productionTechniques.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+                      Production Techniques
+                    </p>
+                    <TokenBadgeList
+                      items={styleProfile.productionTechniques.map((item) => ({ label: item, tone: 'violet' as const }))}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="rounded-sm border border-border bg-bg-card p-4 space-y-2">
+                <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+                  Style Read
+                </p>
+                <p className="text-xs font-mono text-text-secondary leading-relaxed">
+                  {truncateAtSentenceBoundary(styleProfile.description, 320)}
+                </p>
+              </div>
+              <div className="rounded-sm border border-accent/20 bg-accent/5 p-4 space-y-2">
+                <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-accent">
+                  Reusable Prompt
+                </p>
+                <p className="text-xs font-mono text-text-secondary leading-relaxed">
+                  {truncateAtSentenceBoundary(styleProfile.generationPrompt, 320)}
+                </p>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="rounded-sm border border-border bg-bg-card p-4 space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-border text-text-secondary">
+                {styleProfileSectionState === 'disabled'
+                  ? 'DISABLED'
+                  : styleProfileSectionState === 'pending'
+                    ? 'PENDING'
+                    : styleProfileSectionState === 'omitted'
+                      ? 'NOT RETURNED'
+                      : 'DROPPED'}
+              </span>
+            </div>
+            <p className="text-xs font-mono text-text-secondary leading-relaxed">
+              {styleProfileSectionState === 'disabled'
+                ? 'AI interpretation was disabled for this run, so no style profile was generated.'
+                : styleProfileSectionState === 'pending'
+                  ? 'Style profile is not ready yet. AI interpretation is still running or did not finish with a usable result.'
+                  : styleProfileSectionState === 'omitted'
+                    ? 'AI interpretation completed, but this run did not return a structured style profile.'
+                    : 'The model returned an invalid style profile, so ASA ignored it. See interpretation warnings above.'}
+            </p>
+            {styleProfileSectionState === 'disabled' && phase2StatusMessage && (
+              <p className="text-[10px] font-mono uppercase tracking-[0.16em] text-text-secondary/80">
+                {phase2StatusMessage}
+              </p>
+            )}
+          </div>
+        )}
+      </section>
+
       {audioObservations && (
         <section id="section-audio-observations" className="space-y-6 scroll-mt-24">
-          <div className="flex items-center justify-between border-b border-border pb-2">
-            <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
-              <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
-              Audio Observations
-            </h2>
-            <span className="text-[10px] font-mono bg-bg-panel border border-border text-text-secondary px-2 py-1 rounded font-bold">
-              Perceptual / Audio-Derived
-            </span>
-          </div>
+          <ResultsSectionHeader
+            title="Audio Observations"
+            rightSlot={
+              <span className="text-[10px] font-mono bg-bg-panel border border-border text-text-secondary px-2 py-1 rounded font-bold">
+                Perceptual / Audio-Derived
+              </span>
+            }
+          />
 
           <div className="rounded-sm border border-accent/20 bg-accent/5 p-4 space-y-2">
             <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-accent">
@@ -735,15 +1072,14 @@ export function AnalysisResults({
 
       {projectSetup && (
         <section id="section-project-setup" className="space-y-6 scroll-mt-24">
-          <div className="flex items-center justify-between border-b border-border pb-2">
-            <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
-              <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
-              Project Setup
-            </h2>
-            <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">
-              LIVE 12 V2
-            </span>
-          </div>
+          <ResultsSectionHeader
+            title="Project Setup"
+            rightSlot={
+              <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">
+                LIVE 12 V2
+              </span>
+            }
+          />
 
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <AccentMetricCard label="Tempo" value={projectSetup.tempoBpm} unit="BPM" />
@@ -766,15 +1102,14 @@ export function AnalysisResults({
 
       {trackLayout.length > 0 && (
         <section id="section-track-layout" className="space-y-6 scroll-mt-24">
-          <div className="flex items-center justify-between border-b border-border pb-2">
-            <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
-              <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
-              Track Layout
-            </h2>
-            <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">
-              SCAFFOLD
-            </span>
-          </div>
+          <ResultsSectionHeader
+            title="Track Layout"
+            rightSlot={
+              <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">
+                SCAFFOLD
+              </span>
+            }
+          />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {trackLayout.map((item) => (
@@ -817,15 +1152,14 @@ export function AnalysisResults({
 
       {routingBlueprint && (
         <section id="section-routing-blueprint" className="space-y-6 scroll-mt-24">
-          <div className="flex items-center justify-between border-b border-border pb-2">
-            <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
-              <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
-              Routing Blueprint
-            </h2>
-            <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">
-              SIGNAL MAP
-            </span>
-          </div>
+          <ResultsSectionHeader
+            title="Routing Blueprint"
+            rightSlot={
+              <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">
+                SIGNAL MAP
+              </span>
+            }
+          />
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="rounded-sm border border-border bg-bg-card p-4 space-y-2">
@@ -890,15 +1224,14 @@ export function AnalysisResults({
 
       {warpGuide && (
         <section id="section-warp-guide" className="space-y-6 scroll-mt-24">
-          <div className="flex items-center justify-between border-b border-border pb-2">
-            <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
-              <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
-              Warp Guide
-            </h2>
-            <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">
-              CLIP PREP
-            </span>
-          </div>
+          <ResultsSectionHeader
+            title="Warp Guide"
+            rightSlot={
+              <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">
+                CLIP PREP
+              </span>
+            }
+          />
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
             {warpTargets.map(({ label, target }) => (
@@ -932,13 +1265,12 @@ export function AnalysisResults({
 
       {Array.isArray(phase2?.detectedCharacteristics) && phase2.detectedCharacteristics.length > 0 && (
         <div className="space-y-6">
-          <div className="flex items-center justify-between border-b border-border pb-2">
-            <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
-              <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
-              Detected Characteristics
-            </h2>
-            <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">AI INTERP</span>
-          </div>
+          <ResultsSectionHeader
+            title="Detected Characteristics"
+            rightSlot={
+              <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">AI INTERP</span>
+            }
+          />
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {phase2.detectedCharacteristics.map((item, idx) => (
               <div
@@ -976,13 +1308,12 @@ export function AnalysisResults({
 
       {arrangement && (
         <section id="section-arrangement" className="space-y-6 scroll-mt-24">
-          <div className="flex items-center justify-between border-b border-border pb-2">
-            <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
-              <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
-              Arrangement Overview
-            </h2>
-            <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">TIMELINE</span>
-          </div>
+          <ResultsSectionHeader
+            title="Arrangement Overview"
+            rightSlot={
+              <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">TIMELINE</span>
+            }
+          />
 
           {arrangement.summary && (
             <p className="text-xs text-text-secondary font-mono leading-relaxed opacity-80">
@@ -1161,15 +1492,14 @@ export function AnalysisResults({
 
       {hasStemSummaryContent && (
         <section id="section-stem-summary" className="space-y-6 scroll-mt-24">
-          <div className="flex items-center justify-between border-b border-border pb-2">
-            <h2 className="text-sm font-mono uppercase tracking-wider flex items-center text-text-secondary">
-              <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
-              AI stem summary for musical understanding
-            </h2>
-            <span className="text-[10px] font-mono bg-bg-panel border border-accent/30 text-accent px-2 py-1 rounded font-bold">
-              BEST EFFORT
-            </span>
-          </div>
+          <ResultsSectionHeader
+            title="AI stem summary for musical understanding"
+            rightSlot={
+              <span className="text-[10px] font-mono bg-bg-panel border border-accent/30 text-accent px-2 py-1 rounded font-bold">
+                BEST EFFORT
+              </span>
+            }
+          />
 
           <div className="rounded-sm border border-accent/20 bg-accent/5 p-4 space-y-2">
             <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-accent">
@@ -1292,16 +1622,13 @@ export function AnalysisResults({
 
       {sonicCards.length > 0 && (
         <section id="section-sonic-elements" className="space-y-6 scroll-mt-24">
-          <div className="flex items-center justify-between border-b border-border pb-2">
-            <h2
-              data-text-role="section-title"
-              className={textRoleClassName('section-title', 'flex items-center')}
-            >
-              <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
-              {formatDisplayText('Sonic Elements & Reconstruction', 'title')}
-            </h2>
-            <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">COLLAPSIBLE</span>
-          </div>
+          <ResultsSectionHeader
+            title={formatDisplayText('Sonic Elements & Reconstruction', 'title')}
+            titleRole="section-title"
+            rightSlot={
+              <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">COLLAPSIBLE</span>
+            }
+          />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
             {sonicCards.map((card) => {
@@ -1393,16 +1720,13 @@ export function AnalysisResults({
 
       {mixGroups.length > 0 && (
         <section id="section-mix-chain" className="space-y-6 scroll-mt-24">
-          <div className="flex items-center justify-between border-b border-border pb-2">
-            <h2
-              data-text-role="section-title"
-              className={textRoleClassName('section-title', 'flex items-center')}
-            >
-              <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
-              {formatDisplayText('Mix & Master Chain', 'title')}
-            </h2>
-            <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">SIGNAL FLOW</span>
-          </div>
+          <ResultsSectionHeader
+            title={formatDisplayText('Mix & Master Chain', 'title')}
+            titleRole="section-title"
+            rightSlot={
+              <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">SIGNAL FLOW</span>
+            }
+          />
 
           <div className="space-y-4">
             {mixGroups
@@ -1506,16 +1830,11 @@ export function AnalysisResults({
 
       {patchCards.length > 0 && (
         <section id="section-patches" className="space-y-6 scroll-mt-24">
-          <div className="flex items-center justify-between border-b border-border pb-2">
-            <h2
-              data-text-role="section-title"
-              className={textRoleClassName('section-title', 'flex items-center')}
-            >
-              <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
-              {formatDisplayText('Patch Framework', 'title')}
-            </h2>
-            <Sliders className="w-4 h-4 text-accent opacity-70" />
-          </div>
+          <ResultsSectionHeader
+            title={formatDisplayText('Patch Framework', 'title')}
+            titleRole="section-title"
+            rightSlot={<Sliders className="w-4 h-4 text-accent opacity-70" />}
+          />
 
           <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
             {patchCards.map((patch) => {

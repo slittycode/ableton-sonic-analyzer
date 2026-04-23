@@ -269,6 +269,24 @@ const phase2V2: Phase2Result = {
   ],
 };
 
+const phase2V2WithStyleProfile: Phase2Result = {
+  ...phase2V2,
+  styleProfile: {
+    genre: 'Techno',
+    subGenre: 'Warehouse',
+    mood: ['Driving', 'Dark'],
+    instruments: ['Kick', 'Bass', 'Hats'],
+    productionTechniques: ['Sidechain ducking', 'Filtered percussion'],
+    description: 'Driving warehouse techno with a tight low end and disciplined stereo image.',
+    generationPrompt: 'Create a warehouse techno loop with mono bass, filtered hats, and a strict 4/4 pulse.',
+    authoritativeMeasurements: {
+      bpm: 126,
+      key: 'F minor',
+      timeSignature: '4/4',
+    },
+  },
+};
+
 const baseStemSummary: StemSummaryResult = {
   summary: 'Bass stem: Bass pulses anchor the groove. Musical stem: Upper motion stays approximate.',
   stems: [
@@ -589,10 +607,158 @@ describe('AnalysisResults UI wiring', () => {
     );
 
     expect(html).toContain('Interpretation Caution');
+    expect(html).toContain('data-testid="interpretation-warnings"');
     expect(html).toContain('Parameter mismatch surfaced as a caution.');
     expect(html).toContain('UNKNOWN_PARAMETER');
     expect(html).toContain('abletonRecommendations[0].parameter');
     expect(html).toContain('Track Character');
+  });
+
+  it('groups routing auto-repairs into a softer adjustment banner', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults as React.ComponentType<Record<string, unknown>>, {
+        phase1: baseMeasurement,
+        phase2: phase2V2,
+        phase2SchemaVersion: 'interpretation.v2',
+        phase2ValidationWarnings: [
+          {
+            code: 'COERCED_TRACK_CONTEXT',
+            path: 'abletonRecommendations[4].trackContext',
+            message: "Coerced trackContext 'Return:Long Reverb' to 'Return:Return:Long Reverb' by matching against declared routingBlueprint return names.",
+            originalValue: 'Return:Long Reverb',
+            coercedValue: 'Return:Return:Long Reverb',
+          },
+          {
+            code: 'COERCED_TRACK_CONTEXT',
+            path: 'abletonRecommendations[5].trackContext',
+            message: "Coerced trackContext 'Return:Long Reverb' to 'Return:Return:Long Reverb' by matching against declared routingBlueprint return names.",
+            originalValue: 'Return:Long Reverb',
+            coercedValue: 'Return:Return:Long Reverb',
+          },
+        ],
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).toContain('Interpretation Adjustments');
+    expect(html).not.toContain('Interpretation Caution');
+    expect(html).toContain('Adjusted routing labels');
+    expect(html).toContain('2 items');
+    expect(html).toContain('abletonRecommendations[4].trackContext');
+    expect(html).toContain('abletonRecommendations[5].trackContext');
+    expect(html).toContain('Return:Return:Long Reverb');
+  });
+
+  it('keeps the interpretation intro flat so it matches the surrounding AI sections', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults as React.ComponentType<Record<string, unknown>>, {
+        phase1: baseMeasurement,
+        phase2: phase2V2,
+        phase2SchemaVersion: 'interpretation.v2',
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).toContain('data-testid="interpretation-panel"');
+    expect(html).not.toMatch(/data-testid="interpretation-panel" class="[^"]*bg-bg-card/);
+    expect(html).not.toMatch(/data-testid="interpretation-panel" class="[^"]*border-border/);
+    expect(html).toContain('Track Character');
+    expect(html).toContain('Detected Characteristics');
+    expect(html).toContain('Mix &amp; Master Chain');
+  });
+
+  it('renders the structured style profile section when present', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults as React.ComponentType<Record<string, unknown>>, {
+        phase1: baseMeasurement,
+        phase2: phase2V2WithStyleProfile,
+        phase2SchemaVersion: 'interpretation.v2',
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).toContain('Style Profile');
+    expect(html).toContain('STRUCTURED');
+    expect(html).toContain('Techno');
+    expect(html).toContain('Warehouse');
+    expect(html).toContain('Driving');
+    expect(html).toContain('Kick');
+    expect(html).toContain('Sidechain ducking');
+    expect(html).toContain('126');
+    expect(html).toContain('F minor');
+    expect(html).toContain('Create a warehouse techno loop');
+  });
+
+  it('renders the style profile placeholder when phase2 completed without styleProfile', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults as React.ComponentType<Record<string, unknown>>, {
+        phase1: baseMeasurement,
+        phase2: phase2V2,
+        phase2SchemaVersion: 'interpretation.v2',
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).toContain('Style Profile');
+    expect(html).toContain('NOT RETURNED');
+    expect(html).toContain('AI interpretation completed, but this run did not return a structured style profile.');
+    expect(html).toContain('href="#section-style-profile"');
+    expect(html).not.toContain('STRUCTURED');
+  });
+
+  it('renders the disabled style profile placeholder when interpretation is skipped', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults as React.ComponentType<Record<string, unknown>>, {
+        phase1: baseMeasurement,
+        phase2: null,
+        phase2StatusMessage: 'AI interpretation skipped because it was disabled in the UI.',
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).toContain('Style Profile');
+    expect(html).toContain('DISABLED');
+    expect(html).toContain('AI interpretation was disabled for this run, so no style profile was generated.');
+    expect(html).toContain('AI interpretation skipped because it was disabled in the UI.');
+  });
+
+  it('renders the pending style profile placeholder when interpretation is unavailable without a status message', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults as React.ComponentType<Record<string, unknown>>, {
+        phase1: baseMeasurement,
+        phase2: null,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).toContain('Style Profile');
+    expect(html).toContain('PENDING');
+    expect(html).toContain('Style profile is not ready yet. AI interpretation is still running or did not finish with a usable result.');
+  });
+
+  it('renders the dropped style profile placeholder when the backend salvages an invalid style profile', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults as React.ComponentType<Record<string, unknown>>, {
+        phase1: baseMeasurement,
+        phase2: phase2V2,
+        phase2SchemaVersion: 'interpretation.v2',
+        phase2ValidationWarnings: [
+          {
+            code: 'DROPPED_INVALID_STYLE_PROFILE',
+            path: 'styleProfile',
+            message: 'Dropped styleProfile because the nested shape was invalid.',
+            originalValue: '{"genre":42}',
+            dropReason: 'Invalid nested styleProfile shape.',
+          },
+        ],
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).toContain('Style Profile');
+    expect(html).toContain('DROPPED');
+    expect(html).toContain('The model returned an invalid style profile, so ASA ignored it. See interpretation warnings above.');
+    expect(html).toContain('Interpretation Caution');
   });
 
   it('renders v2 arrangement actions, device workflow metadata, and prefers structured secret sauce steps', () => {
