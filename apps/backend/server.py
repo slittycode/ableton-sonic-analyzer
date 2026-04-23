@@ -669,6 +669,45 @@ PHASE2_RESPONSE_SCHEMA = {
                 "mixContext",
             ],
         },
+        "styleProfile": {
+            "type": "OBJECT",
+            "properties": {
+                "genre": {"type": "STRING"},
+                "subGenre": {"type": "STRING"},
+                "mood": {
+                    "type": "ARRAY",
+                    "items": {"type": "STRING"},
+                },
+                "instruments": {
+                    "type": "ARRAY",
+                    "items": {"type": "STRING"},
+                },
+                "productionTechniques": {
+                    "type": "ARRAY",
+                    "items": {"type": "STRING"},
+                },
+                "description": {"type": "STRING"},
+                "generationPrompt": {"type": "STRING"},
+                "authoritativeMeasurements": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "bpm": {"type": "NUMBER"},
+                        "key": {"type": "STRING"},
+                        "timeSignature": {"type": "STRING"},
+                    },
+                    "required": ["bpm", "key", "timeSignature"],
+                },
+            },
+            "required": [
+                "genre",
+                "mood",
+                "instruments",
+                "productionTechniques",
+                "description",
+                "generationPrompt",
+                "authoritativeMeasurements",
+            ],
+        },
         "arrangementOverview": {
             "type": "OBJECT",
             "properties": {
@@ -2415,12 +2454,24 @@ def _run_interpretation_request_with_profile_config(
                 ]
         else:
             interpretation_result, skip_message = profile_config["parseResult"](response_text)
+        style_profile_warnings = (
+            _finalize_style_profile_authoritative_measurements(
+                interpretation_result,
+                measurement_result,
+            )
+            if profile_id == "producer_summary" and interpretation_result is not None
+            else []
+        )
         semantic_validation_warnings = (
             _validate_phase2_semantics(interpretation_result)
             if profile_id == "producer_summary" and interpretation_result is not None
             else []
         )
-        validation_warnings = parse_validation_warnings + semantic_validation_warnings
+        validation_warnings = (
+            parse_validation_warnings
+            + style_profile_warnings
+            + semantic_validation_warnings
+        )
         diagnostics = _build_diagnostics(
             request_id=request_id,
             estimate={"totalLowMs": 0, "totalHighMs": 0},
@@ -3566,6 +3617,38 @@ def _is_audio_observations(v: Any) -> bool:
     )
 
 
+def _is_style_profile_authoritative_measurements(v: Any) -> bool:
+    record = _as_record(v)
+    if not record:
+        return False
+    return (
+        "bpm" in record
+        and "key" in record
+        and "timeSignature" in record
+        and _is_opt_num(record.get("bpm"))
+        and _is_opt_str(record.get("key"))
+        and _is_opt_str(record.get("timeSignature"))
+    )
+
+
+def _is_style_profile(v: Any) -> bool:
+    record = _as_record(v)
+    if not record:
+        return False
+    return (
+        _is_str(record.get("genre"))
+        and _is_opt_str(record.get("subGenre"))
+        and _is_str_list(record.get("mood"))
+        and _is_str_list(record.get("instruments"))
+        and _is_str_list(record.get("productionTechniques"))
+        and _is_str(record.get("description"))
+        and _is_str(record.get("generationPrompt"))
+        and _is_style_profile_authoritative_measurements(
+            record.get("authoritativeMeasurements")
+        )
+    )
+
+
 def _is_arrangement_overview(v: Any) -> bool:
     r = _as_record(v)
     if not r or not _is_str(r.get("summary")) or not isinstance(r.get("segments"), list):
@@ -3689,6 +3772,7 @@ def _is_valid_phase2_shape(data: Any) -> bool:
         and _is_warp_guide(r.get("warpGuide"))
         and _is_detected_characteristics(r.get("detectedCharacteristics"))
         and (r.get("audioObservations") is None or _is_audio_observations(r.get("audioObservations")))
+        and (r.get("styleProfile") is None or _is_style_profile(r.get("styleProfile")))
         and _is_arrangement_overview(r.get("arrangementOverview"))
         and _is_sonic_elements(r.get("sonicElements"))
         and _is_mix_and_master_chain(r.get("mixAndMasterChain"))
@@ -3698,13 +3782,27 @@ def _is_valid_phase2_shape(data: Any) -> bool:
     )
 
 
-def _sanitize_optional_phase2_fields(data: dict[str, Any]) -> dict[str, Any]:
+def _sanitize_optional_phase2_fields(
+    data: dict[str, Any],
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     sanitized = dict(data)
+    warnings: list[dict[str, Any]] = []
     if "audioObservations" in sanitized and not _is_audio_observations(
         sanitized.get("audioObservations")
     ):
         sanitized.pop("audioObservations", None)
-    return sanitized
+    if "styleProfile" in sanitized and not _is_style_profile(sanitized.get("styleProfile")):
+        dropped = sanitized.pop("styleProfile", None)
+        warnings.append(
+            _build_phase2_validation_warning(
+                code="DROPPED_INVALID_STYLE_PROFILE",
+                path="styleProfile",
+                message="Dropped styleProfile because the nested shape was invalid.",
+                original_value=_stringify_warning_value(dropped),
+                drop_reason="Invalid nested styleProfile shape.",
+            )
+        )
+    return sanitized, warnings
 
 
 _PHASE2_DEBUG_SHAPE_ISSUE_LIMIT = 16
@@ -4358,6 +4456,33 @@ def _collect_phase2_shape_issues(data: Any) -> list[dict[str, str]]:
         expect_string_list(record.get("productionSignatures"), f"{path}.productionSignatures")
         expect_str(record.get("mixContext"), f"{path}.mixContext")
 
+    def validate_style_profile(value: Any, path: str) -> None:
+        if value is None:
+            return
+        record = expect_record(value, path)
+        if record is None:
+            return
+        expect_str(record.get("genre"), f"{path}.genre")
+        expect_optional_str(record.get("subGenre"), f"{path}.subGenre")
+        expect_string_list(record.get("mood"), f"{path}.mood")
+        expect_string_list(record.get("instruments"), f"{path}.instruments")
+        expect_string_list(record.get("productionTechniques"), f"{path}.productionTechniques")
+        expect_str(record.get("description"), f"{path}.description")
+        expect_str(record.get("generationPrompt"), f"{path}.generationPrompt")
+        measurements = expect_record(
+            record.get("authoritativeMeasurements"),
+            f"{path}.authoritativeMeasurements",
+        )
+        if measurements is None:
+            return
+        if measurements.get("bpm") is not None:
+            expect_num(measurements.get("bpm"), f"{path}.authoritativeMeasurements.bpm")
+        expect_optional_str(measurements.get("key"), f"{path}.authoritativeMeasurements.key")
+        expect_optional_str(
+            measurements.get("timeSignature"),
+            f"{path}.authoritativeMeasurements.timeSignature",
+        )
+
     def validate_arrangement_overview(value: Any, path: str) -> None:
         record = expect_record(value, path)
         if record is None:
@@ -4480,6 +4605,7 @@ def _collect_phase2_shape_issues(data: Any) -> list[dict[str, str]]:
     validate_warp_guide(record.get("warpGuide"), "warpGuide")
     validate_detected_characteristics(record.get("detectedCharacteristics"), "detectedCharacteristics")
     validate_audio_observations(record.get("audioObservations"), "audioObservations")
+    validate_style_profile(record.get("styleProfile"), "styleProfile")
     validate_arrangement_overview(record.get("arrangementOverview"), "arrangementOverview")
     validate_sonic_elements(record.get("sonicElements"), "sonicElements")
     validate_mix_chain(record.get("mixAndMasterChain"), "mixAndMasterChain")
@@ -4518,10 +4644,11 @@ def _parse_phase2_result_debug(response_text: str | None) -> dict[str, Any]:
     emptied_required_arrays: set[str] = set()
     record = _as_record(parsed)
     if record is not None:
-        parsed = _sanitize_optional_phase2_fields(record)
-        parsed, validation_warnings, emptied_required_arrays = _normalize_and_salvage_phase2_result(
+        parsed, sanitize_warnings = _sanitize_optional_phase2_fields(record)
+        parsed, salvage_warnings, emptied_required_arrays = _normalize_and_salvage_phase2_result(
             parsed
         )
+        validation_warnings = sanitize_warnings + salvage_warnings
     shape_issues = _collect_phase2_shape_issues(parsed)
     for array_path in sorted(emptied_required_arrays):
         _append_shape_issue(
@@ -4582,6 +4709,47 @@ def _build_phase2_validation_warning(
     if drop_reason is not None:
         warning["dropReason"] = drop_reason
     return warning
+
+
+def _finalize_style_profile_authoritative_measurements(
+    interpretation_result: dict[str, Any],
+    measurement_result: dict[str, Any],
+) -> list[dict[str, Any]]:
+    style_profile = _as_record(interpretation_result.get("styleProfile"))
+    if style_profile is None:
+        return []
+
+    authoritative = _as_record(style_profile.get("authoritativeMeasurements"))
+    if authoritative is None:
+        authoritative = {}
+        style_profile["authoritativeMeasurements"] = authoritative
+
+    measured_values = {
+        "bpm": _coerce_nullable_number(measurement_result.get("bpm")),
+        "key": _coerce_nullable_string(measurement_result.get("key")),
+        "timeSignature": _coerce_nullable_string(measurement_result.get("timeSignature")),
+    }
+
+    warnings: list[dict[str, Any]] = []
+    for field, measured_value in measured_values.items():
+        current_value = authoritative.get(field)
+        if current_value != measured_value:
+            warnings.append(
+                _build_phase2_validation_warning(
+                    code="AUTHORITATIVE_MEASUREMENT_OVERRIDDEN",
+                    path=f"styleProfile.authoritativeMeasurements.{field}",
+                    message=(
+                        f"Overrode styleProfile.authoritativeMeasurements.{field} with "
+                        "the authoritative Phase 1 measurement."
+                    ),
+                    original_value=_stringify_warning_value(current_value),
+                    coerced_value=_stringify_warning_value(measured_value),
+                )
+            )
+        authoritative[field] = measured_value
+
+    interpretation_result["styleProfile"] = style_profile
+    return warnings
 
 
 def _validate_phase2_catalog_entry(

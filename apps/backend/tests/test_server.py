@@ -215,6 +215,27 @@ def _valid_audio_observations() -> dict:
     }
 
 
+def _valid_style_profile() -> dict:
+    return {
+        "genre": "Techno",
+        "subGenre": "Warehouse",
+        "mood": ["Driving", "Dark"],
+        "instruments": ["Kick", "Bass", "Hats"],
+        "productionTechniques": ["Sidechain ducking", "Filtered percussion"],
+        "description": (
+            "Driving warehouse techno with a tight low end, restrained width, and a measured club-focused energy curve."
+        ),
+        "generationPrompt": (
+            "Create a warehouse techno loop with mono bass, filtered hats, and disciplined stereo width."
+        ),
+        "authoritativeMeasurements": {
+            "bpm": 128,
+            "key": "F minor",
+            "timeSignature": "4/4",
+        },
+    }
+
+
 def _valid_single_stem_summary_result(summary: str = "Bass pulses anchor the section while the upper stem stays approximate.") -> dict:
     return {
         "summary": summary,
@@ -299,7 +320,9 @@ class ServerContractTests(unittest.TestCase):
         self.assertIn("production technique signatures", prompt)
         self.assertIn("must not repeat or restate content already covered", prompt)
         self.assertIn("Do not omit any required top-level keys", prompt)
-        self.assertIn("Only audioObservations may be omitted", prompt)
+        self.assertIn("Only audioObservations and styleProfile may be omitted", prompt)
+        self.assertIn("styleProfile", prompt)
+        self.assertIn("authoritativeMeasurements", prompt)
         self.assertIn("category must be exactly one of", prompt)
         self.assertIn("workflowStage = the project phase", prompt)
         self.assertIn('"workflowStage":"SOUND_DESIGN","category":"SYNTHESIS"', prompt)
@@ -329,6 +352,28 @@ class ServerContractTests(unittest.TestCase):
         self.assertIsNotNone(parsed)
         self.assertNotIn("audioObservations", parsed)
 
+    def test_parse_phase2_result_keeps_valid_style_profile(self) -> None:
+        payload = _valid_phase2_result()
+        payload["styleProfile"] = _valid_style_profile()
+
+        parsed, skip_message = server._parse_phase2_result(json.dumps(payload))
+
+        self.assertIsNone(skip_message)
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed["styleProfile"]["genre"], "Techno")
+        self.assertEqual(parsed["styleProfile"]["mood"], ["Driving", "Dark"])
+        self.assertEqual(
+            parsed["styleProfile"]["authoritativeMeasurements"]["bpm"],
+            128,
+        )
+
+    def test_parse_phase2_result_allows_missing_style_profile(self) -> None:
+        parsed, skip_message = server._parse_phase2_result(json.dumps(_valid_phase2_result()))
+
+        self.assertIsNone(skip_message)
+        self.assertIsNotNone(parsed)
+        self.assertNotIn("styleProfile", parsed)
+
     def test_parse_phase2_result_drops_malformed_audio_observations_only(self) -> None:
         payload = _valid_phase2_result()
         payload["audioObservations"] = {
@@ -344,6 +389,25 @@ class ServerContractTests(unittest.TestCase):
         self.assertIsNotNone(parsed)
         self.assertNotIn("audioObservations", parsed)
         self.assertEqual(parsed["projectSetup"]["sampleRate"], 48000)
+
+    def test_parse_phase2_result_debug_drops_malformed_style_profile_only(self) -> None:
+        payload = _valid_phase2_result()
+        payload["styleProfile"] = {
+            "genre": "Techno",
+            "description": "Missing required nested fields.",
+        }
+
+        debug = server._parse_phase2_result_debug(json.dumps(payload))
+
+        self.assertIsNone(debug["skipReason"])
+        self.assertIsNotNone(debug["result"])
+        self.assertNotIn("styleProfile", debug["result"])
+        warning = next(
+            w for w in debug["validationWarnings"]
+            if w["code"] == "DROPPED_INVALID_STYLE_PROFILE"
+        )
+        self.assertEqual(warning["path"], "styleProfile")
+        self.assertIn("invalid", warning["message"].lower())
 
     def test_parse_phase2_result_debug_coerces_synthesis_workflow_stage(self) -> None:
         payload = _valid_phase2_result()
@@ -714,6 +778,143 @@ class ServerContractTests(unittest.TestCase):
         self.assertEqual(warnings[0]["code"], "COERCED_ENUM_VALUE")
         self.assertEqual(warnings[0]["originalValue"], "SYNTHESIS")
         self.assertEqual(warnings[0]["coercedValue"], "SOUND_DESIGN")
+
+    def test_finalize_style_profile_authoritative_measurements_overwrites_mismatches(self) -> None:
+        interpretation_result = _valid_phase2_result()
+        interpretation_result["styleProfile"] = _valid_style_profile()
+        interpretation_result["styleProfile"]["authoritativeMeasurements"] = {
+            "bpm": 130,
+            "key": "C major",
+            "timeSignature": "3/4",
+        }
+
+        warnings = server._finalize_style_profile_authoritative_measurements(
+            interpretation_result,
+            {"bpm": 128, "key": "F minor", "timeSignature": "4/4"},
+        )
+
+        measurements = interpretation_result["styleProfile"]["authoritativeMeasurements"]
+        self.assertEqual(measurements["bpm"], 128)
+        self.assertEqual(measurements["key"], "F minor")
+        self.assertEqual(measurements["timeSignature"], "4/4")
+        paths = {warning["path"] for warning in warnings}
+        self.assertIn("styleProfile.authoritativeMeasurements.bpm", paths)
+        self.assertIn("styleProfile.authoritativeMeasurements.key", paths)
+        self.assertIn("styleProfile.authoritativeMeasurements.timeSignature", paths)
+
+    def test_finalize_style_profile_authoritative_measurements_preserves_null_phase1_values(self) -> None:
+        interpretation_result = _valid_phase2_result()
+        interpretation_result["styleProfile"] = _valid_style_profile()
+
+        warnings = server._finalize_style_profile_authoritative_measurements(
+            interpretation_result,
+            {"bpm": 128, "key": None, "timeSignature": None},
+        )
+
+        measurements = interpretation_result["styleProfile"]["authoritativeMeasurements"]
+        self.assertEqual(measurements["bpm"], 128)
+        self.assertIsNone(measurements["key"])
+        self.assertIsNone(measurements["timeSignature"])
+        paths = {warning["path"] for warning in warnings}
+        self.assertIn("styleProfile.authoritativeMeasurements.key", paths)
+        self.assertIn("styleProfile.authoritativeMeasurements.timeSignature", paths)
+
+    def test_run_interpretation_request_with_profile_config_overwrites_style_profile_authoritative_measurements(
+        self,
+    ) -> None:
+        payload = _valid_phase2_result()
+        payload["styleProfile"] = _valid_style_profile()
+        payload["styleProfile"]["authoritativeMeasurements"]["bpm"] = 130
+        mock_response = unittest.mock.MagicMock()
+        mock_response.text = json.dumps(payload)
+        mock_model = unittest.mock.MagicMock()
+        mock_model.generate_content.return_value = mock_response
+        mock_client = unittest.mock.MagicMock()
+        mock_client.models = mock_model
+        with tempfile.TemporaryDirectory(prefix="asa_phase2_style_profile_") as temp_dir:
+            audio_path = Path(temp_dir) / "track.wav"
+            audio_path.write_bytes(b"fake-audio")
+            profile_config = server._resolve_interpretation_profile_config("producer_summary")
+            with (
+                patch.object(server, "_GENAI_AVAILABLE", True),
+                patch.dict(server.os.environ, {"GEMINI_API_KEY": "fake-key"}),
+                patch.object(server, "_genai") as mock_genai,
+                patch.object(server, "_genai_types") as mock_genai_types,
+            ):
+                mock_genai.Client.return_value = mock_client
+                mock_genai_types.GenerateContentConfig.return_value = unittest.mock.MagicMock()
+                execution = server._run_interpretation_request_with_profile_config(
+                    source_path=str(audio_path),
+                    filename=audio_path.name,
+                    file_size_bytes=audio_path.stat().st_size,
+                    profile_id="producer_summary",
+                    profile_config=profile_config,
+                    measurement_result={
+                        "bpm": 128,
+                        "key": "F minor",
+                        "timeSignature": "4/4",
+                    },
+                    pitch_note_result=None,
+                    grounding_metadata={"profileId": "producer_summary"},
+                    model_name="gemini-3.1-pro-preview",
+                    request_id="style-profile-finalizer-test",
+                )
+
+        self.assertTrue(execution["ok"])
+        result = execution["interpretationResult"]
+        self.assertEqual(result["styleProfile"]["authoritativeMeasurements"]["bpm"], 128)
+        warning = next(
+            w for w in execution["diagnostics"]["validationWarnings"]
+            if w["code"] == "AUTHORITATIVE_MEASUREMENT_OVERRIDDEN"
+            and w["path"] == "styleProfile.authoritativeMeasurements.bpm"
+        )
+        self.assertEqual(warning["originalValue"], "130")
+        self.assertEqual(warning["coercedValue"], "128.0")
+
+    def test_run_interpretation_request_with_profile_config_drops_malformed_style_profile_only(
+        self,
+    ) -> None:
+        payload = _valid_phase2_result()
+        payload["styleProfile"] = {"genre": "Techno"}
+        mock_response = unittest.mock.MagicMock()
+        mock_response.text = json.dumps(payload)
+        mock_model = unittest.mock.MagicMock()
+        mock_model.generate_content.return_value = mock_response
+        mock_client = unittest.mock.MagicMock()
+        mock_client.models = mock_model
+        with tempfile.TemporaryDirectory(prefix="asa_phase2_style_profile_drop_") as temp_dir:
+            audio_path = Path(temp_dir) / "track.wav"
+            audio_path.write_bytes(b"fake-audio")
+            profile_config = server._resolve_interpretation_profile_config("producer_summary")
+            with (
+                patch.object(server, "_GENAI_AVAILABLE", True),
+                patch.dict(server.os.environ, {"GEMINI_API_KEY": "fake-key"}),
+                patch.object(server, "_genai") as mock_genai,
+                patch.object(server, "_genai_types") as mock_genai_types,
+            ):
+                mock_genai.Client.return_value = mock_client
+                mock_genai_types.GenerateContentConfig.return_value = unittest.mock.MagicMock()
+                execution = server._run_interpretation_request_with_profile_config(
+                    source_path=str(audio_path),
+                    filename=audio_path.name,
+                    file_size_bytes=audio_path.stat().st_size,
+                    profile_id="producer_summary",
+                    profile_config=profile_config,
+                    measurement_result={"bpm": 128, "key": "F minor", "timeSignature": "4/4"},
+                    pitch_note_result=None,
+                    grounding_metadata={"profileId": "producer_summary"},
+                    model_name="gemini-3.1-pro-preview",
+                    request_id="style-profile-drop-test",
+                )
+
+        self.assertTrue(execution["ok"])
+        result = execution["interpretationResult"]
+        self.assertNotIn("styleProfile", result)
+        warning = next(
+            w for w in execution["diagnostics"]["validationWarnings"]
+            if w["code"] == "DROPPED_INVALID_STYLE_PROFILE"
+        )
+        self.assertEqual(warning["path"], "styleProfile")
 
     def test_resolve_server_port_defaults_to_8100(self) -> None:
         with patch.dict(server.os.environ, {}, clear=True):

@@ -146,6 +146,28 @@ describe('validatePhase2Consistency', () => {
       const bpmViolation = result.violations.find(v => v.field === 'bpm');
       expect(bpmViolation).toBeDefined();
     });
+
+    it('flags a BPM contradiction in styleProfile.description', () => {
+      const phase1 = createBasePhase1({ bpm: 126 });
+      const phase2 = createBasePhase2({
+        styleProfile: {
+          genre: 'Techno',
+          subGenre: 'Warehouse',
+          mood: ['Driving'],
+          instruments: ['Kick', 'Bass'],
+          productionTechniques: ['Sidechain'],
+          description: 'Driving warehouse techno at 140 BPM with a hard kick.',
+          generationPrompt: 'Warehouse techno groove in F minor at 126 BPM.',
+          authoritativeMeasurements: { bpm: 126, key: 'F minor', timeSignature: '4/4' },
+        },
+      });
+
+      const result = validatePhase2Consistency(phase1, phase2);
+
+      const bpmViolations = result.violations.filter(v => v.field === 'bpm');
+      expect(bpmViolations.length).toBeGreaterThan(0);
+      expect(bpmViolations.some(v => String(v.message).includes('styleProfile.description'))).toBe(true);
+    });
   });
 
   describe('Key validation', () => {
@@ -181,6 +203,28 @@ describe('validatePhase2Consistency', () => {
       expect(keyViolation?.severity).toBe('ERROR');
       expect(keyViolation?.phase1Value).toBe('F minor');
       expect(result.passed).toBe(false);
+    });
+
+    it('flags a key contradiction in styleProfile.generationPrompt', () => {
+      const phase1 = createBasePhase1({ key: 'F minor' });
+      const phase2 = createBasePhase2({
+        styleProfile: {
+          genre: 'Techno',
+          subGenre: 'Warehouse',
+          mood: ['Driving'],
+          instruments: ['Kick'],
+          productionTechniques: [],
+          description: 'Driving techno with disciplined low end.',
+          generationPrompt: 'Warehouse techno loop in C major at 126 BPM.',
+          authoritativeMeasurements: { bpm: 126, key: 'F minor', timeSignature: '4/4' },
+        },
+      });
+
+      const result = validatePhase2Consistency(phase1, phase2);
+
+      const keyViolations = result.violations.filter(v => v.field === 'key');
+      expect(keyViolations.length).toBeGreaterThan(0);
+      expect(keyViolations.some(v => String(v.message).includes('styleProfile.generationPrompt'))).toBe(true);
     });
   });
 

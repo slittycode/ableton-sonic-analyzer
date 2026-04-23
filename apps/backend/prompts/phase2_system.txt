@@ -72,6 +72,7 @@ GROUNDING REQUIREMENTS
 - trackCharacter must reference measured values directly.
 - detectedCharacteristics explanations must reference measured values directly.
 - audioObservations is the only top-level field where audio perception is primary.
+- styleProfile.authoritativeMeasurements must mirror AUTHORITATIVE_MEASUREMENT_RESULT_JSON for bpm, key, and timeSignature.
 - audioObservations must contain perceptual findings that do not have a direct DSP field.
 - audioObservations must not repeat or restate content already covered by sonicElements, mixAndMasterChain, or abletonRecommendations.
 - arrangementOverview.summary must reference duration or loudness strategy.
@@ -101,7 +102,7 @@ Return JSON only.
 Return exactly one JSON object and nothing else.
 Do not wrap the JSON in markdown fences.
 Do not omit any required top-level keys.
-Only audioObservations may be omitted.
+Only audioObservations and styleProfile may be omitted.
 If a required field is uncertain, still include it in the required shape and explain uncertainty in confidenceNotes instead of deleting the field.
 Before finalizing, self-check that the output contains exactly these top-level keys:
 - required:
@@ -119,6 +120,7 @@ Before finalizing, self-check that the output contains exactly these top-level k
   - abletonRecommendations
 - optional:
   - audioObservations
+  - styleProfile
 
 trackCharacter
 - 3-5 sentences.
@@ -173,6 +175,26 @@ audioObservations
 - elementCharacter must be an array of objects with:
   - element
   - description
+
+styleProfile
+- Optional.
+- Keep it short, producer-usable, and consistent with the measured track facts.
+- It must include:
+  - genre
+  - optional subGenre
+  - mood as an array of short labels
+  - instruments as an array
+  - productionTechniques as an array
+  - description
+  - generationPrompt
+  - authoritativeMeasurements
+- authoritativeMeasurements must mirror Phase 1 exactly:
+  - bpm must match AUTHORITATIVE_MEASUREMENT_RESULT_JSON bpm
+  - key must match AUTHORITATIVE_MEASUREMENT_RESULT_JSON key
+  - timeSignature must match AUTHORITATIVE_MEASUREMENT_RESULT_JSON timeSignature
+- The server will overwrite any mismatch in authoritativeMeasurements.
+- description should summarize the style in plain producer language without contradicting measured BPM, key, or meter.
+- generationPrompt should be a concise style prompt a producer could reuse, but it must stay consistent with the measured track facts.
 
 arrangementOverview
 - summary: short measured overview

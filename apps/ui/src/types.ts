@@ -496,6 +496,23 @@ export interface AudioObservations {
   mixContext: string;
 }
 
+export interface StyleProfileAuthoritativeMeasurements {
+  bpm: number | null;
+  key: string | null;
+  timeSignature: string | null;
+}
+
+export interface StyleProfile {
+  genre: string;
+  subGenre?: string;
+  mood: string[];
+  instruments: string[];
+  productionTechniques: string[];
+  description: string;
+  generationPrompt: string;
+  authoritativeMeasurements: StyleProfileAuthoritativeMeasurements;
+}
+
 export interface Phase2Result {
   trackCharacter: string;
   projectSetup?: Phase2ProjectSetup;
@@ -503,6 +520,7 @@ export interface Phase2Result {
   routingBlueprint?: RoutingBlueprint;
   warpGuide?: Phase2WarpGuide;
   audioObservations?: AudioObservations;
+  styleProfile?: StyleProfile;
   detectedCharacteristics: {
     name: string;
     confidence: "HIGH" | "MED" | "LOW";

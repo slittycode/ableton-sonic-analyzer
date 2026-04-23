@@ -127,6 +127,23 @@ function extractBPMFromPhase2(phase2: Phase2Result): Array<{ value: number; loca
     }
   }
 
+  if (phase2.styleProfile) {
+    const description = phase2.styleProfile.description;
+    if (description) {
+      const bpm = extractBPMFromText(description);
+      if (bpm !== null) {
+        mentions.push({ value: bpm, location: 'styleProfile.description' });
+      }
+    }
+    const generationPrompt = phase2.styleProfile.generationPrompt;
+    if (generationPrompt) {
+      const bpm = extractBPMFromText(generationPrompt);
+      if (bpm !== null) {
+        mentions.push({ value: bpm, location: 'styleProfile.generationPrompt' });
+      }
+    }
+  }
+
   return mentions;
 }
 
@@ -207,6 +224,23 @@ function extractKeyFromPhase2(phase2: Phase2Result): Array<{ value: string; loca
     const matches = [...harmonicDesc.matchAll(keyPattern)];
     for (const match of matches) {
       mentions.push({ value: match[1].trim(), location: 'sonicElements.harmonicContent' });
+    }
+  }
+
+  if (phase2.styleProfile) {
+    const description = phase2.styleProfile.description;
+    if (description) {
+      const matches = [...description.matchAll(keyPattern)];
+      for (const match of matches) {
+        mentions.push({ value: match[1].trim(), location: 'styleProfile.description' });
+      }
+    }
+    const generationPrompt = phase2.styleProfile.generationPrompt;
+    if (generationPrompt) {
+      const matches = [...generationPrompt.matchAll(keyPattern)];
+      for (const match of matches) {
+        mentions.push({ value: match[1].trim(), location: 'styleProfile.generationPrompt' });
+      }
     }
   }
 
