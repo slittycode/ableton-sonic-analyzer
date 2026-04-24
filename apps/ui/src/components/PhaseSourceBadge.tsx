@@ -10,7 +10,7 @@ export function PhaseSourceBadge({ source, className = "" }: PhaseSourceBadgePro
   const toneClass =
     source === "measured"
       ? "border-accent/40 bg-accent/10 text-accent"
-      : "border-border bg-bg-panel/40 text-text-secondary";
+      : "border-border-light bg-bg-panel text-text-secondary";
 
   return (
     <span

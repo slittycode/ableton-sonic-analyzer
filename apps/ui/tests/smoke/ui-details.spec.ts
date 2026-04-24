@@ -136,7 +136,14 @@ function fixturePath(): string {
   return path.resolve(testDir, './fixtures/silence.wav');
 }
 
-function stubRoutes(page: import('@playwright/test').Page) {
+function stubRoutes(
+  page: import('@playwright/test').Page,
+  options?: { validationWarnings?: Array<Record<string, unknown>> },
+) {
+  const interpretationDiagnostics =
+    options?.validationWarnings && options.validationWarnings.length > 0
+      ? { validationWarnings: options.validationWarnings }
+      : null;
   return Promise.all([
     page.route('**/api/analysis-runs/estimate', async (route) => {
       await route.fulfill({
@@ -264,7 +271,7 @@ function stubRoutes(page: import('@playwright/test').Page) {
               ],
               result: PHASE2_STUB,
               provenance: null,
-              diagnostics: null,
+              diagnostics: interpretationDiagnostics,
               error: null,
             },
           },
@@ -554,6 +561,45 @@ test('audio observations panel appears when the interpretation includes perceptu
   await expect(page.getByText('Audio Observations')).toBeVisible();
   await expect(page.getByText('Perceptual / Audio-Derived')).toBeVisible();
   await expect(page.getByText('Smoke fingerprint from the audio path.')).toBeVisible();
+});
+
+test('interpretation intro stays flat while the warning banner keeps its opaque card surface', async ({ page }) => {
+  await stubRoutes(page, {
+    validationWarnings: [
+      {
+        code: 'UNKNOWN_PARAMETER',
+        path: 'abletonRecommendations[0].parameter',
+        message: 'Parameter mismatch surfaced as a caution.',
+      },
+    ],
+  });
+  await page.goto('/', { waitUntil: 'networkidle' });
+  await page.setInputFiles('#audio-upload', fixturePath());
+  await page.getByRole('button', { name: /Run Analysis/i }).click();
+
+  await expect(page.getByText('Analysis Results')).toBeVisible();
+  await expect(page.getByText('Interpretation Caution')).toBeVisible();
+
+  const styles = await page.evaluate(() => {
+    const interpretationPanel = document.querySelector('[data-testid="interpretation-panel"]');
+    const warningPanel = document.querySelector('[data-testid="interpretation-warnings"]');
+
+    if (!interpretationPanel || !warningPanel) {
+      throw new Error('Expected interpretation surfaces were not found.');
+    }
+
+    return {
+      interpretationPanelBg: getComputedStyle(interpretationPanel).backgroundColor,
+      interpretationPanelBorderTopWidth: getComputedStyle(interpretationPanel).borderTopWidth,
+      warningPanelBg: getComputedStyle(warningPanel).backgroundColor,
+      warningPanelBorderTop: getComputedStyle(warningPanel).borderTopColor,
+    };
+  });
+
+  expect(styles.interpretationPanelBg).toBe('rgba(0, 0, 0, 0)');
+  expect(styles.interpretationPanelBorderTopWidth).toBe('0px');
+  expect(styles.warningPanelBg).toBe('rgb(68, 68, 68)');
+  expect(styles.warningPanelBorderTop).not.toBe('rgba(0, 0, 0, 0)');
 });
 
 test('diagnostic log can be collapsed and expanded via toggle button', async ({ page }) => {
