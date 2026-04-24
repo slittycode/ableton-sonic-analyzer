@@ -1016,9 +1016,9 @@ export default function App() {
                           className="mt-0.5 h-4 w-4 accent-accent"
                         />
                         <div className="space-y-1">
-                          <p className="text-[10px] font-mono uppercase tracking-wider">PITCH/NOTE TRANSLATION</p>
+                          <p className="text-[10px] font-mono uppercase tracking-wider">STEM PITCH/NOTE TRANSLATION</p>
                           <p className="text-[10px] font-mono uppercase tracking-wide opacity-80">
-                            Optional. Slower and heavier. Best-effort local note extraction from separated stems.
+                            Optional. Slower and heavier. Turns on the extra stem-based note draft. The separate melody guide may still appear when measurement can produce one.
                           </p>
                         </div>
                       </div>

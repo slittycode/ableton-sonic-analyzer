@@ -125,6 +125,37 @@ describe('SessionMusicianPanel confidence helpers', () => {
     expect(html).toMatch(/CONFIDENCE<\/span><input[^>]*disabled=""/);
   });
 
+  it('explains when only the melody guide is available and labels the export accordingly', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(SessionMusicianPanel, {
+        phase1: {
+          ...baseMeasurement,
+          melodyDetail: {
+            noteCount: 3,
+            notes: [
+              { midi: 60, onset: 0.2, duration: 0.3 },
+              { midi: 64, onset: 0.8, duration: 0.2 },
+              { midi: 67, onset: 1.2, duration: 0.4 },
+            ],
+            dominantNotes: [60, 64, 67],
+            pitchRange: { min: 60, max: 67 },
+            pitchConfidence: 0.72,
+            midiFile: '/tmp/melody-guide.mid',
+            sourceSeparated: true,
+            vibratoPresent: false,
+            vibratoExtent: 0,
+            vibratoRate: 0,
+            vibratoConfidence: 0.1,
+          },
+        },
+      }),
+    );
+
+    expect(html).toContain('Stem pitch/note extraction is off.');
+    expect(html).toContain('showing the measurement-layer melody guide instead');
+    expect(html).toContain('Download melody .mid');
+  });
+
   it('filters notes at or above the confidence threshold', () => {
     const filtered = filterNotesByConfidence(
       [

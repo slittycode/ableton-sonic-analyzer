@@ -202,6 +202,7 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
   const [activeStemFilter, setActiveStemFilter] = useState<string | null>(null);
   const hasTranscription = !!transcriptionDetail?.noteCount && transcriptionDetail.noteCount > 0;
   const hasMelody = !!melodyDetail?.notes?.length;
+  const melodyGuideOnly = !hasTranscription && hasMelody;
   const canToggle = hasTranscription && hasMelody;
   const activeSource = canToggle
     ? sourceMode
@@ -370,6 +371,12 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
           : `not detected (${Math.round(melodyDetail.vibratoConfidence * 100)}%)`,
       }
     : null;
+  const previewLabel = activeSource === 'melodyGuide' ? 'Preview melody' : 'Preview';
+  const downloadLabel = activeSource === 'melodyGuide' ? 'Download melody .mid' : 'Download .mid';
+  const panelSummaryTitle = melodyGuideOnly ? 'Measurement-layer melody guide' : 'Pitch detection and melody guide';
+  const panelSummaryBody = melodyGuideOnly
+    ? 'Stem note extraction is off. You are seeing the lighter melody guide path instead.'
+    : 'Draft notes for MIDI cleanup';
 
   return (
     <section data-testid="session-musician-panel" className="space-y-4">
@@ -401,10 +408,10 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
             </div>
             <div className="space-y-2">
               <p data-text-role="body" className={[getTextRoleClassName('body'), 'opacity-80'].join(' ')}>
-                Pitch detection and melody guide
+                {panelSummaryTitle}
               </p>
               <p data-text-role="body" className={[getTextRoleClassName('body'), 'text-accent/70'].join(' ')}>
-                Draft notes for MIDI cleanup
+                {panelSummaryBody}
               </p>
             </div>
           </div>
@@ -413,20 +420,20 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
             <button
               onClick={handlePreview}
               disabled={!displayNotes.length}
-              title={isPreviewing ? 'Stop preview' : 'Preview MIDI'}
+              title={isPreviewing ? 'Stop preview' : previewLabel}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-accent/10 border border-accent/40 text-accent text-xs font-mono uppercase rounded-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-accent/20 transition-colors"
             >
               {isPreviewing ? <Square className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-              {isPreviewing ? 'Stop' : 'Preview'}
+              {isPreviewing ? 'Stop' : previewLabel}
             </button>
             <button
               onClick={handleDownload}
               disabled={!displayNotes.length}
-              title="Download .mid file"
+              title={downloadLabel}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-panel border border-border text-text-primary text-xs font-mono uppercase rounded-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-bg-card transition-colors"
             >
               <Download className="w-3.5 h-3.5" />
-              Download .mid
+              {downloadLabel}
             </button>
             {canToggle && (
               <div className="inline-flex items-center rounded-sm border border-border bg-bg-panel/40 p-0.5">
@@ -465,6 +472,17 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
 
         {expanded && (
           <>
+            {melodyGuideOnly && (
+              <div className="rounded-sm border border-accent/20 bg-bg-panel p-3 space-y-1">
+                <p className="text-[10px] font-mono uppercase tracking-wide text-accent">
+                  Stem pitch/note extraction is off.
+                </p>
+                <p className="text-[10px] font-mono text-text-secondary/80 leading-relaxed">
+                  This panel is showing the measurement-layer melody guide instead, so preview and MIDI export still work, but this is not the stem note draft.
+                </p>
+              </div>
+            )}
+
             {activeSource === 'none' && (
               <div className="border border-border rounded-sm px-3 py-2 bg-bg-panel/40 space-y-1">
                 <p className="text-[11px] font-mono text-text-secondary uppercase tracking-wide">
