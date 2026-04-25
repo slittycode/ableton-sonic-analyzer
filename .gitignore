@@ -34,3 +34,6 @@ apps/backend/.runtime/
 
 # UI prototypes
 apps/ui/redesign-concept.html
+
+# Local-only superpowers plans
+docs/superpowers/
