@@ -19,8 +19,9 @@ import {
   PitchNoteTranslationAttemptSummary,
   PitchNoteTranslationStageSnapshot,
 } from '../types';
-import { BackendClientError, createUserCancelledError, parsePhase1Result } from './backendPhase1Client';
+import { parsePhase1Result } from './backendPhase1Client';
 import { requestBackendEstimate } from './backendPhase1Client';
+import { fetchJson } from './httpClient';
 
 interface AnalysisRunsClientOptions {
   apiBaseUrl: string;
@@ -259,56 +260,6 @@ export function projectStemSummaryFromRun(snapshot: AnalysisRunSnapshot): StemSu
     return null;
   }
   return profile.result as StemSummaryResult | null;
-}
-
-async function fetchJson(url: string, init: RequestInit): Promise<unknown> {
-  let response: Response;
-  try {
-    response = await fetch(url, init);
-  } catch (error) {
-    if (init.signal?.aborted) {
-      throw createUserCancelledError();
-    }
-    if (error instanceof TypeError) {
-      throw new BackendClientError(
-        'NETWORK_UNREACHABLE',
-        'Cannot reach the local DSP backend. Confirm it is running and the API base URL is correct.',
-        { cause: error },
-      );
-    }
-    throw error instanceof Error ? error : new Error(String(error));
-  }
-
-  let payload: Record<string, unknown>;
-  try {
-    payload = (await response.json()) as Record<string, unknown>;
-  } catch (error) {
-    throw new BackendClientError(
-      'BACKEND_BAD_RESPONSE',
-      'Analysis run endpoint returned a non-JSON response.',
-      {
-        status: response.status,
-        statusText: response.statusText,
-        cause: error,
-      },
-    );
-  }
-
-  if (!response.ok) {
-    const errorPayload = parseNullableRecord(payload.error);
-    throw new BackendClientError(
-      'BACKEND_HTTP_ERROR',
-      asString(errorPayload?.message) ?? 'Analysis run request failed.',
-      {
-        status: response.status,
-        statusText: response.statusText,
-        serverCode: asString(errorPayload?.code) ?? undefined,
-        retryable: typeof errorPayload?.retryable === 'boolean' ? errorPayload.retryable : undefined,
-      },
-    );
-  }
-
-  return payload;
 }
 
 function parseAnalysisRunSnapshot(value: unknown): AnalysisRunSnapshot {
