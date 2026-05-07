@@ -159,7 +159,6 @@ function makeRunSnapshot(overrides?: Partial<AnalysisRunSnapshot>): AnalysisRunS
         mimeType: 'audio/mpeg',
         sizeBytes: 4096,
         contentSha256: 'abc123',
-        path: '/tmp/track.mp3',
       },
     },
     stages: {

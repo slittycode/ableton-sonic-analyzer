@@ -169,6 +169,21 @@ Override the port when needed:
 SONIC_ANALYZER_PORT=8456 ./venv/bin/python server.py
 ```
 
+Runtime profile and process role:
+
+- `SONIC_ANALYZER_RUNTIME_PROFILE=local` keeps the current local-first behavior.
+- `SONIC_ANALYZER_RUNTIME_PROFILE=hosted` turns on hosted-only guardrails such as required user identity headers on the run APIs.
+- `SONIC_ANALYZER_PROCESS_ROLE=all` is the local default and starts the API plus in-process workers together.
+- `SONIC_ANALYZER_PROCESS_ROLE=api` is the hosted default and starts the API without in-process workers.
+- `SONIC_ANALYZER_PROCESS_ROLE=worker` is reserved for dedicated worker processes.
+
+Hosted worker entry point:
+
+```bash
+cd apps/backend
+SONIC_ANALYZER_RUNTIME_PROFILE=hosted SONIC_ANALYZER_PROCESS_ROLE=worker ./venv/bin/python worker.py
+```
+
 Current bind:
 
 - host: `0.0.0.0`
@@ -183,82 +198,15 @@ Current CORS allow list:
 - `http://localhost:5173`
 - `http://127.0.0.1:5173`
 
-## Upload Size Limits
+Hosted auth hook:
 
-The canonical upload limit contract is generated from code in
-`upload_limits.py`, not maintained by hand in the docs.
+- In hosted mode, canonical run endpoints require `X-ASA-User-Id`.
+- In plain English: the backend now expects the hosted platform to tell ASA which signed-in user owns the run before it will create, fetch, interrupt, or delete that run.
 
-To render the current contract, protected route list, and proxy snippets:
+Artifact storage boundary:
 
-```bash
-./venv/bin/python scripts/render_upload_limit_contract.py
-```
-
-The current generated values are:
-
-- raw audio limit: `104857600` bytes (`100 MiB`)
-- request envelope limit: `105906176` bytes (`101 MiB`)
-
-In plain English: the uploaded audio itself is capped at 100 MiB, but the full
-HTTP request is allowed to be 1 MiB larger so multipart boundaries, filenames,
-and small form fields do not cause false `413` rejections.
-
-In plain English: the uploaded audio itself is capped at 100 MiB, but the full
-HTTP request is allowed to be 1 MiB larger so multipart boundaries, filenames,
-and small form fields do not cause false `413` rejections.
-
-Current backend behavior:
-
-- the ASGI middleware rejects any request whose declared `Content-Length`
-  exceeds `105906176`
-- for valid `multipart/form-data`, the middleware counts only the `track`
-  file part toward the 100 MiB audio limit
-- malformed multipart requests still fail as parse errors instead of being
-  mislabeled as `UPLOAD_TOO_LARGE`
-- `_persist_upload()` still enforces the same 100 MiB raw file limit after the
-  middleware as defense in depth
-
-### Edge Proxy Guidance
-
-This repo does not include live deploy or reverse-proxy config.
-
-If you put ASA behind a proxy or load balancer later, treat the generated
-contract output as the source of truth and mirror the request envelope limit of
-`105906176` bytes (`101 MiB`) on these routes:
-
-- `POST /api/analysis-runs`
-- `POST /api/analysis-runs/estimate`
-- `POST /api/analyze`
-- `POST /api/analyze/estimate`
-- `POST /api/phase2`
-
-Generated examples:
-
-```nginx
-client_max_body_size 101m;
-```
-
-```caddy
-request_body {
-  max_size 105906176
-}
-```
-
-```yaml
-http:
-  middlewares:
-    asa-upload-limit:
-      buffering:
-        maxRequestBodyBytes: 105906176
-```
-
-### Future Hosted Deployment Checklist
-
-- Run `./venv/bin/python scripts/render_upload_limit_contract.py` and confirm the
-  edge request-body limit matches `105906176` bytes (`101 MiB`).
-- Confirm only these five upload POST routes are capped at the edge.
-- Confirm the backend startup log shows the same raw and edge limits after deploy.
-- Confirm a near-limit valid upload succeeds and an oversized upload returns HTTP `413`.
+- Run artifacts are now written through `artifact_storage.py` instead of being created inline directly from every runtime call site.
+- In plain English: the backend still stores files on local disk today, but the read/write boundary is now isolated so hosted object storage can replace it later without rewriting every analysis path.
 
 ## HTTP API
 
@@ -278,6 +226,7 @@ Multipart form fields:
 - `interpretation_mode` optional string
 - `interpretation_profile` optional string
 - `interpretation_model` optional string
+- `X-ASA-User-Id` required in hosted mode
 
 Response shape:
 
@@ -319,6 +268,7 @@ Multipart form fields:
 - `track` required file upload
 - `dsp_json_override` optional string, accepted but ignored
 - `transcribe` optional boolean-like form value; when true the server appends `--transcribe`
+- `X-ASA-User-Id` required in hosted mode
 
 Query parameters:
 

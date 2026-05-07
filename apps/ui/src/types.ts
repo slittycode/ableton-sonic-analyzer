@@ -653,7 +653,6 @@ export interface AnalysisRunArtifact {
   mimeType: string;
   sizeBytes: number;
   contentSha256: string;
-  path: string;
 }
 
 export interface SpectralArtifactRef {
