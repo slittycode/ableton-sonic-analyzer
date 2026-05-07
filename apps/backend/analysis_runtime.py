@@ -8,6 +8,7 @@ from typing import Any
 from uuid import uuid4
 
 from artifact_storage import ArtifactStorage, FilesystemArtifactStorage
+import uuid
 
 SQLITE_BUSY_TIMEOUT_MS = 5_000
 MEASUREMENT_PIPELINE_PROGRESS_STATUSES = {"pending", "running", "completed"}
@@ -210,6 +211,7 @@ class AnalysisRuntime:
         interpretation_model: str | None,
         legacy_request_id: str | None = None,
         analysis_mode: str = "full",
+        expose_source_path_in_snapshot: bool = False,
     ) -> dict[str, Any]:
         artifact_id = str(uuid4())
         created_at = _utc_now_iso()
@@ -217,6 +219,14 @@ class AnalysisRuntime:
             artifact_id=artifact_id,
             filename=filename,
             content=content,
+        )
+
+        run_id = str(uuid.uuid4())
+        resolved_analysis_mode = analysis_mode or "standard"
+        source_artifact_provenance = (
+            _json_dumps({"exposePathInSnapshot": True})
+            if expose_source_path_in_snapshot
+            else None
         )
 
         with self._connect() as conn:
@@ -276,7 +286,7 @@ class AnalysisRuntime:
                     stored_artifact.size_bytes,
                     stored_artifact.content_sha256,
                     stored_artifact.storage_ref,
-                    None,
+                    source_artifact_provenance,
                     created_at,
                 ),
             )
@@ -381,6 +391,29 @@ class AnalysisRuntime:
                 f"Run '{row['id']}' does not belong to user '{owner_user_id}'."
             )
 
+
+    def create_run_from_source_path(self, *, source_path, **kwargs):
+        source = Path(source_path)
+        content = source.read_bytes()
+
+        existing_artifacts = set()
+        if self.artifacts_dir.exists():
+            existing_artifacts = set(self.artifacts_dir.iterdir())
+
+        try:
+            return self.create_run(
+                content=content,
+                expose_source_path_in_snapshot=True,
+                **kwargs,
+            )
+        except Exception:
+            if self.artifacts_dir.exists():
+                for artifact_path in self.artifacts_dir.iterdir():
+                    if artifact_path not in existing_artifacts and artifact_path.is_file():
+                        artifact_path.unlink(missing_ok=True)
+            raise
+
+
     def get_source_artifact(self, run_id: str) -> dict[str, Any]:
         with self._connect() as conn:
             run_row = conn.execute(
@@ -396,14 +429,18 @@ class AnalysisRuntime:
         if artifact_row is None:
             raise KeyError(f"Run {run_id} is missing its source artifact")
         return {
+            "id": artifact_row["id"],
             "artifactId": artifact_row["id"],
+            "runId": run_id,
+            "kind": artifact_row["kind"],
             "filename": artifact_row["filename"],
             "mimeType": artifact_row["mime_type"],
             "sizeBytes": artifact_row["size_bytes"],
             "contentSha256": artifact_row["content_sha256"],
             "path": artifact_row["path"],
-            "provenance": _json_loads(artifact_row["provenance_json"]),
+            "createdAt": artifact_row["created_at"],
         }
+
 
     def get_measurement_result(self, run_id: str) -> dict[str, Any] | None:
         with self._connect() as conn:
@@ -540,6 +577,13 @@ class AnalysisRuntime:
                     "mimeType": artifact_row["mime_type"],
                     "sizeBytes": artifact_row["size_bytes"],
                     "contentSha256": artifact_row["content_sha256"],
+                    **(
+                        {"path": artifact_row["path"]}
+                        if (_json_loads(artifact_row["provenance_json"]) or {}).get(
+                            "exposePathInSnapshot"
+                        )
+                        else {}
+                    ),
                 },
                 "stems": [self._public_artifact_record(row) for row in stem_rows],
             },

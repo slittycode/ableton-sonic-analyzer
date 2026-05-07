@@ -397,3 +397,12 @@ GEMINI_API_KEY=your_real_key_here \
 VITE_ENABLE_PHASE2_GEMINI=true \
 ./scripts/test-e2e.sh
 ```
+
+## Upload Limit Contract
+
+Current upload limit values:
+
+- Raw audio upload limit: `104857600` bytes (`100 MiB`)
+- Multipart request envelope limit: `105906176` bytes
+- Contract renderer: `./venv/bin/python scripts/render_upload_limit_contract.py`
+

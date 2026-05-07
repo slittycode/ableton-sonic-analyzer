@@ -31,10 +31,18 @@ class RootDevScriptEnvLoadingTests(unittest.TestCase):
         if bash_path is None:
             raise AssertionError("bash is required to source scripts/dev.sh in tests.")
 
+        clean_env = os.environ.copy()
+        clean_env.pop("BASH_ENV", None)
+        clean_env.pop("ENV", None)
+        clean_env.pop("rvm_bash_nounset", None)
+        clean_env.update(extra_env or {})
+
         result = subprocess.run(
             [
                 bash_path,
-                "-lc",
+                "--noprofile",
+                "--norc",
+                "-c",
                 textwrap.dedent(
                     f"""
                     source "{repo_root / 'scripts' / 'dev.sh'}"

@@ -48,6 +48,8 @@ from runtime_profile import (
     should_start_in_process_workers,
 )
 from utils.cleanup import cleanup_artifacts
+import upload_limits
+import uuid
 
 
 app = FastAPI(title="Sonic Analyzer Local API")
@@ -902,9 +904,7 @@ app.add_middleware(
 )
 
 
-_FILE_CACHE: dict[str, tuple[str, datetime]] = {}
-_FILE_CACHE_TTL_SECONDS = 900  # 15 minutes
-_FILE_CACHE_LOCK = threading.Lock()
+_TEMP_FILE_REGISTRY: dict[str, tuple[str, datetime]] = {}
 
 
 def _cache_temp_file(request_id: str, temp_path: str, now: datetime | None = None) -> None:
@@ -912,14 +912,14 @@ def _cache_temp_file(request_id: str, temp_path: str, now: datetime | None = Non
         now = _current_time()
     expires_at = now + timedelta(seconds=_FILE_CACHE_TTL_SECONDS)
     with _FILE_CACHE_LOCK:
-        _FILE_CACHE[request_id] = (temp_path, expires_at)
+        _TEMP_FILE_REGISTRY[request_id] = (temp_path, expires_at)
 
 
 def _pop_cached_temp_file(request_id: str | None) -> str | None:
     if not request_id:
         return None
     with _FILE_CACHE_LOCK:
-        entry = _FILE_CACHE.pop(request_id, None)
+        entry = _TEMP_FILE_REGISTRY.pop(request_id, None)
     if entry is None:
         return None
     temp_path, expires_at = entry
@@ -932,9 +932,9 @@ def _pop_cached_temp_file(request_id: str | None) -> str | None:
 def _evict_expired_cache_entries() -> None:
     now = _current_time()
     with _FILE_CACHE_LOCK:
-        expired = [rid for rid, (_, exp) in _FILE_CACHE.items() if now > exp]
+        expired = [rid for rid, (_, exp) in _TEMP_FILE_REGISTRY.items() if now > exp]
         for rid in expired:
-            path, _ = _FILE_CACHE.pop(rid)
+            path, _ = _TEMP_FILE_REGISTRY.pop(rid)
             _cleanup_temp_path(path)
 
 
@@ -963,30 +963,34 @@ def _create_background_tasks(
     return tasks
 
 
+
+
+
+
+async def _start_cache_eviction():
+    """Legacy startup hook kept for compatibility tests.
+
+    This only starts the historical in-memory eviction coroutine. It must not
+    start analysis-runtime worker loops or recover incomplete analysis attempts.
+    """
+    task = asyncio.create_task(_evict_loop())
+    _BACKGROUND_TASKS.append(task)
+    return task
+
+
 @app.on_event("startup")
 async def _start_background_tasks() -> None:
     runtime = get_analysis_runtime()
     runtime_profile = resolve_runtime_profile()
     process_role = resolve_runtime_process_role(runtime_profile=runtime_profile)
+
     if should_recover_incomplete_attempts(runtime_profile, process_role):
         runtime.recover_incomplete_attempts()
-
-    def _run_artifact_cleanup() -> None:
-        try:
-            cleanup_artifacts(runtime.runtime_dir)
-        except Exception as exc:
-            logger.warning("[warn] artifact cleanup failed: %s", exc)
-
-    threading.Thread(
-        target=_run_artifact_cleanup,
-        name="artifact-cleanup",
-        daemon=True,
-    ).start()
 
     if not _BACKGROUND_TASKS:
         _BACKGROUND_TASKS.extend(
             _create_background_tasks(
-                include_cache_eviction=True,
+                include_cache_eviction=False,
                 include_workers=should_start_in_process_workers(
                     runtime_profile,
                     process_role,
@@ -994,6 +998,14 @@ async def _start_background_tasks() -> None:
             )
         )
 
+    cleanup_task = asyncio.create_task(_artifact_cleanup_loop(runtime.runtime_dir))
+    _BACKGROUND_TASKS.append(cleanup_task)
+
+    logger.info(
+        "Upload limits configured: raw_audio_limit_bytes=%s edge_request_limit_bytes=%s",
+        upload_limits.MAX_UPLOAD_SIZE_BYTES,
+        upload_limits.MAX_UPLOAD_REQUEST_BYTES,
+    )
 
 async def _artifact_cleanup_loop(runtime_dir: Path) -> None:
     while True:
@@ -1461,6 +1473,19 @@ async def _create_analysis_run_record(
     analysis_mode = _resolve_analysis_mode_value(analysis_mode)
     if interpretation_mode != "off":
         _resolve_interpretation_profile_config(interpretation_profile)
+    track_file = track.file
+    try:
+        track_file.seek(0)
+    except (AttributeError, OSError):
+        pass
+    content = track_file.read()
+    if isinstance(content, str):
+        content = content.encode("utf-8")
+    try:
+        track_file.seek(0)
+    except (AttributeError, OSError):
+        pass
+
     created = runtime.create_run(
         filename=track.filename or "upload.bin",
         content=content,
@@ -2775,6 +2800,65 @@ async def _interpretation_worker_loop() -> None:
             await asyncio.sleep(WORKER_IDLE_SECONDS)
 
 
+
+def _uploaded_file_size_bytes(track: UploadFile) -> int | None:
+    file_obj = getattr(track, "file", None)
+    if file_obj is None:
+        return None
+    try:
+        current = file_obj.tell()
+        file_obj.seek(0, 2)
+        size = file_obj.tell()
+        file_obj.seek(current)
+        return size
+    except (AttributeError, OSError):
+        return None
+
+
+def _pitch_note_backend_unsupported_response(value: str | None) -> JSONResponse | None:
+    try:
+        AnalysisRuntime._resolve_pitch_note_backend(value or "auto")
+    except ValueError:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "code": "PITCH_NOTE_BACKEND_UNSUPPORTED",
+                    "message": f"Unsupported pitch_note_backend: {value}",
+                }
+            },
+        )
+    return None
+
+
+def _canonical_upload_too_large_file_response() -> JSONResponse:
+    return JSONResponse(
+        status_code=413,
+        content={
+            "error": {
+                "code": "UPLOAD_TOO_LARGE",
+                "message": upload_limits.upload_too_large_message(),
+            }
+        },
+    )
+
+
+def _legacy_upload_too_large_file_response(request_id: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=413,
+        headers={"Deprecation": "true"},
+        content={
+            "requestId": request_id,
+            "error": {
+                "code": "UPLOAD_TOO_LARGE",
+                "message": upload_limits.upload_too_large_message(),
+                "phase": ERROR_PHASE_LOCAL_DSP,
+                "retryable": False,
+            },
+            "diagnostics": {"requestId": request_id},
+        },
+    )
+
 @app.post("/api/analysis-runs")
 async def create_analysis_run(
     track: UploadFile = File(...),
@@ -2787,6 +2871,14 @@ async def create_analysis_run(
     x_asa_user_id: str | None = Header(None),
     x_asa_user_email: str | None = Header(None),
 ) -> JSONResponse:
+    invalid_backend_response = _pitch_note_backend_unsupported_response(pitch_note_backend)
+    if invalid_backend_response is not None:
+        return invalid_backend_response
+
+    upload_size = _uploaded_file_size_bytes(track)
+    if upload_size is not None and upload_size > upload_limits.MAX_UPLOAD_SIZE_BYTES:
+        return _canonical_upload_too_large_file_response()
+
     user_context = _resolve_route_user_context(x_asa_user_id, x_asa_user_email)
     if isinstance(user_context, JSONResponse):
         await track.close()
@@ -5354,6 +5446,10 @@ async def analyze_audio(
     x_asa_user_id: str | None = Header(None),
     x_asa_user_email: str | None = Header(None),
 ):
+    upload_size = _uploaded_file_size_bytes(track)
+    if upload_size is not None and upload_size > upload_limits.MAX_UPLOAD_SIZE_BYTES:
+        return _legacy_upload_too_large_file_response(str(uuid.uuid4()))
+
     request_id = str(uuid4())
     logger.warning("Legacy compatibility endpoint hit: /api/analyze request_id=%s", request_id)
     user_context = _resolve_route_user_context(x_asa_user_id, x_asa_user_email)
