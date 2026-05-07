@@ -16,6 +16,14 @@ Migration note:
 - App-level changelogs remain imported app history rather than monorepo release history.
 - App-specific editing and test guidance lives in `apps/ui/AGENTS.md` and `apps/backend/AGENTS.md`.
 
+## AI Agent Docs
+
+- `AGENTS.md`: monorepo policy and workflow rules.
+- `CODEX.md`: Codex-tailored guidance derived from `PURPOSE.md`, `ASA_System_Design.docx`, and `CLAUDE.md`.
+- App-local overlays:
+  - `apps/ui/CODEX.md`
+  - `apps/backend/CODEX.md`
+
 ## Canonical Local Stack
 
 - UI: `http://127.0.0.1:3100`

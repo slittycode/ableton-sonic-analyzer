@@ -2,6 +2,8 @@
 
 This file provides guidance to AI coding agents working with the ASA (Sonic Analyzer) codebase.
 
+Codex-specific instructions live in `CODEX.md` at the repo root, with app overlays in `apps/ui/CODEX.md` and `apps/backend/CODEX.md`.
+
 ## Project Overview
 
 ASA is a local audio analysis tool for music producers. It analyzes audio files to extract measurable properties (tempo, key, loudness, spectral characteristics) and provides AI-powered interpretation for arrangement advice and musical descriptions.
