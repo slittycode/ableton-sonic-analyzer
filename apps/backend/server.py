@@ -46,6 +46,7 @@ from runtime_profile import (
     should_start_in_process_workers,
 )
 from utils.cleanup import cleanup_artifacts
+import upload_limits
 from server_upload import (  # noqa: F401 — re-exported for test backward compat
     LEGACY_ENDPOINT_SUNSET,
     ERROR_PHASE_LOCAL_DSP,
@@ -2561,7 +2562,7 @@ async def analyze_audio(
 ):
     upload_size = _uploaded_file_size_bytes(track)
     if upload_size is not None and upload_size > upload_limits.MAX_UPLOAD_SIZE_BYTES:
-        return _legacy_upload_too_large_file_response(str(uuid.uuid4()))
+        return _legacy_upload_too_large_file_response(str(uuid4()))
 
     request_id = str(uuid4())
     logger.warning("Legacy compatibility endpoint hit: /api/analyze request_id=%s", request_id)
