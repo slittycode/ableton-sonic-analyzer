@@ -73,6 +73,7 @@ test('upload + backend phase1 success renders analysis results', async ({ page }
             mimeType: 'audio/wav',
             sizeBytes: 2048,
             contentSha256: 'abc123',
+            path: 'uploads/test.wav',
           },
         },
         stages: {
@@ -129,6 +130,7 @@ test('upload + backend phase1 success renders analysis results', async ({ page }
             mimeType: 'audio/wav',
             sizeBytes: 2048,
             contentSha256: 'abc123',
+            path: 'uploads/test.wav',
           },
         },
         stages: {
