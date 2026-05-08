@@ -25,10 +25,11 @@ except ImportError:
     _genai_types = None  # type: ignore[assignment]
     _GENAI_AVAILABLE = False
 
-from fastapi import FastAPI, File, Form, Query, UploadFile
+from fastapi import FastAPI, File, Form, Header, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
+from auth_context import AuthenticationRequiredError, UserContext, resolve_api_user_context
 from analysis_runtime import (
     AnalysisRuntime,
     UnsupportedPitchNoteBackendError,
@@ -38,8 +39,14 @@ from analyze import (
     build_analysis_estimate,
     get_audio_duration_seconds,
 )
-import upload_limits
+from runtime_profile import (
+    resolve_process_role,
+    resolve_runtime_profile,
+    should_recover_incomplete_attempts,
+    should_start_in_process_workers,
+)
 from utils.cleanup import cleanup_artifacts
+<<<<<<< HEAD
 from server_upload import (  # noqa: F401 — re-exported for test backward compat
     LEGACY_ENDPOINT_SUNSET,
     ERROR_PHASE_LOCAL_DSP,
@@ -132,6 +139,10 @@ from server_phase2 import (  # noqa: F401 — re-exported for test backward comp
     _validate_phase2_catalog_entry,
     _validate_phase2_semantics,
 )
+=======
+import upload_limits
+import uuid
+>>>>>>> c3e6e0bf8fc19444d5c6012beea8c299dc0ab1dd
 
 
 app = FastAPI(title="Sonic Analyzer Local API")
@@ -229,26 +240,108 @@ app.add_middleware(
 )
 
 
-@app.on_event("startup")
-async def _start_background_tasks() -> None:
-    runtime = get_analysis_runtime()
-    runtime.recover_incomplete_attempts()
-    logger.info(
-        "Upload limits configured: raw_audio_limit_bytes=%s edge_request_limit_bytes=%s",
-        upload_limits.MAX_UPLOAD_SIZE_BYTES,
-        upload_limits.MAX_UPLOAD_REQUEST_BYTES,
-    )
+_TEMP_FILE_REGISTRY: dict[str, tuple[str, datetime]] = {}
 
-    if not _BACKGROUND_TASKS:
-        _BACKGROUND_TASKS.extend(
+
+def _cache_temp_file(request_id: str, temp_path: str, now: datetime | None = None) -> None:
+    if now is None:
+        now = _current_time()
+    expires_at = now + timedelta(seconds=_FILE_CACHE_TTL_SECONDS)
+    with _FILE_CACHE_LOCK:
+        _TEMP_FILE_REGISTRY[request_id] = (temp_path, expires_at)
+
+
+def _pop_cached_temp_file(request_id: str | None) -> str | None:
+    if not request_id:
+        return None
+    with _FILE_CACHE_LOCK:
+        entry = _TEMP_FILE_REGISTRY.pop(request_id, None)
+    if entry is None:
+        return None
+    temp_path, expires_at = entry
+    if _current_time() > expires_at:
+        _cleanup_temp_path(temp_path)
+        return None
+    return temp_path
+
+
+def _evict_expired_cache_entries() -> None:
+    now = _current_time()
+    with _FILE_CACHE_LOCK:
+        expired = [rid for rid, (_, exp) in _TEMP_FILE_REGISTRY.items() if now > exp]
+        for rid in expired:
+            path, _ = _TEMP_FILE_REGISTRY.pop(rid)
+            _cleanup_temp_path(path)
+
+
+async def _evict_loop() -> None:
+    while True:
+        await asyncio.sleep(300)
+        _evict_expired_cache_entries()
+
+
+def _create_background_tasks(
+    *,
+    include_cache_eviction: bool,
+    include_workers: bool,
+) -> list[asyncio.Task[Any]]:
+    tasks: list[asyncio.Task[Any]] = []
+    if include_cache_eviction:
+        tasks.append(asyncio.create_task(_evict_loop()))
+    if include_workers:
+        tasks.extend(
             [
-                asyncio.create_task(_artifact_cleanup_loop(runtime.runtime_dir)),
                 asyncio.create_task(_measurement_worker_loop()),
                 asyncio.create_task(_pitch_note_worker_loop()),
                 asyncio.create_task(_interpretation_worker_loop()),
             ]
         )
+    return tasks
 
+
+
+
+
+
+async def _start_cache_eviction():
+    """Legacy startup hook kept for compatibility tests.
+
+    This only starts the historical in-memory eviction coroutine. It must not
+    start analysis-runtime worker loops or recover incomplete analysis attempts.
+    """
+    task = asyncio.create_task(_evict_loop())
+    _BACKGROUND_TASKS.append(task)
+    return task
+
+
+@app.on_event("startup")
+async def _start_background_tasks() -> None:
+    runtime = get_analysis_runtime()
+    runtime_profile = resolve_runtime_profile()
+    process_role = resolve_runtime_process_role(runtime_profile=runtime_profile)
+
+    if should_recover_incomplete_attempts(runtime_profile, process_role):
+        runtime.recover_incomplete_attempts()
+
+    if not _BACKGROUND_TASKS:
+        _BACKGROUND_TASKS.extend(
+            _create_background_tasks(
+                include_cache_eviction=False,
+                include_workers=should_start_in_process_workers(
+                    runtime_profile,
+                    process_role,
+                ),
+            )
+        )
+
+    cleanup_task = asyncio.create_task(_artifact_cleanup_loop(runtime.runtime_dir))
+    _BACKGROUND_TASKS.append(cleanup_task)
+
+    logger.info(
+        "Upload limits configured: raw_audio_limit_bytes=%s edge_request_limit_bytes=%s",
+        upload_limits.MAX_UPLOAD_SIZE_BYTES,
+        upload_limits.MAX_UPLOAD_REQUEST_BYTES,
+    )
 
 async def _artifact_cleanup_loop(runtime_dir: Path) -> None:
     while True:
@@ -289,6 +382,40 @@ def get_analysis_runtime() -> AnalysisRuntime:
     if _ANALYSIS_RUNTIME is None:
         _ANALYSIS_RUNTIME = AnalysisRuntime(resolve_runtime_dir())
     return _ANALYSIS_RUNTIME
+
+
+def resolve_runtime_process_role(*, runtime_profile: str | None = None) -> str:
+    return resolve_process_role(runtime_profile=runtime_profile)
+
+
+def _resolve_route_user_context(
+    x_asa_user_id: str | None,
+    x_asa_user_email: str | None,
+) -> UserContext | JSONResponse:
+    try:
+        return resolve_api_user_context(x_asa_user_id, x_asa_user_email)
+    except AuthenticationRequiredError as exc:
+        return JSONResponse(
+            status_code=401,
+            content={
+                "error": {
+                    "code": "AUTHENTICATION_REQUIRED",
+                    "message": str(exc),
+                }
+            },
+        )
+
+
+def _run_not_found_response(run_id: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=404,
+        content={
+            "error": {
+                "code": "RUN_NOT_FOUND",
+                "message": f"Analysis run '{run_id}' was not found.",
+            }
+        },
+    )
 
 
 def resolve_server_port() -> int:
@@ -413,6 +540,7 @@ def _run_streamed_subprocess(
 async def _create_analysis_run_record(
     *,
     track: UploadFile,
+    owner_user_id: str,
     analysis_mode: str,
     pitch_note_mode: str,
     pitch_note_backend: str,
@@ -423,26 +551,36 @@ async def _create_analysis_run_record(
 ) -> tuple[AnalysisRuntime, str]:
     temp_path: str | None = None
     runtime = get_analysis_runtime()
+    analysis_mode = _resolve_analysis_mode_value(analysis_mode)
+    if interpretation_mode != "off":
+        _resolve_interpretation_profile_config(interpretation_profile)
+    track_file = track.file
     try:
-        temp_path, _ = _persist_upload(track)
-        analysis_mode = _resolve_analysis_mode_value(analysis_mode)
-        if interpretation_mode != "off":
-            _resolve_interpretation_profile_config(interpretation_profile)
-        created = runtime.create_run_from_source_path(
-            filename=track.filename or "upload.bin",
-            source_path=temp_path,
-            mime_type=track.content_type or _get_audio_mime_type(track.filename or "upload.bin"),
-            analysis_mode=analysis_mode,
-            pitch_note_mode=pitch_note_mode,
-            pitch_note_backend=pitch_note_backend,
-            interpretation_mode=interpretation_mode,
-            interpretation_profile=interpretation_profile,
-            interpretation_model=interpretation_model,
-            legacy_request_id=legacy_request_id,
-        )
-        return runtime, created["runId"]
-    finally:
-        _cleanup_temp_path(temp_path)
+        track_file.seek(0)
+    except (AttributeError, OSError):
+        pass
+    content = track_file.read()
+    if isinstance(content, str):
+        content = content.encode("utf-8")
+    try:
+        track_file.seek(0)
+    except (AttributeError, OSError):
+        pass
+
+    created = runtime.create_run(
+        filename=track.filename or "upload.bin",
+        content=content,
+        mime_type=track.content_type or _get_audio_mime_type(track.filename or "upload.bin"),
+        owner_user_id=owner_user_id,
+        analysis_mode=analysis_mode,
+        pitch_note_mode=pitch_note_mode,
+        pitch_note_backend=pitch_note_backend,
+        interpretation_mode=interpretation_mode,
+        interpretation_profile=interpretation_profile,
+        interpretation_model=interpretation_model,
+        legacy_request_id=legacy_request_id,
+    )
+    return runtime, created["runId"]
 
 
 
@@ -821,8 +959,12 @@ def _generate_spectral_artifacts(runtime: AnalysisRuntime, run_id: str) -> None:
         from spectral_viz import generate_all_artifacts
 
         source = runtime.get_source_artifact(run_id)
+        source_local_path = runtime.require_local_artifact_path(
+            source.get("path"),
+            purpose="Source audio artifact for spectral generation",
+        )
         with tempfile.TemporaryDirectory(prefix="spectral_viz_") as tmp_dir:
-            artifacts = generate_all_artifacts(source["path"], tmp_dir)
+            artifacts = generate_all_artifacts(source_local_path, tmp_dir)
             _MIME_TYPES = {
                 "spectrogram_mel": "image/png",
                 "spectral_time_series": "application/json",
@@ -858,10 +1000,14 @@ def _execute_measurement_run(
     run_fast: bool,
 ) -> dict[str, Any]:
     source_artifact = runtime.get_source_artifact(run_id)
+    source_local_path = runtime.require_local_artifact_path(
+        source_artifact.get("path"),
+        purpose="Source audio artifact for measurement",
+    )
     execution = _run_measurement_subprocess(
         runtime=runtime,
         run_id=run_id,
-        audio_path=source_artifact["path"],
+        audio_path=source_local_path,
         file_size_bytes=source_artifact["sizeBytes"],
         request_id=request_id,
         request_started_at=_current_time(),
@@ -979,10 +1125,14 @@ def _execute_pitch_note_attempt(
     }
     stem_output_dir: str | None = None
     try:
+        source_local_path = runtime.require_local_artifact_path(
+            source_artifact.get("path"),
+            purpose="Source audio artifact for pitch/note translation",
+        )
         # Build the subprocess command
         command = [
             "./venv/bin/python", "analyze.py",
-            source_artifact["path"],
+            source_local_path,
             "--pitch-note-only",
             "--pitch-note-backend",
             attempt["backendId"],
@@ -993,12 +1143,12 @@ def _execute_pitch_note_attempt(
         # so the subprocess skips Demucs separation
         stem_dir = None
         if attempt["mode"] == "stem_notes":
-            existing = runtime.get_artifacts_by_kind(run_id, "stem_")
+            existing = runtime.get_internal_artifacts_by_kind(run_id, "stem_")
             stem_paths_map = {
-                artifact["kind"].removeprefix("stem_"): artifact["path"]
+                artifact["kind"].removeprefix("stem_"): str(local_path)
                 for artifact in existing
-                if isinstance(artifact.get("path"), str)
-                and os.path.isfile(artifact["path"])
+                if (local_path := runtime.resolve_artifact_local_path(artifact.get("path"))) is not None
+                and local_path.is_file()
             }
             if "bass" in stem_paths_map or "other" in stem_paths_map:
                 # Find the common parent directory of existing stems
@@ -1136,13 +1286,13 @@ def _run_combined_stem_summary_request(
     model_name: str,
     request_id: str,
 ) -> dict[str, Any]:
-    stem_artifacts = runtime.get_artifacts_by_kind(run_id, "stem_")
+    stem_artifacts = runtime.get_internal_artifacts_by_kind(run_id, "stem_")
     usable_stems = [
         artifact
         for artifact in stem_artifacts
         if artifact.get("kind") in {"stem_bass", "stem_other"}
-        and isinstance(artifact.get("path"), str)
-        and os.path.isfile(str(artifact["path"]))
+        and (local_path := runtime.resolve_artifact_local_path(artifact.get("path"))) is not None
+        and local_path.is_file()
     ]
     usable_stems.sort(key=lambda artifact: artifact["kind"])
     if not usable_stems:
@@ -1159,13 +1309,17 @@ def _run_combined_stem_summary_request(
 
     for artifact in usable_stems:
         stem_kind = str(artifact["kind"]).removeprefix("stem_")
+        stem_local_path = runtime.require_local_artifact_path(
+            artifact.get("path"),
+            purpose=f"{stem_kind} stem artifact for interpretation",
+        )
         stem_grounding_metadata = {
             **grounding_metadata,
             "stemKind": stem_kind,
             "stemArtifactId": artifact["artifactId"],
         }
         execution = _run_interpretation_request_with_profile_config(
-            source_path=str(artifact["path"]),
+            source_path=stem_local_path,
             filename=str(artifact["filename"]),
             file_size_bytes=int(artifact["sizeBytes"]),
             profile_id="stem_summary",
@@ -1467,8 +1621,12 @@ def _execute_interpretation_attempt(
         )
     else:
         source_artifact = runtime.get_source_artifact(run_id)
+        source_local_path = runtime.require_local_artifact_path(
+            source_artifact.get("path"),
+            purpose="Source audio artifact for interpretation",
+        )
         execution = _run_interpretation_request(
-            source_path=source_artifact["path"],
+            source_path=source_local_path,
             filename=source_artifact["filename"],
             file_size_bytes=source_artifact["sizeBytes"],
             profile_id=profile_id,
@@ -1533,12 +1691,16 @@ def _resolve_phase2_run_id(
     *,
     analysis_run_id: str | None,
     phase1_request_id: str | None,
+    owner_user_id: str | None = None,
 ) -> str:
     if analysis_run_id:
-        runtime.get_run(analysis_run_id)
+        runtime.get_run(analysis_run_id, owner_user_id=owner_user_id)
         return analysis_run_id
     if phase1_request_id:
-        return runtime.get_run_id_by_legacy_request_id(phase1_request_id)
+        return runtime.get_run_id_by_legacy_request_id(
+            phase1_request_id,
+            owner_user_id=owner_user_id,
+        )
     raise KeyError("Missing analysis context")
 
 
@@ -1599,6 +1761,65 @@ async def _interpretation_worker_loop() -> None:
             await asyncio.sleep(WORKER_IDLE_SECONDS)
 
 
+
+def _uploaded_file_size_bytes(track: UploadFile) -> int | None:
+    file_obj = getattr(track, "file", None)
+    if file_obj is None:
+        return None
+    try:
+        current = file_obj.tell()
+        file_obj.seek(0, 2)
+        size = file_obj.tell()
+        file_obj.seek(current)
+        return size
+    except (AttributeError, OSError):
+        return None
+
+
+def _pitch_note_backend_unsupported_response(value: str | None) -> JSONResponse | None:
+    try:
+        AnalysisRuntime._resolve_pitch_note_backend(value or "auto")
+    except ValueError:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "code": "PITCH_NOTE_BACKEND_UNSUPPORTED",
+                    "message": f"Unsupported pitch_note_backend: {value}",
+                }
+            },
+        )
+    return None
+
+
+def _canonical_upload_too_large_file_response() -> JSONResponse:
+    return JSONResponse(
+        status_code=413,
+        content={
+            "error": {
+                "code": "UPLOAD_TOO_LARGE",
+                "message": upload_limits.upload_too_large_message(),
+            }
+        },
+    )
+
+
+def _legacy_upload_too_large_file_response(request_id: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=413,
+        headers={"Deprecation": "true"},
+        content={
+            "requestId": request_id,
+            "error": {
+                "code": "UPLOAD_TOO_LARGE",
+                "message": upload_limits.upload_too_large_message(),
+                "phase": ERROR_PHASE_LOCAL_DSP,
+                "retryable": False,
+            },
+            "diagnostics": {"requestId": request_id},
+        },
+    )
+
 @app.post("/api/analysis-runs")
 async def create_analysis_run(
     track: UploadFile = File(...),
@@ -1608,10 +1829,25 @@ async def create_analysis_run(
     interpretation_mode: str = Form("off"),
     interpretation_profile: str = Form("producer_summary"),
     interpretation_model: str | None = Form(None),
+    x_asa_user_id: str | None = Header(None),
+    x_asa_user_email: str | None = Header(None),
 ) -> JSONResponse:
+    invalid_backend_response = _pitch_note_backend_unsupported_response(pitch_note_backend)
+    if invalid_backend_response is not None:
+        return invalid_backend_response
+
+    upload_size = _uploaded_file_size_bytes(track)
+    if upload_size is not None and upload_size > upload_limits.MAX_UPLOAD_SIZE_BYTES:
+        return _canonical_upload_too_large_file_response()
+
+    user_context = _resolve_route_user_context(x_asa_user_id, x_asa_user_email)
+    if isinstance(user_context, JSONResponse):
+        await track.close()
+        return user_context
     try:
         runtime, run_id = await _create_analysis_run_record(
             track=track,
+            owner_user_id=user_context.user_id,
             analysis_mode=analysis_mode,
             pitch_note_mode=pitch_note_mode,
             pitch_note_backend=pitch_note_backend,
@@ -1619,9 +1855,12 @@ async def create_analysis_run(
             interpretation_profile=interpretation_profile,
             interpretation_model=interpretation_model,
         )
-        return JSONResponse(content=_normalize_run_snapshot(runtime.get_run(run_id), runtime))
-    except UploadTooLargeError as exc:
-        return _canonical_upload_too_large_response(exc)
+        return JSONResponse(
+            content=_normalize_run_snapshot(
+                runtime.get_run(run_id, owner_user_id=user_context.user_id),
+                runtime,
+            )
+        )
     except UnsupportedPitchNoteBackendError as exc:
         return JSONResponse(
             status_code=400,
@@ -1665,7 +1904,13 @@ async def estimate_analysis_run(
     interpretation_mode: str = Form("off"),
     interpretation_profile: str = Form("producer_summary"),
     interpretation_model: str | None = Form(None),
+    x_asa_user_id: str | None = Header(None),
+    x_asa_user_email: str | None = Header(None),
 ) -> JSONResponse:
+    user_context = _resolve_route_user_context(x_asa_user_id, x_asa_user_email)
+    if isinstance(user_context, JSONResponse):
+        await track.close()
+        return user_context
     try:
         return await _estimate_analysis_run(
             track=track,
@@ -1711,38 +1956,42 @@ async def estimate_analysis_run(
 
 
 @app.get("/api/analysis-runs/{run_id}")
-async def get_analysis_run(run_id: str) -> JSONResponse:
+async def get_analysis_run(
+    run_id: str,
+    x_asa_user_id: str | None = Header(None),
+    x_asa_user_email: str | None = Header(None),
+) -> JSONResponse:
+    user_context = _resolve_route_user_context(x_asa_user_id, x_asa_user_email)
+    if isinstance(user_context, JSONResponse):
+        return user_context
     runtime = get_analysis_runtime()
     try:
-        return JSONResponse(content=_normalize_run_snapshot(runtime.get_run(run_id), runtime))
-    except KeyError:
         return JSONResponse(
-            status_code=404,
-            content={
-                "error": {
-                    "code": "RUN_NOT_FOUND",
-                    "message": f"Analysis run '{run_id}' was not found.",
-                }
-            },
+            content=_normalize_run_snapshot(
+                runtime.get_run(run_id, owner_user_id=user_context.user_id),
+                runtime,
+            )
         )
+    except (KeyError, PermissionError):
+        return _run_not_found_response(run_id)
 
 
 @app.post("/api/analysis-runs/{run_id}/interrupt")
-async def interrupt_analysis_run(run_id: str) -> JSONResponse:
+async def interrupt_analysis_run(
+    run_id: str,
+    x_asa_user_id: str | None = Header(None),
+    x_asa_user_email: str | None = Header(None),
+) -> JSONResponse:
+    user_context = _resolve_route_user_context(x_asa_user_id, x_asa_user_email)
+    if isinstance(user_context, JSONResponse):
+        return user_context
     runtime = get_analysis_runtime()
     try:
+        runtime.get_run(run_id, owner_user_id=user_context.user_id)
         terminated_stages = _interrupt_active_child_processes(run_id)
         snapshot = runtime.interrupt_run(run_id)
-    except KeyError:
-        return JSONResponse(
-            status_code=404,
-            content={
-                "error": {
-                    "code": "RUN_NOT_FOUND",
-                    "message": f"Analysis run '{run_id}' was not found.",
-                }
-            },
-        )
+    except (KeyError, PermissionError):
+        return _run_not_found_response(run_id)
 
     payload = _normalize_run_snapshot(snapshot, runtime)
     payload["interrupt"] = {
@@ -1751,46 +2000,70 @@ async def interrupt_analysis_run(run_id: str) -> JSONResponse:
     return JSONResponse(status_code=202, content=payload)
 
 
+@app.delete("/api/analysis-runs/{run_id}")
+async def delete_analysis_run(
+    run_id: str,
+    x_asa_user_id: str | None = Header(None),
+    x_asa_user_email: str | None = Header(None),
+) -> JSONResponse:
+    user_context = _resolve_route_user_context(x_asa_user_id, x_asa_user_email)
+    if isinstance(user_context, JSONResponse):
+        return user_context
+    runtime = get_analysis_runtime()
+    try:
+        runtime.get_run(run_id, owner_user_id=user_context.user_id)
+        terminated_stages = _interrupt_active_child_processes(run_id)
+        runtime.delete_run(run_id)
+    except (KeyError, PermissionError):
+        return _run_not_found_response(run_id)
+    return JSONResponse(
+        status_code=202,
+        content={
+            "runId": run_id,
+            "deleted": True,
+            "interrupt": {
+                "stagesTerminated": terminated_stages,
+            },
+        },
+    )
+
+
 @app.get("/api/analysis-runs/{run_id}/artifacts")
 async def list_run_artifacts(
     run_id: str,
     kind: str = Query("", description="Filter by kind prefix"),
+    x_asa_user_id: str | None = Header(None),
+    x_asa_user_email: str | None = Header(None),
 ) -> JSONResponse:
+    user_context = _resolve_route_user_context(x_asa_user_id, x_asa_user_email)
+    if isinstance(user_context, JSONResponse):
+        return user_context
     runtime = get_analysis_runtime()
     try:
-        runtime.get_run(run_id)
-    except KeyError:
-        return JSONResponse(
-            status_code=404,
-            content={
-                "error": {
-                    "code": "RUN_NOT_FOUND",
-                    "message": f"Analysis run '{run_id}' was not found.",
-                }
-            },
-        )
+        runtime.get_run(run_id, owner_user_id=user_context.user_id)
+    except (KeyError, PermissionError):
+        return _run_not_found_response(run_id)
     prefix = kind if kind else ""
     artifacts = runtime.get_artifacts_by_kind(run_id, prefix)
     return JSONResponse(content=artifacts)
 
 
 @app.get("/api/analysis-runs/{run_id}/artifacts/{artifact_id}", response_model=None)
-async def get_run_artifact(run_id: str, artifact_id: str) -> FileResponse | JSONResponse:
+async def get_run_artifact(
+    run_id: str,
+    artifact_id: str,
+    x_asa_user_id: str | None = Header(None),
+    x_asa_user_email: str | None = Header(None),
+) -> FileResponse | JSONResponse:
+    user_context = _resolve_route_user_context(x_asa_user_id, x_asa_user_email)
+    if isinstance(user_context, JSONResponse):
+        return user_context
     runtime = get_analysis_runtime()
     try:
-        runtime.get_run(run_id)
-    except KeyError:
-        return JSONResponse(
-            status_code=404,
-            content={
-                "error": {
-                    "code": "RUN_NOT_FOUND",
-                    "message": f"Analysis run '{run_id}' was not found.",
-                }
-            },
-        )
-    artifacts = runtime.get_artifacts_by_kind(run_id, "")
-    match = next((a for a in artifacts if a["artifactId"] == artifact_id), None)
+        runtime.get_run(run_id, owner_user_id=user_context.user_id)
+    except (KeyError, PermissionError):
+        return _run_not_found_response(run_id)
+    match = runtime.get_internal_artifact(run_id, artifact_id)
     if match is None:
         return JSONResponse(
             status_code=404,
@@ -1801,8 +2074,8 @@ async def get_run_artifact(run_id: str, artifact_id: str) -> FileResponse | JSON
                 }
             },
         )
-    artifact_path = match.get("path", "")
-    if not artifact_path or not Path(artifact_path).is_file():
+    artifact_local_path = runtime.resolve_artifact_local_path(match.get("path"))
+    if artifact_local_path is None or not artifact_local_path.is_file():
         return JSONResponse(
             status_code=404,
             content={
@@ -1813,9 +2086,9 @@ async def get_run_artifact(run_id: str, artifact_id: str) -> FileResponse | JSON
             },
         )
     return FileResponse(
-        path=artifact_path,
+        path=str(artifact_local_path),
         media_type=match.get("mimeType", "application/octet-stream"),
-        filename=match.get("filename", os.path.basename(artifact_path)),
+        filename=match.get("filename", artifact_local_path.name),
     )
 
 
@@ -1828,21 +2101,26 @@ _ENHANCEMENT_GENERATORS = {
 
 
 @app.post("/api/analysis-runs/{run_id}/spectral-enhancements/{kind}")
-async def generate_spectral_enhancement(run_id: str, kind: str) -> JSONResponse:
+async def generate_spectral_enhancement(
+    run_id: str,
+    kind: str,
+    x_asa_user_id: str | None = Header(None),
+    x_asa_user_email: str | None = Header(None),
+) -> JSONResponse:
     if kind not in _ENHANCEMENT_GENERATORS:
         return JSONResponse(
             status_code=400,
             content={"error": {"code": "INVALID_KIND", "message": f"Unknown enhancement kind: '{kind}'. Valid: {', '.join(_ENHANCEMENT_GENERATORS)}"}},
         )
 
+    user_context = _resolve_route_user_context(x_asa_user_id, x_asa_user_email)
+    if isinstance(user_context, JSONResponse):
+        return user_context
     runtime = get_analysis_runtime()
     try:
-        run = runtime.get_run(run_id)
-    except KeyError:
-        return JSONResponse(
-            status_code=404,
-            content={"error": {"code": "RUN_NOT_FOUND", "message": f"Analysis run '{run_id}' was not found."}},
-        )
+        run = runtime.get_run(run_id, owner_user_id=user_context.user_id)
+    except (KeyError, PermissionError):
+        return _run_not_found_response(run_id)
 
     stages = run.get("stages", {})
     meas_status = stages.get("measurement", {}).get("status")
@@ -1857,7 +2135,7 @@ async def generate_spectral_enhancement(run_id: str, kind: str) -> JSONResponse:
     # Idempotent: skip if already generated
     existing = []
     for ak in artifact_kinds:
-        existing.extend(runtime.get_artifacts_by_kind(run_id, ak))
+        existing.extend(runtime.get_internal_artifacts_by_kind(run_id, ak))
     if existing:
         strip = lambda a: {"artifactId": a["artifactId"], "kind": a["kind"], "filename": a["filename"], "mimeType": a["mimeType"], "sizeBytes": a["sizeBytes"]}
         return JSONResponse(content={"artifacts": [strip(a) for a in existing]})
@@ -1878,10 +2156,14 @@ async def generate_spectral_enhancement(run_id: str, kind: str) -> JSONResponse:
         }
 
         with tempfile.TemporaryDirectory(prefix="spectral_enh_") as tmp_dir:
+            source_local_path = runtime.require_local_artifact_path(
+                source.get("path"),
+                purpose="Source audio artifact for spectral enhancement generation",
+            )
             if is_image:
-                result = gen_func(source["path"], tmp_dir)
+                result = gen_func(source_local_path, tmp_dir)
             else:
-                data = gen_func(source["path"])
+                data = gen_func(source_local_path)
                 # Write JSON to file for artifact storage
                 import json as json_mod
                 for ak in artifact_kinds:
@@ -1920,9 +2202,15 @@ async def create_pitch_note_translation_attempt(
     run_id: str,
     pitch_note_mode: str = Form("stem_notes"),
     pitch_note_backend: str = Form("auto"),
+    x_asa_user_id: str | None = Header(None),
+    x_asa_user_email: str | None = Header(None),
 ) -> JSONResponse:
+    user_context = _resolve_route_user_context(x_asa_user_id, x_asa_user_email)
+    if isinstance(user_context, JSONResponse):
+        return user_context
     runtime = get_analysis_runtime()
     try:
+        runtime.get_run(run_id, owner_user_id=user_context.user_id)
         resolved_backend = runtime._resolve_pitch_note_backend(pitch_note_backend)
         if runtime.get_measurement_status(run_id) != "completed":
             return JSONResponse(
@@ -1946,17 +2234,15 @@ async def create_pitch_note_translation_attempt(
                 "requestedViaApi": True,
             },
         )
-        return JSONResponse(status_code=202, content=_normalize_run_snapshot(runtime.get_run(run_id), runtime))
-    except KeyError:
         return JSONResponse(
-            status_code=404,
-            content={
-                "error": {
-                    "code": "RUN_NOT_FOUND",
-                    "message": f"Analysis run '{run_id}' was not found.",
-                }
-            },
+            status_code=202,
+            content=_normalize_run_snapshot(
+                runtime.get_run(run_id, owner_user_id=user_context.user_id),
+                runtime,
+            ),
         )
+    except (KeyError, PermissionError):
+        return _run_not_found_response(run_id)
     except UnsupportedPitchNoteBackendError as exc:
         return JSONResponse(
             status_code=400,
@@ -1974,9 +2260,15 @@ async def create_interpretation_attempt(
     run_id: str,
     interpretation_profile: str = Form("producer_summary"),
     interpretation_model: str = Form("gemini-2.5-flash"),
+    x_asa_user_id: str | None = Header(None),
+    x_asa_user_email: str | None = Header(None),
 ) -> JSONResponse:
+    user_context = _resolve_route_user_context(x_asa_user_id, x_asa_user_email)
+    if isinstance(user_context, JSONResponse):
+        return user_context
     runtime = get_analysis_runtime()
     try:
+        runtime.get_run(run_id, owner_user_id=user_context.user_id)
         _resolve_interpretation_profile_config(interpretation_profile)
         if runtime.get_measurement_status(run_id) != "completed":
             return JSONResponse(
@@ -2000,7 +2292,13 @@ async def create_interpretation_attempt(
                 "requestedViaApi": True,
             },
         )
-        return JSONResponse(status_code=202, content=_normalize_run_snapshot(runtime.get_run(run_id), runtime))
+        return JSONResponse(
+            status_code=202,
+            content=_normalize_run_snapshot(
+                runtime.get_run(run_id, owner_user_id=user_context.user_id),
+                runtime,
+            ),
+        )
     except ValueError as exc:
         return JSONResponse(
             status_code=400,
@@ -2011,16 +2309,8 @@ async def create_interpretation_attempt(
                 }
             },
         )
-    except KeyError:
-        return JSONResponse(
-            status_code=404,
-            content={
-                "error": {
-                    "code": "RUN_NOT_FOUND",
-                    "message": f"Analysis run '{run_id}' was not found.",
-                }
-            },
-        )
+    except (KeyError, PermissionError):
+        return _run_not_found_response(run_id)
 
 
 
@@ -2222,8 +2512,14 @@ async def estimate_analysis(
         alias="--separate",
         description="Alias for separate; accepts query key --separate",
     ),
+    x_asa_user_id: str | None = Header(None),
+    x_asa_user_email: str | None = Header(None),
 ):
     logger.warning("Legacy compatibility endpoint hit: /api/analyze/estimate")
+    user_context = _resolve_route_user_context(x_asa_user_id, x_asa_user_email)
+    if isinstance(user_context, JSONResponse):
+        await track.close()
+        return _mark_legacy_endpoint_response(user_context, endpoint="/api/analyze/estimate")
     _ = dsp_json_override
     try:
         response = await _estimate_analysis_run(
@@ -2265,15 +2561,26 @@ async def analyze_audio(
     fast_query: bool = Query(
         False, alias="fast", description="Pass --fast to analyze.py when true"
     ),
+    x_asa_user_id: str | None = Header(None),
+    x_asa_user_email: str | None = Header(None),
 ):
+    upload_size = _uploaded_file_size_bytes(track)
+    if upload_size is not None and upload_size > upload_limits.MAX_UPLOAD_SIZE_BYTES:
+        return _legacy_upload_too_large_file_response(str(uuid.uuid4()))
+
     request_id = str(uuid4())
     logger.warning("Legacy compatibility endpoint hit: /api/analyze request_id=%s", request_id)
+    user_context = _resolve_route_user_context(x_asa_user_id, x_asa_user_email)
+    if isinstance(user_context, JSONResponse):
+        await track.close()
+        return _mark_legacy_endpoint_response(user_context, endpoint="/api/analyze")
     try:
         _ = dsp_json_override
         analysis_mode = _resolve_analysis_mode_value(analysis_mode)
         requested_pitch_note_mode = _resolve_pitch_note_mode_for_legacy(transcribe)
         runtime, run_id = await _create_analysis_run_record(
             track=track,
+            owner_user_id=user_context.user_id,
             analysis_mode=analysis_mode,
             pitch_note_mode=requested_pitch_note_mode,
             pitch_note_backend="auto",
@@ -2362,6 +2669,8 @@ async def analyze_phase2(
     model_name: str = Form("gemini-2.5-flash"),
     phase1_request_id: str | None = Form(None),
     analysis_run_id: str | None = Form(None),
+    x_asa_user_id: str | None = Header(None),
+    x_asa_user_email: str | None = Header(None),
 ) -> JSONResponse:
     """Run Gemini Phase 2 advisory reconstruction server-side.
 
@@ -2374,6 +2683,10 @@ async def analyze_phase2(
     request_id = str(uuid4())
     temp_path: str | None = None
     logger.warning("Legacy compatibility endpoint hit: /api/phase2 request_id=%s", request_id)
+    user_context = _resolve_route_user_context(x_asa_user_id, x_asa_user_email)
+    if isinstance(user_context, JSONResponse):
+        await track.close()
+        return _mark_legacy_endpoint_response(user_context, endpoint="/api/phase2")
     try:
         temp_path, _ = _persist_upload(track)
 
@@ -2426,8 +2739,9 @@ async def analyze_phase2(
                 runtime,
                 analysis_run_id=analysis_run_id,
                 phase1_request_id=phase1_request_id,
+                owner_user_id=user_context.user_id,
             )
-        except KeyError:
+        except (KeyError, PermissionError):
             missing_context = not analysis_run_id and not phase1_request_id
             return _build_phase2_error_response(
                 request_id=request_id,

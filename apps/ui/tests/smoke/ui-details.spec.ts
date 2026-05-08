@@ -184,7 +184,6 @@ function stubRoutes(
               mimeType: 'audio/wav',
               sizeBytes: 2048,
               contentSha256: 'abc123',
-              path: '/tmp/silence.wav',
             },
           },
           stages: {
@@ -240,7 +239,6 @@ function stubRoutes(
               mimeType: 'audio/wav',
               sizeBytes: 2048,
               contentSha256: 'abc123',
-              path: '/tmp/silence.wav',
             },
           },
           stages: {
@@ -341,7 +339,6 @@ test('CPU indicator animates during analysis', async ({ page }) => {
             mimeType: 'audio/wav',
             sizeBytes: 2048,
             contentSha256: 'abc123',
-            path: '/tmp/silence.wav',
           },
         },
         stages: {
@@ -403,7 +400,6 @@ test('CPU indicator animates during analysis', async ({ page }) => {
             mimeType: 'audio/wav',
             sizeBytes: 2048,
             contentSha256: 'abc123',
-            path: '/tmp/silence.wav',
           },
         },
         stages: {

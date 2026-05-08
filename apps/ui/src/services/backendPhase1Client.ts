@@ -18,6 +18,7 @@ import {
   TextureCharacter,
   VocalDetail,
 } from "../types";
+import { buildConfiguredRequestInit } from "../config";
 
 const ANALYZE_TIMEOUT_FLOOR_MS = 180_000;
 const ANALYZE_TIMEOUT_PADDING_MS = 60_000;
@@ -290,10 +291,13 @@ async function probeBackendIdentity(apiBaseUrl: string): Promise<BackendIdentity
   const timeoutHandle = setTimeout(() => controller.abort(), BACKEND_IDENTITY_TIMEOUT_MS);
 
   try {
-    const response = await fetch(`${apiBaseUrl}/openapi.json`, {
-      method: "GET",
-      signal: controller.signal,
-    });
+    const response = await fetch(
+      `${apiBaseUrl}/openapi.json`,
+      buildConfiguredRequestInit({
+        method: "GET",
+        signal: controller.signal,
+      }),
+    );
 
     if (!response.ok) return null;
 
@@ -355,11 +359,14 @@ async function postBackendMultipart(
   }
 
   try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      body: formData,
-      signal: controller.signal,
-    });
+    const response = await fetch(
+      endpoint,
+      buildConfiguredRequestInit({
+        method: "POST",
+        body: formData,
+        signal: controller.signal,
+      }),
+    );
 
     if (!response.ok) {
       throw await toBackendHttpError(response);
