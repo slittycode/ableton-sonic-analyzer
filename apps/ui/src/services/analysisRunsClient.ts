@@ -325,7 +325,7 @@ function parseArtifact(value: Record<string, unknown>): AnalysisRunArtifact {
     mimeType: expectString(value.mimeType, 'mimeType'),
     sizeBytes: expectNumber(value.sizeBytes, 'sizeBytes'),
     contentSha256: expectString(value.contentSha256, 'contentSha256'),
-    path: expectString(value.path, 'path'),
+    ...(typeof value.path === 'string' ? { path: value.path } : {}),
   };
 }
 
