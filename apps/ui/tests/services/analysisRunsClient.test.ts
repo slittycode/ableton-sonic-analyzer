@@ -30,6 +30,7 @@ const baseRunSnapshot: AnalysisRunSnapshot = {
       mimeType: 'audio/mpeg',
       sizeBytes: 1024,
       contentSha256: 'abc123',
+      path: 'uploads/track.mp3',
     },
   },
   stages: {

@@ -19,14 +19,9 @@ import {
   PitchNoteTranslationAttemptSummary,
   PitchNoteTranslationStageSnapshot,
 } from '../types';
-<<<<<<< HEAD
-import { parsePhase1Result } from './backendPhase1Client';
-=======
 import { appConfig, buildConfiguredRequestInit } from '../config';
 import { BackendClientError, createUserCancelledError, parsePhase1Result } from './backendPhase1Client';
->>>>>>> c3e6e0bf8fc19444d5c6012beea8c299dc0ab1dd
 import { requestBackendEstimate } from './backendPhase1Client';
-import { fetchJson } from './httpClient';
 
 interface AnalysisRunsClientOptions {
   apiBaseUrl: string;
@@ -267,8 +262,6 @@ export function projectStemSummaryFromRun(snapshot: AnalysisRunSnapshot): StemSu
   return profile.result as StemSummaryResult | null;
 }
 
-<<<<<<< HEAD
-=======
 async function fetchJson(url: string, init: RequestInit): Promise<unknown> {
   let response: Response;
   try {
@@ -321,7 +314,6 @@ async function fetchJson(url: string, init: RequestInit): Promise<unknown> {
   return payload;
 }
 
->>>>>>> c3e6e0bf8fc19444d5c6012beea8c299dc0ab1dd
 function parseAnalysisRunSnapshot(value: unknown): AnalysisRunSnapshot {
   const root = expectRecord(value, 'analysis run');
   const stages = expectRecord(root.stages, 'analysis run stages');

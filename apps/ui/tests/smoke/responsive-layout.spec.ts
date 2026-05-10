@@ -92,6 +92,7 @@ function stubRoutes(page: import('@playwright/test').Page) {
               mimeType: 'audio/wav',
               sizeBytes: 2048,
               contentSha256: 'abc123',
+              path: 'uploads/test.wav',
             },
           },
           stages: {
@@ -147,6 +148,7 @@ function stubRoutes(page: import('@playwright/test').Page) {
               mimeType: 'audio/wav',
               sizeBytes: 2048,
               contentSha256: 'abc123',
+              path: 'uploads/test.wav',
             },
           },
           stages: {

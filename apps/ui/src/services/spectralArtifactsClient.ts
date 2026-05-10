@@ -4,11 +4,7 @@ import type {
   SpectralArtifactRef,
   SpectralTimeSeriesData,
 } from '../types';
-<<<<<<< HEAD
-import { fetchJson } from './httpClient';
-=======
 import { buildConfiguredRequestInit } from '../config';
->>>>>>> c3e6e0bf8fc19444d5c6012beea8c299dc0ab1dd
 
 export function buildArtifactUrl(
   apiBaseUrl: string,
@@ -52,15 +48,11 @@ export async function fetchSpectralTimeSeries(
   options?: { signal?: AbortSignal },
 ): Promise<SpectralTimeSeriesData> {
   const url = buildArtifactUrl(apiBaseUrl, runId, artifactId);
-<<<<<<< HEAD
-  return fetchJson(url, { signal: options?.signal }) as Promise<SpectralTimeSeriesData>;
-=======
   const response = await fetch(url, buildConfiguredRequestInit({ signal: options?.signal }));
   if (!response.ok) {
     throw new Error(`Failed to fetch spectral time series: ${response.status}`);
   }
   return response.json() as Promise<SpectralTimeSeriesData>;
->>>>>>> c3e6e0bf8fc19444d5c6012beea8c299dc0ab1dd
 }
 
 export type SpectralEnhancementKind = 'cqt' | 'hpss' | 'onset' | 'chroma_interactive';
@@ -72,9 +64,6 @@ export async function generateSpectralEnhancement(
   options?: { signal?: AbortSignal },
 ): Promise<{ artifacts: SpectralArtifactRef[] }> {
   const url = `${apiBaseUrl}/api/analysis-runs/${encodeURIComponent(runId)}/spectral-enhancements/${encodeURIComponent(kind)}`;
-<<<<<<< HEAD
-  return fetchJson(url, { method: 'POST', signal: options?.signal }) as Promise<{ artifacts: SpectralArtifactRef[] }>;
-=======
   const response = await fetch(
     url,
     buildConfiguredRequestInit({ method: 'POST', signal: options?.signal }),
@@ -84,7 +73,6 @@ export async function generateSpectralEnhancement(
     throw new Error(body?.error?.message ?? `Enhancement generation failed: ${response.status}`);
   }
   return response.json();
->>>>>>> c3e6e0bf8fc19444d5c6012beea8c299dc0ab1dd
 }
 
 export async function fetchOnsetStrengthData(
@@ -94,15 +82,11 @@ export async function fetchOnsetStrengthData(
   options?: { signal?: AbortSignal },
 ): Promise<OnsetStrengthData> {
   const url = buildArtifactUrl(apiBaseUrl, runId, artifactId);
-<<<<<<< HEAD
-  return fetchJson(url, { signal: options?.signal }) as Promise<OnsetStrengthData>;
-=======
   const response = await fetch(url, buildConfiguredRequestInit({ signal: options?.signal }));
   if (!response.ok) {
     throw new Error(`Failed to fetch onset strength data: ${response.status}`);
   }
   return response.json() as Promise<OnsetStrengthData>;
->>>>>>> c3e6e0bf8fc19444d5c6012beea8c299dc0ab1dd
 }
 
 export async function fetchChromaInteractiveData(
@@ -112,13 +96,9 @@ export async function fetchChromaInteractiveData(
   options?: { signal?: AbortSignal },
 ): Promise<ChromaInteractiveData> {
   const url = buildArtifactUrl(apiBaseUrl, runId, artifactId);
-<<<<<<< HEAD
-  return fetchJson(url, { signal: options?.signal }) as Promise<ChromaInteractiveData>;
-=======
   const response = await fetch(url, buildConfiguredRequestInit({ signal: options?.signal }));
   if (!response.ok) {
     throw new Error(`Failed to fetch interactive chroma data: ${response.status}`);
   }
   return response.json() as Promise<ChromaInteractiveData>;
->>>>>>> c3e6e0bf8fc19444d5c6012beea8c299dc0ab1dd
 }

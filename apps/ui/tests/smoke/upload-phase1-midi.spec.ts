@@ -158,6 +158,7 @@ test('phase1 dual-source session musician panel toggles between pitch-note and m
             mimeType: 'audio/wav',
             sizeBytes: 2048,
             contentSha256: 'abc123',
+            path: 'uploads/test.wav',
           },
         },
         stages: {
@@ -214,6 +215,7 @@ test('phase1 dual-source session musician panel toggles between pitch-note and m
             mimeType: 'audio/wav',
             sizeBytes: 2048,
             contentSha256: 'abc123',
+            path: 'uploads/test.wav',
           },
         },
         stages: {
@@ -465,6 +467,7 @@ test('missing melodyDetail shows MIDI unavailable state', async ({ page }) => {
             mimeType: 'audio/wav',
             sizeBytes: 2048,
             contentSha256: 'abc123',
+            path: 'uploads/test.wav',
           },
         },
         stages: {
@@ -521,6 +524,7 @@ test('missing melodyDetail shows MIDI unavailable state', async ({ page }) => {
             mimeType: 'audio/wav',
             sizeBytes: 2048,
             contentSha256: 'abc123',
+            path: 'uploads/test.wav',
           },
         },
         stages: {
