@@ -1599,6 +1599,15 @@ export function AnalysisResults({
                     <p className="text-xs font-mono text-text-secondary leading-relaxed">
                       Movement: {truncateAtSentenceBoundary(stem.globalPatterns.pumpingOrModulation, 180)}
                     </p>
+                    <p className="text-xs font-mono text-text-secondary leading-relaxed">
+                      Synthesis: {truncateAtSentenceBoundary(stem.globalPatterns.synthesisCharacter, 180)}
+                    </p>
+                    <p className="text-xs font-mono text-text-secondary leading-relaxed">
+                      Vocal presence: {truncateAtSentenceBoundary(stem.globalPatterns.vocalPresence, 180)}
+                    </p>
+                    <p className="text-xs font-mono text-text-secondary leading-relaxed">
+                      Bass character: {truncateAtSentenceBoundary(stem.globalPatterns.bassCharacter, 180)}
+                    </p>
                   </div>
                 </div>
 

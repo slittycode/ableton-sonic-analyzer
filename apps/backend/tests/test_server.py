@@ -256,6 +256,9 @@ def _valid_single_stem_summary_result(summary: str = "Bass pulses anchor the sec
             "bassRole": "Anchors the groove in the low register.",
             "melodicRole": "Sparse upper-register punctuation.",
             "pumpingOrModulation": "Measured pumping suggests compressor-led movement.",
+            "synthesisCharacter": "No reliable synthesis character measured.",
+            "vocalPresence": "No reliable vocal evidence measured.",
+            "bassCharacter": "Bass character unavailable for this stem.",
         },
         "uncertaintyFlags": ["Upper melodic detail is approximate."],
     }
@@ -2959,6 +2962,29 @@ class Phase2EndpointTests(unittest.TestCase):
         body = self._decode(response)
         self.assertEqual(body["analysisRunId"], run_id)
 
+    def test_stem_summary_schema_requires_tier3_global_patterns(self) -> None:
+        schema = server.STEM_SUMMARY_RESPONSE_SCHEMA["properties"]["globalPatterns"]
+        for field in ("synthesisCharacter", "vocalPresence", "bassCharacter"):
+            self.assertIn(field, schema["properties"])
+            self.assertIn(field, schema["required"])
+
+        valid_payload = _valid_single_stem_summary_result()
+        parsed, error = server._parse_stem_summary_result(json.dumps(valid_payload))
+        self.assertIsNone(error)
+        self.assertIsNotNone(parsed)
+
+        missing_payload = json.loads(json.dumps(valid_payload))
+        del missing_payload["globalPatterns"]["vocalPresence"]
+        parsed, error = server._parse_stem_summary_result(json.dumps(missing_payload))
+        self.assertIsNone(parsed)
+        self.assertIsNotNone(error)
+
+        blank_payload = json.loads(json.dumps(valid_payload))
+        blank_payload["globalPatterns"]["vocalPresence"] = "   "
+        parsed, error = server._parse_stem_summary_result(json.dumps(blank_payload))
+        self.assertIsNone(parsed)
+        self.assertIsNotNone(error)
+
     def test_stem_summary_profile_uses_dedicated_prompt_schema_and_hooks(self) -> None:
         source_audio = b"source-audio"
         bass_audio = b"bass-audio"
@@ -3105,6 +3131,10 @@ class Phase2EndpointTests(unittest.TestCase):
             self.assertEqual(
                 snapshot["stages"]["interpretation"]["result"]["stems"][0]["summary"],
                 "Bass stem summary.",
+            )
+            self.assertEqual(
+                snapshot["stages"]["interpretation"]["result"]["stems"][0]["globalPatterns"]["vocalPresence"],
+                "No reliable vocal evidence measured.",
             )
 
     def test_pitch_note_worker_persists_stem_artifacts_from_subprocess_output(self) -> None:

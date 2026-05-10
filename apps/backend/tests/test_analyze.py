@@ -1209,6 +1209,40 @@ class VocalDetailTests(unittest.TestCase):
         self.assertIsNotNone(detail)
         self.assertFalse(detail["hasVocals"])
 
+    def test_prefers_vocal_stem_when_available(self):
+        """Vocal detection should analyze the vocals stem when Demucs output exists."""
+        sr = 44100
+        t = np.linspace(0, 2.0, int(sr * 2.0), endpoint=False, dtype=np.float32)
+        stem_signal = (
+            0.5 * np.sin(2 * np.pi * 220.0 * t)
+            + 0.3 * np.sin(2 * np.pi * 440.0 * t)
+        ).astype(np.float32)
+        mono = np.zeros(int(sr * 2.0), dtype=np.float32)
+        stems = {"vocals": "/tmp/vocals.wav"}
+
+        with mock.patch("analyze_detection._load_stem_mono", return_value=stem_signal) as mock_load:
+            result = self.analyze.analyze_vocal_detail(mono, sr, bpm=120.0, stems=stems)
+
+        self.assertIsNotNone(result["vocalDetail"])
+        mock_load.assert_called_once_with(stems, "vocals", sr)
+
+    def test_vocal_detail_falls_back_to_mix_when_stem_unavailable(self):
+        """Missing vocals stem should keep the existing full-mix behavior."""
+        sr = 44100
+        t = np.linspace(0, 2.0, int(sr * 2.0), endpoint=False, dtype=np.float32)
+        mono = (0.3 * np.sin(2 * np.pi * 440 * t)).astype(np.float32)
+
+        expected = self.analyze.analyze_vocal_detail(mono, sr, bpm=120.0)
+        with mock.patch("analyze_detection._load_stem_mono", return_value=None):
+            actual = self.analyze.analyze_vocal_detail(
+                mono,
+                sr,
+                bpm=120.0,
+                stems={"vocals": "/tmp/missing-vocals.wav"},
+            )
+
+        self.assertEqual(actual, expected)
+
 
 class SupersawDetailTests(unittest.TestCase):
     """Tests for analyze_supersaw_detail — detuned unison detection."""
@@ -1274,6 +1308,41 @@ class SupersawDetailTests(unittest.TestCase):
             result_single["supersawDetail"]["voiceCount"],
         )
 
+    def test_prefers_other_stem_when_available(self):
+        """Supersaw detection should analyze the musical/other stem when available."""
+        sr = 44100
+        t = np.linspace(0, 2.0, int(sr * 2.0), endpoint=False, dtype=np.float32)
+        stem_signal = np.zeros_like(t)
+        for detune_cents in [-12, -5, 0, 5, 12]:
+            freq = 440.0 * (2.0 ** (detune_cents / 1200.0))
+            stem_signal += 0.12 * np.sin(2 * np.pi * freq * t)
+        stem_signal = stem_signal.astype(np.float32)
+        mono = np.zeros(int(sr * 2.0), dtype=np.float32)
+        stems = {"other": "/tmp/other.wav"}
+
+        with mock.patch("analyze_detection._load_stem_mono", return_value=stem_signal) as mock_load:
+            result = self.analyze.analyze_supersaw_detail(mono, sr, bpm=128.0, stems=stems)
+
+        self.assertIsNotNone(result["supersawDetail"])
+        mock_load.assert_called_once_with(stems, "other", sr)
+
+    def test_supersaw_detail_falls_back_to_mix_when_stem_unavailable(self):
+        """Missing other stem should keep the existing full-mix behavior."""
+        sr = 44100
+        t = np.linspace(0, 2.0, int(sr * 2.0), endpoint=False, dtype=np.float32)
+        mono = (0.3 * np.sin(2 * np.pi * 440 * t)).astype(np.float32)
+
+        expected = self.analyze.analyze_supersaw_detail(mono, sr, bpm=128.0)
+        with mock.patch("analyze_detection._load_stem_mono", return_value=None):
+            actual = self.analyze.analyze_supersaw_detail(
+                mono,
+                sr,
+                bpm=128.0,
+                stems={"other": "/tmp/missing-other.wav"},
+            )
+
+        self.assertEqual(actual, expected)
+
 
 class BassDetailTests(unittest.TestCase):
     """Tests for analyze_bass_detail — bass character analysis."""
@@ -1337,11 +1406,7 @@ class BassDetailTests(unittest.TestCase):
         time_axis = np.linspace(0, 3.0, int(sr * 3.0), endpoint=False, dtype=np.float32)
         stem_signal = 0.5 * np.sin(2 * np.pi * 60.0 * time_axis).astype(np.float32)
 
-        with mock.patch.object(self.analyze.os.path, "isfile", return_value=True), mock.patch.object(
-            self.analyze,
-            "load_mono",
-            return_value=stem_signal,
-        ):
+        with mock.patch.object(self.analyze, "_load_stem_mono", return_value=stem_signal):
             result = self.analyze.analyze_bass_detail(
                 mono,
                 sr,
@@ -1434,11 +1499,7 @@ class KickDetailTests(unittest.TestCase):
                 * np.exp(-burst / 500)
             )
 
-        with mock.patch.object(self.analyze.os.path, "isfile", return_value=True), mock.patch.object(
-            self.analyze,
-            "load_mono",
-            return_value=stem_signal,
-        ):
+        with mock.patch.object(self.analyze, "_load_stem_mono", return_value=stem_signal):
             result = self.analyze.analyze_kick_detail(
                 mono,
                 sr,
@@ -1506,11 +1567,7 @@ class SidechainDetailTests(unittest.TestCase):
             beat_data=beat_data,
         )["sidechainDetail"]
 
-        with mock.patch.object(self.analyze.os.path, "isfile", return_value=True), mock.patch.object(
-            self.analyze,
-            "load_mono",
-            return_value=bass_stem,
-        ):
+        with mock.patch.object(self.analyze, "_load_stem_mono", return_value=bass_stem):
             stem_result = self.analyze.analyze_sidechain_detail(
                 mono,
                 sample_rate,
@@ -1615,6 +1672,37 @@ class GenreDetailTests(unittest.TestCase):
         acid_s = acid_score(result_acid)
         if plain_s is not None and acid_s is not None:
             self.assertGreaterEqual(acid_s, plain_s)
+
+    def test_vocal_boost_raises_vocal_aware_genre_score(self):
+        """Vocal-aware genres should receive a bounded boost when vocalDetail.hasVocals is True."""
+        base = self._make_result(
+            bpm=90.0,
+            crestFactor=12.0,
+            spectralBalance={"subBass": -16.0},
+            spectralDetail={"spectralCentroid": 4200.0},
+            rhythmDetail={"onsetRate": 6.0},
+            sidechainDetail={"pumpingStrength": 0.1},
+            bassDetail={"averageDecayMs": 700.0},
+        )
+        result_no_vocal = self.analyze.analyze_genre_detail({
+            **base,
+            "vocalDetail": {"hasVocals": False},
+        })
+        result_with_vocal = self.analyze.analyze_genre_detail({
+            **base,
+            "vocalDetail": {"hasVocals": True},
+        })
+
+        def hiphop_score(result):
+            return next(
+                (entry["score"] for entry in result["genreDetail"]["topScores"] if entry["genre"] == "hiphop"),
+                None,
+            )
+
+        self.assertGreater(
+            hiphop_score(result_with_vocal),
+            hiphop_score(result_no_vocal),
+        )
 
     def test_empty_result_dict_abstains(self):
         """Empty result dict → genreDetail is None (fewer than 3 real features)."""

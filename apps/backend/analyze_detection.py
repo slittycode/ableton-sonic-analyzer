@@ -10,6 +10,7 @@ except ImportError:
     es = None
 
 from dsp_utils import _safe_db, _compute_bark_db
+from analyze_audio_io import _load_stem_mono
 
 
 def analyze_effects_detail(
@@ -363,6 +364,7 @@ def analyze_vocal_detail(
     mono: np.ndarray,
     sample_rate: int = 44100,
     bpm: float | None = None,
+    stems: dict | None = None,
 ) -> dict:
     """Detect vocal presence via spectral energy ratio, formant peaks, and MFCC likelihood.
 
@@ -371,7 +373,10 @@ def analyze_vocal_detail(
     for formant detection instead of browser FFT.
     """
     try:
-        mono_arr = np.asarray(mono, dtype=np.float32)
+        source_mono = _load_stem_mono(stems, "vocals", sample_rate)
+        if source_mono is None:
+            source_mono = mono
+        mono_arr = np.asarray(source_mono, dtype=np.float32)
         if mono_arr.ndim != 1 or mono_arr.size < 2048:
             return {"vocalDetail": None}
 
@@ -496,6 +501,7 @@ def analyze_supersaw_detail(
     mono: np.ndarray,
     sample_rate: int = 44100,
     bpm: float | None = None,
+    stems: dict | None = None,
 ) -> dict:
     """Detect detuned sawtooth stacks characteristic of supersaw patches.
 
@@ -505,7 +511,10 @@ def analyze_supersaw_detail(
     check for sawtooth harmonic decay patterns.
     """
     try:
-        mono_arr = np.asarray(mono, dtype=np.float32)
+        source_mono = _load_stem_mono(stems, "other", sample_rate)
+        if source_mono is None:
+            source_mono = mono
+        mono_arr = np.asarray(source_mono, dtype=np.float32)
         if mono_arr.ndim != 1 or mono_arr.size < 4096:
             return {"supersawDetail": None}
 
@@ -722,6 +731,7 @@ def analyze_genre_detail(result: dict) -> dict:
         kick_det = result.get("kickDetail") or {}
         acid_det = result.get("acidDetail") or {}
         supersaw_det = result.get("supersawDetail") or {}
+        vocal_det = result.get("vocalDetail") or {}
 
         # Extract core features, tracking which have real (non-fallback) values.
         # If fewer than 3 of 7 core features are present, the classifier
@@ -759,6 +769,7 @@ def analyze_genre_detail(result: dict) -> dict:
 
         is_acid = bool(acid_det.get("isAcid", False))
         is_supersaw = bool(supersaw_det.get("isSupersaw", False))
+        is_vocal = bool(vocal_det.get("hasVocals", False))
 
         scores: list[tuple[str, float]] = []
 
@@ -797,6 +808,11 @@ def analyze_genre_detail(result: dict) -> dict:
                 weighted_score = min(1.0, weighted_score * 1.3)
             if sig["id"] in ("trance", "psytrance", "progressive-house") and is_supersaw:
                 weighted_score = min(1.0, weighted_score * 1.2)
+            if is_vocal and sig["id"] in (
+                "pop", "hiphop", "breaks", "house", "classic-house", "deep-house",
+                "afro-house", "tech-house", "bass-house", "uk-garage", "trance",
+            ):
+                weighted_score = min(1.0, weighted_score * 1.15)
 
             scores.append((sig["id"], round(weighted_score, 4)))
 
@@ -832,5 +848,4 @@ def analyze_genre_detail(result: dict) -> dict:
     except Exception as e:
         print(f"[warn] Genre classification failed: {e}", file=sys.stderr)
         return {"genreDetail": None}
-
 

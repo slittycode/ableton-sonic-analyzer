@@ -23,6 +23,12 @@ ABSOLUTE RULES:
 7. Do not ask for or imply piano-roll precision. No MIDI editing language, no exact velocity claims, and no exact note-length claims beyond what is musically defensible.
 8. Use the pumping/modulation descriptor only as context for groove and movement language. Do not convert it into new measurement claims.
 9. Every bar entry must remain non-authoritative musical guidance.
+10. When describing vocal presence, use vocalDetail.hasVocals and vocalDetail.confidence as the primary signal. Do not infer vocals from spectral balance alone.
+11. When describing synth character, reference supersawDetail.voiceCount and synthesisCharacter.inharmonicity when available. Do not invent unison stacks or detune amounts not supported by these measurements.
+12. When describing bass character, use bassDetail.type, bassDetail.averageDecayMs, and bassDetail.grooveType when available. Do not invent bass behavior not reflected in these fields.
+13. When describing acid character, use acidDetail.isAcid and acidDetail.resonanceLevel. Do not claim acid basslines without this signal.
+14. When describing reverb or space, use reverbDetail.rt60 and reverbDetail.isWet. Do not infer reverb from spectral centroid alone.
+15. Required globalPatterns fields must be filled even when a signal is absent or unavailable. Use clear absence language such as "no reliable vocal evidence measured" instead of an empty string.
 
 OUTPUT REQUIREMENTS:
 - summary: 3-4 sentences on the musical role of the stem material across the section, grounded in measured tempo/structure.
@@ -40,6 +46,9 @@ OUTPUT REQUIREMENTS:
   - bassRole: one paragraph on the bass function and register
   - melodicRole: one paragraph on the melodic or hook function
   - pumpingOrModulation: one paragraph on pumping, modulation, or movement cues from the measured hooks
+  - synthesisCharacter: one paragraph on inharmonicity, odd/even harmonic ratios, and synthesis approach, or explicit unavailable/absent evidence language
+  - vocalPresence: one paragraph on vocal detection confidence and register when vocals are present, or explicit no-reliable-vocal-evidence language
+  - bassCharacter: one paragraph on bass type, decay, and groove when bass is present, or explicit no-reliable-bass-evidence language
 - uncertaintyFlags: a short list of the most important caveats the producer should keep in mind
 
 STYLE:

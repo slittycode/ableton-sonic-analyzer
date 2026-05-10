@@ -476,6 +476,9 @@ function parseStemSummaryResult(value: unknown): StemSummaryResult {
             bassRole: expectString(globalPatterns.bassRole, 'stem summary bassRole'),
             melodicRole: expectString(globalPatterns.melodicRole, 'stem summary melodicRole'),
             pumpingOrModulation: expectString(globalPatterns.pumpingOrModulation, 'stem summary pumpingOrModulation'),
+            synthesisCharacter: expectString(globalPatterns.synthesisCharacter, 'stem summary synthesisCharacter'),
+            vocalPresence: expectString(globalPatterns.vocalPresence, 'stem summary vocalPresence'),
+            bassCharacter: expectString(globalPatterns.bassCharacter, 'stem summary bassCharacter'),
           },
           uncertaintyFlags: Array.isArray(stem.uncertaintyFlags)
             ? stem.uncertaintyFlags.map((item) => String(item))
@@ -524,6 +527,9 @@ function parseStemSummaryResult(value: unknown): StemSummaryResult {
           bassRole: expectString(globalPatterns.bassRole, 'stem summary bassRole'),
           melodicRole: expectString(globalPatterns.melodicRole, 'stem summary melodicRole'),
           pumpingOrModulation: expectString(globalPatterns.pumpingOrModulation, 'stem summary pumpingOrModulation'),
+          synthesisCharacter: expectString(globalPatterns.synthesisCharacter, 'stem summary synthesisCharacter'),
+          vocalPresence: expectString(globalPatterns.vocalPresence, 'stem summary vocalPresence'),
+          bassCharacter: expectString(globalPatterns.bassCharacter, 'stem summary bassCharacter'),
         },
         uncertaintyFlags: Array.isArray(result.uncertaintyFlags)
           ? result.uncertaintyFlags.map((item) => String(item))

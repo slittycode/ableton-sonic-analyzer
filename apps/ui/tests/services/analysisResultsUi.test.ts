@@ -311,6 +311,9 @@ const baseStemSummary: StemSummaryResult = {
         bassRole: 'Anchors the groove in the low register.',
         melodicRole: 'Leaves space for the upper material.',
         pumpingOrModulation: 'Measured pumping suggests compressor-led movement.',
+        synthesisCharacter: 'No reliable synthesis character measured.',
+        vocalPresence: 'No reliable vocal evidence measured.',
+        bassCharacter: 'Punchy bass character measured.',
       },
       uncertaintyFlags: ['Upper melodic detail is approximate.'],
     },
@@ -335,6 +338,9 @@ const baseStemSummary: StemSummaryResult = {
         bassRole: 'Not a bass layer.',
         melodicRole: 'Sparse upper-register punctuation.',
         pumpingOrModulation: 'Subtle movement follows the measured pump.',
+        synthesisCharacter: 'Bright upper harmonics suggest layered synthesis.',
+        vocalPresence: 'No reliable vocal evidence measured.',
+        bassCharacter: 'No reliable bass character measured.',
       },
       uncertaintyFlags: ['Dense harmonic overlap reduces note certainty.'],
     },
@@ -551,6 +557,8 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).toContain('Bass stem');
     expect(html).toContain('Musical stem');
     expect(html).toContain('Upper melodic detail is approximate.');
+    expect(html).toContain('No reliable vocal evidence measured.');
+    expect(html).toContain('No reliable bass character measured.');
   });
 
   it('renders v2-only Live session setup sections when interpretation.v2 is active', () => {

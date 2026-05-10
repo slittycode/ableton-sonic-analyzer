@@ -59,27 +59,11 @@ from analyze_audio_io import (  # noqa: E402
     load_stereo,
     _write_wav_pcm16,
     _demucs_chunked_inference,
+    _load_stem_mono,
     separate_stems,
     analyze_crepe_pitch,
     cleanup_stems,
 )
-
-
-def _load_stem_mono(
-    stems: dict | None,
-    stem_name: str,
-    sample_rate: int = 44100,
-) -> np.ndarray | None:
-    """Load a preferred stem as mono when it exists."""
-    if not isinstance(stems, dict):
-        return None
-    stem_path = stems.get(stem_name)
-    if not isinstance(stem_path, str) or not os.path.isfile(stem_path):
-        return None
-    try:
-        return load_mono(stem_path, sample_rate=sample_rate)
-    except Exception:
-        return None
 from analyze_estimate import (  # noqa: E402
     _format_duration_label,
     _estimate_stage_seconds,
@@ -1193,9 +1177,6 @@ def main():
         )
     )
 
-    # Genre detail (Tier 2 — derived from other results, nearly free)
-    result.update(analyze_genre_detail(result))
-
     # Danceability (Tier 2 — single Essentia call, fast)
     result.update(analyze_danceability(mono, sample_rate))
 
@@ -1222,6 +1203,7 @@ def main():
         result["chordDetail"] = None
         result["perceptual"] = None
         result["essentiaFeatures"] = None
+        result.update(analyze_genre_detail(result))
 
         # Stereo array no longer needed — release memory.
         del stereo
@@ -1235,8 +1217,8 @@ def main():
         # Detection detail
         result.update(analyze_acid_detail(mono, sample_rate, bpm=result.get("bpm")))
         result.update(analyze_reverb_detail(mono, sample_rate, bpm=result.get("bpm")))
-        result.update(analyze_vocal_detail(mono, sample_rate, bpm=result.get("bpm")))
-        result.update(analyze_supersaw_detail(mono, sample_rate, bpm=result.get("bpm")))
+        result.update(analyze_vocal_detail(mono, sample_rate, bpm=result.get("bpm"), stems=stems))
+        result.update(analyze_supersaw_detail(mono, sample_rate, bpm=result.get("bpm"), stems=stems))
         result.update(
             analyze_bass_detail(
                 mono,
@@ -1261,6 +1243,7 @@ def main():
                 lufs_integrated=result.get("lufsIntegrated"),
             )
         )
+        result.update(analyze_genre_detail(result))
 
         # Synthesis character
         result.update(analyze_synthesis_character(mono, sample_rate))

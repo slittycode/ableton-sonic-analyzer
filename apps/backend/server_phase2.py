@@ -602,8 +602,18 @@ STEM_SUMMARY_RESPONSE_SCHEMA = {
                 "bassRole": {"type": "STRING"},
                 "melodicRole": {"type": "STRING"},
                 "pumpingOrModulation": {"type": "STRING"},
+                "synthesisCharacter": {"type": "STRING"},
+                "vocalPresence": {"type": "STRING"},
+                "bassCharacter": {"type": "STRING"},
             },
-            "required": ["bassRole", "melodicRole", "pumpingOrModulation"],
+            "required": [
+                "bassRole",
+                "melodicRole",
+                "pumpingOrModulation",
+                "synthesisCharacter",
+                "vocalPresence",
+                "bassCharacter",
+            ],
         },
         "uncertaintyFlags": {"type": "ARRAY", "items": {"type": "STRING"}},
     },
@@ -2362,6 +2372,12 @@ def _is_stem_summary_global_patterns(value: Any) -> bool:
         _is_str(record.get("bassRole"))
         and _is_str(record.get("melodicRole"))
         and _is_str(record.get("pumpingOrModulation"))
+        and isinstance(record.get("synthesisCharacter"), str)
+        and bool(record.get("synthesisCharacter", "").strip())
+        and isinstance(record.get("vocalPresence"), str)
+        and bool(record.get("vocalPresence", "").strip())
+        and isinstance(record.get("bassCharacter"), str)
+        and bool(record.get("bassCharacter", "").strip())
     )
 
 
@@ -2390,6 +2406,5 @@ def _parse_stem_summary_result(
     if not _is_valid_stem_summary_shape(parsed):
         return None, "Stem summary skipped because Gemini returned an invalid response shape."
     return parsed, None
-
 
 
