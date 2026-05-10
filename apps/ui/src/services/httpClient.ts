@@ -1,9 +1,10 @@
+import { appConfig, buildConfiguredRequestInit } from '../config';
 import { BackendClientError, createUserCancelledError } from './backendPhase1Client';
 
 export async function fetchJson(url: string, init: RequestInit): Promise<unknown> {
   let response: Response;
   try {
-    response = await fetch(url, init);
+    response = await fetch(url, buildConfiguredRequestInit(init));
   } catch (error) {
     if (init.signal?.aborted) {
       throw createUserCancelledError();
@@ -11,7 +12,9 @@ export async function fetchJson(url: string, init: RequestInit): Promise<unknown
     if (error instanceof TypeError) {
       throw new BackendClientError(
         'NETWORK_UNREACHABLE',
-        'Cannot reach the local DSP backend. Confirm it is running and the API base URL is correct.',
+        appConfig.runtimeProfile === 'hosted'
+          ? 'Cannot reach the ASA backend service. Confirm the hosted API URL and deployment are available.'
+          : 'Cannot reach the local DSP backend. Confirm it is running and the API base URL is correct.',
         { cause: error },
       );
     }
