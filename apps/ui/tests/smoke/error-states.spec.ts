@@ -78,6 +78,7 @@ function buildRunSnapshot(runId: string, overrides: RunSnapshotOverrides = {}) {
         mimeType: 'audio/wav',
         sizeBytes: 2048,
         contentSha256: 'abc123',
+        path: 'uploads/test.wav',
       },
     },
     stages: {

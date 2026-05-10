@@ -76,6 +76,7 @@ function stubAnalyzeRoute(page: import('@playwright/test').Page, requestId = 're
             mimeType: 'audio/wav',
             sizeBytes: 2048,
             contentSha256: 'abc123',
+            path: 'uploads/test.wav',
           },
         },
         stages: {
@@ -143,6 +144,7 @@ function stubRunPoll(
             mimeType: 'audio/wav',
             sizeBytes: 2048,
             contentSha256: 'abc123',
+            path: 'uploads/test.wav',
           },
         },
         stages: {

@@ -325,6 +325,7 @@ function parseArtifact(value: Record<string, unknown>): AnalysisRunArtifact {
     mimeType: expectString(value.mimeType, 'mimeType'),
     sizeBytes: expectNumber(value.sizeBytes, 'sizeBytes'),
     contentSha256: expectString(value.contentSha256, 'contentSha256'),
+    path: asString(value.path) ?? undefined,
   };
 }
 
@@ -476,9 +477,21 @@ function parseStemSummaryResult(value: unknown): StemSummaryResult {
             bassRole: expectString(globalPatterns.bassRole, 'stem summary bassRole'),
             melodicRole: expectString(globalPatterns.melodicRole, 'stem summary melodicRole'),
             pumpingOrModulation: expectString(globalPatterns.pumpingOrModulation, 'stem summary pumpingOrModulation'),
-            synthesisCharacter: expectString(globalPatterns.synthesisCharacter, 'stem summary synthesisCharacter'),
-            vocalPresence: expectString(globalPatterns.vocalPresence, 'stem summary vocalPresence'),
-            bassCharacter: expectString(globalPatterns.bassCharacter, 'stem summary bassCharacter'),
+            synthesisCharacter: expectStemSummaryPattern(
+              globalPatterns.synthesisCharacter,
+              'stem summary synthesisCharacter',
+              'No reliable synthesis character measured.',
+            ),
+            vocalPresence: expectStemSummaryPattern(
+              globalPatterns.vocalPresence,
+              'stem summary vocalPresence',
+              'No reliable vocal evidence measured.',
+            ),
+            bassCharacter: expectStemSummaryPattern(
+              globalPatterns.bassCharacter,
+              'stem summary bassCharacter',
+              'Bass character unavailable for this stem.',
+            ),
           },
           uncertaintyFlags: Array.isArray(stem.uncertaintyFlags)
             ? stem.uncertaintyFlags.map((item) => String(item))
@@ -527,9 +540,21 @@ function parseStemSummaryResult(value: unknown): StemSummaryResult {
           bassRole: expectString(globalPatterns.bassRole, 'stem summary bassRole'),
           melodicRole: expectString(globalPatterns.melodicRole, 'stem summary melodicRole'),
           pumpingOrModulation: expectString(globalPatterns.pumpingOrModulation, 'stem summary pumpingOrModulation'),
-          synthesisCharacter: expectString(globalPatterns.synthesisCharacter, 'stem summary synthesisCharacter'),
-          vocalPresence: expectString(globalPatterns.vocalPresence, 'stem summary vocalPresence'),
-          bassCharacter: expectString(globalPatterns.bassCharacter, 'stem summary bassCharacter'),
+          synthesisCharacter: expectStemSummaryPattern(
+            globalPatterns.synthesisCharacter,
+            'stem summary synthesisCharacter',
+            'No reliable synthesis character measured.',
+          ),
+          vocalPresence: expectStemSummaryPattern(
+            globalPatterns.vocalPresence,
+            'stem summary vocalPresence',
+            'No reliable vocal evidence measured.',
+          ),
+          bassCharacter: expectStemSummaryPattern(
+            globalPatterns.bassCharacter,
+            'stem summary bassCharacter',
+            'Bass character unavailable for this stem.',
+          ),
         },
         uncertaintyFlags: Array.isArray(result.uncertaintyFlags)
           ? result.uncertaintyFlags.map((item) => String(item))
@@ -625,6 +650,13 @@ function expectString(value: unknown, label: string): string {
     throw new Error(`Expected ${label} to be a non-empty string.`);
   }
   return value;
+}
+
+function expectStemSummaryPattern(value: unknown, label: string, fallback: string): string {
+  if (value === undefined) {
+    return fallback;
+  }
+  return expectString(value, label);
 }
 
 function expectNumber(value: unknown, label: string): number {

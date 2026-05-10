@@ -30,6 +30,7 @@ const baseRunSnapshot: AnalysisRunSnapshot = {
       mimeType: 'audio/mpeg',
       sizeBytes: 1024,
       contentSha256: 'abc123',
+      path: 'uploads/track.mp3',
     },
   },
   stages: {
@@ -715,8 +716,8 @@ describe('analysisRunsClient', () => {
     );
   });
 
-  it('rejects stem summaries missing required Tier-3 global pattern fields', async () => {
-    const invalidStemSummarySnapshot = {
+  it('fills fallback text for legacy stem summaries missing new Tier-3 fields', async () => {
+    const legacyStemSummarySnapshot = {
       ...baseRunSnapshot,
       stages: {
         ...baseRunSnapshot.stages,
@@ -759,12 +760,16 @@ describe('analysisRunsClient', () => {
       ok: true,
       status: 200,
       statusText: 'OK',
-      json: () => Promise.resolve(invalidStemSummarySnapshot),
+      json: () => Promise.resolve(legacyStemSummarySnapshot),
     } as Response));
 
-    await expect(getAnalysisRun('run_123', {
+    const snapshot = await getAnalysisRun('run_123', {
       apiBaseUrl: 'http://127.0.0.1:8100',
-    })).rejects.toThrow('stem summary vocalPresence');
+    });
+
+    expect(projectStemSummaryFromRun(snapshot)?.stems[0].globalPatterns.vocalPresence).toBe(
+      'No reliable vocal evidence measured.',
+    );
   });
 
   it('rejects stem summaries with blank required Tier-3 global pattern fields', async () => {
