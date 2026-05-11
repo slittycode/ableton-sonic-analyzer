@@ -187,9 +187,10 @@ function drawPianoRoll(canvas: HTMLCanvasElement, notes: MidiDisplayNote[], dura
 interface SessionMusicianPanelProps {
   phase1: Phase1Result;
   sourceFileName?: string | null;
+  pitchNoteMode?: 'stem_notes' | 'off' | null;
 }
 
-export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusicianPanelProps) {
+export function SessionMusicianPanel({ phase1, sourceFileName, pitchNoteMode = null }: SessionMusicianPanelProps) {
   const melodyDetail = phase1.melodyDetail;
   const transcriptionDetail = phase1.transcriptionDetail ?? null;
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -204,13 +205,16 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
   const hasMelody = !!melodyDetail?.notes?.length;
   const melodyGuideOnly = !hasTranscription && hasMelody;
   const canToggle = hasTranscription && hasMelody;
-  const activeSource = canToggle
-    ? sourceMode
-    : hasTranscription
-      ? 'pitchNote'
-      : hasMelody
-        ? 'melodyGuide'
-        : 'none';
+  const userOptedOutOfPitchNote = pitchNoteMode === 'off';
+  const activeSource = userOptedOutOfPitchNote
+    ? 'optedOut'
+    : canToggle
+      ? sourceMode
+      : hasTranscription
+        ? 'pitchNote'
+        : hasMelody
+          ? 'melodyGuide'
+          : 'none';
 
   useEffect(() => {
     if (activeSource !== 'pitchNote') {
@@ -373,8 +377,14 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
     : null;
   const previewLabel = activeSource === 'melodyGuide' ? 'Preview melody' : 'Preview';
   const downloadLabel = activeSource === 'melodyGuide' ? 'Download melody .mid' : 'Download .mid';
-  const panelSummaryTitle = melodyGuideOnly ? 'Measurement-layer melody guide' : 'Pitch detection and melody guide';
-  const panelSummaryBody = 'Draft notes for MIDI cleanup';
+  const panelSummaryTitle = userOptedOutOfPitchNote
+    ? 'Pitch/note translation is off'
+    : melodyGuideOnly
+      ? 'Measurement-layer melody guide'
+      : 'Pitch detection and melody guide';
+  const panelSummaryBody = userOptedOutOfPitchNote
+    ? 'Re-enable the Stem Pitch/Note Translation toggle to use the melody guide preview and MIDI export.'
+    : 'Draft notes for MIDI cleanup';
 
   return (
     <section data-testid="session-musician-panel" className="space-y-4">
@@ -468,13 +478,24 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
           </div>
         </div>
 
-        {melodyGuideOnly && (
+        {melodyGuideOnly && !userOptedOutOfPitchNote && (
           <div className="rounded-sm border border-accent/20 bg-bg-panel p-3 space-y-1">
             <p className="text-[10px] font-mono uppercase tracking-wide text-accent">
               Stem pitch/note extraction is off.
             </p>
             <p className="text-[10px] font-mono text-text-secondary/80 leading-relaxed">
               This panel is showing the measurement-layer melody guide instead, so preview and MIDI export still work, but this is not the stem note draft.
+            </p>
+          </div>
+        )}
+
+        {userOptedOutOfPitchNote && (
+          <div className="rounded-sm border border-accent/20 bg-bg-panel p-3 space-y-1">
+            <p className="text-[10px] font-mono uppercase tracking-wide text-accent">
+              Pitch/note translation is off.
+            </p>
+            <p className="text-[10px] font-mono text-text-secondary/80 leading-relaxed">
+              Re-enable the Stem Pitch/Note Translation toggle in the request panel to preview and export the melody guide.
             </p>
           </div>
         )}
@@ -492,7 +513,7 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
               </div>
             )}
 
-            {activeSource !== 'none' && (
+            {(activeSource === 'pitchNote' || activeSource === 'melodyGuide') && (
               <>
                 {stats && (
                   <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono uppercase tracking-wide text-text-secondary">
@@ -603,10 +624,8 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
                 <div className="rounded-sm border border-border overflow-hidden">
                   <canvas ref={canvasRef} className="w-full" style={{ height: PIANO_ROLL_HEIGHT }} />
                 </div>
-              </>
-            )}
 
-            <div className="flex flex-wrap items-center gap-4 p-3 border border-border rounded-sm bg-bg-panel/40">
+                <div className="flex flex-wrap items-center gap-4 p-3 border border-border rounded-sm bg-bg-panel/40">
               <div className="flex items-center gap-2">
                 <Grid3X3 className="w-3.5 h-3.5 text-text-secondary" />
                 <span className="text-[10px] font-mono uppercase text-text-secondary">Quantize</span>
@@ -668,17 +687,17 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
               </div>
             </div>
 
-            <div className="flex items-start gap-2 text-[10px] font-mono text-text-secondary/80">
-              <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
-              <span title="Session musician transcription details">
-                {activeSource === 'pitchNote'
-                  ? `${formatPitchNoteMethodLabel(transcriptionDetail?.transcriptionMethod)} pitch detection. Adjust quantize before preview/export. Adjust confidence threshold to filter noise before export.`
-                  : activeSource === 'melodyGuide'
-                    ? 'Essentia melody guide. Adjust quantize before preview/export. Per-note confidence not available in melody-guide mode.'
-                    : 'Pitch detection unavailable until pitch/note translation or melodyDetail is present in the DSP payload.'}
-                {isDraft ? ' Confidence is low, so treat this clip as a draft scaffold.' : ''}
-              </span>
-            </div>
+                <div className="flex items-start gap-2 text-[10px] font-mono text-text-secondary/80">
+                  <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                  <span title="Session musician transcription details">
+                    {activeSource === 'pitchNote'
+                      ? `${formatPitchNoteMethodLabel(transcriptionDetail?.transcriptionMethod)} pitch detection. Adjust quantize before preview/export. Adjust confidence threshold to filter noise before export.`
+                      : 'Essentia melody guide. Adjust quantize before preview/export. Per-note confidence not available in melody-guide mode.'}
+                    {isDraft ? ' Confidence is low, so treat this clip as a draft scaffold.' : ''}
+                  </span>
+                </div>
+              </>
+            )}
           </>
         )}
       </div>

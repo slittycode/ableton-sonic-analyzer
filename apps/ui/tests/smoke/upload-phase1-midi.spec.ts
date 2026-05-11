@@ -608,10 +608,184 @@ test('missing melodyDetail shows MIDI unavailable state', async ({ page }) => {
   await page.getByRole('button', { name: /Run Analysis/i }).click();
 
   const panel = page.locator('section').filter({ hasText: /SESSION MUSICIAN/i }).first();
-  await expect(panel.locator('p').filter({ hasText: 'PITCH & MELODY UNAVAILABLE' })).toBeVisible();
-  await expect(
-    panel.getByText('Run with pitch/note translation enabled, or ensure melodyDetail is present in the DSP payload for a melody guide'),
-  ).toBeVisible();
+  // With pitchNoteMode='off', the panel shows opted-out state even when melodyDetail is absent.
+  // "PITCH & MELODY UNAVAILABLE" no longer renders; the opted-out banner is the primary cue.
+  await expect(panel.locator('p').filter({ hasText: /Pitch\/note translation is off/i }).first()).toBeVisible();
   await expect(panel.getByRole('button', { name: /Preview/i })).toBeDisabled();
   await expect(panel.getByRole('button', { name: /Download \.mid/i })).toBeDisabled();
+});
+
+test('pitch/note off with melody present shows opted-out state', async ({ page }) => {
+  await stubGeminiPhase2(page);
+  await page.route('**/api/analysis-runs/estimate', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        requestId: 'req_estimate_smoke_midi_optedout_001',
+        estimate: {
+          durationSeconds: 210.6,
+          totalLowMs: 22000,
+          totalHighMs: 38000,
+          stages: [{ key: 'local_dsp', label: 'Local DSP analysis', lowMs: 22000, highMs: 38000 }],
+        },
+      }),
+    });
+  });
+
+  await page.route('**/api/analysis-runs', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        runId: 'run_smoke_midi_optedout_001',
+        requestedStages: {
+          pitchNoteMode: 'off',
+          pitchNoteBackend: 'auto',
+          interpretationMode: 'async',
+          interpretationProfile: 'producer_summary',
+          interpretationModel: 'gemini-3.1-pro-preview',
+        },
+        artifacts: {
+          sourceAudio: {
+            artifactId: 'artifact_smoke_midi_optedout_001',
+            filename: 'silence.wav',
+            mimeType: 'audio/wav',
+            sizeBytes: 2048,
+            contentSha256: 'abc123',
+            path: '/tmp/silence.wav',
+          },
+        },
+        stages: {
+          measurement: { status: 'queued', authoritative: true, result: null, provenance: null, diagnostics: null, error: null },
+          pitchNoteTranslation: { status: 'not_requested', authoritative: false, preferredAttemptId: null, attemptsSummary: [], result: null, provenance: null, diagnostics: null, error: null },
+          interpretation: { status: 'blocked', authoritative: false, preferredAttemptId: null, attemptsSummary: [], result: null, provenance: null, diagnostics: null, error: null },
+        },
+      }),
+    });
+  });
+
+  await page.route('**/api/analysis-runs/run_smoke_midi_optedout_001', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        runId: 'run_smoke_midi_optedout_001',
+        requestedStages: {
+          pitchNoteMode: 'off',
+          pitchNoteBackend: 'auto',
+          interpretationMode: 'async',
+          interpretationProfile: 'producer_summary',
+          interpretationModel: 'gemini-3.1-pro-preview',
+        },
+        artifacts: {
+          sourceAudio: {
+            artifactId: 'artifact_smoke_midi_optedout_001',
+            filename: 'silence.wav',
+            mimeType: 'audio/wav',
+            sizeBytes: 2048,
+            contentSha256: 'abc123',
+            path: '/tmp/silence.wav',
+          },
+        },
+        stages: {
+          measurement: {
+            status: 'completed',
+            authoritative: true,
+            result: {
+              bpm: 126,
+              bpmConfidence: 0.93,
+              key: 'F minor',
+              keyConfidence: 0.88,
+              timeSignature: '4/4',
+              durationSeconds: 210.6,
+              lufsIntegrated: -7.9,
+              truePeak: -0.2,
+              stereoWidth: 0.69,
+              stereoCorrelation: 0.84,
+              spectralBalance: {
+                subBass: -0.7,
+                lowBass: 1.2,
+                lowMids: 0.0,
+                mids: -0.3,
+                upperMids: 0.4,
+                highs: 1.0,
+                brilliance: 0.8,
+              },
+              melodyDetail: {
+                noteCount: 3,
+                notes: [
+                  { midi: 60, onset: 0.2, duration: 0.3 },
+                  { midi: 64, onset: 0.8, duration: 0.2 },
+                  { midi: 67, onset: 1.2, duration: 0.4 },
+                ],
+                dominantNotes: [60, 64, 67],
+                pitchRange: { min: 60, max: 67 },
+                pitchConfidence: 0.72,
+                midiFile: null,
+                sourceSeparated: false,
+                vibratoPresent: false,
+                vibratoExtent: 0,
+                vibratoRate: 0,
+                vibratoConfidence: 0.1,
+              },
+            },
+            provenance: null,
+            diagnostics: { timings: { totalMs: 980, analysisMs: 900, serverOverheadMs: 80, flagsUsed: [], fileSizeBytes: 2048, fileDurationSeconds: 10, msPerSecondOfAudio: 98 } },
+            error: null,
+          },
+          pitchNoteTranslation: {
+            status: 'not_requested',
+            authoritative: false,
+            preferredAttemptId: null,
+            attemptsSummary: [],
+            result: null,
+            provenance: null,
+            diagnostics: null,
+            error: null,
+          },
+          interpretation: {
+            status: 'completed',
+            authoritative: false,
+            preferredAttemptId: 'int_smoke_midi_optedout_001',
+            attemptsSummary: [
+              { attemptId: 'int_smoke_midi_optedout_001', profileId: 'producer_summary', modelName: 'gemini-3.1-pro-preview', status: 'completed' },
+            ],
+            result: {
+              trackCharacter: 'Deterministic smoke response.',
+              detectedCharacteristics: [],
+              arrangementOverview: { summary: 'Smoke summary.', segments: [] },
+              sonicElements: { kick: 'Kick.', bass: 'Bass.', melodicArp: 'Arp.', grooveAndTiming: 'Groove.', effectsAndTexture: 'FX.' },
+              mixAndMasterChain: [],
+              secretSauce: { title: 'Smoke Sauce', explanation: 'Smoke explanation.', implementationSteps: ['Step 1'] },
+              confidenceNotes: [],
+              abletonRecommendations: [],
+            },
+            provenance: null,
+            diagnostics: null,
+            error: null,
+          },
+        },
+      }),
+    });
+  });
+
+  await page.goto('/', { waitUntil: 'networkidle' });
+  const fixturePath = path.resolve(testDir, './fixtures/silence.wav');
+  await page.setInputFiles('#audio-upload', fixturePath);
+  await page.getByRole('button', { name: /Run Analysis/i }).click();
+
+  const panel = page.locator('section').filter({ hasText: /SESSION MUSICIAN/i }).first();
+  // Opted-out banner is the primary disclosure
+  await expect(panel.locator('p').filter({ hasText: /Pitch\/note translation is off/i }).first()).toBeVisible();
+  await expect(panel.locator('p').filter({ hasText: /Re-enable the Stem Pitch\/Note Translation toggle/i }).first()).toBeVisible();
+  // Preview and Download are disabled
+  await expect(panel.getByRole('button', { name: /Preview/i })).toBeDisabled();
+  await expect(panel.getByRole('button', { name: /Download \.mid/i })).toBeDisabled();
+  // Quantize controls are absent (not rendered for opted-out state)
+  await expect(panel.getByRole('button', { name: /1\/16 note/i })).toHaveCount(0);
 });

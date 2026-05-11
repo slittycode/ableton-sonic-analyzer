@@ -210,6 +210,48 @@ describe('SessionMusicianPanel confidence helpers', () => {
     expect(html).not.toContain('1/16 note');
   });
 
+  it('disables preview and export when pitch/note translation is opted out', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(SessionMusicianPanel, {
+        phase1: {
+          ...baseMeasurement,
+          melodyDetail: {
+            noteCount: 3,
+            notes: [
+              { midi: 60, onset: 0.2, duration: 0.3 },
+              { midi: 64, onset: 0.8, duration: 0.2 },
+              { midi: 67, onset: 1.2, duration: 0.4 },
+            ],
+            dominantNotes: [60, 64, 67],
+            pitchRange: { min: 60, max: 67 },
+            pitchConfidence: 0.72,
+            midiFile: '/tmp/melody-guide.mid',
+            sourceSeparated: true,
+            vibratoPresent: false,
+            vibratoExtent: 0,
+            vibratoRate: 0,
+            vibratoConfidence: 0.1,
+          },
+        },
+        pitchNoteMode: 'off',
+      }),
+    );
+
+    // Opted-out banner is the primary cue
+    expect(html).toContain('Pitch/note translation is off.');
+    expect(html).toContain('Re-enable the Stem Pitch/Note Translation toggle');
+    // Summary copy reflects opted-out state
+    expect(html).toContain('Pitch/note translation is off');
+    // Preview and Download buttons are disabled
+    expect(html).toMatch(/disabled=""[^>]*>(?:<[^>]*>)*(?:Stop|Preview melody|Preview)/);
+    expect(html).toMatch(/disabled=""[^>]*>(?:<[^>]*>)*(?:Download)/);
+    // Piano roll canvas is absent
+    expect(html).not.toContain('<canvas');
+    // Quantize and controls are absent (moved inside active-source guard)
+    expect(html).not.toContain('1/16 note');
+    expect(html).not.toContain('CONFIDENCE');
+  });
+
   it('filters notes at or above the confidence threshold', () => {
     const filtered = filterNotesByConfidence(
       [

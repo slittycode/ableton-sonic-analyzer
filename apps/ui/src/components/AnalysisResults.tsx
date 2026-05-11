@@ -62,6 +62,7 @@ export interface AnalysisResultsProps {
   measurementAvailability?: MeasurementAvailabilityContext;
   apiBaseUrl?: string;
   runId?: string;
+  pitchNoteMode?: 'stem_notes' | 'off' | null;
 }
 
 const LOW_CHORD_CONFIDENCE_THRESHOLD = 0.5;
@@ -392,6 +393,7 @@ export function AnalysisResults({
   measurementAvailability,
   apiBaseUrl,
   runId,
+  pitchNoteMode = null,
 }: AnalysisResultsProps) {
   const [openArrangement, setOpenArrangement] = useState<Record<string, boolean>>({});
   const [openSonic, setOpenSonic] = useState<Set<string>>(new Set());
@@ -1539,7 +1541,7 @@ export function AnalysisResults({
       )}
 
       <div id="section-session" className="scroll-mt-24">
-        <SessionMusicianPanel phase1={phase1} sourceFileName={sourceFileName} />
+        <SessionMusicianPanel phase1={phase1} sourceFileName={sourceFileName} pitchNoteMode={pitchNoteMode} />
       </div>
 
       {hasStemSummaryContent && (
