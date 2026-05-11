@@ -211,6 +211,9 @@ export interface StemSummaryStem {
     bassRole: string;
     melodicRole: string;
     pumpingOrModulation: string;
+    synthesisCharacter: string;
+    vocalPresence: string;
+    bassCharacter: string;
   };
   uncertaintyFlags: string[];
 }

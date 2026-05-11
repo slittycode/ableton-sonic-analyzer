@@ -618,6 +618,9 @@ describe('analysisRunsClient', () => {
                   bassRole: 'Anchors the groove.',
                   melodicRole: 'Sparse upper register punctuation.',
                   pumpingOrModulation: 'Measured pumping suggests compressor-driven movement.',
+                  synthesisCharacter: 'No reliable synthesis character measured.',
+                  vocalPresence: 'No reliable vocal evidence measured.',
+                  bassCharacter: 'Punchy bass character measured.',
                 },
                 uncertaintyFlags: ['Upper melodic content is approximate.'],
               },
@@ -630,6 +633,9 @@ describe('analysisRunsClient', () => {
                   bassRole: 'Not applicable.',
                   melodicRole: 'Sparse upper register punctuation.',
                   pumpingOrModulation: 'Measured pumping suggests compressor-driven movement.',
+                  synthesisCharacter: 'No reliable synthesis character measured.',
+                  vocalPresence: 'No reliable vocal evidence measured.',
+                  bassCharacter: 'No reliable bass character measured.',
                 },
                 uncertaintyFlags: ['Upper melodic content is approximate.'],
               },
@@ -674,6 +680,9 @@ describe('analysisRunsClient', () => {
                       bassRole: 'Anchors the groove.',
                       melodicRole: 'Sparse upper register punctuation.',
                       pumpingOrModulation: 'Measured pumping suggests compressor-driven movement.',
+                      synthesisCharacter: 'No reliable synthesis character measured.',
+                      vocalPresence: 'No reliable vocal evidence measured.',
+                      bassCharacter: 'Punchy bass character measured.',
                     },
                     uncertaintyFlags: ['Upper melodic content is approximate.'],
                   },
@@ -702,6 +711,118 @@ describe('analysisRunsClient', () => {
 
     expect(projectPhase2FromRun(snapshot)?.trackCharacter).toBe('Tight modern electronic mix.');
     expect(projectStemSummaryFromRun(snapshot)?.stems[0].bars[0].noteHypotheses).toEqual(['C3 pedal']);
+    expect(projectStemSummaryFromRun(snapshot)?.stems[0].globalPatterns.vocalPresence).toBe(
+      'No reliable vocal evidence measured.',
+    );
+  });
+
+  it('fills fallback text for legacy stem summaries missing new Tier-3 fields', async () => {
+    const legacyStemSummarySnapshot = {
+      ...baseRunSnapshot,
+      stages: {
+        ...baseRunSnapshot.stages,
+        interpretation: {
+          ...baseRunSnapshot.stages.interpretation,
+          attemptsSummary: [
+            {
+              attemptId: 'int_stem_123',
+              profileId: 'stem_summary',
+              modelName: 'gemini-2.5-flash',
+              status: 'completed',
+            },
+          ],
+          preferredAttemptId: 'int_stem_123',
+          result: {
+            summary: 'Bass stem: Bass pulses anchor the groove.',
+            stems: [
+              {
+                stem: 'bass',
+                label: 'Bass stem',
+                summary: 'Bass pulses anchor the groove.',
+                bars: [],
+                globalPatterns: {
+                  bassRole: 'Anchors the groove.',
+                  melodicRole: 'Sparse upper register punctuation.',
+                  pumpingOrModulation: 'Measured pumping suggests compressor-driven movement.',
+                  synthesisCharacter: 'No reliable synthesis character measured.',
+                  bassCharacter: 'Punchy bass character measured.',
+                },
+                uncertaintyFlags: [],
+              },
+            ],
+            uncertaintyFlags: [],
+          },
+        },
+      },
+    };
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: () => Promise.resolve(legacyStemSummarySnapshot),
+    } as Response));
+
+    const snapshot = await getAnalysisRun('run_123', {
+      apiBaseUrl: 'http://127.0.0.1:8100',
+    });
+
+    expect(projectStemSummaryFromRun(snapshot)?.stems[0].globalPatterns.vocalPresence).toBe(
+      'No reliable vocal evidence measured.',
+    );
+  });
+
+  it('rejects stem summaries with blank required Tier-3 global pattern fields', async () => {
+    const invalidStemSummarySnapshot = {
+      ...baseRunSnapshot,
+      stages: {
+        ...baseRunSnapshot.stages,
+        interpretation: {
+          ...baseRunSnapshot.stages.interpretation,
+          attemptsSummary: [
+            {
+              attemptId: 'int_stem_123',
+              profileId: 'stem_summary',
+              modelName: 'gemini-2.5-flash',
+              status: 'completed',
+            },
+          ],
+          preferredAttemptId: 'int_stem_123',
+          result: {
+            summary: 'Bass stem: Bass pulses anchor the groove.',
+            stems: [
+              {
+                stem: 'bass',
+                label: 'Bass stem',
+                summary: 'Bass pulses anchor the groove.',
+                bars: [],
+                globalPatterns: {
+                  bassRole: 'Anchors the groove.',
+                  melodicRole: 'Sparse upper register punctuation.',
+                  pumpingOrModulation: 'Measured pumping suggests compressor-driven movement.',
+                  synthesisCharacter: 'No reliable synthesis character measured.',
+                  vocalPresence: '   ',
+                  bassCharacter: 'Punchy bass character measured.',
+                },
+                uncertaintyFlags: [],
+              },
+            ],
+            uncertaintyFlags: [],
+          },
+        },
+      },
+    };
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: () => Promise.resolve(invalidStemSummarySnapshot),
+    } as Response));
+
+    await expect(getAnalysisRun('run_123', {
+      apiBaseUrl: 'http://127.0.0.1:8100',
+    })).rejects.toThrow('stem summary vocalPresence');
   });
 
   it('creates pitch/note retry attempts against the canonical endpoint', async () => {
