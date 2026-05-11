@@ -629,6 +629,7 @@ describe('AnalysisResults UI wiring', () => {
         phase2: phase2V2,
         phase2SchemaVersion: 'interpretation.v2',
         phase2ValidationWarnings: [
+          // Two blueprint-match repairs (same reason) — collapse into one row
           {
             code: 'COERCED_TRACK_CONTEXT',
             path: 'abletonRecommendations[4].trackContext',
@@ -639,22 +640,29 @@ describe('AnalysisResults UI wiring', () => {
           {
             code: 'COERCED_TRACK_CONTEXT',
             path: 'abletonRecommendations[5].trackContext',
-            message: "Coerced trackContext 'Return:Long Reverb' to 'Return:Return:Long Reverb' by matching against declared routingBlueprint return names.",
-            originalValue: 'Return:Long Reverb',
-            coercedValue: 'Return:Return:Long Reverb',
+            message: "Coerced trackContext 'Return: Short Delay' to 'Return:Short Delay' to match the required Return:<name> format.",
+            originalValue: 'Return: Short Delay',
+            coercedValue: 'Return:Short Delay',
           },
         ],
         sourceFileName: 'example.wav',
       }),
     );
 
+    // Both COERCED_TRACK_CONTEXT warnings should produce the adjustment banner, not caution
     expect(html).toContain('Interpretation Adjustments');
     expect(html).not.toContain('Interpretation Caution');
-    expect(html).toContain('Adjusted routing labels');
-    expect(html).toContain('2 items');
+    // Different repair reasons → two separate rows with distinct titles
+    expect(html).toContain('Matched routing label to declared return');
+    expect(html).toContain('Reformatted routing label');
+    // Mappings render: original → coerced values appear as sub-items
+    expect(html).toContain('Return:Long Reverb');
+    expect(html).toContain('Return:Return:Long Reverb');
+    expect(html).toContain('Return: Short Delay');
+    expect(html).toContain('Return:Short Delay');
+    // Paths appear as mapping path suffixes
     expect(html).toContain('abletonRecommendations[4].trackContext');
     expect(html).toContain('abletonRecommendations[5].trackContext');
-    expect(html).toContain('Return:Return:Long Reverb');
   });
 
   it('keeps the interpretation intro flat so it matches the surrounding AI sections', () => {

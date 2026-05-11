@@ -213,6 +213,12 @@ interface MetaBadgeItem {
   value?: string | null;
 }
 
+interface InterpretationWarningMapping {
+  originalValue?: string;
+  coercedValue?: string;
+  path?: string;
+}
+
 interface GroupedInterpretationWarning {
   key: string;
   code?: string;
@@ -221,6 +227,7 @@ interface GroupedInterpretationWarning {
   title: string;
   message: string;
   paths: string[];
+  mappings: InterpretationWarningMapping[];
 }
 
 type StyleProfileSectionState = 'ready' | 'dropped' | 'omitted' | 'disabled' | 'pending';
@@ -277,11 +284,16 @@ function describeInterpretationWarning(
   warning: InterpretationValidationWarning,
 ): Pick<GroupedInterpretationWarning, 'tone' | 'title' | 'message'> {
   if (warning.code === 'COERCED_TRACK_CONTEXT') {
+    // Two distinct repair reasons produce different titles so they stay as separate rows.
+    // "to match the required" → _normalize_track_context_value (format repair)
+    // "by matching against declared" → _repair_return_track_context (blueprint match)
+    const isFormatRepair = warning.message?.includes('to match the required') ?? true;
+    const title = isFormatRepair ? 'Reformatted routing label' : 'Matched routing label to declared return';
     const originalValue = warning.originalValue ? `"${warning.originalValue}"` : 'the AI-generated routing label';
     const coercedValue = warning.coercedValue ? `"${warning.coercedValue}"` : 'the detected return-track label';
     return {
       tone: 'adjustment',
-      title: 'Adjusted routing labels',
+      title,
       message: `The backend kept the result and corrected ${originalValue} to ${coercedValue} so the routing labels match the detected session structure.`,
     };
   }
@@ -300,22 +312,23 @@ function groupInterpretationWarnings(
 
   warnings.forEach((warning, index) => {
     const description = describeInterpretationWarning(warning);
-    const key = [
-      warning.code ?? 'warning',
-      description.tone,
-      description.title,
-      description.message,
-      warning.originalValue ?? '',
-      warning.coercedValue ?? '',
-      warning.dropReason ?? '',
-    ].join('::');
+    // Key on code + tone + title only: multiple instances of the same repair reason
+    // collapse into one row; different repair reasons (different titles) stay separate.
+    const key = [warning.code ?? 'warning', description.tone, description.title].join('::');
     const existing = grouped.get(key);
+
+    const mapping: InterpretationWarningMapping = {
+      originalValue: warning.originalValue,
+      coercedValue: warning.coercedValue,
+      path: warning.path,
+    };
 
     if (existing) {
       existing.count += 1;
       if (warning.path) {
         existing.paths.push(warning.path);
       }
+      existing.mappings.push(mapping);
       return;
     }
 
@@ -327,6 +340,7 @@ function groupInterpretationWarnings(
       title: description.title,
       message: description.message,
       paths: warning.path ? [warning.path] : [],
+      mappings: [mapping],
     });
   });
 
@@ -809,19 +823,33 @@ export function AnalysisResults({
                     {warning.message}
                   </p>
                 </div>
-                {warning.paths.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {warning.paths.map((path) => (
-                      <span
-                        key={`${warning.key}-${path}`}
-                        className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-border text-text-secondary"
+                {warning.mappings.some((m) => m.originalValue || m.coercedValue || m.path) ? (
+                  <div className="space-y-1">
+                    {warning.mappings.map((m, mIdx) => (
+                      <div
+                        key={`${warning.key}-mapping-${mIdx}`}
+                        className="flex flex-wrap items-center gap-1.5 text-[9px] font-mono text-text-secondary"
                       >
-                        {path}
-                      </span>
+                        {(m.originalValue || m.coercedValue) && (
+                          <>
+                            <span className="px-1.5 py-0.5 rounded border border-border">
+                              {m.originalValue ?? '—'}
+                            </span>
+                            <span className="opacity-50">→</span>
+                            <span className="px-1.5 py-0.5 rounded border border-border">
+                              {m.coercedValue ?? '—'}
+                            </span>
+                          </>
+                        )}
+                        {m.path && (
+                          <span className="px-1.5 py-0.5 rounded border border-border opacity-70">
+                            {m.path}
+                          </span>
+                        )}
+                      </div>
                     ))}
                   </div>
-                )}
-                {warning.paths.length === 0 && (
+                ) : (
                   <div className="flex flex-wrap gap-1.5">
                     <span className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-border text-text-secondary">
                       Result-level warning
