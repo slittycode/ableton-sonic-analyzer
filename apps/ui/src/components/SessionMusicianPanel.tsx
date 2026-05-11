@@ -374,9 +374,7 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
   const previewLabel = activeSource === 'melodyGuide' ? 'Preview melody' : 'Preview';
   const downloadLabel = activeSource === 'melodyGuide' ? 'Download melody .mid' : 'Download .mid';
   const panelSummaryTitle = melodyGuideOnly ? 'Measurement-layer melody guide' : 'Pitch detection and melody guide';
-  const panelSummaryBody = melodyGuideOnly
-    ? 'Stem note extraction is off. You are seeing the lighter melody guide path instead.'
-    : 'Draft notes for MIDI cleanup';
+  const panelSummaryBody = 'Draft notes for MIDI cleanup';
 
   return (
     <section data-testid="session-musician-panel" className="space-y-4">
@@ -470,19 +468,19 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
           </div>
         </div>
 
+        {melodyGuideOnly && (
+          <div className="rounded-sm border border-accent/20 bg-bg-panel p-3 space-y-1">
+            <p className="text-[10px] font-mono uppercase tracking-wide text-accent">
+              Stem pitch/note extraction is off.
+            </p>
+            <p className="text-[10px] font-mono text-text-secondary/80 leading-relaxed">
+              This panel is showing the measurement-layer melody guide instead, so preview and MIDI export still work, but this is not the stem note draft.
+            </p>
+          </div>
+        )}
+
         {expanded && (
           <>
-            {melodyGuideOnly && (
-              <div className="rounded-sm border border-accent/20 bg-bg-panel p-3 space-y-1">
-                <p className="text-[10px] font-mono uppercase tracking-wide text-accent">
-                  Stem pitch/note extraction is off.
-                </p>
-                <p className="text-[10px] font-mono text-text-secondary/80 leading-relaxed">
-                  This panel is showing the measurement-layer melody guide instead, so preview and MIDI export still work, but this is not the stem note draft.
-                </p>
-              </div>
-            )}
-
             {activeSource === 'none' && (
               <div className="border border-border rounded-sm px-3 py-2 bg-bg-panel/40 space-y-1">
                 <p className="text-[11px] font-mono text-text-secondary uppercase tracking-wide">
