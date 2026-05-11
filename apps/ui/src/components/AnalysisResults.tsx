@@ -62,6 +62,7 @@ export interface AnalysisResultsProps {
   measurementAvailability?: MeasurementAvailabilityContext;
   apiBaseUrl?: string;
   runId?: string;
+  pitchNoteMode?: 'stem_notes' | 'off' | null;
 }
 
 const LOW_CHORD_CONFIDENCE_THRESHOLD = 0.5;
@@ -213,6 +214,12 @@ interface MetaBadgeItem {
   value?: string | null;
 }
 
+interface InterpretationWarningMapping {
+  originalValue?: string;
+  coercedValue?: string;
+  path?: string;
+}
+
 interface GroupedInterpretationWarning {
   key: string;
   code?: string;
@@ -221,6 +228,7 @@ interface GroupedInterpretationWarning {
   title: string;
   message: string;
   paths: string[];
+  mappings: InterpretationWarningMapping[];
 }
 
 type StyleProfileSectionState = 'ready' | 'dropped' | 'omitted' | 'disabled' | 'pending';
@@ -277,11 +285,16 @@ function describeInterpretationWarning(
   warning: InterpretationValidationWarning,
 ): Pick<GroupedInterpretationWarning, 'tone' | 'title' | 'message'> {
   if (warning.code === 'COERCED_TRACK_CONTEXT') {
+    // Two distinct repair reasons produce different titles so they stay as separate rows.
+    // "to match the required" → _normalize_track_context_value (format repair)
+    // "by matching against declared" → _repair_return_track_context (blueprint match)
+    const isFormatRepair = warning.message?.includes('to match the required') ?? true;
+    const title = isFormatRepair ? 'Reformatted routing label' : 'Matched routing label to declared return';
     const originalValue = warning.originalValue ? `"${warning.originalValue}"` : 'the AI-generated routing label';
     const coercedValue = warning.coercedValue ? `"${warning.coercedValue}"` : 'the detected return-track label';
     return {
       tone: 'adjustment',
-      title: 'Adjusted routing labels',
+      title,
       message: `The backend kept the result and corrected ${originalValue} to ${coercedValue} so the routing labels match the detected session structure.`,
     };
   }
@@ -300,22 +313,23 @@ function groupInterpretationWarnings(
 
   warnings.forEach((warning, index) => {
     const description = describeInterpretationWarning(warning);
-    const key = [
-      warning.code ?? 'warning',
-      description.tone,
-      description.title,
-      description.message,
-      warning.originalValue ?? '',
-      warning.coercedValue ?? '',
-      warning.dropReason ?? '',
-    ].join('::');
+    // Key on code + tone + title only: multiple instances of the same repair reason
+    // collapse into one row; different repair reasons (different titles) stay separate.
+    const key = [warning.code ?? 'warning', description.tone, description.title].join('::');
     const existing = grouped.get(key);
+
+    const mapping: InterpretationWarningMapping = {
+      originalValue: warning.originalValue,
+      coercedValue: warning.coercedValue,
+      path: warning.path,
+    };
 
     if (existing) {
       existing.count += 1;
       if (warning.path) {
         existing.paths.push(warning.path);
       }
+      existing.mappings.push(mapping);
       return;
     }
 
@@ -327,6 +341,7 @@ function groupInterpretationWarnings(
       title: description.title,
       message: description.message,
       paths: warning.path ? [warning.path] : [],
+      mappings: [mapping],
     });
   });
 
@@ -378,6 +393,7 @@ export function AnalysisResults({
   measurementAvailability,
   apiBaseUrl,
   runId,
+  pitchNoteMode = null,
 }: AnalysisResultsProps) {
   const [openArrangement, setOpenArrangement] = useState<Record<string, boolean>>({});
   const [openSonic, setOpenSonic] = useState<Set<string>>(new Set());
@@ -434,12 +450,20 @@ export function AnalysisResults({
     () => groupInterpretationWarnings(validationWarnings),
     [validationWarnings],
   );
-  const allValidationWarningsAreAdjustments =
-    groupedValidationWarnings.length > 0 &&
-    groupedValidationWarnings.every((warning) => warning.tone === 'adjustment');
-  const validationWarningCountLabel = allValidationWarningsAreAdjustments
-    ? `${validationWarnings.length} item${validationWarnings.length === 1 ? '' : 's'}`
-    : `${validationWarnings.length} warning${validationWarnings.length === 1 ? '' : 's'}`;
+  const adjustmentGroups = useMemo(
+    () => groupedValidationWarnings.filter((g) => g.tone === 'adjustment'),
+    [groupedValidationWarnings],
+  );
+  const warningGroups = useMemo(
+    () => groupedValidationWarnings.filter((g) => g.tone === 'warning'),
+    [groupedValidationWarnings],
+  );
+  const hasAdjustments = adjustmentGroups.length > 0;
+  const hasWarnings = warningGroups.length > 0;
+  const isMixed = hasAdjustments && hasWarnings;
+  const allValidationWarningsAreAdjustments = hasAdjustments && !hasWarnings;
+  const adjustmentCount = adjustmentGroups.reduce((sum, g) => sum + g.count, 0);
+  const warningCount = warningGroups.reduce((sum, g) => sum + g.count, 0);
 
   const confidenceBadges = toConfidenceBadges(phase2?.confidenceNotes);
   const arrangement = buildArrangementViewModel(phase1, phase2?.arrangementOverview);
@@ -729,42 +753,58 @@ export function AnalysisResults({
         <section
           data-testid="interpretation-warnings"
           className={`space-y-3 rounded-sm border p-4 ${
-            allValidationWarningsAreAdjustments
-              ? 'border-accent/25 bg-bg-card'
-              : 'border-warning/25 bg-bg-card'
+            isMixed
+              ? 'border-border bg-bg-card'
+              : allValidationWarningsAreAdjustments
+                ? 'border-accent/25 bg-bg-card'
+                : 'border-warning/25 bg-bg-card'
           }`}
         >
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2
                 className={`text-sm font-mono uppercase tracking-wider ${
-                  allValidationWarningsAreAdjustments ? 'text-accent' : 'text-warning'
+                  isMixed
+                    ? 'text-text-primary'
+                    : allValidationWarningsAreAdjustments ? 'text-accent' : 'text-warning'
                 }`}
               >
-                {allValidationWarningsAreAdjustments ? 'Interpretation Adjustments' : 'Interpretation Caution'}
+                {isMixed
+                  ? 'Interpretation Notes'
+                  : allValidationWarningsAreAdjustments ? 'Interpretation Adjustments' : 'Interpretation Caution'}
               </h2>
               <p
                 className={`text-[10px] font-mono uppercase tracking-[0.16em] ${
-                  allValidationWarningsAreAdjustments ? 'text-accent/80' : 'text-warning/80'
+                  isMixed
+                    ? 'text-text-secondary'
+                    : allValidationWarningsAreAdjustments ? 'text-accent/80' : 'text-warning/80'
                 }`}
               >
-                {allValidationWarningsAreAdjustments
-                  ? 'The backend kept the result and auto-corrected a few AI-generated labels so they match the detected session structure.'
-                  : 'The backend kept the result, but flagged parts that may not match the approved Live catalog.'}
+                {isMixed
+                  ? 'The backend made auto-corrections and flagged parts that may need review.'
+                  : allValidationWarningsAreAdjustments
+                    ? 'The backend kept the result and auto-corrected a few AI-generated labels so they match the detected session structure.'
+                    : 'The backend kept the result, but flagged parts that may not match the approved Live catalog.'}
               </p>
             </div>
             <span
               className={`text-[10px] font-mono uppercase px-2 py-1 rounded border ${
-                allValidationWarningsAreAdjustments
-                  ? 'border-accent/30 text-accent'
-                  : 'border-warning/30 text-warning'
+                isMixed
+                  ? 'border-border text-text-secondary'
+                  : allValidationWarningsAreAdjustments
+                    ? 'border-accent/30 text-accent'
+                    : 'border-warning/30 text-warning'
               }`}
             >
-              {validationWarningCountLabel}
+              {isMixed
+                ? `${adjustmentCount} adjustment${adjustmentCount === 1 ? '' : 's'} · ${warningCount} warning${warningCount === 1 ? '' : 's'}`
+                : allValidationWarningsAreAdjustments
+                  ? `${adjustmentCount} item${adjustmentCount === 1 ? '' : 's'}`
+                  : `${warningCount} warning${warningCount === 1 ? '' : 's'}`}
             </span>
           </div>
           <div className="space-y-2">
-            {groupedValidationWarnings.map((warning) => (
+            {(isMixed ? [...adjustmentGroups, ...warningGroups] : groupedValidationWarnings).map((warning) => (
               <div
                 key={warning.key}
                 className={`rounded-sm border p-3 space-y-2 ${
@@ -809,19 +849,33 @@ export function AnalysisResults({
                     {warning.message}
                   </p>
                 </div>
-                {warning.paths.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {warning.paths.map((path) => (
-                      <span
-                        key={`${warning.key}-${path}`}
-                        className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-border text-text-secondary"
+                {warning.mappings.some((m) => m.originalValue || m.coercedValue || m.path) ? (
+                  <div className="space-y-1">
+                    {warning.mappings.map((m, mIdx) => (
+                      <div
+                        key={`${warning.key}-mapping-${mIdx}`}
+                        className="flex flex-wrap items-center gap-1.5 text-[9px] font-mono text-text-secondary"
                       >
-                        {path}
-                      </span>
+                        {(m.originalValue || m.coercedValue) && (
+                          <>
+                            <span className="px-1.5 py-0.5 rounded border border-border">
+                              {m.originalValue ?? '—'}
+                            </span>
+                            <span className="opacity-50">→</span>
+                            <span className="px-1.5 py-0.5 rounded border border-border">
+                              {m.coercedValue ?? '—'}
+                            </span>
+                          </>
+                        )}
+                        {m.path && (
+                          <span className="px-1.5 py-0.5 rounded border border-border opacity-70">
+                            {m.path}
+                          </span>
+                        )}
+                      </div>
                     ))}
                   </div>
-                )}
-                {warning.paths.length === 0 && (
+                ) : (
                   <div className="flex flex-wrap gap-1.5">
                     <span className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-border text-text-secondary">
                       Result-level warning
@@ -1487,7 +1541,7 @@ export function AnalysisResults({
       )}
 
       <div id="section-session" className="scroll-mt-24">
-        <SessionMusicianPanel phase1={phase1} sourceFileName={sourceFileName} />
+        <SessionMusicianPanel phase1={phase1} sourceFileName={sourceFileName} pitchNoteMode={pitchNoteMode} />
       </div>
 
       {hasStemSummaryContent && (

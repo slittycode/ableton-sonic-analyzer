@@ -1230,6 +1230,7 @@ export default function App() {
                   }}
                   apiBaseUrl={appConfig.apiBaseUrl}
                   runId={activeRunId ?? undefined}
+                  pitchNoteMode={analysisRun?.requestedStages.pitchNoteMode ?? null}
                 />
               </Suspense>
             ) : null}
