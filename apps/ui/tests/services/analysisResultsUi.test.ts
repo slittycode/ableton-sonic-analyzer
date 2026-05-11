@@ -665,6 +665,44 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).toContain('abletonRecommendations[5].trackContext');
   });
 
+  it('renders adjustments and warnings side-by-side without forcing caution styling', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults as React.ComponentType<Record<string, unknown>>, {
+        phase1: baseMeasurement,
+        phase2: phase2V2,
+        phase2SchemaVersion: 'interpretation.v2',
+        phase2ValidationWarnings: [
+          {
+            code: 'COERCED_TRACK_CONTEXT',
+            path: 'abletonRecommendations[4].trackContext',
+            message: "Coerced trackContext 'Return:Long Reverb' to 'Return:Return:Long Reverb' by matching against declared routingBlueprint return names.",
+            originalValue: 'Return:Long Reverb',
+            coercedValue: 'Return:Return:Long Reverb',
+          },
+          {
+            code: 'UNKNOWN_PARAMETER',
+            path: 'abletonRecommendations[0].parameter',
+            message: 'Parameter mismatch surfaced as a caution.',
+          },
+        ],
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    // Mixed container — neutral heading, not adjustment-only or caution-only
+    expect(html).toContain('Interpretation Notes');
+    expect(html).not.toContain('Interpretation Adjustments');
+    expect(html).not.toContain('Interpretation Caution');
+    // Count pill shows both counts
+    expect(html).toContain('1 adjustment');
+    expect(html).toContain('1 warning');
+    // Both item cards render
+    expect(html).toContain('Matched routing label to declared return');
+    expect(html).toContain('UNKNOWN PARAMETER');
+    // data-testid hook preserved for smoke tests
+    expect(html).toContain('data-testid="interpretation-warnings"');
+  });
+
   it('keeps the interpretation intro flat so it matches the surrounding AI sections', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults as React.ComponentType<Record<string, unknown>>, {

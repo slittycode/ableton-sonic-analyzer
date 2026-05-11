@@ -448,12 +448,20 @@ export function AnalysisResults({
     () => groupInterpretationWarnings(validationWarnings),
     [validationWarnings],
   );
-  const allValidationWarningsAreAdjustments =
-    groupedValidationWarnings.length > 0 &&
-    groupedValidationWarnings.every((warning) => warning.tone === 'adjustment');
-  const validationWarningCountLabel = allValidationWarningsAreAdjustments
-    ? `${validationWarnings.length} item${validationWarnings.length === 1 ? '' : 's'}`
-    : `${validationWarnings.length} warning${validationWarnings.length === 1 ? '' : 's'}`;
+  const adjustmentGroups = useMemo(
+    () => groupedValidationWarnings.filter((g) => g.tone === 'adjustment'),
+    [groupedValidationWarnings],
+  );
+  const warningGroups = useMemo(
+    () => groupedValidationWarnings.filter((g) => g.tone === 'warning'),
+    [groupedValidationWarnings],
+  );
+  const hasAdjustments = adjustmentGroups.length > 0;
+  const hasWarnings = warningGroups.length > 0;
+  const isMixed = hasAdjustments && hasWarnings;
+  const allValidationWarningsAreAdjustments = hasAdjustments && !hasWarnings;
+  const adjustmentCount = adjustmentGroups.reduce((sum, g) => sum + g.count, 0);
+  const warningCount = warningGroups.reduce((sum, g) => sum + g.count, 0);
 
   const confidenceBadges = toConfidenceBadges(phase2?.confidenceNotes);
   const arrangement = buildArrangementViewModel(phase1, phase2?.arrangementOverview);
@@ -743,42 +751,58 @@ export function AnalysisResults({
         <section
           data-testid="interpretation-warnings"
           className={`space-y-3 rounded-sm border p-4 ${
-            allValidationWarningsAreAdjustments
-              ? 'border-accent/25 bg-bg-card'
-              : 'border-warning/25 bg-bg-card'
+            isMixed
+              ? 'border-border bg-bg-card'
+              : allValidationWarningsAreAdjustments
+                ? 'border-accent/25 bg-bg-card'
+                : 'border-warning/25 bg-bg-card'
           }`}
         >
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2
                 className={`text-sm font-mono uppercase tracking-wider ${
-                  allValidationWarningsAreAdjustments ? 'text-accent' : 'text-warning'
+                  isMixed
+                    ? 'text-text-primary'
+                    : allValidationWarningsAreAdjustments ? 'text-accent' : 'text-warning'
                 }`}
               >
-                {allValidationWarningsAreAdjustments ? 'Interpretation Adjustments' : 'Interpretation Caution'}
+                {isMixed
+                  ? 'Interpretation Notes'
+                  : allValidationWarningsAreAdjustments ? 'Interpretation Adjustments' : 'Interpretation Caution'}
               </h2>
               <p
                 className={`text-[10px] font-mono uppercase tracking-[0.16em] ${
-                  allValidationWarningsAreAdjustments ? 'text-accent/80' : 'text-warning/80'
+                  isMixed
+                    ? 'text-text-secondary'
+                    : allValidationWarningsAreAdjustments ? 'text-accent/80' : 'text-warning/80'
                 }`}
               >
-                {allValidationWarningsAreAdjustments
-                  ? 'The backend kept the result and auto-corrected a few AI-generated labels so they match the detected session structure.'
-                  : 'The backend kept the result, but flagged parts that may not match the approved Live catalog.'}
+                {isMixed
+                  ? 'The backend made auto-corrections and flagged parts that may need review.'
+                  : allValidationWarningsAreAdjustments
+                    ? 'The backend kept the result and auto-corrected a few AI-generated labels so they match the detected session structure.'
+                    : 'The backend kept the result, but flagged parts that may not match the approved Live catalog.'}
               </p>
             </div>
             <span
               className={`text-[10px] font-mono uppercase px-2 py-1 rounded border ${
-                allValidationWarningsAreAdjustments
-                  ? 'border-accent/30 text-accent'
-                  : 'border-warning/30 text-warning'
+                isMixed
+                  ? 'border-border text-text-secondary'
+                  : allValidationWarningsAreAdjustments
+                    ? 'border-accent/30 text-accent'
+                    : 'border-warning/30 text-warning'
               }`}
             >
-              {validationWarningCountLabel}
+              {isMixed
+                ? `${adjustmentCount} adjustment${adjustmentCount === 1 ? '' : 's'} · ${warningCount} warning${warningCount === 1 ? '' : 's'}`
+                : allValidationWarningsAreAdjustments
+                  ? `${adjustmentCount} item${adjustmentCount === 1 ? '' : 's'}`
+                  : `${warningCount} warning${warningCount === 1 ? '' : 's'}`}
             </span>
           </div>
           <div className="space-y-2">
-            {groupedValidationWarnings.map((warning) => (
+            {(isMixed ? [...adjustmentGroups, ...warningGroups] : groupedValidationWarnings).map((warning) => (
               <div
                 key={warning.key}
                 className={`rounded-sm border p-3 space-y-2 ${
