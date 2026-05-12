@@ -812,3 +812,184 @@ test('pitch/note off with melody present shows opted-out state', async ({ page }
   // Block B owns its own quantize controls.
   await expect(melodyContour.getByRole('button', { name: '1/16 note' })).toBeVisible();
 });
+
+test('legacy run shows Re-analyze CTA that fires a new POST with pitch_note_mode=stem_notes', async ({ page }) => {
+  await stubGeminiPhase2(page);
+
+  const postedPitchNoteModes: string[] = [];
+
+  await page.route('**/api/analysis-runs/estimate', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        requestId: 'req_estimate_smoke_reanalyze_001',
+        estimate: {
+          durationSeconds: 12,
+          totalLowMs: 4000,
+          totalHighMs: 6000,
+          stages: [{ key: 'local_dsp', label: 'Local DSP analysis', lowMs: 4000, highMs: 6000 }],
+        },
+      }),
+    });
+  });
+
+  await page.route('**/api/analysis-runs', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.fallback();
+      return;
+    }
+    const body = route.request().postData() ?? '';
+    const match = body.match(/name="pitch_note_mode"\r?\n\r?\n([^\r\n]+)/);
+    postedPitchNoteModes.push(match?.[1] ?? '');
+    const runIndex = postedPitchNoteModes.length;
+    const runId = `run_smoke_reanalyze_${runIndex}`;
+    // Return a minimal snapshot — the GET handler below fills in the data
+    // the page actually renders from.
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        runId,
+        requestedStages: {
+          pitchNoteMode: 'stem_notes',
+          pitchNoteBackend: 'auto',
+          interpretationMode: 'off',
+          interpretationProfile: 'producer_summary',
+          interpretationModel: null,
+        },
+        artifacts: {
+          sourceAudio: {
+            artifactId: `artifact_smoke_reanalyze_${runIndex}`,
+            filename: 'silence.wav',
+            mimeType: 'audio/wav',
+            sizeBytes: 2048,
+            contentSha256: 'abc123',
+            path: '/tmp/silence.wav',
+          },
+        },
+        stages: {
+          measurement: { status: 'queued', authoritative: true, result: null, provenance: null, diagnostics: null, error: null },
+          pitchNoteTranslation: { status: 'queued', authoritative: false, preferredAttemptId: null, attemptsSummary: [], result: null, provenance: null, diagnostics: null, error: null },
+          interpretation: { status: 'not_requested', authoritative: false, preferredAttemptId: null, attemptsSummary: [], result: null, provenance: null, diagnostics: null, error: null },
+        },
+      }),
+    });
+  });
+
+  // Only the first run completes with a legacy basic-pitch transcription.
+  // The second run created by the Re-analyze CTA can stay queued — the
+  // assertion is just that the POST fired with pitch_note_mode=stem_notes.
+  await page.route('**/api/analysis-runs/run_smoke_reanalyze_1', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        runId: 'run_smoke_reanalyze_1',
+        requestedStages: {
+          pitchNoteMode: 'stem_notes',
+          pitchNoteBackend: 'auto',
+          interpretationMode: 'off',
+          interpretationProfile: 'producer_summary',
+          interpretationModel: null,
+        },
+        artifacts: {
+          sourceAudio: {
+            artifactId: 'artifact_smoke_reanalyze_1',
+            filename: 'silence.wav',
+            mimeType: 'audio/wav',
+            sizeBytes: 2048,
+            contentSha256: 'abc123',
+            path: '/tmp/silence.wav',
+          },
+        },
+        stages: {
+          measurement: {
+            status: 'completed',
+            authoritative: true,
+            result: {
+              bpm: 120,
+              bpmConfidence: 0.9,
+              key: 'C major',
+              keyConfidence: 0.85,
+              timeSignature: '4/4',
+              durationSeconds: 12,
+              lufsIntegrated: -10,
+              truePeak: -0.3,
+              stereoWidth: 0.5,
+              stereoCorrelation: 0.8,
+              spectralBalance: { subBass: 0, lowBass: 0, lowMids: 0, mids: 0, upperMids: 0, highs: 0, brilliance: 0 },
+            },
+            provenance: null,
+            diagnostics: null,
+            error: null,
+          },
+          pitchNoteTranslation: {
+            status: 'completed',
+            authoritative: false,
+            preferredAttemptId: 'sym_smoke_reanalyze_1',
+            attemptsSummary: [
+              { attemptId: 'sym_smoke_reanalyze_1', backendId: 'basic-pitch', mode: 'stem_notes', status: 'completed' },
+            ],
+            result: {
+              transcriptionMethod: 'basic-pitch',
+              noteCount: 1,
+              averageConfidence: 0.5,
+              stemSeparationUsed: false,
+              fullMixFallback: true,
+              stemsTranscribed: ['full_mix'],
+              dominantPitches: [{ pitchMidi: 60, pitchName: 'C4', count: 1 }],
+              pitchRange: { minMidi: 60, maxMidi: 60, minName: 'C4', maxName: 'C4' },
+              notes: [
+                {
+                  pitchMidi: 60,
+                  pitchName: 'C4',
+                  onsetSeconds: 0,
+                  durationSeconds: 0.5,
+                  confidence: 0.5,
+                  stemSource: 'full_mix',
+                },
+              ],
+            },
+            provenance: null,
+            diagnostics: null,
+            error: null,
+          },
+          interpretation: {
+            status: 'not_requested',
+            authoritative: false,
+            preferredAttemptId: null,
+            attemptsSummary: [],
+            result: null,
+            provenance: null,
+            diagnostics: null,
+            error: null,
+          },
+        },
+      }),
+    });
+  });
+
+  await page.goto('/', { waitUntil: 'networkidle' });
+  const fixturePath = path.resolve(testDir, './fixtures/silence.wav');
+  await page.setInputFiles('#audio-upload', fixturePath);
+  // Uncheck AI interpretation so the test doesn't need a Phase 2 stub.
+  await page.getByLabel('AI INTERPRETATION').uncheck();
+  await page.getByRole('button', { name: /Run Analysis/i }).click();
+
+  const panel = page.locator('section').filter({ hasText: /SESSION MUSICIAN/i }).first();
+  const noteDraft = panel.getByTestId('note-draft-block');
+  await expect(noteDraft).toBeVisible();
+  await expect(noteDraft).toHaveAttribute('data-render-state', 'legacy');
+  // The Re-analyze CTA is visible in the legacy state.
+  const reanalyzeButton = noteDraft.getByTestId('note-draft-reanalyze');
+  await expect(reanalyzeButton).toBeVisible();
+  await expect(reanalyzeButton).toContainText(/Re-analyze with stem-aware pipeline/i);
+
+  // Two POSTs so far: the original run created during Run Analysis. Clicking
+  // the CTA should fire a second POST with pitch_note_mode=stem_notes.
+  expect(postedPitchNoteModes).toHaveLength(1);
+  await reanalyzeButton.click();
+  await expect.poll(() => postedPitchNoteModes.length, { timeout: 5000 }).toBe(2);
+  expect(postedPitchNoteModes[1]).toBe('stem_notes');
+});

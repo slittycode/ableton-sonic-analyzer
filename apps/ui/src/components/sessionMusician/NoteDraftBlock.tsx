@@ -9,6 +9,7 @@
 // precedence rules.
 
 import React, { useMemo, useState } from 'react';
+import { RotateCw } from 'lucide-react';
 import type { TranscriptionDetail } from '../../types';
 import type { QuantizeOptions } from '../../services/midi/types';
 import { quantizeNotes } from '../../services/midi/quantization';
@@ -83,6 +84,12 @@ interface NoteDraftBlockProps {
   bpm: number;
   /** Used to scale the piano-roll x-axis; defaults to last-note-end when missing. */
   trackDurationSeconds: number;
+  /**
+   * When set AND the render state is `legacy`, the block renders a button
+   * that re-runs analysis on the current source file with the stem-aware
+   * torchcrepe pipeline forced on. Hidden in all other render states.
+   */
+  onReanalyzeWithStemAware?: () => void;
 }
 
 export function NoteDraftBlock({
@@ -91,6 +98,7 @@ export function NoteDraftBlock({
   controller,
   bpm,
   trackDurationSeconds,
+  onReanalyzeWithStemAware,
 }: NoteDraftBlockProps) {
   const renderState = useMemo(
     () => deriveNoteDraftRenderState(transcriptionDetail, pitchNoteMode),
@@ -206,6 +214,18 @@ export function NoteDraftBlock({
         overrideTone={bandOverrideTone}
         testId="note-draft-band"
       />
+
+      {renderState === 'legacy' && onReanalyzeWithStemAware && (
+        <button
+          type="button"
+          onClick={onReanalyzeWithStemAware}
+          data-testid="note-draft-reanalyze"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-accent/10 border border-accent/40 text-accent text-xs font-mono uppercase rounded-sm hover:bg-accent/20 transition-colors w-fit"
+        >
+          <RotateCw className="w-3.5 h-3.5" />
+          Re-analyze with stem-aware pipeline
+        </button>
+      )}
 
       <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono uppercase tracking-wide text-text-secondary">
         <span>{countLabel}</span>

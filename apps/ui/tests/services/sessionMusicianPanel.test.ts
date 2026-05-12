@@ -224,6 +224,94 @@ describe('SessionMusicianPanel — Block A render states', () => {
     expect(deriveNoteDraftRenderState(transcriptionDetail, 'stem_notes')).toBe('legacy');
   });
 
+  it('renders the Re-analyze CTA in legacy state when the callback is provided', () => {
+    const transcriptionDetail = stemAwareTranscription({
+      transcriptionMethod: 'basic-pitch',
+    });
+    const html = renderToStaticMarkup(
+      React.createElement(SessionMusicianPanel, {
+        phase1: { ...baseMeasurement, transcriptionDetail },
+        pitchNoteMode: 'stem_notes',
+        onReanalyzeWithStemAware: () => undefined,
+      }),
+    );
+    expect(html).toContain('data-render-state="legacy"');
+    expect(html).toContain('data-testid="note-draft-reanalyze"');
+    expect(html).toContain('Re-analyze with stem-aware pipeline');
+  });
+
+  it('omits the Re-analyze CTA in legacy state when the callback is absent', () => {
+    const transcriptionDetail = stemAwareTranscription({
+      transcriptionMethod: 'basic-pitch',
+    });
+    const html = renderToStaticMarkup(
+      React.createElement(SessionMusicianPanel, {
+        phase1: { ...baseMeasurement, transcriptionDetail },
+        pitchNoteMode: 'stem_notes',
+      }),
+    );
+    expect(html).toContain('data-render-state="legacy"');
+    expect(html).not.toContain('data-testid="note-draft-reanalyze"');
+  });
+
+  it('does not render the Re-analyze CTA in the stem-aware render state', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(SessionMusicianPanel, {
+        phase1: { ...baseMeasurement, transcriptionDetail: stemAwareTranscription() },
+        pitchNoteMode: 'stem_notes',
+        onReanalyzeWithStemAware: () => undefined,
+      }),
+    );
+    expect(html).toContain('data-render-state="stem-aware"');
+    expect(html).not.toContain('data-testid="note-draft-reanalyze"');
+  });
+
+  it('does not render the Re-analyze CTA in the full-mix-fallback render state', () => {
+    const transcriptionDetail = stemAwareTranscription({
+      stemSeparationUsed: false,
+      fullMixFallback: true,
+      stemsTranscribed: ['full_mix'],
+      notes: stemAwareTranscription().notes.map((note) => ({
+        ...note,
+        stemSource: 'full_mix',
+      })),
+    });
+    const html = renderToStaticMarkup(
+      React.createElement(SessionMusicianPanel, {
+        phase1: { ...baseMeasurement, transcriptionDetail },
+        pitchNoteMode: 'stem_notes',
+        onReanalyzeWithStemAware: () => undefined,
+      }),
+    );
+    expect(html).toContain('data-render-state="full-mix-fallback"');
+    expect(html).not.toContain('data-testid="note-draft-reanalyze"');
+  });
+
+  it('does not render the Re-analyze CTA in ran-with-no-result or requested-but-unavailable states', () => {
+    const ranHtml = renderToStaticMarkup(
+      React.createElement(SessionMusicianPanel, {
+        phase1: {
+          ...baseMeasurement,
+          transcriptionDetail: stemAwareTranscription({ notes: [], noteCount: 0 }),
+        },
+        pitchNoteMode: 'stem_notes',
+        onReanalyzeWithStemAware: () => undefined,
+      }),
+    );
+    expect(ranHtml).toContain('data-render-state="ran-with-no-result"');
+    expect(ranHtml).not.toContain('data-testid="note-draft-reanalyze"');
+
+    const requestedHtml = renderToStaticMarkup(
+      React.createElement(SessionMusicianPanel, {
+        phase1: { ...baseMeasurement },
+        pitchNoteMode: 'stem_notes',
+        onReanalyzeWithStemAware: () => undefined,
+      }),
+    );
+    expect(requestedHtml).toContain('data-render-state="requested-but-unavailable"');
+    expect(requestedHtml).not.toContain('data-testid="note-draft-reanalyze"');
+  });
+
   it('shows requested-but-unavailable notice when stem_notes is on but transcription is missing', () => {
     const html = renderToStaticMarkup(
       React.createElement(SessionMusicianPanel, {

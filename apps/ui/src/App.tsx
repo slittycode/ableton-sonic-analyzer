@@ -473,7 +473,15 @@ export default function App() {
     return currentLogs;
   }, []);
 
-  const handleStartAnalysis = async () => {
+  // Overrides let the Session Musician panel re-trigger analysis for a legacy
+  // (non-torchcrepe) snapshot with the stem-aware pipeline forced on, without
+  // waiting for the React state of the toggle to flush before kicking off
+  // the run. The current toggle is also updated so the UI stays consistent.
+  type StartAnalysisOverrides = {
+    pitchNoteRequested?: boolean;
+  };
+
+  const handleStartAnalysis = async (overrides: StartAnalysisOverrides = {}) => {
     if (!audioFile) return;
 
     const activeFile = audioFile;
@@ -481,6 +489,14 @@ export default function App() {
     const activeEstimate = analysisEstimate;
     const activeTimeoutMs = deriveAnalyzeTimeoutMs(activeEstimate?.totalHighMs);
     const audioMetadata = buildAudioMetadata(activeFile);
+    const activePitchNoteRequested =
+      overrides.pitchNoteRequested ?? pitchNoteTranslationRequested;
+    if (
+      overrides.pitchNoteRequested !== undefined &&
+      overrides.pitchNoteRequested !== pitchNoteTranslationRequested
+    ) {
+      setPitchNoteTranslationRequested(overrides.pitchNoteRequested);
+    }
 
     startRenderBenchmarkCycle(window);
     ignoredRunIdsRef.current.clear();
@@ -609,7 +625,7 @@ export default function App() {
         },
         {
           analysisMode,
-          pitchNoteRequested: pitchNoteTranslationRequested,
+          pitchNoteRequested: activePitchNoteRequested,
           timeoutMs: activeTimeoutMs,
           signal: ac.signal,
           interpretationRequested,
@@ -1231,6 +1247,11 @@ export default function App() {
                   apiBaseUrl={appConfig.apiBaseUrl}
                   runId={activeRunId ?? undefined}
                   pitchNoteMode={analysisRun?.requestedStages.pitchNoteMode ?? null}
+                  onReanalyzeWithStemAware={
+                    audioFile && !isAnalyzing
+                      ? () => handleStartAnalysis({ pitchNoteRequested: true })
+                      : undefined
+                  }
                 />
               </Suspense>
             ) : null}

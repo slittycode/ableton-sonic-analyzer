@@ -65,6 +65,13 @@ export interface AnalysisResultsProps {
   apiBaseUrl?: string;
   runId?: string;
   pitchNoteMode?: 'stem_notes' | 'off' | null;
+  /**
+   * Click handler for the "Re-analyze with stem-aware pipeline" button that
+   * Block A renders in its legacy render state. App owns the run-creation
+   * primitives; pass `undefined` to hide the button (e.g. while an analysis
+   * is already in flight or no source File is loaded).
+   */
+  onReanalyzeWithStemAware?: () => void;
 }
 
 const LOW_CHORD_CONFIDENCE_THRESHOLD = 0.5;
@@ -396,6 +403,7 @@ export function AnalysisResults({
   apiBaseUrl,
   runId,
   pitchNoteMode = null,
+  onReanalyzeWithStemAware,
 }: AnalysisResultsProps) {
   const [openArrangement, setOpenArrangement] = useState<Record<string, boolean>>({});
   const [openSonic, setOpenSonic] = useState<Set<string>>(new Set());
@@ -1551,6 +1559,7 @@ export function AnalysisResults({
             sourceFileName={sourceFileName}
             pitchNoteMode={pitchNoteMode}
             hasStemListeningNotes={hasStemSummaryContent}
+            onReanalyzeWithStemAware={onReanalyzeWithStemAware}
           />
         </div>
 
