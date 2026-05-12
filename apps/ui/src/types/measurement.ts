@@ -353,13 +353,17 @@ export interface SegmentKeyEntry {
 
 /**
  * Phase 1.D #2 — temporal chord-progression timeline entry. Each entry
- * represents a stable chord region after 5-frame median-filter smoothing;
- * regions shorter than ~250 ms are dropped as noise.
+ * represents a stable chord region decoded by a 25-state (12 major + 12 minor
+ * + "N" no-chord) Viterbi over librosa chroma_cqt; regions shorter than
+ * ~250 ms are dropped as noise. `label` is short-form ("Cm", "Eb", "N");
+ * `labelLong` is human-readable ("C minor", "Eb major", "N") and is optional
+ * for back-compat with pre-migration stored payloads.
  */
 export interface ChordTimelineEntry {
   startSec: number;
   endSec: number;
   label: string;
+  labelLong?: string;
   confidence: number;
 }
 
@@ -370,8 +374,12 @@ export interface ChordDetail {
   dominantChords?: string[] | null;
   /** Phase 1.D #2: chord segments with start/end times + per-segment confidence. */
   chordTimeline?: ChordTimelineEntry[] | null;
-  /** Phase 1.D #2: count of unique chord-to-chord transitions in the smoothed timeline. */
+  /** Phase 1.D #2: count of unique chord-to-chord transitions in the Viterbi timeline. */
   chordChangeCount?: number | null;
+  /** Phase 1.D #2: identifier of the engine that produced chordTimeline. Currently always "librosa_viterbi". */
+  chordTimelineSource?: string | null;
+  /** Phase 1.D #2: true when Viterbi's dominant matches Essentia's dominantChords[0] after enharmonic normalization. */
+  chordTimelineAgreement?: boolean | null;
 }
 
 export interface PerceptualDetail {

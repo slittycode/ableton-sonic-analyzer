@@ -788,6 +788,89 @@ describe('validatePhase2Consistency', () => {
       expect(PHASE1_NEW_FIELD_PATHS).toContain('snareDetail');
       expect(PHASE1_NEW_FIELD_PATHS).toContain('hihatDetail');
       expect(PHASE1_NEW_FIELD_PATHS).toContain('saturationDetail');
+      // Phase 1.D #2 — librosa+Viterbi chord-timeline migration.
+      expect(PHASE1_NEW_FIELD_PATHS).toContain('chordDetail.chordTimeline');
+      expect(PHASE1_NEW_FIELD_PATHS).toContain('chordDetail.chordChangeCount');
+    });
+
+    it('warns when chordDetail.chordTimeline is populated but no recommendation cites it', () => {
+      // chordTimeline needs >=5 entries to clear the MIN_USEFUL_CURVE_POINTS
+      // threshold — same gate that protects lufsCurve / noveltyCurve from
+      // warning on too-sparse data.
+      const phase1 = createBasePhase1({
+        chordDetail: {
+          chordSequence: ['Cm', 'Eb', 'Bb', 'Ab', 'Fm', 'Cm'],
+          chordStrength: 0.72,
+          progression: ['Cm', 'Eb', 'Bb', 'Ab', 'Fm'],
+          dominantChords: ['Cm', 'Eb', 'Bb', 'Ab'],
+          chordTimeline: [
+            { startSec: 0, endSec: 4, label: 'Cm', labelLong: 'C minor', confidence: 0.8 },
+            { startSec: 4, endSec: 8, label: 'Eb', labelLong: 'Eb major', confidence: 0.65 },
+            { startSec: 8, endSec: 12, label: 'Bb', labelLong: 'Bb major', confidence: 0.7 },
+            { startSec: 12, endSec: 16, label: 'Ab', labelLong: 'Ab major', confidence: 0.6 },
+            { startSec: 16, endSec: 20, label: 'Fm', labelLong: 'F minor', confidence: 0.55 },
+          ],
+          chordChangeCount: 4,
+          chordTimelineSource: 'librosa_viterbi',
+          chordTimelineAgreement: true,
+        },
+      } as Partial<Phase1Result>);
+      const phase2 = createBasePhase2({
+        abletonRecommendations: [
+          {
+            device: 'EQ Eight',
+            category: 'EQ',
+            parameter: 'Low Cut',
+            value: '30 Hz',
+            reason: 'Removes rumble.',
+            phase1Fields: ['spectralBalance.subBass'],
+          },
+        ],
+      });
+
+      const result = validatePhase2Consistency(phase1, phase2);
+      const uncited = result.violations.filter(
+        v => v.type === 'NEW_FIELD_UNCITED' && v.field === 'chordDetail.chordTimeline',
+      );
+      expect(uncited).toHaveLength(1);
+    });
+
+    it('does not warn when a chordDetail child path is cited', () => {
+      const phase1 = createBasePhase1({
+        chordDetail: {
+          chordSequence: ['Cm', 'Eb', 'Bb', 'Ab', 'Fm', 'Cm'],
+          chordStrength: 0.72,
+          chordTimeline: [
+            { startSec: 0, endSec: 4, label: 'Cm', labelLong: 'C minor', confidence: 0.8 },
+            { startSec: 4, endSec: 8, label: 'Eb', labelLong: 'Eb major', confidence: 0.65 },
+            { startSec: 8, endSec: 12, label: 'Bb', labelLong: 'Bb major', confidence: 0.7 },
+            { startSec: 12, endSec: 16, label: 'Ab', labelLong: 'Ab major', confidence: 0.6 },
+            { startSec: 16, endSec: 20, label: 'Fm', labelLong: 'F minor', confidence: 0.55 },
+          ],
+          chordChangeCount: 4,
+          chordTimelineSource: 'librosa_viterbi',
+          chordTimelineAgreement: true,
+        },
+      } as Partial<Phase1Result>);
+      const phase2 = createBasePhase2({
+        abletonRecommendations: [
+          {
+            device: 'MIDI Effects',
+            category: 'MIDI',
+            parameter: 'Chord Trigger',
+            value: 'Cm',
+            reason: 'The Viterbi timeline reads Cm with high confidence.',
+            // Citing the path satisfies the new-field-coverage gate.
+            phase1Fields: ['chordDetail.chordTimeline'],
+          },
+        ],
+      });
+
+      const result = validatePhase2Consistency(phase1, phase2);
+      const uncited = result.violations.filter(
+        v => v.type === 'NEW_FIELD_UNCITED' && v.field === 'chordDetail.chordTimeline',
+      );
+      expect(uncited).toHaveLength(0);
     });
   });
 
@@ -918,6 +1001,42 @@ describe('validatePhase2Consistency', () => {
         v => v.type === 'LOW_CONFIDENCE_NOT_HEDGED',
       );
       expect(violations).toHaveLength(0);
+    });
+
+    it('flags imperative chord recommendations grounded in low chordStrength', () => {
+      // chordStrength below the hedging threshold (default 0.4); a card that
+      // cites the Viterbi timeline must hedge ("may be", "consider") or the
+      // validator will surface it as LOW_CONFIDENCE_NOT_HEDGED.
+      const phase1 = createBasePhase1({
+        chordDetail: {
+          chordSequence: ['Cm'],
+          chordStrength: 0.28,
+          chordTimeline: [
+            { startSec: 0, endSec: 4, label: 'Cm', labelLong: 'C minor', confidence: 0.25 },
+          ],
+          chordChangeCount: 0,
+          chordTimelineSource: 'librosa_viterbi',
+          chordTimelineAgreement: false,
+        },
+      } as Partial<Phase1Result>);
+      const phase2 = createBasePhase2({
+        abletonRecommendations: [
+          {
+            device: 'MIDI Effects',
+            category: 'MIDI',
+            parameter: 'Chord Trigger',
+            value: 'Cm',
+            reason: 'The timeline reads Cm — you must build the chord stab in Cm.',
+            phase1Fields: ['chordDetail.chordTimeline'],
+          },
+        ],
+      });
+
+      const result = validatePhase2Consistency(phase1, phase2);
+      const violations = result.violations.filter(
+        v => v.type === 'LOW_CONFIDENCE_NOT_HEDGED',
+      );
+      expect(violations.length).toBeGreaterThan(0);
     });
   });
 

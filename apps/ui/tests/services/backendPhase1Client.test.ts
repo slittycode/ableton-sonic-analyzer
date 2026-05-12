@@ -213,7 +213,17 @@ const validPayload = {
       dissonance: 0.21,
     },
     chordDetail: {
+      chordSequence: ['Am', 'F', 'C', 'G'],
+      chordStrength: 0.72,
       progression: ['Am', 'G'],
+      dominantChords: ['Am', 'G', 'F', 'C'],
+      chordTimeline: [
+        { startSec: 0.0, endSec: 4.0, label: 'Am', labelLong: 'A minor', confidence: 0.81 },
+        { startSec: 4.0, endSec: 8.0, label: 'F', labelLong: 'F major', confidence: 0.65 },
+      ],
+      chordChangeCount: 1,
+      chordTimelineSource: 'librosa_viterbi',
+      chordTimelineAgreement: true,
     },
     perceptual: {
       energy: 0.77,
@@ -499,6 +509,96 @@ describe('parseBackendAnalyzeResponse', () => {
     expect(parsed.phase1.rhythmTimeline?.windows[0]?.midBandSteps.every((value) => value === 0)).toBe(true);
     expect(parsed.phase1.rhythmTimeline?.windows[0]?.highBandSteps.every((value) => value === 0)).toBe(true);
     expect(parsed.phase1.rhythmTimeline?.windows[0]?.overallSteps.every((value) => value === 0)).toBe(true);
+  });
+
+  it('parses chordDetail.chordTimeline with labelLong and the new Viterbi meta-fields', () => {
+    const parsed = parseBackendAnalyzeResponse(validPayload);
+    const chord = parsed.phase1.chordDetail;
+    expect(chord).not.toBeNull();
+    expect(chord?.chordTimelineSource).toBe('librosa_viterbi');
+    expect(chord?.chordTimelineAgreement).toBe(true);
+    expect(chord?.chordTimeline).toHaveLength(2);
+    expect(chord?.chordTimeline?.[0]).toEqual({
+      startSec: 0.0,
+      endSec: 4.0,
+      label: 'Am',
+      labelLong: 'A minor',
+      confidence: 0.81,
+    });
+    expect(chord?.chordSequence).toEqual(['Am', 'F', 'C', 'G']);
+    expect(chord?.chordChangeCount).toBe(1);
+  });
+
+  it('accepts chordTimeline entries that omit labelLong for back-compat with older payloads', () => {
+    const parsed = parseBackendAnalyzeResponse({
+      ...validPayload,
+      phase1: {
+        ...validPayload.phase1,
+        chordDetail: {
+          ...validPayload.phase1.chordDetail,
+          chordTimeline: [
+            { startSec: 0.0, endSec: 2.0, label: 'Cm', confidence: 0.7 },
+          ],
+          // labelLong intentionally absent on this segment
+        },
+      },
+    });
+    expect(parsed.phase1.chordDetail?.chordTimeline).toHaveLength(1);
+    const seg = parsed.phase1.chordDetail?.chordTimeline?.[0];
+    expect(seg?.label).toBe('Cm');
+    expect(seg?.labelLong).toBeUndefined();
+  });
+
+  it('drops malformed chordTimeline entries without rejecting the rest of chordDetail', () => {
+    const parsed = parseBackendAnalyzeResponse({
+      ...validPayload,
+      phase1: {
+        ...validPayload.phase1,
+        chordDetail: {
+          chordSequence: ['Am'],
+          chordStrength: 0.5,
+          chordTimeline: [
+            // good
+            { startSec: 0, endSec: 2, label: 'Am', labelLong: 'A minor', confidence: 0.8 },
+            // bad: missing label
+            { startSec: 2, endSec: 4, confidence: 0.6 },
+            // bad: NaN confidence
+            { startSec: 4, endSec: 6, label: 'C', confidence: Number.NaN },
+            // bad: endSec < startSec
+            { startSec: 8, endSec: 6, label: 'F', confidence: 0.7 },
+            // good — emits after sort
+            { startSec: 6, endSec: 8, label: 'G', labelLong: 'G major', confidence: 1.5 }, // confidence clamped
+            // bad: not a record
+            'oops',
+          ],
+          chordChangeCount: 1,
+          chordTimelineSource: 'librosa_viterbi',
+          chordTimelineAgreement: null,
+        },
+      },
+    });
+    const tl = parsed.phase1.chordDetail?.chordTimeline;
+    expect(tl).toHaveLength(2);
+    expect(tl?.[0]?.label).toBe('Am');
+    expect(tl?.[1]?.label).toBe('G');
+    expect(tl?.[1]?.confidence).toBe(1); // clamped from 1.5
+    // chordDetail as a whole is still parsed (not nulled).
+    expect(parsed.phase1.chordDetail?.chordStrength).toBe(0.5);
+    expect(parsed.phase1.chordDetail?.chordTimelineAgreement).toBeNull();
+  });
+
+  it('treats chordTimelineAgreement as null when neither true nor false is passed', () => {
+    const parsed = parseBackendAnalyzeResponse({
+      ...validPayload,
+      phase1: {
+        ...validPayload.phase1,
+        chordDetail: {
+          ...validPayload.phase1.chordDetail,
+          chordTimelineAgreement: 'yes', // junk value should normalize to null
+        },
+      },
+    });
+    expect(parsed.phase1.chordDetail?.chordTimelineAgreement).toBeNull();
   });
 
   it('throws when phase1 is missing', () => {

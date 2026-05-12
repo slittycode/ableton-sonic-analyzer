@@ -89,6 +89,8 @@ export const PHASE1_NEW_FIELD_PATHS = [
   'reverbDetail.perBandRt60',        // #5: RT60 per octave band
   'reverbDetail.preDelayMs',         // #5: median pre-delay
   'stemAnalysis.*.reverbDetail',     // #5: per-stem reverb (any of drums/bass/other/vocals)
+  'chordDetail.chordTimeline',       // #2: librosa+Viterbi chord-timeline segments
+  'chordDetail.chordChangeCount',    // #2: count of transitions in the Viterbi timeline
 ] as const;
 
 /**
@@ -134,6 +136,7 @@ const CONFIDENCE_PAIRS: Record<string, string> = {
   'transcriptionDetail': 'transcriptionDetail.averageConfidence',
   'genreDetail': 'genreDetail.confidence',
   'chordDetail': 'chordDetail.chordStrength',
+  'chordDetail.chordTimeline': 'chordDetail.chordStrength',
 };
 
 /**

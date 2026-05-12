@@ -162,7 +162,9 @@ const ALL_PHASE1_FIELDS: string[] = [
   // Chords
   'chordDetail.dominantChords',
   'chordDetail.chordStrength',
-  'chordDetail.chordProgression',
+  'chordDetail.progression',
+  'chordDetail.chordTimeline',
+  'chordDetail.chordChangeCount',
   // Danceability
   'danceability.danceability',
   'danceability.dfa',
