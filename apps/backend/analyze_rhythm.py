@@ -13,6 +13,8 @@ try:
 except ImportError:
     es = None
 
+from dsp_utils import _compute_tempo_curve_from_ticks
+
 
 def _extract_beat_loudness_data(
     mono: np.ndarray,
@@ -56,6 +58,15 @@ def _extract_beat_loudness_data(
             band_loudness = band_loudness * beat_loudness[:, np.newaxis]
 
         low_band = band_loudness[:, 0]
+        # Phase 1.C #3: surface the middle band (200-4000 Hz) so analyze_groove
+        # can compute per-drum-group swing for the snare separately from kick
+        # and hi-hat. The BeatLoudness algorithm already computes this — we
+        # were just discarding it.
+        mid_band = (
+            band_loudness[:, 1]
+            if band_loudness.shape[1] >= 3
+            else np.zeros(band_loudness.shape[0], dtype=np.float64)
+        )
         high_band = band_loudness[:, -1]
         count = min(
             ticks.size,
@@ -71,6 +82,7 @@ def _extract_beat_loudness_data(
         beat_loudness = beat_loudness[:count]
         band_loudness = band_loudness[:count, :]
         low_band = low_band[:count]
+        mid_band = mid_band[:count]
         high_band = high_band[:count]
 
         return {
@@ -78,6 +90,7 @@ def _extract_beat_loudness_data(
             "beatLoudness": beat_loudness,
             "bandLoudness": band_loudness,
             "lowBand": low_band,
+            "midBand": mid_band,
             "highBand": high_band,
         }
     except Exception:
@@ -189,6 +202,11 @@ def analyze_rhythm_detail(
                 "totalPhrases8Bar": len(phrases_8bar),
             }
 
+        # Instantaneous-BPM curve from beat ticks, smoothed with a 4-beat
+        # rolling median. Surfaces deliberate ritardando/accelerando and
+        # DJ-tool transitions that the single mean BPM scalar conflates away.
+        tempo_curve = _compute_tempo_curve_from_ticks(ticks)
+
         return {
             "rhythmDetail": {
                 "onsetRate": round(onset_rate, 2),
@@ -198,6 +216,7 @@ def analyze_rhythm_detail(
                 "grooveAmount": round(groove, 4),
                 "tempoStability": tempo_stability,
                 "phraseGrid": phrase_grid,
+                "tempoCurve": tempo_curve,
             }
         }
     except Exception as e:
@@ -453,6 +472,7 @@ def analyze_groove(
 
         beats = np.asarray(beat_data.get("beats", []), dtype=np.float64)
         low_band = np.asarray(beat_data.get("lowBand", []), dtype=np.float64)
+        mid_band = np.asarray(beat_data.get("midBand", []), dtype=np.float64)
         high_band = np.asarray(beat_data.get("highBand", []), dtype=np.float64)
         if beats.size < 2 or low_band.size < 2 or high_band.size < 2:
             return {"grooveDetail": None}
@@ -482,12 +502,28 @@ def analyze_groove(
             return [round(float(v), 4) for v in values]
 
         raw_kick_swing = calc_swing(low_band, beats)
+        raw_snare_swing = (
+            calc_swing(mid_band, beats) if mid_band.size >= 2 else 0.0
+        )
         raw_hihat_swing = calc_swing(high_band, beats)
         # Normalize to 0-1 scale using tanh compression
         kick_swing = round(math.tanh(raw_kick_swing * 0.5), 4)
+        snare_swing = round(math.tanh(raw_snare_swing * 0.5), 4)
         hihat_swing = round(math.tanh(raw_hihat_swing * 0.5), 4)
         kick_accent = sample_accents(low_band, 16)
         hihat_accent = sample_accents(high_band, 16)
+
+        # Phase 1.C #3: per-drum-group swing object — derived from the three
+        # beat-loudness bands (kick: 20-200 Hz, snare: 200-4000 Hz, hi-hat:
+        # 4000-20000 Hz). When `stems.drums` is present the per-stem drum
+        # analyzers (snareDetail, hihatDetail) give more accurate event timing;
+        # but this object is computed on the same loudness signal used for
+        # kickSwing/hihatSwing, so it's available even when stems are absent.
+        per_drum_swing = {
+            "kick": kick_swing,
+            "snare": snare_swing,
+            "hihat": hihat_swing,
+        }
 
         return {
             "grooveDetail": {
@@ -495,6 +531,7 @@ def analyze_groove(
                 "hihatSwing": hihat_swing,
                 "kickAccent": kick_accent,
                 "hihatAccent": hihat_accent,
+                "perDrumSwing": per_drum_swing,
             }
         }
     except Exception as e:

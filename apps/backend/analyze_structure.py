@@ -89,7 +89,13 @@ def _compute_arrangement_novelty_summary(
     sample_rate: int,
     frame_size: int = STRUCTURE_FRAME_SIZE,
     hop_size: int = STRUCTURE_HOP_SIZE,
-    max_curve_points: int = 64,
+    # Bumped from 64 to 256 for Phase 1.A.5. At STRUCTURE_HOP_SIZE the native
+    # novelty resolution on a 4-minute track is ~3000 frames; 64 collapsed
+    # that to roughly one point per 4 seconds (transitions inside a build
+    # become invisible). 256 keeps the payload modest while resolving roughly
+    # one point per second — enough for Phase 2 to cite "novelty ramps for
+    # 8 bars before the drop" instead of just naming peaks.
+    max_curve_points: int = 256,
     max_peaks: int = 8,
     min_spacing_sec: float = 2.0,
 ) -> dict | None:

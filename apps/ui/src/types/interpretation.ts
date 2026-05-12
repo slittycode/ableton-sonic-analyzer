@@ -85,6 +85,11 @@ export interface SecretSauceWorkflowStep {
   value: string;
   instruction: string;
   measurementJustification: string;
+  // Structured citation array. Required by the Gemini response schema; optional
+  // in this type only to keep stored older Phase 2 results parseable until
+  // they are re-run under the new schema. The validator enforces presence on
+  // fresh runs.
+  phase1Fields?: string[];
 }
 
 export interface AbletonRecommendation {
@@ -97,6 +102,8 @@ export interface AbletonRecommendation {
   value: string;
   reason: string;
   advancedTip?: string;
+  // See SecretSauceWorkflowStep.phase1Fields for the rollout rationale.
+  phase1Fields?: string[];
 }
 
 export interface AudioObservationElement {
@@ -174,6 +181,8 @@ export interface Phase2Result {
     parameter: string;
     value: string;
     reason: string;
+    // See SecretSauceWorkflowStep.phase1Fields for the rollout rationale.
+    phase1Fields?: string[];
   }>;
   secretSauce: {
     title: string;

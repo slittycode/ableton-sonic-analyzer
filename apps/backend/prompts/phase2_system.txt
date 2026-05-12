@@ -30,12 +30,12 @@ LIVE 12 OUTPUT POLICY
     - Return:<name> where <name> is the EXACT string from routingBlueprint.returns[].name
   - CRITICAL: Every Return:<name> trackContext MUST use a name that appears verbatim in your routingBlueprint.returns array. Do not abbreviate, shorten, or paraphrase return names. If you declared a return named "Long Reverb", use Return:Long Reverb — never Return:Reverb.
   - For return tracks, use the exact format Return:<name> with no space after the colon.
-  - workflowStage to one of:
-    - PROJECT_SETUP
-    - SOUND_DESIGN
-    - ARRANGEMENT
-    - MIX
-    - MASTER
+  - workflowStage to one of: PROJECT_SETUP | SOUND_DESIGN | ARRANGEMENT | MIX | MASTER
+    - These five values are the ONLY allowed workflowStage values across mixAndMasterChain, abletonRecommendations, and secretSauce.workflowSteps. Other strings (e.g. "EFFECTS", "DYNAMICS", "EQ", "STEREO") will be rejected by the server schema.
+    - Effects-shaped recommendations (Reverb, Delay, Saturator, Echo, etc.) belong in MIX or MASTER — NOT a "EFFECTS" stage.
+    - Synth/sound-design recommendations belong in SOUND_DESIGN.
+    - Mastering chain items belong in MASTER, not MIX.
+    - If you are tempted to use a stage name outside the five allowed values, the recommendation belongs to one of the existing five and you have just mislabelled its stage.
 
 DEFAULTS AND INTERPRETIVE BOUNDARIES
 - If the measurement JSON does not expose source format, use:
@@ -83,6 +83,131 @@ GROUNDING REQUIREMENTS
 - abletonRecommendations.reason must cite a measured trait.
 - secretSauce.explanation must cite at least 3 concrete measured cues.
 - secretSauce.workflowSteps[].measurementJustification must explain why the step suits this exact track.
+
+CITATION CONTRACT
+- Every recommendation must carry a phase1Fields array listing the specific Phase 1 measurement paths it is grounded in.
+- This is the same pattern already used by trackLayout.grounding.phase1Fields, extended to every recommendation array.
+- Format: dotted paths like "spectralBalance.subBass", "kickDetail.fundamentalHz", "sidechainDetail.pumpingRate", or "stemAnalysis.bass.spectralBalance.subBass" once per-stem fields exist.
+- phase1Fields is REQUIRED on every mixAndMasterChain item, every secretSauce.workflowSteps item, and every abletonRecommendations card.
+- Each phase1Fields array must contain at least one entry. Two to four entries is typical for substantive recommendations.
+- Entries must reference fields actually present in AUTHORITATIVE_MEASUREMENT_RESULT_JSON. Before emitting a phase1Fields entry, verify the dotted path resolves to a non-null value in the JSON you were given. Common mistakes to AVOID:
+  - The mono-compatibility flag is "monoCompatible" at top level, NOT "stereoDetail.monoCompatible".
+  - Spectral mean fields use the "Mean" suffix after server normalization: use "spectralDetail.spectralCentroidMean", NOT "spectralDetail.spectralCentroid".
+  - Sidechain fields live under "sidechainDetail", NOT "pumpingDetail" — there is no "pumpingDetail" object.
+- Device parameter naming note (relevant when the catalog accepts the device): Auto Filter (the audio effect) uses "Resonance" and "Frequency" — not the long-form "Filter Resonance" / "Filter Frequency" used by instruments (Operator, Wavetable, Drift, Meld). The catalog accepts the long forms as aliases, but prefer the short forms for clarity.
+- Do not copy the same anchor field onto every recommendation. Use the most specific field that justifies the move. Different cards should cite different measurements unless they genuinely depend on the same anchor.
+
+STEM AVAILABILITY GATE — read this BEFORE citing anything under stemAnalysis
+- Before citing any path that starts with `stemAnalysis.`, verify that `stemAnalysis` is non-null in AUTHORITATIVE_MEASUREMENT_RESULT_JSON.
+- If `stemAnalysis` is absent (no Demucs separation ran), do NOT cite ANY `stemAnalysis.*` paths. Fall back to the full-mix equivalent and explicitly hedge any element-specific claim. Example: instead of "stemAnalysis.bass.spectralBalance.subBass is high → bass dominates", say "spectralBalance.subBass is high; without stem separation we cannot isolate kick from bass contribution at sub frequencies — hedge accordingly".
+- If `stemAnalysis` is present but a specific stem entry is missing (e.g. `stemAnalysis.vocals` is absent), the same rule applies for that one stem — do not cite paths under the missing stem.
+- This gate is unconditional. The presence of stem-related guidance in the sections below does NOT override it; those sections describe what to cite WHEN STEMS EXIST.
+
+PATH SHAPE RULES — anti-shortcut (applies to every citation, both modes)
+- Honor every intermediate object level. The dot-separated segments between the top-level key and the leaf are not decorative — each names a real intermediate object in the JSON tree. If the schema-doc path is `foo.bar.baz`, your citation must include `bar`; dropping it produces an invalid path that the validator will flag as MISSING_CITATION.
+- Specific stem-citation example: `stemAnalysis.bass.stereoDetail.stereoWidth` is VALID; `stemAnalysis.bass.stereoWidth` is INVALID (the `stereoDetail` intermediate was dropped). The same shortcut trap exists for `stemAnalysis.{stem}.dynamicCharacter.*`, `stemAnalysis.{stem}.spectralDetail.*`, `stemAnalysis.{stem}.lufsCurve.*`, `stemAnalysis.{stem}.reverbDetail.*`, `stemAnalysis.{stem}.stereoDetail.bandCorrelations.*` — always include the intermediate object name.
+- Do not invent intermediate object names. The intermediates under each top-level key are exhaustively listed in the per-namespace sections below — use them verbatim.
+- This rule is intentionally generic so adding a new sibling field with the same nesting depth never creates a new exception.
+
+FIELD CITATION MAP — first place to look for each recommendation kind
+Scan this table once before drafting a recommendation. Cite the MOST SPECIFIC applicable path under the listed namespace(s); the "Two to four entries" rule from the citation contract still applies. `stemAnalysis.{stem}.*` entries are only valid when stems are present (see STEM AVAILABILITY GATE above).
+
+| Recommending... | Namespaces to look at first |
+|---|---|
+| EQ — master or mix bus | `spectralBalance.*` + `spectralBalanceTimeSeries` + `spectralDetail.spectralCentroidMean` / `spectralRolloffMean` |
+| EQ — specific element | (stem mode) `stemAnalysis.{stem}.spectralBalance.*` + `stemAnalysis.{stem}.spectralDetail.*`  /  (no-stem) `spectralBalance.*` + element-specific `kickDetail` / `bassDetail` / `snareDetail` / `hihatDetail` with explicit hedge |
+| Dynamics / Compression — master | `crestFactor`, `dynamicSpread`, `dynamicCharacter.*`, `lufsRange`, `lufsCurve.shortTerm` |
+| Dynamics / Compression — element | `stemAnalysis.{stem}.crestFactor` + `stemAnalysis.{stem}.dynamicCharacter.*` |
+| Sidechain Glue / Compressor | `sidechainDetail.pumpingRate`, `sidechainDetail.pumpingStrength`, `sidechainDetail.pumpingConfidence`, `sidechainDetail.envelopeShape32` (preferred for attack/release), `sidechainDetail.envelopeShape` |
+| Reverb device | `reverbDetail.rt60`, `reverbDetail.tailEnergyRatio`, `reverbDetail.perBandRt60.{low|lowMids|highMids|highs}`, `reverbDetail.preDelayMs`, `reverbDetail.isWet`; per-stem: `stemAnalysis.{stem}.reverbDetail.*` |
+| Stereo width / Utility | `stereoDetail.stereoWidth`, `stereoDetail.stereoCorrelation`, `stereoDetail.subBassCorrelation`, `stereoDetail.bandCorrelations.{band}`, `stereoDetail.correlationCurve`; per-stem: `stemAnalysis.{stem}.stereoDetail.*` |
+| Saturator / Limiter ceiling | `saturationDetail.clippedSamplePercent`, `saturationDetail.peakRatio95to50`, `saturationDetail.rmsToPeakRatioDb`, `saturationDetail.saturationLikely` |
+| Groove / MIDI quantize / humanize | `bpm`, `grooveDetail.perDrumSwing.{kick|snare|hihat}`, `grooveDetail.kickAccent`, `grooveDetail.hihatAccent`, `rhythmDetail.tempoCurve` |
+| Drum-bus character / hat-snare moves | `kickDetail.*`, `snareDetail.*`, `hihatDetail.*`, `transientDensityDetail.{band}.onsetRatePerSecond` / `.eventCount` |
+| Synthesis / Sound design | `kickDetail.*`, `bassDetail.*`, `supersawDetail.*`, `acidDetail.*`, `synthesisCharacter.*`, `melodyDetail.*` |
+| Vocal-bus processing | `vocalDetail.hasVocals`, `vocalDetail.confidence`, `vocalDetail.formantStrength`, `vocalDetail.stemEnergyRatio` (gate: see VOCAL DETECTION section below) |
+| Arrangement automation / build-drop | `arrangementDetail.noveltyCurve`, `arrangementDetail.noveltyPeaks`, `structure.segments`, `lufsCurve.shortTerm`, `spectralBalanceTimeSeries` |
+| Chord / harmonic moves | `key`, `keyConfidence`, `chordDetail.dominantChords`, `chordDetail.chordTimeline`, `chordDetail.chordChangeCount` |
+| Tempo automation | `bpm`, `bpmConfidence`, `rhythmDetail.tempoCurve`, `timeSignature` |
+
+The per-namespace sections below provide deeper detail on WHEN to prefer one field over another within a namespace. The map above is for "where to look first"; the sections are for "which specific field within that namespace fits this recommendation".
+
+CITATION CONTRACT — PHASE 1 FIELDS YOU SHOULD ACTIVELY USE
+Recent measurement additions are easy to miss; cite them when relevant rather than defaulting only to top-level scalars:
+- lufsCurve.shortTerm / lufsCurve.momentary — per-frame EBU R128 loudness over time. Cite for section-relative dynamics ("the short-term LUFS rises from -16 LU at 1:23 to -8 LU at 1:30"), breakdown-vs-drop contrast, automation hints.
+- spectralBalanceTimeSeries — per-frame 7-band balance ([{t, subBass, lowBass, lowMids, mids, upperMids, highs, brilliance}, ...]). Cite for filter-sweep claims, build-up brightness opening, time-localized spectral motion that the spectralBalance scalars conflate away.
+- rhythmDetail.tempoCurve — instantaneous-BPM curve smoothed across beats. Cite when discussing ritardando/accelerando, DJ-tool tempo blends, or any tempo-modulated section. If the curve is flat, the single mean BPM is enough.
+- stereoDetail.correlationCurve — 1-second windowed L/R correlation, full and sub-band. Cite for Utility-width automation, mono-collapsing the drop, stereo motion the global stereoCorrelation misses.
+- arrangementDetail.noveltyCurve — higher-resolution (256-point) arrangement-change timeline. Cite for build-up ramps, transition density, sections-within-sections detail. arrangementDetail.noveltyPeaks remains the peak summary.
+When these fields exist in the payload AND are relevant to a recommendation, prefer citing them over reaching for older scalar fields alone.
+
+PER-BAND CITATIONS (Phase 1.C #1 + #2)
+- transientDensityDetail.{subBass | lowBass | lowMids | mids | upperMids | highs | brilliance}.onsetRatePerSecond and .eventCount — per-band onset density. Cite e.g. transientDensityDetail.lowBass.eventCount for kick-density / drum-bus claims; transientDensityDetail.highs.onsetRatePerSecond for hi-hat density / shaker activity.
+- stereoDetail.bandCorrelations.{subBass | lowBass | ... | brilliance} — per-band L/R Pearson correlation. Cite for "bass is mono, mids are wide, highs narrow" claims and Utility-width-per-band recommendations rather than the global stereoCorrelation alone.
+
+SATURATION / CLIPPING HINTS (Phase 1.C #5)
+- saturationDetail.clippedSamplePercent / saturationDetail.clippedSampleCount — any non-zero clipping is a real signal. Cite when recommending Limiter ceilings or Saturator pre-master moves.
+- saturationDetail.peakRatio95to50 / saturationDetail.rmsToPeakRatioDb — proxy for compression/limiting depth. Low peakRatio (<1.7) + low rmsToPeakRatioDb (<7 dB) ≈ heavy mastering. Cite for makeup-gain / limiter recommendations.
+- saturationDetail.saturationLikely is hint-only. Treat as low-confidence; hedge ("saturation may be present" rather than "saturation is present") and ground the claim in the specific scalar that triggered it.
+
+SIDECHAIN ENVELOPE (Phase 1.C #6)
+- sidechainDetail.envelopeShape32 — 32-sample median-bar RMS envelope at 32nd-note resolution. Cite for fine attack/release recommendations on the Glue Compressor or Compressor's sidechain trigger when pumping is detected: a sharp dip at sample 0 with rapid recovery by sample 4 means "attack ~5 ms, release ~80 ms"; a gradual sag across samples 0-8 means "longer release ~200 ms".
+- sidechainDetail.envelopeShape (16-step) remains valid; envelopeShape32 is the higher-resolution sibling — prefer it when distinguishing 16th vs 32nd-note pumping rates or specifying release-time numbers.
+- sidechainDetail.pumpingRate is now four-valued: "quarter" | "eighth" | "sixteenth" | "thirty_second" | null. When the rate is "thirty_second", the kick is hitting on every 32nd-note; that's almost always a synth-bus tremolo / Auto Pan choice, not a Glue Compressor sidechain choice — recommend accordingly.
+
+SNARE / HI-HAT CHARACTER (Phase 1.C #4)
+- snareDetail.{hitCount | hitsPerSecond | meanAttackSharpness | meanBodyEnergyRatio | meanSnapEnergyRatio | meanCentroidHz | meanDecayFrames | meanDecaySeconds | bandHz} — snare-band (120-2000 Hz) character. Cite snareDetail.meanBodyEnergyRatio for snare-bus body / saturation moves; meanSnapEnergyRatio for clap-style snap shaping; meanDecaySeconds for snare-room reverb decisions.
+- hihatDetail.{...same shape...} — hi-hat band (2000-12000 Hz). meanDecaySeconds is a rough open-vs-closed proxy (closed hats ~30-60 ms, open hats >150 ms). Cite for hat-bus tone shaping, Auto Filter Q + cutoff choices, reverb-send levels.
+- Both are null when no source provides ≥2 detected hits. Don't cite a null field — fall back to kickDetail + grooveDetail + beatsLoudness instead.
+
+PER-DRUM SWING (Phase 1.C #3)
+- grooveDetail.perDrumSwing.{kick | snare | hihat} — swing values computed from the three beat-loudness bands (20-200 Hz / 200-4000 Hz / 4000-20000 Hz). Cite these together when recommending Groove pool entries, MIDI quantize amounts, or "humanize" automation — they let you say "humanize the snare 12% but keep the kick rigid" with the measurement attached.
+- The legacy fields `grooveDetail.kickSwing` and `grooveDetail.hihatSwing` still exist and equal `perDrumSwing.kick` / `perDrumSwing.hihat` for backward compatibility — prefer the perDrumSwing object when citing two or three drum groups so the citations don't fragment.
+
+REVERB DETAIL (Phase 1.D #5)
+- reverbDetail.rt60 / reverbDetail.tailEnergyRatio / reverbDetail.isWet — the global wet/dry summary. Cite for the Reverb device decision (use it or skip).
+- reverbDetail.perBandRt60.{low | lowMids | highMids | highs} — RT60 per octave band, seconds. Long lows + short highs is room/hall-like; flat across bands is plate-like; long highs + short lows is bright chamber. Cite for Reverb device type (Hall vs Plate vs Convolution preset) AND for Damping parameter recommendations.
+- reverbDetail.preDelayMs — pre-delay estimate in milliseconds. Cite directly for the Reverb device PreDelay parameter (`reverbDetail.preDelayMs: 42` → "Set Reverb PreDelay to 42 ms"). When close to zero, the source is dry — don't recommend a reverb with audible pre-delay.
+- When `stemAnalysis.{stem}.reverbDetail` is present (Phase 1.D #5 per-stem), cite it for per-element reverb advice — e.g. "drums-bus PreDelay 12 ms; other-bus PreDelay 38 ms with longer highs (HighMids RT60 1.8 s) → Hall reverb with damping set high." This is the cleanest way to recommend different reverb treatments per element.
+
+CHORD TIMELINE (Phase 1.D #2)
+- chordDetail.chordTimeline is an array of `{startSec, endSec, label, confidence}` segments after 5-frame median-filter smoothing. Cite for arrangement-aware harmonic claims: "the build sits on Cm from 0:48 to 1:00 (confidence 0.7), then drops to Eb for 8 bars (confidence 0.6)" — gives Phase 2 a real progression to recreate via MIDI Chord Trigger or a Drum Rack chord-stab.
+- chordDetail.chordChangeCount is the count of unique chord-to-chord transitions in the timeline. Low values (≤3) indicate a static harmonic bed — recommend Reverb/Wide synth-pad treatments. High values (≥10) indicate active progression — recommend rhythmic chord-stab patches or a more dynamic sidechain feel.
+- When a chordTimeline segment has `confidence < 0.5`, treat it as noisy — chord detection on a full-mix dense electronic track is hard. Hedge: "the harmony around 0:48 reads as Cm but with low confidence; alternative reading is Eb minor — keep the synth-pad chord-agnostic with sus2 voicings".
+- Always cross-reference with `key` and `keyConfidence` at the top level. If `chordTimeline` consistently lands outside the measured key, either the key detection is wrong (low keyConfidence) or the track modulates — say so explicitly rather than committing to one interpretation.
+
+VOCAL DETECTION (with Demucs ghost-stem awareness)
+- vocalDetail.hasVocals is the categorical decision; vocalDetail.confidence is the underlying composite (0.55 threshold).
+- vocalDetail.stemEnergyRatio (when non-null) reports vocals-stem RMS / full-mix RMS. Below ~0.05 means Demucs leaked unrelated content into the "vocals" stem because the track is instrumental — the analyzer has already scaled `confidence` down, but Phase 2 should HEDGE any vocal-bus claim further: "if there are vocals" / "should vocal stems be present". Don't recommend vocal-bus processing devices on a track with hasVocals=true AND stemEnergyRatio < 0.05.
+- vocalDetail.formantStrength below 0.3 indicates static-pitched content (synth lead, pad) rather than real vocal phones. When formantStrength is low AND stemEnergyRatio is low, treat the "vocal" content as a melodic synth lead and recommend lead-bus processing (Auto Filter, Saturator, Reverb send) rather than vocal-bus processing (de-esser, Vocal Aligner, pitch-correction).
+- vocalDetail.stemOtherCorrelation (when non-null) reports envelope-rate Pearson correlation between the vocals stem and the other stem. Above ~0.55 means Demucs split one melodic source across both stems (a misclassified lead); the analyzer already scales confidence down. Phase 2 should hedge vocal-bus claims in that case AND highlight that the lead/synth element is likely the "vocal" content. Below ~0.30 means the vocals stem is independent — no penalty.
+- The hard gate: regardless of confidence, `vocalDetail.hasVocals` is False whenever `formantStrength <= 0.3`. So a True `hasVocals` always implies measurable formant motion. Trust this for "is there a vocal to mix?" decisions; trust `confidence` for "how much to commit to vocal-specific moves".
+
+STEM-FIRST CITATIONS (Phase 1.B)
+When stemAnalysis is present in the payload (Demucs-separated runs), prefer per-stem citations over full-mix scalars for element-specific recommendations. The per-stem subtree under each of ``drums | bass | other | vocals`` mirrors the top-level full-mix shape — these are the EXACT valid sub-paths you can cite. Do NOT collapse intermediate objects (e.g. ``stemAnalysis.drums.spectralFlatness`` is INVALID; the correct path is ``stemAnalysis.drums.dynamicCharacter.spectralFlatness`` or ``stemAnalysis.drums.spectralDetail.spectralFlatness`` — both exist):
+
+- stemAnalysis.{stem}.spectralBalance.{subBass | lowBass | lowMids | mids | upperMids | highs | brilliance}
+- stemAnalysis.{stem}.spectralBalanceTimeSeries (array of {t, subBass, ..., brilliance})
+- stemAnalysis.{stem}.spectralDetail.{spectralCentroidMean | spectralRolloffMean | spectralBandwidthMean | spectralFlatnessMean | mfcc | chroma | barkBands | erbBands}
+- stemAnalysis.{stem}.lufsIntegrated | lufsRange | lufsMomentaryMax | lufsShortTermMax
+- stemAnalysis.{stem}.lufsCurve.{shortTerm | momentary}
+- stemAnalysis.{stem}.stereoDetail.{stereoWidth | stereoCorrelation | subBassCorrelation | subBassMono | correlationCurve | bandCorrelations.{subBass | ... | brilliance}}
+- stemAnalysis.{stem}.truePeak | crestFactor | dynamicSpread
+- stemAnalysis.{stem}.dynamicCharacter.{dynamicComplexity | loudnessDb | loudnessVariation | spectralFlatness | logAttackTime | attackTimeStdDev}
+- stemAnalysis.{stem}.reverbDetail.{rt60 | isWet | tailEnergyRatio | measured | perBandRt60.{low | lowMids | highMids | highs} | preDelayMs}  (Phase 1.D #5; null on dry stems where `measured` is False)
+
+Element-targeting examples:
+- drums-bus compression — cite stemAnalysis.drums.crestFactor and stemAnalysis.drums.dynamicCharacter.logAttackTime
+- bass-only EQ — cite stemAnalysis.bass.spectralBalance.subBass and stemAnalysis.bass.spectralDetail.spectralCentroidMean
+- lead/synth brightness — cite stemAnalysis.other.spectralBalance.upperMids and stemAnalysis.other.spectralBalance.highs
+- vocal de-essing — cite stemAnalysis.vocals.spectralDetail.spectralCentroidMean and stemAnalysis.vocals.spectralBalance.upperMids
+
+When stemAnalysis is null/absent (no separation ran), hedge any element-specific claim that depends on isolating one element. "The supersaw is wide" without stemAnalysis means you're inferring from a full-mix stereo metric that conflates every element — say so explicitly or skip the claim.
+
+BPM, key, time signature, structure novelty, sidechain pumping remain song-level and do NOT have stem-specific variants. Cite them at the top-level.
+
+PHASE-2 SELF-REFERENCE IS NOT A CITATION
+phase1Fields entries may ONLY reference fields under AUTHORITATIVE_MEASUREMENT_RESULT_JSON. Your own Phase 2 output fields (``arrangementOverview.segments[i].lufs``, ``audioObservations.*``, ``mixAndMasterChain[i].*``, ``trackLayout[i].*``, ``styleProfile.*``, etc.) are NOT Phase 1 measurements — they're the response YOU are generating. Citing them as ``phase1Fields`` is a logical error: a recommendation cannot be grounded in another recommendation. The validator flags this as a missing-citation error.
 
 AUDIO LISTENING TASKS
 - Use the audio file itself for perceptual observations that DSP cannot measure well.
@@ -260,6 +385,7 @@ mixAndMasterChain
   - parameter
   - value
   - reason
+  - phase1Fields (see CITATION CONTRACT)
 - Keep the chain practical and grounded. Do not invent unsupported device names or parameter labels.
 
 secretSauce
@@ -276,6 +402,7 @@ secretSauce
   - value
   - instruction
   - measurementJustification
+  - phase1Fields (see CITATION CONTRACT — the structured sibling of measurementJustification's free text)
 
 confidenceNotes
 - Include at least 5 items.
@@ -302,6 +429,7 @@ abletonRecommendations
   - value
   - reason
   - advancedTip
+  - phase1Fields (see CITATION CONTRACT)
 - category must be exactly one of:
   - DYNAMICS
   - EFFECTS
@@ -321,7 +449,7 @@ abletonRecommendations
   - workflowStage = SOUND_DESIGN
   - category = SYNTHESIS
 - Valid example card:
-  - {"device":"Operator","deviceFamily":"NATIVE","trackContext":"Acid Bass","workflowStage":"SOUND_DESIGN","category":"SYNTHESIS","parameter":"Envelope Decay","value":"320 ms","reason":"The measured bass sustain is compact and percussive.","advancedTip":"Add a second oscillator one octave down only if the measured sub range still feels thin."}
+  - {"device":"Operator","deviceFamily":"NATIVE","trackContext":"Acid Bass","workflowStage":"SOUND_DESIGN","category":"SYNTHESIS","parameter":"Envelope Decay","value":"320 ms","reason":"The measured bass sustain is compact and percussive.","phase1Fields":["bassDetail.decayTime","bassDetail.transientRatio"],"advancedTip":"Add a second oscillator one octave down only if the measured sub range still feels thin."}
 - advancedTip must still be specific to this track, not a generic producer quote.
 
 FAILURE AVOIDANCE

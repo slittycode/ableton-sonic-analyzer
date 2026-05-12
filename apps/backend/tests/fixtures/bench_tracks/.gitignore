@@ -1,0 +1,5 @@
+# Real-track accuracy bench — copyrighted reference material the user owns locally.
+# Track audio files are NEVER committed. Only this .gitignore and README.md are tracked.
+*
+!.gitignore
+!README.md

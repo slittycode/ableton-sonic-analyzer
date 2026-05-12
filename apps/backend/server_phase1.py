@@ -99,6 +99,30 @@ def _normalize_spectral_detail(detail: Any) -> dict[str, Any] | None:
     return out
 
 
+def _normalize_stem_analysis(stem_analysis: Any) -> dict[str, Any] | None:
+    """Apply ``_normalize_spectral_detail`` to every per-stem spectralDetail.
+
+    Keeps the field-name contract consistent between the top-level
+    ``spectralDetail`` and the per-stem nested ``stemAnalysis.{stem}.spectralDetail``
+    so the frontend, Gemini, and the citation validator all speak the same
+    naming convention. Other per-stem keys (spectralBalance, lufsCurve,
+    stereoDetail, etc.) keep their existing shapes — only the spectralDetail
+    rename is needed today.
+    """
+    if not isinstance(stem_analysis, dict):
+        return None
+    out: dict[str, Any] = {}
+    for stem_name, stem_entry in stem_analysis.items():
+        if not isinstance(stem_entry, dict):
+            out[stem_name] = stem_entry
+            continue
+        stem_copy = dict(stem_entry)
+        if isinstance(stem_copy.get("spectralDetail"), dict):
+            stem_copy["spectralDetail"] = _normalize_spectral_detail(stem_copy["spectralDetail"])
+        out[stem_name] = stem_copy
+    return out
+
+
 def _build_phase1(payload: dict[str, Any]) -> dict[str, Any]:
     stereo_detail = payload.get("stereoDetail")
     if not isinstance(stereo_detail, dict):
@@ -142,6 +166,7 @@ def _build_phase1(payload: dict[str, Any]) -> dict[str, Any]:
         "lufsRange": _coerce_nullable_number(payload.get("lufsRange")),
         "lufsMomentaryMax": _coerce_nullable_number(payload.get("lufsMomentaryMax")),
         "lufsShortTermMax": _coerce_nullable_number(payload.get("lufsShortTermMax")),
+        "lufsCurve": payload.get("lufsCurve"),
         "truePeak": _coerce_number(payload.get("truePeak")),
         "plr": plr,
         "crestFactor": _coerce_nullable_number(payload.get("crestFactor")),
@@ -161,6 +186,15 @@ def _build_phase1(payload: dict[str, Any]) -> dict[str, Any]:
             "highs": _coerce_number(spectral_balance.get("highs")),
             "brilliance": _coerce_number(spectral_balance.get("brilliance")),
         },
+        "spectralBalanceTimeSeries": payload.get("spectralBalanceTimeSeries"),
+        # Stem subtree is forwarded as-is, but per-stem spectralDetail keys are
+        # renamed to match the top-level Mean-suffix contract — keeps the
+        # frontend and the Gemini citation contract speaking one schema.
+        "stemAnalysis": _normalize_stem_analysis(payload.get("stemAnalysis")),
+        "transientDensityDetail": payload.get("transientDensityDetail"),
+        "saturationDetail": payload.get("saturationDetail"),
+        "snareDetail": payload.get("snareDetail"),
+        "hihatDetail": payload.get("hihatDetail"),
         "spectralDetail": _normalize_spectral_detail(payload.get("spectralDetail")),
         "rhythmDetail": payload.get("rhythmDetail"),
         "melodyDetail": payload.get("melodyDetail"),

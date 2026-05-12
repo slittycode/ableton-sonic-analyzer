@@ -60,6 +60,7 @@ from analyze_audio_io import (  # noqa: E402
     _write_wav_pcm16,
     _demucs_chunked_inference,
     _load_stem_mono,
+    _load_stem_stereo,
     separate_stems,
     analyze_crepe_pitch,
     cleanup_stems,
@@ -82,6 +83,7 @@ from analyze_core import (  # noqa: E402
     analyze_true_peak,
     analyze_dynamics,
     analyze_dynamic_character,
+    analyze_saturation_detail,
     TEXTURE_FLATNESS_BANDS,
     _build_texture_character,
     analyze_texture_character,
@@ -147,6 +149,7 @@ from analyze_detection import (  # noqa: E402
     analyze_reverb_detail,
     analyze_vocal_detail,
     analyze_supersaw_detail,
+    analyze_per_band_transient_density,
     _GENRE_SIGNATURES,
     _GENRE_FAMILY_MAP,
     _genre_range_score,
@@ -320,17 +323,24 @@ def analyze_sidechain_detail(
         if total_samples < 2:
             return {"sidechainDetail": None}
 
-        # Build a 16th-note grid from beat intervals.
-        sixteenth_times = []
+        # Build a 32nd-note grid (8 steps per beat). Internally the analyzer
+        # works at 32nd-note resolution so rate detection can distinguish
+        # 32nd-note from 16th-note pumping (Phase 1.C #6); the legacy
+        # `envelopeShape` field is still emitted at 16-step resolution by
+        # downsampling 32 → 16 to keep the existing contract green.
+        GRID_STEPS_PER_BEAT = 8  # 1 beat → 8 thirty-second-note slots
+        thirty_second_times: list[float] = []
         for i in range(beats.size - 1):
             start = float(beats[i])
             end = float(beats[i + 1])
             if not np.isfinite(start) or not np.isfinite(end) or end <= start:
                 continue
-            step = (end - start) / 4.0
-            sixteenth_times.extend([start + j * step for j in range(4)])
+            step = (end - start) / GRID_STEPS_PER_BEAT
+            thirty_second_times.extend(
+                [start + j * step for j in range(GRID_STEPS_PER_BEAT)]
+            )
 
-        if len(sixteenth_times) == 0:
+        if len(thirty_second_times) == 0:
             return {
                 "sidechainDetail": {
                     "pumpingStrength": 0.0,
@@ -339,15 +349,15 @@ def analyze_sidechain_detail(
                     "pumpingConfidence": 0.0,
                 }
             }
-        sixteenth_times.append(float(beats[-1]))
-        sixteenth_times = np.asarray(sixteenth_times, dtype=np.float64)
+        thirty_second_times.append(float(beats[-1]))
+        thirty_second_times = np.asarray(thirty_second_times, dtype=np.float64)
 
         rms_algo = es.RMS()
         rms_values = []
         centers = []
-        for i in range(sixteenth_times.size - 1):
-            start_t = float(sixteenth_times[i])
-            end_t = float(sixteenth_times[i + 1])
+        for i in range(thirty_second_times.size - 1):
+            start_t = float(thirty_second_times[i])
+            end_t = float(thirty_second_times[i + 1])
             if end_t <= start_t:
                 continue
             start_idx = max(0, min(total_samples, int(round(start_t * sample_rate))))
@@ -427,11 +437,15 @@ def analyze_sidechain_detail(
                     np.clip(1.0 - (np.std(interval_steps) / mean_step), 0.0, 1.0)
                 )
 
+            # Grid is now at 32nd-note resolution (8 steps per beat).
+            # quarter = 1 beat = 8 steps, eighth = 1/2 beat = 4 steps,
+            # sixteenth = 1/4 beat = 2 steps, thirty_second = 1/8 beat = 1 step.
             rate_scores = {}
             for label, target in (
-                ("quarter", 4.0),
-                ("eighth", 2.0),
-                ("sixteenth", 1.0),
+                ("quarter", 8.0),
+                ("eighth", 4.0),
+                ("sixteenth", 2.0),
+                ("thirty_second", 1.0),
             ):
                 if interval_steps.size == 0:
                     rate_scores[label] = 0.0
@@ -487,17 +501,29 @@ def analyze_sidechain_detail(
             confidence *= 0.7
         pumping_confidence = float(np.clip(confidence, 0.0, 1.0))
 
-        # Envelope shape: median RMS across bars at 16th-note resolution (16 values)
-        envelope_shape = None
-        if rms_values.size >= 16:
-            n_bars = rms_values.size // 16
+        # Envelope shape: median RMS across bars at 32nd-note (32-step) resolution.
+        # Then downsample 32 → 16 for the legacy `envelopeShape` contract while
+        # preserving the full 32-step detail under `envelopeShape32`.
+        envelope_shape: list[float] | None = None
+        envelope_shape_32: list[float] | None = None
+        if rms_values.size >= 32:
+            n_bars = rms_values.size // 32
             if n_bars >= 1:
-                bars_matrix = rms_values[:n_bars * 16].reshape(n_bars, 16)
-                median_bar = np.median(bars_matrix, axis=0)
-                bar_max = float(np.max(median_bar))
-                if bar_max > 0:
-                    normalized = median_bar / bar_max
-                    envelope_shape = [round(float(v), 3) for v in normalized]
+                bars_matrix = rms_values[:n_bars * 32].reshape(n_bars, 32)
+                median_bar_32 = np.median(bars_matrix, axis=0)
+                bar_max_32 = float(np.max(median_bar_32))
+                if bar_max_32 > 0:
+                    normalized_32 = median_bar_32 / bar_max_32
+                    envelope_shape_32 = [round(float(v), 3) for v in normalized_32]
+                    # Downsample to 16 by max-pairing adjacent 32nd-note samples
+                    # — preserves the "peak at the kick" shape that the legacy
+                    # consumer expects, rather than averaging and smearing dips.
+                    paired = normalized_32.reshape(16, 2)
+                    median_bar_16 = paired.max(axis=1)
+                    bar_max_16 = float(np.max(median_bar_16))
+                    if bar_max_16 > 0:
+                        normalized_16 = median_bar_16 / bar_max_16
+                        envelope_shape = [round(float(v), 3) for v in normalized_16]
 
         return {
             "sidechainDetail": {
@@ -508,6 +534,7 @@ def analyze_sidechain_detail(
                 "pumpingRate": pumping_rate,
                 "pumpingConfidence": round(pumping_confidence, 4),
                 "envelopeShape": envelope_shape,
+                "envelopeShape32": envelope_shape_32,
             }
         }
     except Exception as e:
@@ -600,6 +627,25 @@ def analyze_bass_detail(
         MAX_DECAY_MS = 2000.0
         decay_times: list[float] = []
 
+        # Pre-compute an RMS envelope of the bass band so decay-to-threshold
+        # is measured on the envelope, not the raw oscillating waveform
+        # (a 50 Hz sine crosses zero every 10 ms, which made the old loop
+        # record sub-millisecond decays for every note).
+        env_hop = max(1, int(sample_rate * 0.005))   # 5 ms hop
+        env_win = max(env_hop, int(sample_rate * 0.02))  # 20 ms window
+        if bass.size >= env_win:
+            n_frames = 1 + (bass.size - env_win) // env_hop
+            bass_envelope = np.empty(n_frames, dtype=np.float32)
+            for fi in range(n_frames):
+                start = fi * env_hop
+                segment = bass[start:start + env_win]
+                bass_envelope[fi] = float(np.sqrt(np.mean(segment ** 2)))
+        else:
+            bass_envelope = np.array([float(np.sqrt(np.mean(bass ** 2)))], dtype=np.float32)
+
+        def _sample_to_env(sample_index: int) -> int:
+            return int(min(max(0, sample_index // env_hop), bass_envelope.size - 1))
+
         for idx in range(len(onsets) - 1):
             onset_sample = onsets[idx]
             next_onset = onsets[idx + 1]
@@ -607,22 +653,35 @@ def analyze_bass_detail(
                 next_onset - onset_sample,
                 int((MAX_DECAY_MS / 1000.0) * sample_rate),
             )
-            # Find peak near onset (50 ms search window)
-            search_end = min(onset_sample + int(sample_rate * 0.05), bass.size)
-            peak_val = float(np.max(np.abs(bass[onset_sample:search_end]))) if search_end > onset_sample else 0.0
-            if peak_val < 0.001:
+            # Find peak of the envelope inside a 50 ms search window starting at
+            # the onset trigger.
+            env_start = _sample_to_env(onset_sample)
+            env_search_end = _sample_to_env(min(onset_sample + int(sample_rate * 0.05), bass.size - 1)) + 1
+            if env_search_end <= env_start:
                 continue
-            threshold_val = peak_val * (10.0 ** (DECAY_THRESHOLD_DB / 20.0))
+            window_env = bass_envelope[env_start:env_search_end]
+            if window_env.size == 0:
+                continue
+            peak_env_offset = int(np.argmax(window_env))
+            peak_env_val = float(window_env[peak_env_offset])
+            if peak_env_val < 0.001:
+                continue
+            threshold_val = peak_env_val * (10.0 ** (DECAY_THRESHOLD_DB / 20.0))
+
+            # Decay window in envelope frames, anchored at the peak (not the onset).
+            peak_env_index = env_start + peak_env_offset
+            max_decay_env = max(0, max_decay_samples // env_hop - peak_env_offset)
             found = False
-            for s in range(max_decay_samples):
-                if onset_sample + s >= bass.size:
+            for s in range(max_decay_env):
+                env_pos = peak_env_index + s
+                if env_pos >= bass_envelope.size:
                     break
-                if abs(float(bass[onset_sample + s])) < threshold_val:
-                    decay_times.append((s / float(sample_rate)) * 1000.0)
+                if bass_envelope[env_pos] < threshold_val:
+                    decay_times.append((s * env_hop / float(sample_rate)) * 1000.0)
                     found = True
                     break
-            if not found:
-                decay_times.append((max_decay_samples / float(sample_rate)) * 1000.0)
+            if not found and max_decay_env > 0:
+                decay_times.append((max_decay_env * env_hop / float(sample_rate)) * 1000.0)
 
         avg_decay = float(np.mean(decay_times)) if decay_times else 800.0
 
@@ -858,6 +917,211 @@ def analyze_kick_detail(
         return {"kickDetail": None}
 
 
+def _analyze_band_drum_detail(
+    mono: np.ndarray,
+    sample_rate: int,
+    band_lo_hz: float,
+    band_hi_hz: float,
+    bpm: float | None,
+    stems: dict | None,
+    *,
+    min_event_dist_subdivisions: float = 0.25,  # 16th-note default
+    body_split_ratio: float = 0.5,
+) -> dict | None:
+    """Phase 1.C #4 shared helper — band-limited drum onset + character analysis.
+
+    Returns a dict with hit count, mean attack sharpness, body-vs-snap energy
+    ratio, mean band centroid, and decay character. The same shape is used for
+    snare and hi-hat — only the band range differs. Returns None on failure or
+    when fewer than 2 onsets are detected.
+    """
+    if es is None or mono is None or getattr(mono, "size", 0) < 4096:
+        return None
+    try:
+        source_mono = _load_stem_mono(stems, "drums", sample_rate=sample_rate)
+        if source_mono is None:
+            source_mono = mono
+        mono_arr = np.asarray(source_mono, dtype=np.float32)
+        if mono_arr.ndim != 1 or mono_arr.size < 4096:
+            return None
+
+        effective_bpm = bpm if (bpm is not None and np.isfinite(bpm) and bpm > 0) else 120.0
+        frame_size = 2048
+        hop_size = 256
+        nyquist = sample_rate / 2.0
+        lo = max(20.0, min(band_lo_hz, nyquist - 2.0))
+        hi = max(lo + 50.0, min(band_hi_hz, nyquist - 1.0))
+
+        window = es.Windowing(type="hann", size=frame_size)
+        spectrum_algo = es.Spectrum(size=frame_size)
+        freq_resolution = float(sample_rate) / float(frame_size)
+        low_bin = max(1, int(lo / freq_resolution))
+        high_bin = min(frame_size // 2 - 1, int(hi / freq_resolution))
+        mid_bin = max(low_bin + 1, int((lo + (hi - lo) * body_split_ratio) / freq_resolution))
+
+        envelope: list[float] = []
+        for frame in es.FrameGenerator(mono_arr, frameSize=frame_size, hopSize=hop_size):
+            spec = spectrum_algo(window(frame))
+            band_energy = 0.0
+            for k in range(low_bin, high_bin + 1):
+                band_energy += float(spec[k]) ** 2
+            n_bins = max(1, high_bin - low_bin + 1)
+            envelope.append(float(np.sqrt(band_energy / n_bins)))
+
+        if len(envelope) < 5:
+            return None
+
+        beat_dur_s = 60.0 / effective_bpm
+        min_dist_samples = int(beat_dur_s * min_event_dist_subdivisions * sample_rate)
+        min_dist_frames = max(1, min_dist_samples // hop_size)
+
+        envelope_arr = np.asarray(envelope, dtype=np.float64)
+        env_max = float(envelope_arr.max()) if envelope_arr.size > 0 else 0.0
+        if env_max <= 0.0:
+            return None
+        # Adaptive threshold: 10% of envelope max is "real" event territory.
+        peak_floor = max(env_max * 0.10, 0.005)
+
+        transients: list[int] = []
+        last_t = -min_dist_frames
+        for i in range(2, len(envelope) - 2):
+            if (
+                envelope[i] > envelope[i - 1]
+                and envelope[i] > envelope[i + 1]
+                and envelope[i] > peak_floor
+                and i - last_t >= min_dist_frames
+            ):
+                transients.append(i)
+                last_t = i
+
+        if len(transients) < 2:
+            return None
+
+        attack_sharpness_values: list[float] = []
+        body_energy_values: list[float] = []
+        snap_energy_values: list[float] = []
+        centroid_values: list[float] = []
+        decay_frames_values: list[int] = []
+
+        for t_idx in transients:
+            # Attack sharpness: envelope rise across the 2 frames before peak.
+            if t_idx >= 2:
+                rise = envelope[t_idx] - envelope[t_idx - 2]
+                attack_sharpness_values.append(max(0.0, rise))
+
+            # Decay: how many frames after the peak until envelope drops below
+            # peak * 0.3. Caps at 60 frames (~350 ms at 256-hop 44.1k).
+            decay_target = envelope[t_idx] * 0.3
+            decay_count = 0
+            for j in range(t_idx + 1, min(t_idx + 60, len(envelope))):
+                if envelope[j] < decay_target:
+                    break
+                decay_count += 1
+            decay_frames_values.append(decay_count)
+
+            # Per-hit spectral split: body (lower half of band) vs snap (upper half).
+            start_sample = t_idx * hop_size
+            if start_sample + frame_size > mono_arr.size:
+                continue
+            raw_frame = mono_arr[start_sample : start_sample + frame_size]
+            spec = spectrum_algo(window(raw_frame))
+            body_e = 0.0
+            snap_e = 0.0
+            num_weighted = 0.0
+            denom_weighted = 0.0
+            for k in range(low_bin, min(high_bin + 1, spec.size)):
+                mag = float(spec[k])
+                power = mag * mag
+                if k <= mid_bin:
+                    body_e += power
+                else:
+                    snap_e += power
+                num_weighted += k * freq_resolution * mag
+                denom_weighted += mag
+            total_e = body_e + snap_e
+            if total_e > 0.0:
+                body_energy_values.append(body_e / total_e)
+                snap_energy_values.append(snap_e / total_e)
+            if denom_weighted > 0.0:
+                centroid_values.append(num_weighted / denom_weighted)
+
+        if not attack_sharpness_values:
+            return None
+
+        return {
+            "hitCount": len(transients),
+            "hitsPerSecond": round(len(transients) / (mono_arr.size / float(sample_rate)), 2),
+            "meanAttackSharpness": round(float(np.mean(attack_sharpness_values)), 4),
+            "meanBodyEnergyRatio": round(float(np.mean(body_energy_values)), 3) if body_energy_values else None,
+            "meanSnapEnergyRatio": round(float(np.mean(snap_energy_values)), 3) if snap_energy_values else None,
+            "meanCentroidHz": round(float(np.mean(centroid_values)), 1) if centroid_values else None,
+            "meanDecayFrames": round(float(np.mean(decay_frames_values)), 1),
+            "meanDecaySeconds": round(float(np.mean(decay_frames_values)) * hop_size / float(sample_rate), 3),
+            "bandHz": [round(lo, 1), round(hi, 1)],
+        }
+    except Exception as exc:
+        print(f"[warn] band drum analysis [{band_lo_hz}-{band_hi_hz} Hz] failed: {exc}", file=sys.stderr)
+        return None
+
+
+def analyze_snare_detail(
+    mono: np.ndarray,
+    sample_rate: int = 44100,
+    bpm: float | None = None,
+    stems: dict | None = None,
+) -> dict:
+    """Phase 1.C #4 — snare-band character: hit count, attack sharpness,
+    body-vs-snap energy ratio. Mirrors analyze_kick_detail but in the
+    120-2000 Hz band where snare fundamentals and body live.
+
+    Uses the drums stem when stems are available, otherwise falls back to
+    full-mix audio bandpassed by spectrum-bin selection. Phase 2 cites
+    `snareDetail.meanBodyEnergyRatio` for snare-bus body/saturation choices,
+    `snareDetail.hitsPerSecond` for groove-density claims.
+    """
+    return {
+        "snareDetail": _analyze_band_drum_detail(
+            mono,
+            sample_rate,
+            band_lo_hz=120.0,
+            band_hi_hz=2000.0,
+            bpm=bpm,
+            stems=stems,
+            min_event_dist_subdivisions=0.5,  # 8th-note minimum (snare typically on 2 & 4)
+            body_split_ratio=0.35,  # body=120-755 Hz, snap=755-2000 Hz
+        )
+    }
+
+
+def analyze_hihat_detail(
+    mono: np.ndarray,
+    sample_rate: int = 44100,
+    bpm: float | None = None,
+    stems: dict | None = None,
+) -> dict:
+    """Phase 1.C #4 — hi-hat-band character: hit count, attack sharpness,
+    decay character, mean brightness. Mirrors analyze_kick_detail but in the
+    2000-12000 Hz band where hi-hat content sits.
+
+    `meanDecaySeconds` is a rough open-vs-closed proxy: closed hats decay
+    quickly (~30-60 ms), open hats sustain longer. Phase 2 cites
+    `hihatDetail.hitsPerSecond` for 16th-note hat density and
+    `hihatDetail.meanDecaySeconds` for open/closed inference.
+    """
+    return {
+        "hihatDetail": _analyze_band_drum_detail(
+            mono,
+            sample_rate,
+            band_lo_hz=2000.0,
+            band_hi_hz=12000.0,
+            bpm=bpm,
+            stems=stems,
+            min_event_dist_subdivisions=0.125,  # 32nd-note (hats can be dense)
+            body_split_ratio=0.4,
+        )
+    }
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # GENRE CLASSIFICATION
 # Backport of genreClassifierEnhanced.ts — scores 35 electronic subgenres
@@ -911,6 +1175,114 @@ def _run_pitch_note_translation(
     finally:
         if temp_dir is not None and stem_output_dir is None:
             shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def _run_per_stem_analyses(
+    stems: dict | None,
+    sample_rate: int,
+) -> dict | None:
+    """Run the high-value full-mix analyzers against each Demucs stem and
+    return their results namespaced under ``stemAnalysis.{stem}.{field}``.
+
+    This is the Phase 1.B "stem-first overlay" from the depth roadmap. Each
+    stem becomes its own analytical surface so Phase 2 can recommend
+    different processing for kick vs bass vs lead vs vocals — e.g. cite
+    ``stemAnalysis.bass.spectralBalance.subBass`` for a bass-only EQ move
+    instead of relying on a full-mix scalar that conflates every element.
+
+    The subset of analyzers run per-stem is deliberately narrow:
+    - spectralBalance / spectralBalanceTimeSeries — per-element EQ shape.
+    - spectralDetail — per-element timbre summary.
+    - LUFS (integrated, range, momentary/short-term max, lufsCurve) — per-element loudness.
+    - stereo (width, correlation, sub-bass mono check, correlationCurve) — only meaningful when stems are stereo, which Demucs output is.
+    - dynamics + dynamicCharacter — per-element transient/dynamic shape.
+
+    BPM, key, time signature, structure novelty, sidechain pumping, etc. are
+    intentionally NOT per-stem — they're properties of the song, not any
+    one element.
+
+    Sequential implementation. Per the plan, parallelism over stems is a
+    follow-up gated on a benchmark — Essentia's C++ side can use OpenMP
+    threads internally, so naive Python-thread parallelism risks CPU
+    oversubscription on Apple Silicon.
+    """
+    if not isinstance(stems, dict) or not stems:
+        return None
+
+    stem_results: dict[str, dict[str, Any]] = {}
+    for stem_name in ("drums", "bass", "other", "vocals"):
+        try:
+            mono = _load_stem_mono(stems, stem_name, sample_rate=sample_rate)
+        except Exception:
+            mono = None
+        if mono is None or mono.size == 0:
+            continue
+        try:
+            stereo = _load_stem_stereo(stems, stem_name)
+        except Exception:
+            stereo = None
+
+        per_stem: dict[str, Any] = {}
+        try:
+            spectral_balance_block = analyze_spectral_balance(mono, sample_rate)
+            per_stem["spectralBalance"] = spectral_balance_block.get("spectralBalance")
+            per_stem["spectralBalanceTimeSeries"] = spectral_balance_block.get("spectralBalanceTimeSeries")
+        except Exception as exc:
+            print(f"[stem:{stem_name}] spectralBalance failed: {exc}", file=sys.stderr)
+
+        try:
+            spectral_detail_block = analyze_spectral_detail(mono, sample_rate)
+            per_stem["spectralDetail"] = spectral_detail_block.get("spectralDetail")
+        except Exception as exc:
+            print(f"[stem:{stem_name}] spectralDetail failed: {exc}", file=sys.stderr)
+
+        if stereo is not None and isinstance(stereo, np.ndarray) and stereo.ndim == 2 and stereo.shape[1] >= 2:
+            try:
+                loudness_block = analyze_loudness(stereo)
+                per_stem["lufsIntegrated"] = loudness_block.get("lufsIntegrated")
+                per_stem["lufsRange"] = loudness_block.get("lufsRange")
+                per_stem["lufsMomentaryMax"] = loudness_block.get("lufsMomentaryMax")
+                per_stem["lufsShortTermMax"] = loudness_block.get("lufsShortTermMax")
+                per_stem["lufsCurve"] = loudness_block.get("lufsCurve")
+            except Exception as exc:
+                print(f"[stem:{stem_name}] LUFS failed: {exc}", file=sys.stderr)
+            try:
+                stereo_block = analyze_stereo(stereo, sample_rate)
+                per_stem["stereoDetail"] = stereo_block.get("stereoDetail")
+            except Exception as exc:
+                print(f"[stem:{stem_name}] stereoDetail failed: {exc}", file=sys.stderr)
+            try:
+                true_peak_block = analyze_true_peak(stereo)
+                per_stem["truePeak"] = true_peak_block.get("truePeak")
+            except Exception as exc:
+                print(f"[stem:{stem_name}] truePeak failed: {exc}", file=sys.stderr)
+
+        try:
+            dynamics_block = analyze_dynamics(mono, sample_rate)
+            per_stem["crestFactor"] = dynamics_block.get("crestFactor")
+            per_stem["dynamicSpread"] = dynamics_block.get("dynamicSpread")
+        except Exception as exc:
+            print(f"[stem:{stem_name}] dynamics failed: {exc}", file=sys.stderr)
+        try:
+            dynamic_character_block = analyze_dynamic_character(mono, sample_rate)
+            per_stem["dynamicCharacter"] = dynamic_character_block.get("dynamicCharacter")
+        except Exception as exc:
+            print(f"[stem:{stem_name}] dynamicCharacter failed: {exc}", file=sys.stderr)
+
+        # Phase 1.D #5: per-stem reverb (RT60 + perBandRt60 + preDelayMs).
+        # Drums and "other" benefit most — bass/vocals are often dry; the
+        # analyzer gates with `measured=False` when there aren't enough
+        # transients, so dry sources don't pollute the output.
+        try:
+            reverb_block = analyze_reverb_detail(mono, sample_rate)
+            per_stem["reverbDetail"] = reverb_block.get("reverbDetail")
+        except Exception as exc:
+            print(f"[stem:{stem_name}] reverbDetail failed: {exc}", file=sys.stderr)
+
+        if per_stem:
+            stem_results[stem_name] = per_stem
+
+    return stem_results if stem_results else None
 
 
 def main():
@@ -1022,6 +1394,7 @@ def main():
             "sampleRate": result.get("sampleRate"),
             "lufsIntegrated": result.get("lufsIntegrated"),
             "lufsRange": result.get("lufsRange"),
+            "lufsCurve": result.get("lufsCurve"),
             "truePeak": result.get("truePeak"),
             "plr": fast_plr,
             "crestFactor": result.get("crestFactor"),
@@ -1031,7 +1404,13 @@ def main():
             "stereoDetail": result.get("stereoDetail"),
             "monoCompatible": fast_mono_compatible,
             "spectralBalance": result.get("spectralBalance"),
+            "spectralBalanceTimeSeries": result.get("spectralBalanceTimeSeries"),
             "spectralDetail": result.get("spectralDetail"),
+            "stemAnalysis": result.get("stemAnalysis"),
+            "transientDensityDetail": result.get("transientDensityDetail"),
+            "saturationDetail": result.get("saturationDetail"),
+            "snareDetail": result.get("snareDetail"),
+            "hihatDetail": result.get("hihatDetail"),
             "rhythmDetail": result.get("rhythmDetail"),
             "melodyDetail": result.get("melodyDetail"),
             "transcriptionDetail": result.get("transcriptionDetail"),
@@ -1109,7 +1488,7 @@ def main():
 
     result.update(analyze_bpm(rhythm_data, mono, sample_rate))
     result.update(analyze_key(mono))
-    result.update(analyze_time_signature(rhythm_data))
+    result.update(analyze_time_signature(rhythm_data, mono=mono, sample_rate=sample_rate))
     result.update(analyze_duration_and_sr(mono, sample_rate))
 
     # LUFS + LRA (needs stereo)
@@ -1167,6 +1546,13 @@ def main():
     result.update(analyze_groove(mono, sample_rate, rhythm_data, beat_data))
     result.update(analyze_beats_loudness(mono, sample_rate, rhythm_data, beat_data))
     result.update(analyze_rhythm_timeline(mono, sample_rate, rhythm_data, beat_data))
+    # Phase 1.C #1: per-band transient density. ~5-8s on a 2-min track.
+    result.update(analyze_per_band_transient_density(mono, sample_rate))
+
+    # Phase 1.C #5: saturation / clipping / over-compression telltales.
+    # Cheap (~0.5s), no new deps. Hint-only — Phase 2 must hedge.
+    saturation_stereo = stereo if stereo is not None else None
+    result.update(analyze_saturation_detail(mono, saturation_stereo, sample_rate))
     result.update(
         analyze_sidechain_detail(
             mono,
@@ -1229,6 +1615,23 @@ def main():
         )
         result.update(
             analyze_kick_detail(
+                mono,
+                sample_rate,
+                bpm=result.get("bpm"),
+                stems=stems,
+            )
+        )
+        # Phase 1.C #4: snare + hi-hat character analyzers.
+        result.update(
+            analyze_snare_detail(
+                mono,
+                sample_rate,
+                bpm=result.get("bpm"),
+                stems=stems,
+            )
+        )
+        result.update(
+            analyze_hihat_detail(
                 mono,
                 sample_rate,
                 bpm=result.get("bpm"),
@@ -1324,6 +1727,17 @@ def main():
     # Merge pitch extraction results
     result.update(pitch_result)
 
+    # Phase 1.B stem-first overlay: run high-value analyzers per Demucs stem
+    # and namespace results under ``stemAnalysis``. Returns ``None`` when
+    # stems aren't available (no separation requested or separation failed),
+    # so callers downstream can treat ``stemAnalysis`` as an additive
+    # capability rather than a contract change.
+    try:
+        result["stemAnalysis"] = _run_per_stem_analyses(stems, sample_rate)
+    except Exception as exc:
+        print(f"[warn] stem-first overlay failed: {exc}", file=sys.stderr)
+        result["stemAnalysis"] = None
+
     # Build final output in the exact requested key order
     output = {
         "bpm": result.get("bpm"),
@@ -1347,6 +1761,7 @@ def main():
         "lufsRange": result.get("lufsRange"),
         "lufsMomentaryMax": result.get("lufsMomentaryMax"),
         "lufsShortTermMax": result.get("lufsShortTermMax"),
+        "lufsCurve": result.get("lufsCurve"),
         "truePeak": result.get("truePeak"),
         "plr": result.get("plr"),
         "crestFactor": result.get("crestFactor"),
@@ -1356,7 +1771,13 @@ def main():
         "stereoDetail": result.get("stereoDetail"),
         "monoCompatible": result.get("monoCompatible"),
         "spectralBalance": result.get("spectralBalance"),
+        "spectralBalanceTimeSeries": result.get("spectralBalanceTimeSeries"),
         "spectralDetail": result.get("spectralDetail"),
+        "stemAnalysis": result.get("stemAnalysis"),
+        "transientDensityDetail": result.get("transientDensityDetail"),
+        "saturationDetail": result.get("saturationDetail"),
+        "snareDetail": result.get("snareDetail"),
+        "hihatDetail": result.get("hihatDetail"),
         "rhythmDetail": result.get("rhythmDetail"),
         "melodyDetail": result.get("melodyDetail"),
         "transcriptionDetail": result.get("transcriptionDetail"),

@@ -49,9 +49,13 @@ import {
 import { getAppViewHref } from './utils/appView';
 import { startRenderBenchmarkCycle } from './utils/renderBenchmark';
 
+// Note: gemini-3.1-flash-preview is intentionally omitted — three live test runs
+// against the Gemini API on 2026-05-11/12 returned 404 NOT_FOUND for this model
+// ID. The 3.1 Pro variant works. Re-add this entry once Google publishes the
+// flash-preview ID; the backend ALLOWED_GEMINI_MODELS set at server.py:151
+// still includes it so it can be enabled with a single line restore.
 const MODELS = [
   { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro Preview (Recommended)' },
-  { id: 'gemini-3.1-flash-preview', name: 'Gemini 3.1 Flash Preview' },
   { id: 'gemini-3-pro-preview', name: 'Gemini 3.0 Pro Preview' },
   { id: 'gemini-3-flash-preview', name: 'Gemini 3.0 Flash Preview' },
   { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' },

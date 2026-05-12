@@ -58,11 +58,166 @@ export interface DanceabilityResult {
   dfa: number;
 }
 
+export interface LufsCurvePoint {
+  t: number;
+  lufs: number;
+}
+
+export interface LufsCurve {
+  shortTerm: LufsCurvePoint[];
+  momentary: LufsCurvePoint[];
+}
+
+export interface SpectralBalanceTimeSeriesPoint {
+  t: number;
+  subBass: number;
+  lowBass: number;
+  lowMids: number;
+  mids: number;
+  upperMids: number;
+  highs: number;
+  brilliance: number;
+}
+
+/**
+ * Per-Demucs-stem analytical surface from Phase 1.B's stem-first overlay.
+ *
+ * Populated only when stem separation was requested AND succeeded
+ * (``--separate``/``run_separation`` path on the backend). When stems are
+ * unavailable this is ``null`` and the top-level full-mix scalars are the
+ * only source of truth. The subset of analyzers run per-stem mirrors the
+ * full-mix versions — spectralBalance, spectralDetail, loudness, stereo,
+ * dynamics — so Phase 2 can cite e.g. ``stemAnalysis.bass.spectralBalance.subBass``
+ * for a bass-targeted EQ move instead of conflating every element under one
+ * full-mix scalar. Song-level fields (BPM, key, time signature, structure
+ * novelty) are intentionally absent here.
+ */
+export interface StemAnalysisEntry {
+  spectralBalance?: {
+    subBass: number;
+    lowBass: number;
+    lowMids: number;
+    mids: number;
+    upperMids: number;
+    highs: number;
+    brilliance: number;
+  } | null;
+  spectralBalanceTimeSeries?: SpectralBalanceTimeSeriesPoint[] | null;
+  spectralDetail?: SpectralDetail | null;
+  lufsIntegrated?: number | null;
+  lufsRange?: number | null;
+  lufsMomentaryMax?: number | null;
+  lufsShortTermMax?: number | null;
+  lufsCurve?: LufsCurve | null;
+  stereoDetail?: StereoDetail | null;
+  truePeak?: number | null;
+  crestFactor?: number | null;
+  dynamicSpread?: number | null;
+  dynamicCharacter?: DynamicCharacter | null;
+  /**
+   * Phase 1.D #5 — per-stem reverb estimation. The analyzer runs the
+   * same RT60-slope-fit pipeline on each Demucs stem; the drums stem is
+   * usually the most defensible signal (real room reverb) while bass /
+   * other / vocals may report long RT60s that actually reflect sustained
+   * tonal decay rather than reverb. `measured: false` means the analyzer
+   * didn't find enough transients to fit a slope on this stem — caller
+   * should treat the result as a fallback.
+   */
+  reverbDetail?: ReverbDetail | null;
+}
+
+export interface StemAnalysis {
+  drums?: StemAnalysisEntry;
+  bass?: StemAnalysisEntry;
+  other?: StemAnalysisEntry;
+  vocals?: StemAnalysisEntry;
+}
+
+export interface TransientDensityBandEntry {
+  onsetRatePerSecond: number;
+  meanOnsetStrength: number;
+  peakOnsetStrength: number;
+  eventCount: number;
+}
+
+export interface TransientDensityDetail {
+  subBass: TransientDensityBandEntry;
+  lowBass: TransientDensityBandEntry;
+  lowMids: TransientDensityBandEntry;
+  mids: TransientDensityBandEntry;
+  upperMids: TransientDensityBandEntry;
+  highs: TransientDensityBandEntry;
+  brilliance: TransientDensityBandEntry;
+}
+
+/**
+ * Phase 1.C #4 — band-limited drum character (shared shape for snare and
+ * hi-hat). Hit count, attack sharpness, body-vs-snap energy ratio, mean
+ * spectral centroid in band, decay character. Phase 2 cites these for
+ * snare- / hi-hat-bus EQ + saturation + dynamics moves.
+ */
+export interface BandDrumDetail {
+  hitCount: number;
+  hitsPerSecond: number;
+  meanAttackSharpness: number;
+  meanBodyEnergyRatio: number | null;
+  meanSnapEnergyRatio: number | null;
+  meanCentroidHz: number | null;
+  meanDecayFrames: number;
+  meanDecaySeconds: number;
+  bandHz: [number, number];
+}
+
+/**
+ * Phase 1.C #5 — saturation / clipping / over-compression telltales. Hint-
+ * only; Phase 2 should hedge per the citation contract's low-confidence
+ * rules until the audit bench confirms the signal.
+ */
+export interface SaturationDetail {
+  clippedSampleCount: number;
+  clippedSamplePercent: number;
+  nearClippedSampleCount: number;
+  nearClippedSamplePercent: number;
+  peakRatio95to50: number | null;
+  rmsToPeakRatioDb: number | null;
+  saturationLikely: boolean;
+}
+
+export interface StereoCorrelationCurvePoint {
+  t: number;
+  full: number | null;
+  sub: number | null;
+}
+
+/**
+ * Phase 1.C #2 — per-frequency-band L/R Pearson correlation, keyed by the
+ * same 7 bands as ``spectralBalance``. ``null`` per band when that band has
+ * no usable energy (e.g. brilliance on a dark master). Phase 2 cites these
+ * to recommend Utility-tool width per band ("the bass is mono at 0.98 but
+ * the mids are wide at 0.45 — add Utility on the synth bus only").
+ */
+export interface StereoBandCorrelations {
+  subBass: number | null;
+  lowBass: number | null;
+  lowMids: number | null;
+  mids: number | null;
+  upperMids: number | null;
+  highs: number | null;
+  brilliance: number | null;
+}
+
 export interface StereoDetail {
   stereoWidth: number | null;
   stereoCorrelation: number | null;
   subBassCorrelation?: number | null;
   subBassMono?: boolean | null;
+  /**
+   * 1-second windowed L/R correlation, full-band and sub-band side-by-side.
+   * Surfaces stereo automation (utility-tool width sweeps, mono-collapsing
+   * the drop) that the global scalars conflate into one number.
+   */
+  correlationCurve?: StereoCorrelationCurvePoint[] | null;
+  bandCorrelations?: StereoBandCorrelations | null;
 }
 
 export interface SpectralDetail {
@@ -86,6 +241,11 @@ export interface PhraseGrid {
   totalPhrases8Bar: number;
 }
 
+export interface TempoCurvePoint {
+  t: number;
+  bpm: number;
+}
+
 export interface RhythmDetail {
   onsetRate: number;
   beatGrid: number[];
@@ -94,6 +254,12 @@ export interface RhythmDetail {
   grooveAmount: number;
   tempoStability?: number | null;
   phraseGrid?: PhraseGrid | null;
+  /**
+   * Instantaneous-BPM curve smoothed with a 4-beat rolling median and
+   * downsampled to ~200 points. Surfaces deliberate ritardando/accelerando
+   * and DJ-tool transitions that the single mean BPM scalar conflates away.
+   */
+  tempoCurve?: TempoCurvePoint[] | null;
 }
 
 export interface GrooveDetail {
@@ -101,14 +267,24 @@ export interface GrooveDetail {
   hihatSwing: number;
   kickAccent: number[];
   hihatAccent: number[];
+  /** Phase 1.C #3: per-drum-group swing across kick (20-200 Hz), snare (200-4000 Hz), and hi-hat (4000-20000 Hz) beat-loudness bands. Same tanh-normalized scale as kickSwing / hihatSwing. */
+  perDrumSwing?: {
+    kick: number;
+    snare: number;
+    hihat: number;
+  } | null;
 }
 
 export interface SidechainDetail {
   pumpingStrength: number;
   pumpingRegularity: number;
+  /** `"quarter" | "eighth" | "sixteenth" | "thirty_second" | null` — added thirty_second in Phase 1.C #6. */
   pumpingRate: string | null;
   pumpingConfidence: number;
+  /** Median per-bar RMS envelope at 16th-note (16 samples) resolution. */
   envelopeShape?: number[] | null;
+  /** Phase 1.C #6: Median per-bar RMS envelope at 32nd-note (32 samples) resolution. */
+  envelopeShape32?: number[] | null;
 }
 
 export interface EffectsDetail {
@@ -168,11 +344,27 @@ export interface SegmentKeyEntry {
   keyConfidence?: number | null;
 }
 
+/**
+ * Phase 1.D #2 — temporal chord-progression timeline entry. Each entry
+ * represents a stable chord region after 5-frame median-filter smoothing;
+ * regions shorter than ~250 ms are dropped as noise.
+ */
+export interface ChordTimelineEntry {
+  startSec: number;
+  endSec: number;
+  label: string;
+  confidence: number;
+}
+
 export interface ChordDetail {
   chordSequence?: string[] | null;
   chordStrength?: number | null;
   progression?: string[] | null;
   dominantChords?: string[] | null;
+  /** Phase 1.D #2: chord segments with start/end times + per-segment confidence. */
+  chordTimeline?: ChordTimelineEntry[] | null;
+  /** Phase 1.D #2: count of unique chord-to-chord transitions in the smoothed timeline. */
+  chordChangeCount?: number | null;
 }
 
 export interface PerceptualDetail {
@@ -266,6 +458,19 @@ export interface ReverbDetail {
   isWet: boolean;
   tailEnergyRatio: number | null;
   measured: boolean;
+  /**
+   * Phase 1.D #5: RT60 estimated per octave band.
+   * `low` ≈ 20-250 Hz, `lowMids` ≈ 250-2000 Hz,
+   * `highMids` ≈ 2000-8000 Hz, `highs` ≈ 8000-16000 Hz.
+   */
+  perBandRt60?: {
+    low?: number;
+    lowMids?: number;
+    highMids?: number;
+    highs?: number;
+  } | null;
+  /** Phase 1.D #5: median pre-delay in milliseconds (time from direct peak to first envelope minimum). */
+  preDelayMs?: number | null;
 }
 
 export interface VocalDetail {
@@ -274,6 +479,22 @@ export interface VocalDetail {
   vocalEnergyRatio: number;
   formantStrength: number;
   mfccLikelihood: number;
+  /**
+   * Demucs-ghost-stem proxy #1: vocals-stem RMS / full-mix RMS. Null when no
+   * vocals stem was used (full-mix path). Below ~0.05 indicates the vocals
+   * stem is leakage from a track with no real vocal content; the analyzer
+   * scales `confidence` down linearly when this is the case.
+   */
+  stemEnergyRatio?: number | null;
+  /**
+   * Demucs-ghost-stem proxy #2: Pearson correlation between the vocals stem
+   * and the "other" stem at a 200 Hz envelope rate. High correlation (>0.3)
+   * means Demucs is splitting one source (typically a melodic lead) into two
+   * stems — the "vocals" stem is misclassified content, not a genuine voice.
+   * The analyzer scales `confidence` down proportionally above 0.3.
+   * Null when either stem is unavailable or too short to compute.
+   */
+  stemOtherCorrelation?: number | null;
 }
 
 export interface SupersawDetail {
@@ -338,6 +559,13 @@ export interface Phase1Result {
   dynamicSpread?: number | null;
   dynamicCharacter?: DynamicCharacter | null;
   textureCharacter?: TextureCharacter | null;
+  /**
+   * Per-frame EBU R128 momentary (400 ms window) and short-term (3 s window)
+   * loudness, downsampled to ~200 points each. Phase 2 cites
+   * lufsCurve.shortTerm to explain breakdown vs drop loudness contrast.
+   * Null when LUFS extraction failed.
+   */
+  lufsCurve?: LufsCurve | null;
   stereoWidth: number;
   stereoCorrelation: number;
   stereoDetail?: StereoDetail | null;
@@ -351,7 +579,43 @@ export interface Phase1Result {
     highs: number;
     brilliance: number;
   };
+  /**
+   * Sibling time-series partner for spectralBalance. Each row carries all
+   * seven bands at a given timestamp. Downsampled to ~200 rows on a 2-min
+   * track so Phase 2 can cite section-relative spectral motion ("the
+   * high-end opens up at 1:23") instead of static averages alone.
+   * Sibling rather than nested because spectralBalance's exact 7-key shape
+   * is asserted by backend tests.
+   */
+  spectralBalanceTimeSeries?: SpectralBalanceTimeSeriesPoint[] | null;
   spectralDetail?: SpectralDetail | null;
+  /**
+   * Phase 1.B per-stem analytical surface (Demucs-separated). Null when
+   * separation wasn't requested or failed. See {@link StemAnalysis}.
+   */
+  stemAnalysis?: StemAnalysis | null;
+  /**
+   * Phase 1.C #1 — per-frequency-band onset density across the 7
+   * spectralBalance bands. Each entry carries rate (events/sec), mean
+   * onset strength, peak, and event count. Phase 2 cites e.g.
+   * ``transientDensityDetail.highs.onsetRatePerSecond`` for hi-hat
+   * density claims or ``transientDensityDetail.lowBass`` for kick.
+   */
+  transientDensityDetail?: TransientDensityDetail | null;
+  /**
+   * Phase 1.C #5 — saturation / clipping / over-compression hints.
+   */
+  saturationDetail?: SaturationDetail | null;
+  /**
+   * Phase 1.C #4 — snare-band character (120-2000 Hz). Uses the drums stem
+   * when available, otherwise full-mix audio with spectrum-bin selection.
+   */
+  snareDetail?: BandDrumDetail | null;
+  /**
+   * Phase 1.C #4 — hi-hat-band character (2000-12000 Hz). meanDecaySeconds
+   * is a rough open-vs-closed proxy.
+   */
+  hihatDetail?: BandDrumDetail | null;
   rhythmDetail?: RhythmDetail | null;
   melodyDetail?: MelodyDetail;
   transcriptionDetail?: TranscriptionDetail | null;

@@ -152,7 +152,13 @@ describe('analysisResultsViewModel helpers', () => {
     const melodicCard = sonicCards.find((card) => card.id === 'melodicArp');
     expect(widthCard).toBeDefined();
     expect(melodicCard?.transcriptionDerived).toBe(true);
-    expect(melodicCard?.measurements.some((m) => m.label === 'Transcribed Notes')).toBe(true);
+    // The fixture has melodyDetail but no transcriptionDetail, so the label
+    // is the full-mix-draft variant rather than "Transcribed Notes". When a
+    // run actually has transcriptionDetail.noteCount > 0, the label becomes
+    // "Transcribed Notes" instead — see analysisResultsViewModel.ts.
+    expect(
+      melodicCard?.measurements.some((m) => m.label === 'Melody Notes (full-mix draft)'),
+    ).toBe(true);
     expect(widthCard?.description.includes('Seven sentence.')).toBe(false);
   });
 

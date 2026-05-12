@@ -3855,11 +3855,14 @@ class StageWorkerTests(unittest.TestCase):
             ) as execute_measurement_run_mock:
                 server._execute_reserved_measurement_job(runtime, job)
 
+        # pitch_note_mode="stem_notes" now also triggers separation at
+        # measurement time so the Phase 1.B stem-first overlay (stemAnalysis)
+        # can populate without waiting on the pitch-note worker stage.
         execute_measurement_run_mock.assert_called_once_with(
             runtime,
             created["runId"],
             request_id=created["runId"],
-            run_separation=False,
+            run_separation=True,
             run_transcribe=False,
             run_fast=False,
             run_standard=False,
@@ -4014,6 +4017,92 @@ class StageWorkerTests(unittest.TestCase):
         cmd = subprocess_mock.call_args[0][0]
         self.assertIn("--pitch-note-backend", cmd)
         self.assertIn("torchcrepe-viterbi", cmd)
+
+
+class Phase2CatalogValidationTests(unittest.TestCase):
+    """Direct exercise of `_validate_phase2_catalog_entry` for the v3.1
+    follow-up Live 12 catalog completion (Auto Filter aliases + Glue
+    Compressor allowedParameters expansion). No Gemini mocking — just
+    runs the validator against the live catalog dict in
+    `server_phase2.LIVE12_DEVICE_LOOKUP`.
+    """
+
+    def _call(self, device: str, parameter: str) -> list[dict]:
+        from server_phase2 import _validate_phase2_catalog_entry, LIVE12_DEVICE_LOOKUP
+
+        warnings: list[dict] = []
+        entry = LIVE12_DEVICE_LOOKUP.get(device)
+        if entry is None:
+            # Mirror the production codepath where unknown devices emit
+            # UNKNOWN_DEVICE and short-circuit. The test still expects the
+            # validator to be invoked normally — caller-supplied device
+            # may legitimately be missing.
+            _validate_phase2_catalog_entry(
+                warnings=warnings,
+                device=device,
+                device_family=None,
+                parameter=parameter,
+                base_path="mixAndMasterChain[0]",
+            )
+            return warnings
+        _validate_phase2_catalog_entry(
+            warnings=warnings,
+            device=device,
+            device_family=entry["family"],
+            parameter=parameter,
+            base_path="mixAndMasterChain[0]",
+        )
+        return warnings
+
+    def _codes(self, warnings: list[dict]) -> list[str]:
+        return [w.get("code") for w in warnings]
+
+    # ----- Auto Filter (alias resolution) -----
+    def test_auto_filter_resonance_passes_silently(self) -> None:
+        self.assertEqual(self._call("Auto Filter", "Resonance"), [])
+
+    def test_auto_filter_filter_resonance_passes_via_alias(self) -> None:
+        # Alias resolves "Filter Resonance" → "Resonance"; no warning.
+        self.assertEqual(self._call("Auto Filter", "Filter Resonance"), [])
+
+    def test_auto_filter_frequency_passes_silently(self) -> None:
+        self.assertEqual(self._call("Auto Filter", "Frequency"), [])
+
+    def test_auto_filter_filter_frequency_passes_via_alias(self) -> None:
+        # Alias resolves "Filter Frequency" → "Frequency"; no warning.
+        self.assertEqual(self._call("Auto Filter", "Filter Frequency"), [])
+
+    def test_auto_filter_invented_parameter_emits_unknown_parameter(self) -> None:
+        warnings = self._call("Auto Filter", "InventedParameter")
+        self.assertEqual(self._codes(warnings), ["UNKNOWN_PARAMETER"])
+
+    # ----- Glue Compressor (catalog expansion) -----
+    def test_glue_compressor_sidechain_passes(self) -> None:
+        self.assertEqual(self._call("Glue Compressor", "Sidechain"), [])
+
+    def test_glue_compressor_sidechain_gain_passes(self) -> None:
+        self.assertEqual(self._call("Glue Compressor", "Sidechain Gain"), [])
+
+    def test_glue_compressor_sidechain_dry_wet_passes(self) -> None:
+        self.assertEqual(self._call("Glue Compressor", "Sidechain Dry/Wet"), [])
+
+    def test_glue_compressor_range_passes(self) -> None:
+        self.assertEqual(self._call("Glue Compressor", "Range"), [])
+
+    # ----- Negative: hallucinations still flagged after the catalog change -----
+    def test_compressor_sustain_still_emits_unknown_parameter(self) -> None:
+        # v3.2-target hallucination; this catalog pass intentionally does
+        # not touch the Compressor entry. Asserts the new alias mechanism
+        # didn't accidentally swallow this case.
+        warnings = self._call("Compressor", "Sustain")
+        self.assertEqual(self._codes(warnings), ["UNKNOWN_PARAMETER"])
+
+    def test_aliases_scoped_per_device_not_global(self) -> None:
+        # Compressor does NOT define parameterAliases; "Filter Resonance"
+        # there is meaningless and must remain flagged. Asserts we didn't
+        # accidentally apply aliases across devices.
+        warnings = self._call("Compressor", "Filter Resonance")
+        self.assertEqual(self._codes(warnings), ["UNKNOWN_PARAMETER"])
 
 
 if __name__ == "__main__":

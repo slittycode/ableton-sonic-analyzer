@@ -28,9 +28,12 @@ EXPECTED_TOP_LEVEL_KEYS = {
     "bpmDoubletime", "bpmSource", "bpmRawOriginal",
     "key", "keyConfidence", "timeSignature", "timeSignatureSource",
     "timeSignatureConfidence", "durationSeconds", "sampleRate",
-    "lufsIntegrated", "lufsRange", "truePeak", "plr", "crestFactor",
-    "dynamicSpread", "dynamicCharacter", "textureCharacter", "stereoDetail", "monoCompatible", "spectralBalance",
-    "spectralDetail", "rhythmDetail", "melodyDetail", "transcriptionDetail",
+    "lufsIntegrated", "lufsRange", "lufsCurve", "truePeak", "plr", "crestFactor",
+    "dynamicSpread", "dynamicCharacter", "textureCharacter", "stereoDetail", "monoCompatible",
+    "spectralBalance", "spectralBalanceTimeSeries",
+    "spectralDetail", "stemAnalysis", "transientDensityDetail", "saturationDetail",
+    "snareDetail", "hihatDetail",
+    "rhythmDetail", "melodyDetail", "transcriptionDetail",
     "grooveDetail", "beatsLoudness", "rhythmTimeline", "sidechainDetail", "acidDetail", "reverbDetail",
     "vocalDetail", "supersawDetail", "bassDetail", "kickDetail",
     "genreDetail", "effectsDetail", "synthesisCharacter",
@@ -1097,13 +1100,16 @@ class ReverbDetailTests(unittest.TestCase):
         self.assertEqual(result, {"reverbDetail": None})
 
     def test_output_schema_fields(self):
-        """All expected fields must be present."""
+        """All expected fields must be present (Phase 1.D #5 added perBandRt60 + preDelayMs)."""
         sr = 44100
         mono = self._make_decaying_signal(sr, n_transients=8, rt60_target=0.4, duration=6.0)
         result = self.analyze.analyze_reverb_detail(mono, sr, bpm=130.0)
         detail = result.get("reverbDetail")
         self.assertIsNotNone(detail)
-        self.assertEqual(set(detail.keys()), {"rt60", "isWet", "tailEnergyRatio", "measured"})
+        self.assertEqual(
+            set(detail.keys()),
+            {"rt60", "isWet", "tailEnergyRatio", "measured", "perBandRt60", "preDelayMs"},
+        )
 
     def test_rt60_bounded(self):
         """RT60 must be >= 0 and <= 3.0 (capped) when measured."""
@@ -1189,7 +1195,14 @@ class VocalDetailTests(unittest.TestCase):
         result = self.analyze.analyze_vocal_detail(mono, sr, bpm=120.0)
         detail = result.get("vocalDetail")
         self.assertIsNotNone(detail)
-        expected_keys = {"hasVocals", "confidence", "vocalEnergyRatio", "formantStrength", "mfccLikelihood"}
+        # 2026-05-12: stemEnergyRatio + stemOtherCorrelation added for the
+        # two-signal Demucs-ghost-stem scaling (energy + envelope correlation
+        # against the "other" stem).
+        expected_keys = {
+            "hasVocals", "confidence", "vocalEnergyRatio",
+            "formantStrength", "mfccLikelihood",
+            "stemEnergyRatio", "stemOtherCorrelation",
+        }
         self.assertEqual(set(detail.keys()), expected_keys)
 
     def test_confidence_bounded_zero_to_one(self):
@@ -1224,7 +1237,11 @@ class VocalDetailTests(unittest.TestCase):
             result = self.analyze.analyze_vocal_detail(mono, sr, bpm=120.0, stems=stems)
 
         self.assertIsNotNone(result["vocalDetail"])
-        mock_load.assert_called_once_with(stems, "vocals", sr)
+        # As of 2026-05-12 the analyzer also loads the "other" stem to compute
+        # the Demucs-ghost-stem cross-correlation. The invariant is that the
+        # vocals stem WAS loaded with the right arguments, not that it was the
+        # only stem touched.
+        mock_load.assert_any_call(stems, "vocals", sr)
 
     def test_vocal_detail_falls_back_to_mix_when_stem_unavailable(self):
         """Missing vocals stem should keep the existing full-mix behavior."""

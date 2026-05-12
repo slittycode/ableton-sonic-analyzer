@@ -15,7 +15,7 @@ Conventions:
 
 Top-level keys:
 
-`bpm`, `bpmConfidence`, `bpmPercival`, `bpmAgreement`, `bpmDoubletime`, `bpmSource`, `bpmRawOriginal`, `key`, `keyConfidence`, `keyProfile`, `tuningFrequency`, `tuningCents`, `timeSignature`, `timeSignatureSource`, `timeSignatureConfidence`, `durationSeconds`, `sampleRate`, `lufsIntegrated`, `lufsRange`, `lufsMomentaryMax`, `lufsShortTermMax`, `truePeak`, `crestFactor`, `dynamicSpread`, `dynamicCharacter`, `textureCharacter`, `stereoDetail`, `spectralBalance`, `spectralDetail`, `rhythmDetail`, `melodyDetail`, `transcriptionDetail`, `pitchDetail`, `grooveDetail`, `beatsLoudness`, `rhythmTimeline`, `sidechainDetail`, `effectsDetail`, `synthesisCharacter`, `danceability`, `structure`, `arrangementDetail`, `segmentLoudness`, `segmentSpectral`, `segmentStereo`, `segmentKey`, `chordDetail`, `perceptual`, `essentiaFeatures`.
+`bpm`, `bpmConfidence`, `bpmPercival`, `bpmAgreement`, `bpmDoubletime`, `bpmSource`, `bpmRawOriginal`, `key`, `keyConfidence`, `keyProfile`, `tuningFrequency`, `tuningCents`, `timeSignature`, `timeSignatureSource`, `timeSignatureConfidence`, `durationSeconds`, `sampleRate`, `lufsIntegrated`, `lufsRange`, `lufsMomentaryMax`, `lufsShortTermMax`, `lufsCurve`, `truePeak`, `crestFactor`, `dynamicSpread`, `monoCompatible`, `plr`, `dynamicCharacter`, `textureCharacter`, `stereoDetail`, `spectralBalance`, `spectralBalanceTimeSeries`, `spectralDetail`, `stemAnalysis`, `transientDensityDetail`, `saturationDetail`, `snareDetail`, `hihatDetail`, `rhythmDetail`, `melodyDetail`, `transcriptionDetail`, `pitchDetail`, `grooveDetail`, `beatsLoudness`, `rhythmTimeline`, `sidechainDetail`, `reverbDetail`, `vocalDetail`, `acidDetail`, `supersawDetail`, `bassDetail`, `kickDetail`, `genreDetail`, `effectsDetail`, `synthesisCharacter`, `danceability`, `structure`, `arrangementDetail`, `segmentLoudness`, `segmentSpectral`, `segmentStereo`, `segmentKey`, `chordDetail`, `perceptual`, `essentiaFeatures`.
 
 ## Relationship To `POST /api/analyze`
 
@@ -181,6 +181,17 @@ Current server behavior that affects schema expectations:
 | `lufsShortTermMax` | `float \| null` | Maximum short-term loudness (3 s window) via `LoudnessEBUR128`. | LUFS | Peak sustained loudness; gap between this and integrated LUFS indicates dynamic range use. |
 | `dynamicSpread` | `float \| null` | Ratio of broad-band energy means (sub/mid/high approximation). | unitless ratio | Quick indicator of how unevenly energy is distributed across broad frequency regions. |
 
+### `lufsCurve`
+
+Type: `object \| null`
+
+Per-frame EBU R128 loudness over time. Each curve is downsampled to ~200 points on a 2-minute track; points sit at bin-center timestamps relative to track start.
+
+| Field | Type | Description | Units / Scale | LLM interpretation note |
+|---|---|---|---|---|
+| `lufsCurve.shortTerm` | `Array<{t: float, lufs: float}>` | Short-term (3 s window) loudness curve. | seconds / LUFS | Phase 2 cites this to explain breakdown-vs-drop loudness contrast and section-relative dynamics. |
+| `lufsCurve.momentary` | `Array<{t: float, lufs: float}>` | Momentary (400 ms window) loudness curve. | seconds / LUFS | Finer-grained than `shortTerm`; useful for spotting punch and transient swells. |
+
 ### `dynamicCharacter`
 
 Type: `object \| null`
@@ -220,9 +231,12 @@ Type: `object \| null`
 | `stereoDetail.stereoCorrelation` | `float \| null` | Pearson correlation of full-band L/R channels. | -1.0 to 1.0 | Near 1 = mono-compatible; near 0 = wide/decorrelated; negative may collapse poorly to mono. |
 | `stereoDetail.subBassCorrelation` | `float \| null` | L/R correlation after sub-band isolation (20-80 Hz target; low-pass fallback). | -1.0 to 1.0 | Sub mono-compatibility signal; low values suggest risky stereo low-end for club playback. |
 | `stereoDetail.subBassMono` | `bool \| null` | `true` when `subBassCorrelation > 0.85`. | boolean | `true` means sub region is effectively mono-compatible; standard for most dance/club mixes. |
+| `stereoDetail.correlationCurve` | `Array<{t: float, full: float \| null, sub: float \| null}> \| null` | 1-second windowed L/R correlation, full-band and sub-band side-by-side. | seconds / Pearson r in [-1, 1] | Surfaces stereo automation (Utility width sweeps, mono-collapsing the drop) that the global scalars conflate into one number. `sub` may be null in windows where the sub band is silent. |
+| `stereoDetail.bandCorrelations` | `object \| null` | Per-frequency-band L/R Pearson correlation, keyed by the same 7 bands as `spectralBalance` (subBass / lowBass / lowMids / mids / upperMids / highs / brilliance). | dict of Pearson r in [-1, 1] or null | Phase 2 cites these to recommend Utility-tool width per band ("bass is mono at 0.98 but mids are wide at 0.45 — add width on the synth bus only"). Per-band null means that band carries no usable energy on this track. |
 
 Example interpretation:
 - `subBassMono: true` -> "Sub bass is mono-compatible. Standard for club music. Advise keeping bass synthesis below ~150 Hz mono in Ableton."
+- A `correlationCurve` row at `t=48.0` showing `full: 0.42` while the integrated `stereoCorrelation` is `0.78` indicates a deliberate width-opening automation around that section.
 
 ---
 
@@ -234,12 +248,112 @@ Type: `object \| null`
 
 | Field | Type | Description | Units / Scale | LLM interpretation note |
 |---|---|---|---|---|
-| `spectralBalance.subBass` | `float` | Mean energy in 20-60 Hz band. | dB (relative) | Indicates weight of true sub fundamentals. |
-| `spectralBalance.lowBass` | `float` | Mean energy in 60-200 Hz band. | dB (relative) | Covers kick thump and bass body. |
-| `spectralBalance.mids` | `float` | Mean energy in 200-2000 Hz band. | dB (relative) | Core musical body and intelligibility region. |
-| `spectralBalance.upperMids` | `float` | Mean energy in 2-6 kHz band. | dB (relative) | Presence/attack region; affects perceived forwardness. |
-| `spectralBalance.highs` | `float` | Mean energy in 6-12 kHz band. | dB (relative) | Brightness and air onset content. |
-| `spectralBalance.brilliance` | `float` | Mean energy in 12-20 kHz band. | dB (relative) | Extreme top-end "air"; often reduced on lossy or dark masters. |
+| `spectralBalance.subBass` | `float` | Mean energy in 20-80 Hz band. | dB (relative) | Indicates weight of true sub fundamentals. |
+| `spectralBalance.lowBass` | `float` | Mean energy in 80-250 Hz band. | dB (relative) | Covers kick thump and bass body. |
+| `spectralBalance.lowMids` | `float` | Mean energy in 250-500 Hz band. | dB (relative) | Lower midrange — body of low instruments, room boom. Field exists in code but was previously absent from this doc; mind the asymmetry until older readers update. |
+| `spectralBalance.mids` | `float` | Mean energy in 500-2000 Hz band. | dB (relative) | Core musical body and intelligibility region. |
+| `spectralBalance.upperMids` | `float` | Mean energy in 2-5 kHz band. | dB (relative) | Presence/attack region; affects perceived forwardness. |
+| `spectralBalance.highs` | `float` | Mean energy in 5-10 kHz band. | dB (relative) | Brightness and air onset content. |
+| `spectralBalance.brilliance` | `float` | Mean energy in 10-20 kHz band. | dB (relative) | Extreme top-end "air"; often reduced on lossy or dark masters. |
+
+### `spectralBalanceTimeSeries`
+
+Type: `Array<{t: float, subBass: float, lowBass: float, lowMids: float, mids: float, upperMids: float, highs: float, brilliance: float}> \| null`
+
+Sibling time-series partner for `spectralBalance`. Each row carries all seven bands at a given timestamp (bin-center, seconds). Downsampled to ~200 rows on a 2-minute track. Phase 2 cites entries like `spectralBalanceTimeSeries` plus a time index ("the high-end opens up at 1:23") rather than only static averages. Lives as a sibling rather than nested inside `spectralBalance` because that field's exact 7-key shape is asserted by the backend test contract.
+
+### `stemAnalysis`
+
+Type: `object \| null`
+
+Phase 1.B per-stem analytical surface — populated only when Demucs stem separation ran successfully (`--separate`). Null when separation wasn't requested or failed. Phase 2 cites individual stems for element-specific recommendations.
+
+For each available stem (`drums` / `bass` / `other` / `vocals`), the same high-value full-mix analyzers run on the stem's audio:
+
+| Field per stem | Type | Description |
+|---|---|---|
+| `stemAnalysis.{stem}.spectralBalance` | `object` | Same 7-band shape as the top-level `spectralBalance`. Per-element EQ target. |
+| `stemAnalysis.{stem}.spectralBalanceTimeSeries` | `array` | Per-stem 7-band time series, downsampled to ~200 frames. |
+| `stemAnalysis.{stem}.spectralDetail` | `object` | Per-stem centroid/rolloff/MFCC/Bark/ERB/chroma. Same shape as top-level. |
+| `stemAnalysis.{stem}.lufsIntegrated` | `float` | Per-stem integrated EBU R128 loudness. |
+| `stemAnalysis.{stem}.lufsRange` / `.lufsMomentaryMax` / `.lufsShortTermMax` | `float` | Per-stem loudness statistics. |
+| `stemAnalysis.{stem}.lufsCurve` | `object` | Per-stem `{shortTerm, momentary}` curves. |
+| `stemAnalysis.{stem}.stereoDetail` | `object` | Per-stem stereo width/correlation/subBassMono/correlationCurve. |
+| `stemAnalysis.{stem}.truePeak` | `float` | Per-stem true peak across L/R. |
+| `stemAnalysis.{stem}.crestFactor` / `.dynamicSpread` | `float` | Per-stem dynamics scalars. |
+| `stemAnalysis.{stem}.dynamicCharacter` | `object` | Per-stem dynamic-complexity / attack profile. |
+| `stemAnalysis.{stem}.reverbDetail` | `object` | Phase 1.D #5 — per-stem reverb estimation. Same shape as the top-level `reverbDetail` (rt60 / isWet / tailEnergyRatio / measured / perBandRt60 / preDelayMs). Drums stem is typically the cleanest signal; long RT60 on bass/other/vocals often reflects sustained tonal decay rather than reverb. When `measured: false` the slope-fit didn't have enough transients on that stem — treat as fallback. |
+
+**Intentionally not per-stem:** BPM, key, time signature, structure novelty, sidechain pumping, danceability, chord progression. These are song-level properties — splitting them per-stem would produce noise.
+
+### `transientDensityDetail`
+
+Type: `object \| null`
+
+Phase 1.C #1 — per-frequency-band onset density across the 7 `SPECTRAL_BALANCE_BANDS`. For each band (`subBass`, `lowBass`, `lowMids`, `mids`, `upperMids`, `highs`, `brilliance`):
+
+| Field per band | Type | Description |
+|---|---|---|
+| `transientDensityDetail.{band}.onsetRatePerSecond` | `float` | Detected onset events per second within this band. |
+| `transientDensityDetail.{band}.meanOnsetStrength` | `float` | Mean librosa onset-envelope value at detected peaks. |
+| `transientDensityDetail.{band}.peakOnsetStrength` | `float` | Max onset-envelope value across the track. |
+| `transientDensityDetail.{band}.eventCount` | `int` | Number of detected onsets. |
+
+**LLM interpretation notes:**
+- Cite `transientDensityDetail.lowBass.onsetRatePerSecond` for kick-density / drum-bus claims.
+- Cite `transientDensityDetail.highs.eventCount` for hi-hat density / shaker activity.
+- Use cross-band comparisons to anchor "drums-heavy in upper mids, bass smooth in subs" advice.
+- High onset density + low mean strength suggests sustained content (synth pad); high mean strength + low density suggests sparse hits.
+
+### `saturationDetail`
+
+Type: `object \| null`
+
+Phase 1.C #5 — saturation / clipping / over-compression telltales. Hint-level signals — Phase 2 must hedge per the citation contract's low-confidence rules until the audit bench confirms.
+
+| Field | Type | Description |
+|---|---|---|
+| `saturationDetail.clippedSampleCount` | `int` | Stereo samples with `|x| >= 0.9999`. |
+| `saturationDetail.clippedSamplePercent` | `float` | Percentage of total samples that crossed the clip threshold. |
+| `saturationDetail.nearClippedSampleCount` | `int` | Samples with `|x| >= 0.95`. |
+| `saturationDetail.nearClippedSamplePercent` | `float` | Percentage near mastering-loud territory. |
+| `saturationDetail.peakRatio95to50` | `float \| null` | Ratio of 95th-percentile `|x|` to 50th-percentile. Higher = more dynamic. |
+| `saturationDetail.rmsToPeakRatioDb` | `float \| null` | Peak-vs-RMS in dB on the mono buffer. Inverse-shape of crest factor. |
+| `saturationDetail.saturationLikely` | `bool` | Heuristic: any clipping, sustained near-clipping, or low peak ratio + low RMS-to-peak. NOT definitive — Phase 2 should hedge. |
+
+**LLM interpretation notes:**
+- A non-zero `clippedSampleCount` is a strong signal — recommend Saturator or Limiter ceiling at -0.3 dB.
+- `peakRatio95to50` below ~1.7 with low `rmsToPeakRatioDb` (< 7 dB) suggests heavy limiting / brickwall mastering.
+- `saturationLikely=true` alone is a hint, not a verdict — combine with crest factor and `dynamicCharacter.dynamicComplexity` for confidence.
+
+### `snareDetail` / `hihatDetail`
+
+Both types: `object \| null`. Same shape (BandDrumDetail), different bands.
+
+Phase 1.C #4 — band-limited drum character. Mirrors the `analyze_kick_detail` pattern in the 120-2000 Hz band (snare body + snap) and 2000-12000 Hz band (hi-hat brightness / openness). Uses the drums stem when available, otherwise falls back to spectrum-bin selection on the full mix.
+
+| Field | Type | Description |
+|---|---|---|
+| `{snare\|hihat}Detail.hitCount` | `int` | Detected onsets in band. |
+| `{snare\|hihat}Detail.hitsPerSecond` | `float` | Hits per second. Useful for groove density. |
+| `{snare\|hihat}Detail.meanAttackSharpness` | `float` | Mean envelope rise across 2 frames before each peak — a transient sharpness proxy. |
+| `{snare\|hihat}Detail.meanBodyEnergyRatio` | `float \| null` | Fraction of per-hit spectral energy in the lower half of the band. For snare: body region (~120-755 Hz). For hi-hat: lower half (~2-6 kHz). |
+| `{snare\|hihat}Detail.meanSnapEnergyRatio` | `float \| null` | Fraction in the upper half of the band. Higher snare value = more snap; higher hi-hat value = more sizzle. |
+| `{snare\|hihat}Detail.meanCentroidHz` | `float \| null` | Mean spectral centroid weighted by magnitude across the per-hit spectra. |
+| `{snare\|hihat}Detail.meanDecayFrames` | `float` | Mean frames between peak and envelope falling below 30% of peak. |
+| `{snare\|hihat}Detail.meanDecaySeconds` | `float` | Same as above in seconds. For hi-hat, a rough open-vs-closed proxy (closed ~30-60 ms, open >150 ms). |
+| `{snare\|hihat}Detail.bandHz` | `[float, float]` | Inclusive band edges actually used. |
+
+**LLM interpretation notes:**
+- Snare body vs snap balance: `meanBodyEnergyRatio > 0.6` = thick / round snare; `meanSnapEnergyRatio > 0.55` = snappy / clappy. Recommends Saturator drive or EQ Eight body/snap shaping accordingly.
+- Hi-hat decay: `meanDecaySeconds < 0.06` = closed/tight hats; `> 0.15` = open / shaker / cymbal-ish content. Drives reverb send choice and Auto Filter tone.
+- `hitsPerSecond` on hi-hat: 4-8 = 8th notes at house tempos, 8-16 = 16th notes / trap-style, >16 = rolls / shaker textures.
+- Detail is null when no source provides ≥2 detected hits in band (fallback returns null gracefully).
+
+**LLM interpretation notes:**
+- Cite per-stem paths to justify element-specific recommendations ("Glue Compress the kick at -8 dB threshold because `stemAnalysis.drums.crestFactor = 11.2 dB`" rather than the full-mix crest).
+- Compare values across stems for masking / EQ-balance claims (e.g. `stemAnalysis.bass.spectralBalance.subBass` vs `stemAnalysis.drums.spectralBalance.subBass` for sub-bass overlap).
+- If a stem is missing from the dict, treat that stem as "not separated" — don't infer it's silent.
 
 ### `spectralDetail`
 
@@ -280,6 +394,7 @@ Type: `object \| null`
 | `rhythmDetail.phraseGrid.phrases16Bar` | `float[]` | Start times of 16-bar phrases. | seconds | Section-level phrase boundaries. |
 | `rhythmDetail.phraseGrid.totalBars` | `int` | Total number of detected bars. | count | Track length in bars for arrangement planning. |
 | `rhythmDetail.phraseGrid.totalPhrases8Bar` | `int` | Total number of 8-bar phrases. | count | Quick structural count for electronic arrangement estimation. |
+| `rhythmDetail.tempoCurve` | `Array<{t: float, bpm: float}> \| null` | Instantaneous-BPM curve from beat ticks, smoothed with a 4-beat rolling median, downsampled to ~200 points. | seconds / BPM | Surfaces deliberate ritardando/accelerando and DJ-tool tempo blends that the single mean `bpm` scalar conflates away. Phase 2 cites this to explain tempo-modulated sections. |
 
 Note: `rhythmDetail.beatPositions` previously referred to a truncated beat-timestamp alias. That timestamp array is now exposed as `rhythmDetail.beatGrid` for the full track.
 
@@ -293,6 +408,9 @@ Type: `object \| null`
 | `grooveDetail.hihatSwing` | `float` | Swing proxy from high-band accented beat spacing. | unitless | Captures high-frequency rhythmic looseness. |
 | `grooveDetail.kickAccent` | `float[]` | Up-to-16 sampled low-band beat loudness values. | linear loudness proxy | Shape of kick emphasis over time. |
 | `grooveDetail.hihatAccent` | `float[]` | Up-to-16 sampled high-band beat loudness values. | linear loudness proxy | Shape of high-percussion emphasis over time. |
+| `grooveDetail.perDrumSwing.kick` | `float` | Phase 1.C #3 — same kickSwing value, exposed as part of the per-drum-swing object so Phase 2 can cite all three groups uniformly. | 0-1 tanh-compressed | Cite alongside `perDrumSwing.snare` and `perDrumSwing.hihat` for groove-aware MIDI quantization recommendations. |
+| `grooveDetail.perDrumSwing.snare` | `float` | Phase 1.C #3 — swing computed from the snare-band (200-4000 Hz) beat-loudness signal. | 0-1 tanh-compressed | New in this pass. Compare with `perDrumSwing.kick`: if snareSwing >> kickSwing, the snare is being human-pushed/pulled against a quantized kick (classic hip-hop / R&B layered feel). |
+| `grooveDetail.perDrumSwing.hihat` | `float` | Phase 1.C #3 — same hihatSwing value, exposed inside the perDrumSwing object. | 0-1 tanh-compressed | Cite for shuffle / dilla / triplet-hat-feel recommendations. |
 
 ### `beatsLoudness`
 
@@ -343,9 +461,37 @@ Type: `object \| null`
 |---|---|---|---|---|
 | `sidechainDetail.pumpingStrength` | `float` | Depth/alignment score for loudness dips vs kick activity. | 0.0-1.0 | Higher values suggest stronger audible sidechain-style ducking. |
 | `sidechainDetail.pumpingRegularity` | `float` | Period consistency of detected pumping intervals. | 0.0-1.0 | High values indicate clock-like pumping, useful for genre-consistent groove reconstruction. |
-| `sidechainDetail.pumpingRate` | `"quarter" \| "eighth" \| "sixteenth" \| null` | Best-matching pumping grid rate. | categorical | Suggests compressor trigger rhythm for Ableton sidechain setup. |
+| `sidechainDetail.pumpingRate` | `"quarter" \| "eighth" \| "sixteenth" \| "thirty_second" \| null` | Best-matching pumping grid rate. | categorical | Suggests compressor trigger rhythm for Ableton sidechain setup. `thirty_second` added in Phase 1.C #6 (32nd-note grid). |
 | `sidechainDetail.pumpingConfidence` | `float` | Reliability score (kick clarity + dip correlation + timing stability penalties). | 0.0-1.0 | Low confidence means avoid overcommitting to sidechain recreation without ear-checking. |
-| `sidechainDetail.envelopeShape` | `float[16] \| null` | Normalized median RMS envelope across bars at 16th-note resolution. | 0-1 per step | Rhythmic amplitude shape useful for sidechain curve recreation; peak at step 0 typically indicates kick position. |
+| `sidechainDetail.envelopeShape` | `float[16] \| null` | Normalized median RMS envelope across bars at 16th-note resolution (downsampled from the internal 32nd-note grid via max-pairing). | 0-1 per step | Rhythmic amplitude shape useful for sidechain curve recreation; peak at step 0 typically indicates kick position. |
+| `sidechainDetail.envelopeShape32` | `float[32] \| null` | Normalized median RMS envelope across bars at 32nd-note resolution (added Phase 1.C #6). | 0-1 per step | Higher-resolution view of the same sidechain ducking pattern — exposes attack/release within the 16th-note slot. Prefer this over `envelopeShape` for Auto Filter/Auto Pan rate inference. |
+
+### `reverbDetail`
+
+Type: `object \| null`
+
+| Field | Type | Description | Units / Scale | LLM interpretation note |
+|---|---|---|---|---|
+| `reverbDetail.rt60` | `float \| null` | Mean RT60 estimate (-60 dB decay time) across detected transients. | seconds, capped at 3.0 | Quick "wet/dry" proxy at the bus level. `null` when fewer than 4 transients (no decay slopes to fit). |
+| `reverbDetail.isWet` | `bool` | True when mean RT60 > 0.5 s. | boolean | Categorical "this material has measurable reverb" flag. Use to gate Reverb/Convolution recommendations vs dry-source advice. |
+| `reverbDetail.tailEnergyRatio` | `float \| null` | Mean fraction of total post-transient energy that lives in the tail vs direct portion. | 0-1 | Higher = wetter; useful for deciding wet/dry mix percentage when recreating the reverb. |
+| `reverbDetail.measured` | `bool` | Whether enough transients were detected to actually fit RT60 slopes. | boolean | If `measured` is False, all other fields are fallbacks — don't cite RT60 numbers in this case. |
+| `reverbDetail.perBandRt60` | `{low?, lowMids?, highMids?, highs?} \| null` | Phase 1.D #5 — RT60 estimated separately in 4 octave bands (low ≈ 20-250 Hz, lowMids ≈ 250-2000 Hz, highMids ≈ 2000-8000 Hz, highs ≈ 8000-16000 Hz). Each band measures the same transient stream. | seconds | Long lows / short highs is a typical room signature; long highs / short lows suggests plate or bright chamber. Use to choose Reverb device type (Hall vs Plate vs Room) and damping. |
+| `reverbDetail.preDelayMs` | `float \| null` | Phase 1.D #5 — median time between direct peak and first envelope minimum within the next 100 ms, across all detected transients. | milliseconds | A proxy for reverb pre-delay; close to zero on dry sources. Cite for Reverb device PreDelay parameter recommendations. |
+
+### `vocalDetail`
+
+Type: `object \| null`
+
+| Field | Type | Description | Units / Scale | LLM interpretation note |
+|---|---|---|---|---|
+| `vocalDetail.hasVocals` | `bool` | Categorical decision: true when composite confidence > 0.55. | boolean | Use to gate vocal-bus recommendations vs instrumental ones. |
+| `vocalDetail.confidence` | `float` | Composite 35/35/30 weighting of energy / formant / MFCC scores, scaled by stemEnergyRatio when a vocals stem is present. | 0.0-1.0 | Hedge any vocal claim when confidence < 0.7. |
+| `vocalDetail.vocalEnergyRatio` | `float` | Fraction of spectral energy in 150-1500 Hz vocal fundamental band. | 0.0-1.0 | Higher = more energy in the vocal range. Common on vocal-led tracks (0.25-0.45). |
+| `vocalDetail.formantStrength` | `float` | Coherent-formant-frames fraction × temporal-stability multiplier. Penalizes sustained synth leads with static "formants". | 0.0-1.0 | Real vocals usually 0.4-0.8; sustained synth leads should land at 0.2 due to the static-formant penalty. |
+| `vocalDetail.mfccLikelihood` | `float` | How closely the MFCC distribution matches a 40/35/25 low/mid/high voice-like profile. | 0.0-1.0 | Hint-only. Can score high on sustained tonal content; don't rely on this alone. |
+| `vocalDetail.stemEnergyRatio` | `float \| null` | Phase 1.D follow-up: vocals-stem RMS / full-mix RMS. Null when no vocals stem was used (full-mix path). | 0.0-2.0 typical, capped at 2.0 | Below ~0.05 indicates Demucs ghost-stem leakage on an instrumental track; analyzer scales confidence down accordingly. Phase 2 should hedge vocal claims when this value is low. |
+| `vocalDetail.stemOtherCorrelation` | `float \| null` | Phase 1.D follow-up: Pearson correlation between vocals stem and "other" stem at 200 Hz envelope rate. Null when no vocals stem was used. | -1.0 to 1.0 | Above ~0.55 indicates Demucs split a single melodic source across both stems (misclassified lead); analyzer scales confidence down. Below ~0.30 indicates independent stems — no penalty. Phase 2 should hedge vocal-bus claims when this is high. |
 
 ### `effectsDetail`
 
@@ -463,6 +609,8 @@ Type: `object \| null`
 | `chordDetail.chordStrength` | `float` | Mean chord detection strength. | 0-1 (approx) | Low/medium values indicate probable ambiguity on full-master chord detection. |
 | `chordDetail.progression` | `string[]` | Consecutive-duplicate-removed progression, capped at 16. | chord labels | Compact harmonic change path for arrangement planning. |
 | `chordDetail.dominantChords` | `string[]` | Top 4 most frequent chord labels. | chord labels | Candidate tonic/relative function anchors. |
+| `chordDetail.chordTimeline` | `array<{startSec, endSec, label, confidence}> \| null` | Phase 1.D #2 — chord segments with start/end times (seconds) and per-segment confidence (mean of per-frame strength values). Each segment is the result of a 5-frame median-filter smoothing of the per-frame chord labels, then merging consecutive same-label frames. Segments shorter than ~250 ms are dropped as detection noise. Capped at 64 segments. | seconds; 0-1 confidence | Use for arrangement-aware harmonic recommendations ("the bridge sits on Cm for 8 bars, then drops to Eb for 4 — recommend a chord-stab MIDI sequence that matches the timeline"). When `confidence < 0.5` on a segment, hedge — chord-detection on full-mix is noisy. |
+| `chordDetail.chordChangeCount` | `int` | Phase 1.D #2 — count of unique chord-to-chord transitions in the smoothed timeline. Flat 1-chord tracks score 0; harmonically active tracks score 16+. | count | A proxy for "how harmonically active" the track is. Cite for arrangement-density and harmonic-rhythm recommendations. |
 
 ### `segmentKey`
 
@@ -531,7 +679,7 @@ Type: `object \| null`
 
 | Field | Type | Description | Units / Scale | LLM interpretation note |
 |---|---|---|---|---|
-| `arrangementDetail.noveltyCurve` | `float[]` | Downsampled novelty timeline (max 64 points) from Bark-band change detection. | relative novelty units | Highlights where timbral/energy surprises occur (risers, transitions, filter moves). |
+| `arrangementDetail.noveltyCurve` | `float[]` | Downsampled novelty timeline (max 256 points as of Phase 1.A.5; was 64 previously) from Bark-band change detection. | relative novelty units | Highlights where timbral/energy surprises occur (risers, transitions, filter moves). Higher resolution lets Phase 2 cite "novelty ramps for 8 bars before the drop" rather than just naming peaks. |
 | `arrangementDetail.noveltyPeaks` | `array<object>` | Top novelty events with spacing constraint (max 8). | list of events | Candidate transition markers for arrangement mapping beyond SBic segmentation. |
 | `arrangementDetail.noveltyPeaks[].time` | `float` | Time of a novelty peak. | seconds | Place transition/automation markers in arrangement timeline. |
 | `arrangementDetail.noveltyPeaks[].strength` | `float` | Relative strength at novelty peak. | novelty magnitude | Higher values indicate more pronounced spectral/energy change. |
@@ -574,6 +722,70 @@ Type: `array<object> \| null`
 | `segmentStereo[].stereoCorrelation` | `float \| null` | Per-segment L/R Pearson correlation. | -1.0 to 1.0 | Flags mono-compatibility risk per arrangement block instead of only full-track average. |
 
 ---
+
+## Detection analyzers (additional sections — added in JSON_SCHEMA.md reconciliation pass)
+
+### `acidDetail`
+
+Type: `object \| null`
+
+| Field | Type | Description | Units / Scale | LLM interpretation note |
+|---|---|---|---|---|
+| `acidDetail.isAcid` | `bool` | Categorical "this track sounds like acid-style synthesis" flag. | boolean | When True, recommend resonant filter modulation (Auto Filter with high resonance + LFO automation) on the bass-like element. |
+| `acidDetail.confidence` | `float` | Composite confidence in the acid-detection decision. | 0.0-1.0 | Hedge when confidence < 0.5; cite the resonanceLevel + centroidOscillationHz scalars in the recommendation reason. |
+| `acidDetail.resonanceLevel` | `float` | Mean spectral-centroid oscillation amplitude proxy. | 0.0-1.0 | High values indicate strong filter sweep; cite for Auto Filter Q recommendations. |
+| `acidDetail.centroidOscillationHz` | `float` | Dominant frequency of centroid modulation. | Hz | Cite for LFO rate recommendations on the filter cutoff (e.g. "the centroid oscillates at 97 Hz → set Auto Filter LFO rate to match"). |
+| `acidDetail.bassRhythmDensity` | `float` | Onset events per second in the bass-energy band. | events/s | Cross-reference with `kickDetail.kickCount / durationSeconds` — high bassRhythmDensity + low kickCount = acid line driving the rhythm. |
+
+### `bassDetail`
+
+Type: `object \| null`
+
+| Field | Type | Description | Units / Scale | LLM interpretation note |
+|---|---|---|---|---|
+| `bassDetail.fundamentalHz` | `int \| null` | Estimated bass fundamental via ZCR on the 150 Hz lowpassed signal. | Hz, clamped to 30-120 | Cite for Operator/Wavetable Coarse tuning; cross-reference with `key` to determine the bass note. |
+| `bassDetail.averageDecayMs` | `int \| null` | Mean decay time per detected bass transient (peak-anchored envelope decay to -6 dB). | milliseconds | Drives bass-type categorization. Cite for Glue Compressor release-time. <100 ms = punchy; 100-300 = medium; 300-600 = rolling; 600+ = sustained. |
+| `bassDetail.type` | `"punchy" \| "medium" \| "rolling" \| "sustained"` | Categorical bass character derived from `averageDecayMs`. | categorical | Drives device-choice direction: punchy → kick-bus-style compression; sustained → Glue Compressor with longer release. |
+| `bassDetail.transientCount` | `int` | Number of detected bass onsets. | count | A bass density proxy. |
+| `bassDetail.transientRatio` | `float` | Ratio of transient-window energy to total bass-band energy. | 0.0-1.0 | High values = punchy/staccato; low values = sustained pad-like bass. |
+| `bassDetail.swingPercent` | `int` | Swing inferred from bass onset-interval alternation (lag-1 autocorr). | 0-50 | Cite for Ableton Groove pool swing % when adding humanization to a re-built MIDI bass. |
+| `bassDetail.grooveType` | `"straight" \| "slight-swing" \| "heavy-swing" \| "shuffle"` | Categorical groove derived from `swingPercent`. | categorical | Drives MIDI-quantize humanize amount. |
+
+### `kickDetail`
+
+Type: `object \| null`
+
+| Field | Type | Description | Units / Scale | LLM interpretation note |
+|---|---|---|---|---|
+| `kickDetail.fundamentalHz` | `int \| null` | Estimated kick fundamental from sub-bass spectral peak detection. | Hz, typically 30-120 | Cite for Operator/Wavetable kick-tone selection. <60 Hz = deep sub kick; 60-90 Hz = standard 909-ish; 90+ Hz = high-tuned kick. |
+| `kickDetail.kickCount` | `int` | Count of detected kick events (preferentially on the drums stem when stems are available). | count | Cross-check density vs BPM. On full mix this can over-count due to bass/transient bleed; on `drums` stem the count is more reliable. |
+| `kickDetail.thd` | `float \| null` | Total harmonic distortion proxy for the kick hits. | 0.0-1.0+ | Cite for Saturator drive recommendations. >0.2 indicates audible saturation. |
+| `kickDetail.harmonicRatio` | `float \| null` | Harmonic-to-noise ratio across detected kicks. | 0.0-1.0 | High values (>0.9) indicate clean/sub-heavy kicks; low values indicate noisy/punchy kicks with snap content. |
+| `kickDetail.isDistorted` | `bool` | True when THD exceeds a threshold + harmonic spread is broad. | boolean | Hint-only; cite for "the kick is already saturated — don't add more Saturator." |
+
+### `supersawDetail`
+
+Type: `object \| null`
+
+| Field | Type | Description | Units / Scale | LLM interpretation note |
+|---|---|---|---|---|
+| `supersawDetail.isSupersaw` | `bool` | Categorical "stacked-detuned-saws" presence. | boolean | When True, recommend Wavetable in Supersaw / Sawtooth mode with the measured voiceCount + detuneCents. |
+| `supersawDetail.confidence` | `float` | Composite confidence. | 0.0-1.0 | Hedge when below 0.5. |
+| `supersawDetail.voiceCount` | `int` | Estimated unison voice count via near-unison peak grouping. | count | Cite directly for Wavetable Voice Stack value (typically 5-7). |
+| `supersawDetail.avgDetuneCents` | `float` | Mean detune spread of detected unison voices. | cents | Cite for Wavetable Detune amount in cents. |
+| `supersawDetail.spectralComplexity` | `float` | Per-frame peak-count proxy for harmonic richness. | unitless | High values support the supersaw classification; cite alongside `voiceCount`. |
+
+### `genreDetail`
+
+Type: `object \| null`
+
+| Field | Type | Description | Units / Scale | LLM interpretation note |
+|---|---|---|---|---|
+| `genreDetail.genre` | `string` | Predicted primary genre from heuristic signature matching. | label | Treat as context only — Phase 2 invariant says genre is short context, not the main blueprint. |
+| `genreDetail.confidence` | `float` | Match-score against the predicted genre signature. | 0.0-1.0 | Genre detection on electronic music is noisy; hedge when below 0.7. |
+| `genreDetail.secondaryGenre` | `string` | Second-best signature match. | label | Use to triangulate when primary is borderline — e.g. "psytrance + acid-techno" both indicates Goa-style content. |
+| `genreDetail.genreFamily` | `string` | Coarse parent family (`trance`, `house`, `hip-hop`, etc.). | label | More stable than the specific genre; safer to anchor recommendations against the family. |
+| `genreDetail.topScores` | `array<{genre, score}>` | Top-5 candidate scores. | (label, 0.0-1.0) | Surface as alternates when primary confidence is below 0.7. |
 
 ## Danceability
 
