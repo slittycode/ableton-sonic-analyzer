@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   deriveNoteDraftRenderState,
   isLegacyTranscriptionMethod,
+  selectNoteDraftBandConfidence,
 } from '../../src/services/sessionMusician/renderState';
 import type { TranscriptionDetail, TranscriptionNote } from '../../src/types';
 
@@ -113,5 +114,58 @@ describe('deriveNoteDraftRenderState — precedence', () => {
 
   it('returns stem-aware when pitchNoteMode is null but the data is valid (legacy snapshot)', () => {
     expect(deriveNoteDraftRenderState(torchcrepe(), null)).toBe('stem-aware');
+  });
+});
+
+describe('selectNoteDraftBandConfidence — per-stem confidence wiring', () => {
+  const withPerStem = (overrides: Partial<TranscriptionDetail> = {}): TranscriptionDetail =>
+    torchcrepe({
+      averageConfidence: 0.6,
+      perStemAverageConfidence: { bass: 0.85, other: 0.3 },
+      ...overrides,
+    });
+
+  it('uses the overall averageConfidence when no stem filter is active', () => {
+    const detail = withPerStem();
+    expect(selectNoteDraftBandConfidence(detail, null, 'stem-aware')).toBe(0.6);
+  });
+
+  it("uses the BASS stem's average when the stem filter is set to bass", () => {
+    const detail = withPerStem();
+    expect(selectNoteDraftBandConfidence(detail, 'bass', 'stem-aware')).toBe(0.85);
+  });
+
+  it("uses the OTHER stem's average when the stem filter is set to other", () => {
+    const detail = withPerStem();
+    expect(selectNoteDraftBandConfidence(detail, 'other', 'stem-aware')).toBe(0.3);
+  });
+
+  it('falls back to the overall when the stem filter is set but per-stem field is missing', () => {
+    // Legacy snapshot from before the backend started emitting the field.
+    const detail = torchcrepe({ averageConfidence: 0.6 });
+    expect(selectNoteDraftBandConfidence(detail, 'bass', 'stem-aware')).toBe(0.6);
+  });
+
+  it('falls back to the overall when the selected stem key is missing from the per-stem map', () => {
+    const detail = withPerStem({ perStemAverageConfidence: { bass: 0.85 } });
+    expect(selectNoteDraftBandConfidence(detail, 'other', 'stem-aware')).toBe(0.6);
+  });
+
+  it('falls back to the overall when the per-stem entry is not a finite number', () => {
+    const detail = withPerStem({
+      // @ts-expect-error — defensive against malformed runtime payloads
+      perStemAverageConfidence: { bass: 'not a number' },
+    });
+    expect(selectNoteDraftBandConfidence(detail, 'bass', 'stem-aware')).toBe(0.6);
+  });
+
+  it('ignores per-stem values in full-mix-fallback render state (the band is overridden anyway)', () => {
+    const detail = withPerStem();
+    expect(selectNoteDraftBandConfidence(detail, 'bass', 'full-mix-fallback')).toBe(0.6);
+  });
+
+  it('ignores per-stem values in legacy render state', () => {
+    const detail = withPerStem();
+    expect(selectNoteDraftBandConfidence(detail, 'bass', 'legacy')).toBe(0.6);
   });
 });

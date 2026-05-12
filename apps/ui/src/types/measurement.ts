@@ -39,6 +39,13 @@ export interface TranscriptionDetail {
   stemSeparationUsed: boolean;
   fullMixFallback: boolean;
   stemsTranscribed: string[];
+  /**
+   * Mean confidence per stem source, computed over the post-dedup, post-cap notes.
+   * Empty `{}` when `fullMixFallback` is true; otherwise contains one entry per
+   * stem with at least one surviving note (e.g. `{"bass": 0.85, "other": 0.32}`).
+   * Optional because legacy snapshots and the empty-notes path may omit it.
+   */
+  perStemAverageConfidence?: Record<string, number>;
   dominantPitches: Array<{
     pitchMidi: number;
     pitchName: string;

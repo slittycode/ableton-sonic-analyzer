@@ -493,6 +493,48 @@ class AnalyzeTranscriptionHelperTests(unittest.TestCase):
         self.assertEqual(deduplicated[0]["confidence"], 0.81)
         self.assertEqual(deduplicated[0]["durationSeconds"], 0.25)
 
+    def test_per_stem_average_confidence_groups_means_by_stem_source(self) -> None:
+        notes = [
+            {"pitchMidi": 48, "confidence": 0.9, "stemSource": "bass"},
+            {"pitchMidi": 50, "confidence": 0.8, "stemSource": "bass"},
+            {"pitchMidi": 64, "confidence": 0.4, "stemSource": "other"},
+            {"pitchMidi": 67, "confidence": 0.2, "stemSource": "other"},
+        ]
+
+        means = self.analyze._per_stem_average_confidence(notes)
+
+        self.assertEqual(set(means.keys()), {"bass", "other"})
+        self.assertAlmostEqual(means["bass"], 0.85, places=4)
+        self.assertAlmostEqual(means["other"], 0.3, places=4)
+
+    def test_per_stem_average_confidence_returns_empty_for_empty_notes(self) -> None:
+        self.assertEqual(self.analyze._per_stem_average_confidence([]), {})
+
+    def test_per_stem_average_confidence_skips_notes_with_missing_stem_source(self) -> None:
+        notes = [
+            {"pitchMidi": 48, "confidence": 0.9, "stemSource": "bass"},
+            {"pitchMidi": 60, "confidence": 0.7},  # missing stemSource entirely
+            {"pitchMidi": 64, "confidence": 0.5, "stemSource": ""},  # empty string
+            {"pitchMidi": 65, "confidence": 0.4, "stemSource": None},  # explicit null
+        ]
+
+        means = self.analyze._per_stem_average_confidence(notes)
+
+        self.assertEqual(set(means.keys()), {"bass"})
+        self.assertAlmostEqual(means["bass"], 0.9, places=4)
+
+    def test_per_stem_average_confidence_tolerates_invalid_confidence_values(self) -> None:
+        notes = [
+            {"pitchMidi": 48, "confidence": 0.9, "stemSource": "bass"},
+            {"pitchMidi": 50, "confidence": "not a number", "stemSource": "bass"},
+            {"pitchMidi": 52, "confidence": None, "stemSource": "bass"},
+        ]
+
+        means = self.analyze._per_stem_average_confidence(notes)
+
+        # The two malformed entries are skipped; only the 0.9 contributes.
+        self.assertAlmostEqual(means["bass"], 0.9, places=4)
+
 
 
 class AnalyzeTextureCharacterTests(unittest.TestCase):

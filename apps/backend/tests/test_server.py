@@ -3196,6 +3196,105 @@ class Phase2EndpointTests(unittest.TestCase):
                 stem_kinds = [artifact["kind"] for artifact in snapshot["artifacts"]["stems"]]
                 self.assertEqual(stem_kinds, ["stem_bass", "stem_other"])
 
+    def test_pitch_note_worker_passes_per_stem_confidence_through_to_run_snapshot(self) -> None:
+        """A subprocess that emits perStemAverageConfidence must round-trip into the run snapshot."""
+        from analysis_runtime import AnalysisRuntime
+
+        mock_result = json.dumps(
+            {
+                "transcriptionDetail": {
+                    "transcriptionMethod": "torchcrepe-viterbi",
+                    "noteCount": 2,
+                    "averageConfidence": 0.6,
+                    "dominantPitches": [],
+                    "pitchRange": {
+                        "minMidi": 48,
+                        "maxMidi": 64,
+                        "minName": "C3",
+                        "maxName": "E4",
+                    },
+                    "stemSeparationUsed": True,
+                    "fullMixFallback": False,
+                    "stemsTranscribed": ["bass", "other"],
+                    "perStemAverageConfidence": {"bass": 0.85, "other": 0.32},
+                    "notes": [
+                        {
+                            "pitchMidi": 48,
+                            "pitchName": "C3",
+                            "onsetSeconds": 0.0,
+                            "durationSeconds": 0.5,
+                            "confidence": 0.85,
+                            "stemSource": "bass",
+                        },
+                        {
+                            "pitchMidi": 64,
+                            "pitchName": "E4",
+                            "onsetSeconds": 0.6,
+                            "durationSeconds": 0.3,
+                            "confidence": 0.32,
+                            "stemSource": "other",
+                        },
+                    ],
+                }
+            }
+        )
+
+        with tempfile.TemporaryDirectory(prefix="asa_pitch_note_per_stem_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            created = runtime.create_run(
+                filename="track.mp3",
+                content=b"fake-audio",
+                mime_type="audio/mpeg",
+                pitch_note_mode="stem_notes",
+                pitch_note_backend="torchcrepe-viterbi",
+                interpretation_mode="off",
+                interpretation_profile="producer_summary",
+                interpretation_model=None,
+            )
+            attempt_id = runtime.create_pitch_note_attempt(
+                created["runId"],
+                backend_id="torchcrepe-viterbi",
+                mode="stem_notes",
+                status="queued",
+            )
+            runtime.reserve_pitch_note_attempt(attempt_id)
+
+            def fake_subprocess_run(command, **kwargs):
+                stem_output_dir = None
+                if "--stem-output-dir" in command:
+                    idx = command.index("--stem-output-dir")
+                    stem_output_dir = command[idx + 1]
+                if stem_output_dir:
+                    Path(stem_output_dir).mkdir(parents=True, exist_ok=True)
+                    (Path(stem_output_dir) / "bass.wav").write_bytes(b"bass-audio")
+                    (Path(stem_output_dir) / "other.wav").write_bytes(b"other-audio")
+                return subprocess.CompletedProcess(
+                    args=command,
+                    returncode=0,
+                    stdout=mock_result,
+                    stderr="",
+                )
+
+            with patch.object(server.subprocess, "run", side_effect=fake_subprocess_run):
+                server._execute_pitch_note_attempt(
+                    runtime,
+                    {
+                        "attemptId": attempt_id,
+                        "runId": created["runId"],
+                        "backendId": "torchcrepe-viterbi",
+                        "mode": "stem_notes",
+                    },
+                )
+
+            snapshot = runtime.get_run(created["runId"])
+            pitch_note_result = snapshot["stages"]["pitchNoteTranslation"]["result"]
+            self.assertIsNotNone(pitch_note_result)
+            # The new field round-trips end-to-end with no whitelist trimming.
+            self.assertEqual(
+                pitch_note_result["perStemAverageConfidence"],
+                {"bass": 0.85, "other": 0.32},
+            )
+
     def test_openapi_schema_exposes_phase2_route(self) -> None:
         spec = server.app.openapi()
         self.assertIn("/api/phase2", spec["paths"])
