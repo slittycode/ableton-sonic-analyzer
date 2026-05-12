@@ -178,6 +178,7 @@ from analyze_transcription import (  # noqa: E402
     _notes_overlap_for_dedup,
     _select_transcription_winner,
     _deduplicate_transcription_notes,
+    _per_stem_average_confidence,
     _extract_contour_notes,
     TORCHCREPE_SAMPLE_RATE,
     TORCHCREPE_HOP_LENGTH,

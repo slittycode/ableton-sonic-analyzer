@@ -278,6 +278,7 @@ test('phase1 dual-source session musician panel renders both blocks simultaneous
               stemSeparationUsed: true,
               fullMixFallback: false,
               stemsTranscribed: ['bass', 'other'],
+              perStemAverageConfidence: { bass: 0.92, other: 0.32 },
               dominantPitches: [
                 { pitchMidi: 48, pitchName: 'C3', count: 4 },
                 { pitchMidi: 55, pitchName: 'G3', count: 3 },
@@ -375,6 +376,17 @@ test('phase1 dual-source session musician panel renders both blocks simultaneous
   await expect(noteDraft.getByRole('button', { name: 'other' })).toBeVisible();
   await expect(noteDraft.locator('input[type="range"]')).toHaveCount(2); // confidence + swing
   await expect(melodyContour.locator('input[type="range"]')).toHaveCount(1); // swing only
+
+  // Per-stem confidence: toggling the stem filter swaps the band pill to that
+  // stem's average (bass=0.92, other=0.32). Clicking again deselects and
+  // returns to the overall (0.83). The stub above sets perStemAverageConfidence
+  // so the bass stem is Solid and the lead stem is Rough.
+  await noteDraft.getByRole('button', { name: 'bass' }).click();
+  await expect(noteDraft.getByText('Solid scaffold · 92%')).toBeVisible();
+  await noteDraft.getByRole('button', { name: 'other' }).click();
+  await expect(noteDraft.getByText('Rough sketch · 32%')).toBeVisible();
+  await noteDraft.getByRole('button', { name: 'All' }).click();
+  await expect(noteDraft.getByText('Solid scaffold · 83%')).toBeVisible();
 
   // Both blocks expose their own MIDI controls with distinct test IDs.
   const stemsPreview = noteDraft.getByTestId('midi-preview-stems');

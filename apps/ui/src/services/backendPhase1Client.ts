@@ -975,10 +975,23 @@ function parseOptionalTranscriptionDetail(
       raw.stemSeparationUsed === false,
     ),
     stemsTranscribed: parseTranscribedStems(raw.stemsTranscribed),
+    perStemAverageConfidence: parsePerStemAverageConfidence(raw.perStemAverageConfidence),
     dominantPitches,
     pitchRange,
     notes,
   };
+}
+
+function parsePerStemAverageConfidence(value: unknown): Record<string, number> | undefined {
+  if (!isRecord(value)) return undefined;
+  const result: Record<string, number> = {};
+  for (const [key, raw] of Object.entries(value)) {
+    if (typeof raw !== "number" || !Number.isFinite(raw)) continue;
+    // Clamp to 0-1 just like averageConfidence does — defensive against
+    // backend payload bugs.
+    result[key] = clamp01(raw);
+  }
+  return result;
 }
 
 function parseMelodyNotes(value: unknown): NonNullable<Phase1Result["melodyDetail"]>["notes"] {

@@ -13,6 +13,7 @@ export { hasStemListeningNotesContent } from './stemListeningNotes';
 export {
   deriveNoteDraftRenderState,
   isLegacyTranscriptionMethod,
+  selectNoteDraftBandConfidence,
   type NoteDraftRenderState,
   type PitchNoteMode,
 } from './renderState';

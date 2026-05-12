@@ -38,6 +38,37 @@ export function isLegacyTranscriptionMethod(
   return !TORCHCREPE_METHODS.has(normalized);
 }
 
+/**
+ * Pick the confidence value the Block A band pill should display.
+ *
+ * In the nominal stem-aware state, toggling the stem filter to BASS or OTHER
+ * should surface that stem's average confidence — otherwise a Solid bass stem
+ * (0.85) is hidden behind a Rough lead stem (0.32). Falls back to the overall
+ * `averageConfidence` when:
+ *   - the panel is in a non-stem-aware render state (fallback / legacy), where
+ *     the override notice replaces the band copy anyway,
+ *   - no stem filter is active (All button),
+ *   - the per-stem field is missing (legacy snapshots produced before the
+ *     backend started emitting it),
+ *   - or the selected stem key isn't keyed in the per-stem map for some reason.
+ *
+ * Extracted to a pure helper so the wiring is unit-testable without mounting
+ * the component — apps/ui's Vitest config runs in node, no DOM, no clicks.
+ */
+export function selectNoteDraftBandConfidence(
+  transcriptionDetail: TranscriptionDetail,
+  stemFilter: string | null,
+  renderState: NoteDraftRenderState,
+): number {
+  if (renderState === 'stem-aware' && stemFilter) {
+    const perStem = transcriptionDetail.perStemAverageConfidence?.[stemFilter];
+    if (typeof perStem === 'number' && Number.isFinite(perStem)) {
+      return perStem;
+    }
+  }
+  return transcriptionDetail.averageConfidence;
+}
+
 export function deriveNoteDraftRenderState(
   transcriptionDetail: TranscriptionDetail | null | undefined,
   pitchNoteMode: PitchNoteMode,

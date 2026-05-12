@@ -601,6 +601,7 @@ function parsePitchNoteResult(value: unknown): PitchNoteTranslationStageSnapshot
     stemsTranscribed: Array.isArray(result.stemsTranscribed)
       ? result.stemsTranscribed.map((entry) => String(entry))
       : [],
+    perStemAverageConfidence: parsePerStemAverageConfidence(result.perStemAverageConfidence),
     dominantPitches: Array.isArray(result.dominantPitches)
       ? result.dominantPitches.map((entry) => expectRecord(entry, 'dominant pitch') as PitchNoteTranslationStageSnapshot['result']['dominantPitches'][number])
       : [],
@@ -609,6 +610,16 @@ function parsePitchNoteResult(value: unknown): PitchNoteTranslationStageSnapshot
       ? result.notes.map((entry) => expectRecord(entry, 'pitch/note note') as unknown as PitchNoteTranslationStageSnapshot['result']['notes'][number])
       : [],
   };
+}
+
+function parsePerStemAverageConfidence(value: unknown): Record<string, number> | undefined {
+  if (typeof value !== 'object' || value == null || Array.isArray(value)) return undefined;
+  const result: Record<string, number> = {};
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof raw !== 'number' || !Number.isFinite(raw)) continue;
+    result[key] = raw;
+  }
+  return result;
 }
 
 function parseNullableRecord(value: unknown): Record<string, unknown> | null {
