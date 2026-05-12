@@ -99,12 +99,19 @@ interface SessionMusicianPanelProps {
   pitchNoteMode?: PitchNoteMode;
   /** Set by AnalysisResults when the Gemini stem listening notes section will render. */
   hasStemListeningNotes?: boolean;
+  /**
+   * Optional callback for the "Re-analyze with stem-aware pipeline" button
+   * that NoteDraftBlock renders only in the `legacy` render state. App owns
+   * the run-creation primitives; passing `undefined` hides the button.
+   */
+  onReanalyzeWithStemAware?: () => void;
 }
 
 export function SessionMusicianPanel({
   phase1,
   pitchNoteMode = null,
   hasStemListeningNotes = false,
+  onReanalyzeWithStemAware,
 }: SessionMusicianPanelProps) {
   const melodyDetail = phase1.melodyDetail ?? null;
   const transcriptionDetail = phase1.transcriptionDetail ?? null;
@@ -207,6 +214,7 @@ export function SessionMusicianPanel({
                 controller={controller}
                 bpm={phase1.bpm}
                 trackDurationSeconds={phase1.durationSeconds}
+                onReanalyzeWithStemAware={onReanalyzeWithStemAware}
               />
             )}
             {showMelodyBlock && (
