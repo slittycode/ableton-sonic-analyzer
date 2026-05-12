@@ -1,8 +1,10 @@
 """Per-segment analysis — loudness, stereo, spectral, key, and chords."""
 
+import functools
 import sys
 from collections import Counter
 
+import librosa
 import numpy as np
 
 try:
@@ -17,6 +19,234 @@ from dsp_utils import (
     _slice_segments,
     _to_finite_float,
 )
+
+
+# ---- Phase 1.D #2 chord-timeline helpers (Viterbi engine) -----------------
+#
+# Vocabulary: 25 states = 12 major triads + 12 minor triads + 1 no-chord ("N").
+# Short-form labels use Essentia's flat convention so chordTimeline[].label
+# matches dominantChords (e.g. "Eb" not "D#"). Long-form labels are emitted
+# alongside as labelLong for readability. _normalize_chord_label_for_compare
+# is used ONLY for the agreement comparison against Essentia; it maps
+# enharmonic sharps to flats so "D#m" and "Ebm" compare equal.
+
+_PITCH_CLASS_NAMES_FLAT = (
+    "C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B",
+)
+_ENHARMONIC_MAP = {"C#": "Db", "D#": "Eb", "F#": "Gb", "G#": "Ab", "A#": "Bb"}
+
+
+@functools.lru_cache(maxsize=1)
+def _chord_templates_25() -> np.ndarray:
+    """Return a (25, 12) chord-template matrix, L1-normalized per row.
+
+    Rows 0-11: major triads at pitch classes 0-11 (root, +4 semitones, +7).
+    Rows 12-23: minor triads at pitch classes 0-11 (root, +3 semitones, +7).
+    Row 24: "N" no-chord template — uniform 1/12 across pitch classes,
+    matching what a flat chroma profile produces on percussive/silent frames.
+    """
+    templates = np.zeros((25, 12), dtype=np.float64)
+    major_mask = np.zeros(12)
+    major_mask[[0, 4, 7]] = 1.0
+    minor_mask = np.zeros(12)
+    minor_mask[[0, 3, 7]] = 1.0
+    for pc in range(12):
+        templates[pc] = np.roll(major_mask, pc)
+        templates[12 + pc] = np.roll(minor_mask, pc)
+    templates[24] = np.full(12, 1.0 / 12.0)
+    row_sums = templates.sum(axis=1, keepdims=True)
+    row_sums[row_sums == 0] = 1.0
+    templates /= row_sums
+    return templates
+
+
+def _state_label_short(state_idx: int) -> str:
+    """Short-form label for a Viterbi state index: 'Cm', 'Eb', 'N'."""
+    if state_idx == 24:
+        return "N"
+    if state_idx < 12:
+        return _PITCH_CLASS_NAMES_FLAT[state_idx]
+    return _PITCH_CLASS_NAMES_FLAT[state_idx - 12] + "m"
+
+
+def _state_label_long(state_idx: int) -> str:
+    """Long-form label for a Viterbi state index: 'C major', 'Eb minor', 'N'."""
+    if state_idx == 24:
+        return "N"
+    if state_idx < 12:
+        return f"{_PITCH_CLASS_NAMES_FLAT[state_idx]} major"
+    return f"{_PITCH_CLASS_NAMES_FLAT[state_idx - 12]} minor"
+
+
+def _normalize_chord_label_for_compare(label: str) -> str:
+    """Normalize a chord label to 'root:quality' form for agreement comparison.
+
+    Handles both Essentia short form ('Cm', 'Eb', 'F#m') and Viterbi long form
+    ('C minor', 'Eb major', 'F# minor'). Enharmonic sharps are mapped to flats
+    so 'D#m' and 'Ebm' produce identical normalized strings. Returns the input
+    unchanged for 'N' or non-string input.
+    """
+    if not isinstance(label, str):
+        return ""
+    s = label.strip()
+    if not s or s == "N":
+        return s
+    quality = "maj"
+    if s.endswith(" minor"):
+        quality = "min"
+        s = s[: -len(" minor")]
+    elif s.endswith(" major"):
+        quality = "maj"
+        s = s[: -len(" major")]
+    elif s.endswith("m") and len(s) > 1 and s[-2] != "m":
+        # Short form: trailing 'm' marks minor (Cm, F#m, Ebm). "Em" matches;
+        # "maj"-style suffixes never appear in our 25-state vocab.
+        quality = "min"
+        s = s[:-1]
+    s = s.strip()
+    root = _ENHARMONIC_MAP.get(s, s)
+    return f"{root}:{quality}"
+
+
+def _viterbi_chord_timeline(
+    chroma: np.ndarray,
+    hop_seconds: float,
+    min_segment_sec: float = 0.25,
+    p_stay: float = 0.9,
+) -> list[dict]:
+    """Decode a chord timeline via Viterbi over the 25-state HMM.
+
+    Parameters
+    ----------
+    chroma
+        (12, T) numpy array — per-frame chroma vectors (librosa convention).
+    hop_seconds
+        Seconds per frame.
+    min_segment_sec
+        Drop merged segments shorter than this (250 ms by default — chord
+        changes faster than a sixteenth note at 240 BPM are almost always
+        decoder noise, not real harmonic events).
+    p_stay
+        Self-transition probability for the 25-state HMM. 0.9 is a standard
+        default for chord HMMs; higher values produce longer / more stable
+        segments at the cost of missing fast progressions.
+
+    Returns
+    -------
+    list of {"startSec", "endSec", "label", "labelLong", "confidence"}.
+    Empty list on empty input.
+    """
+    if chroma.ndim != 2 or chroma.shape[0] != 12:
+        return []
+    n_frames = chroma.shape[1]
+    if n_frames == 0:
+        return []
+
+    templates = _chord_templates_25()  # (25, 12) — already L1-normalized per row.
+
+    # L1-normalize chroma columns so the dot product with L1-normalized
+    # templates is a directly-comparable mass-overlap score. (L2 normalization
+    # of both sides would over-amplify the uniform "N" template on dense
+    # electronic tracks where the chroma is broadly distributed; the mass-
+    # overlap form is N-safe.)
+    chroma_norm = chroma.astype(np.float64)
+    col_sums = chroma_norm.sum(axis=0, keepdims=True)
+    col_sums[col_sums == 0] = 1.0
+    chroma_norm = chroma_norm / col_sums
+
+    emission_scores = templates @ chroma_norm  # (25, T) — Viterbi emission.
+
+    # Softmax with temperature 0.1 turns mass-overlap scores into log-probs
+    # for the Viterbi DP. The temperature sharpens preferred state without
+    # collapsing the posterior to a delta function.
+    temperature = 0.1
+    scaled = emission_scores / temperature
+    scaled -= scaled.max(axis=0, keepdims=True)
+    exp_scaled = np.exp(scaled)
+    posterior = exp_scaled / exp_scaled.sum(axis=0, keepdims=True)  # (25, T)
+    log_emission = np.log(posterior + 1e-9)
+
+    # Per-frame confidence as L2 cosine similarity between the chroma column
+    # and each state's template. Bounded [0, 1] and producer-intuitive: 1.0
+    # = perfect chord match, ~0.7 = strong triadic match with leakage, ~0.5
+    # = roughly half-matched, ~0.3 = noise. This is more interpretable than
+    # the Viterbi softmax posterior, which caps around 0.3 even for perfect
+    # chords because the 25 closely-overlapping state templates split the
+    # probability mass (e.g., C major and A minor share C+E pitch classes).
+    chroma_l2 = chroma.astype(np.float64)
+    chroma_l2_norms = np.linalg.norm(chroma_l2, axis=0, keepdims=True)
+    chroma_l2_norms[chroma_l2_norms == 0] = 1.0
+    chroma_l2 = chroma_l2 / chroma_l2_norms
+    templates_l2_norms = np.linalg.norm(templates, axis=1, keepdims=True)
+    templates_l2_norms[templates_l2_norms == 0] = 1.0
+    templates_l2 = templates / templates_l2_norms
+    per_frame_cos_sim = templates_l2 @ chroma_l2  # (25, T) in [0, 1].
+
+    # Log transition matrix.
+    n_states = 25
+    log_p_stay = np.log(p_stay)
+    log_p_move = np.log((1.0 - p_stay) / (n_states - 1))
+    log_trans = np.full((n_states, n_states), log_p_move)
+    np.fill_diagonal(log_trans, log_p_stay)
+
+    # Viterbi forward pass.
+    log_uniform_init = -np.log(n_states)
+    delta_matrix = np.full((n_states, n_frames), -np.inf, dtype=np.float64)
+    backpointers = np.zeros((n_states, n_frames), dtype=np.int32)
+    delta_matrix[:, 0] = log_uniform_init + log_emission[:, 0]
+    for t in range(1, n_frames):
+        candidate = delta_matrix[:, t - 1][:, None] + log_trans  # (i, j)
+        best_src = np.argmax(candidate, axis=0)
+        delta_matrix[:, t] = candidate[best_src, np.arange(n_states)] + log_emission[:, t]
+        backpointers[:, t] = best_src
+
+    # Viterbi backtrace.
+    state_path = np.zeros(n_frames, dtype=np.int32)
+    state_path[-1] = int(np.argmax(delta_matrix[:, -1]))
+    for t in range(n_frames - 2, -1, -1):
+        state_path[t] = backpointers[state_path[t + 1], t + 1]
+
+    # Merge consecutive identical states into segments. Confidence is the
+    # mean cosine similarity between chroma and the winning state's template
+    # across the segment's frames — bounded [0, 1], higher = better match.
+    def _emit(seg_state: int, seg_start: int, seg_end: int) -> dict:
+        seg_conf = float(np.mean(per_frame_cos_sim[seg_state, seg_start:seg_end]))
+        seg_conf = float(np.clip(seg_conf, 0.0, 1.0))
+        return {
+            "startSec": round(seg_start * hop_seconds, 3),
+            "endSec": round(seg_end * hop_seconds, 3),
+            "label": _state_label_short(seg_state),
+            "labelLong": _state_label_long(seg_state),
+            "confidence": round(seg_conf, 4),
+        }
+
+    segments: list[dict] = []
+    seg_start = 0
+    for t in range(1, n_frames):
+        if state_path[t] != state_path[seg_start]:
+            segments.append(_emit(int(state_path[seg_start]), seg_start, t))
+            seg_start = t
+    segments.append(_emit(int(state_path[seg_start]), seg_start, n_frames))
+
+    # Drop short segments (chord changes faster than min_segment_sec are noise).
+    segments = [
+        seg for seg in segments
+        if (seg["endSec"] - seg["startSec"]) >= min_segment_sec
+    ]
+    # Drop low-confidence "N" segments — those tend to be transition artifacts
+    # rather than real "no chord" spans.
+    segments = [
+        seg for seg in segments
+        if seg["label"] != "N" or seg["confidence"] >= 0.4
+    ]
+
+    # Cap at 64 segments — keep the 64 longest by duration, then re-sort
+    # by start time. Matches the existing payload-cap policy.
+    if len(segments) > 64:
+        segments.sort(key=lambda s: s["endSec"] - s["startSec"], reverse=True)
+        segments = sorted(segments[:64], key=lambda s: s["startSec"])
+
+    return segments
 
 
 def analyze_segment_loudness(
@@ -326,6 +556,10 @@ def analyze_chords(mono: np.ndarray, sample_rate: int = 44100) -> dict:
                     "chordStrength": 0.0,
                     "progression": [],
                     "dominantChords": [],
+                    "chordTimeline": [],
+                    "chordChangeCount": 0,
+                    "chordTimelineSource": "librosa_viterbi",
+                    "chordTimelineAgreement": None,
                 }
             }
 
@@ -342,6 +576,8 @@ def analyze_chords(mono: np.ndarray, sample_rate: int = 44100) -> dict:
                     "dominantChords": [],
                     "chordTimeline": [],
                     "chordChangeCount": 0,
+                    "chordTimelineSource": "librosa_viterbi",
+                    "chordTimelineAgreement": None,
                 }
             }
 
@@ -365,85 +601,44 @@ def analyze_chords(mono: np.ndarray, sample_rate: int = 44100) -> dict:
 
         dominant_chords = [label for label, _count in Counter(chords).most_common(4)]
 
-        # Phase 1.D #2 — temporal chord timeline. Each per-frame label is
-        # smoothed with a 5-frame median (≈ 250 ms at hop_size=2048/44.1k),
-        # then consecutive same-label frames are merged into segments with
-        # start/end times and the mean strength across that segment. Segments
-        # shorter than the smoothing window (after merging) are dropped to
-        # suppress noise; the cap of 64 segments keeps the payload bounded.
-        frame_duration_s = float(hop_size) / float(sample_rate)
-        smooth_window = 5  # frames
+        # Phase 1.D #2 — temporal chord timeline via librosa chroma_cqt +
+        # 25-state (12 major + 12 minor + N) Viterbi. Replaces the earlier
+        # 5-frame median-filter smoothing of Essentia's per-frame labels.
+        # The HMM self-loop prior produces fewer, more confident segments on
+        # hard material (electronic, modal) and exposes a per-segment posterior
+        # we can hedge against in Phase 2. Same hop_size as the Essentia path
+        # so frame indices remain comparable between the two engines.
+        chroma = librosa.feature.chroma_cqt(
+            y=mono_filtered, sr=sample_rate, hop_length=hop_size
+        )
+        chord_timeline = _viterbi_chord_timeline(
+            chroma, hop_seconds=float(hop_size) / float(sample_rate),
+        )
 
-        def _median_label(window: list[str]) -> str:
-            counts: dict[str, int] = {}
-            for label in window:
-                counts[label] = counts.get(label, 0) + 1
-            return max(counts.items(), key=lambda kv: kv[1])[0]
-
-        smoothed: list[str] = []
-        n_chords = len(chords)
-        for i in range(n_chords):
-            lo = max(0, i - smooth_window // 2)
-            hi = min(n_chords, i + smooth_window // 2 + 1)
-            smoothed.append(_median_label(chords[lo:hi]))
-
-        chord_timeline: list[dict] = []
-        if smoothed:
-            seg_label = smoothed[0]
-            seg_start_idx = 0
-            for idx in range(1, n_chords):
-                if smoothed[idx] != seg_label:
-                    seg_end_idx = idx
-                    seg_strength_slice = strength[seg_start_idx:seg_end_idx]
-                    seg_conf = (
-                        float(np.mean(seg_strength_slice))
-                        if seg_strength_slice.size > 0 else 0.0
-                    )
-                    chord_timeline.append({
-                        "startSec": round(seg_start_idx * frame_duration_s, 3),
-                        "endSec": round(seg_end_idx * frame_duration_s, 3),
-                        "label": seg_label,
-                        "confidence": round(seg_conf, 4),
-                    })
-                    seg_label = smoothed[idx]
-                    seg_start_idx = idx
-            # Flush the final open segment.
-            seg_strength_slice = strength[seg_start_idx:n_chords]
-            seg_conf = (
-                float(np.mean(seg_strength_slice))
-                if seg_strength_slice.size > 0 else 0.0
-            )
-            chord_timeline.append({
-                "startSec": round(seg_start_idx * frame_duration_s, 3),
-                "endSec": round(n_chords * frame_duration_s, 3),
-                "label": seg_label,
-                "confidence": round(seg_conf, 4),
-            })
-
-            # Drop segments shorter than the smoothing-window equivalent
-            # (≈ 250 ms). They typically reflect chord-detector noise around
-            # transitions rather than real harmonic events.
-            min_segment_s = smooth_window * frame_duration_s
-            chord_timeline = [
-                seg for seg in chord_timeline
-                if (seg["endSec"] - seg["startSec"]) >= min_segment_s
-            ]
-
-            # Cap at 64 segments. If we overflow, keep the 64 longest
-            # by duration — those carry the most musical weight.
-            if len(chord_timeline) > 64:
-                chord_timeline.sort(
-                    key=lambda seg: seg["endSec"] - seg["startSec"], reverse=True
-                )
-                chord_timeline = sorted(chord_timeline[:64], key=lambda s: s["startSec"])
-
-        # Count of unique chord-to-chord transitions in the smoothed sequence
-        # (a proxy for "how harmonically active is this track" — flat 1-chord
-        # tracks score 0; rapid-changes tracks score 16+).
+        # chordChangeCount is recomputed from the new timeline (same definition
+        # as before — count of label transitions across the segment list).
         chord_change_count = sum(
             1 for i in range(1, len(chord_timeline))
             if chord_timeline[i]["label"] != chord_timeline[i - 1]["label"]
         )
+
+        # Cross-cite against Essentia: does the most-frequent Viterbi label
+        # (excluding "N") agree with Essentia's top dominantChord after
+        # enharmonic normalization? Disagreement is a strong hedging signal
+        # — Phase 2 should describe the harmony as uncertain when this is False.
+        viterbi_labels_non_n = [
+            seg["label"] for seg in chord_timeline if seg["label"] != "N"
+        ]
+        chord_timeline_agreement: bool | None
+        if viterbi_labels_non_n and dominant_chords:
+            top_viterbi = Counter(viterbi_labels_non_n).most_common(1)[0][0]
+            top_essentia = dominant_chords[0]
+            chord_timeline_agreement = (
+                _normalize_chord_label_for_compare(top_viterbi)
+                == _normalize_chord_label_for_compare(top_essentia)
+            )
+        else:
+            chord_timeline_agreement = None
 
         return {
             "chordDetail": {
@@ -453,6 +648,8 @@ def analyze_chords(mono: np.ndarray, sample_rate: int = 44100) -> dict:
                 "dominantChords": dominant_chords,
                 "chordTimeline": chord_timeline,
                 "chordChangeCount": chord_change_count,
+                "chordTimelineSource": "librosa_viterbi",
+                "chordTimelineAgreement": chord_timeline_agreement,
             }
         }
     except Exception as e:
