@@ -1,5 +1,7 @@
 # Field Utilization Report
 
+> **Status: analysis snapshot, recommendations not tracked.** Data-driven point-in-time look at which Phase 1 fields show up in Gemini Phase 2 recommendations. The "remove unused fields" recommendations near the end of this doc are not on any active backlog and the file paths they target may no longer exist (e.g. the `geminiPhase2Client.ts` it mentions was removed when transport consolidated into [`analysisRunsClient.ts`](../apps/ui/src/services/analysisRunsClient.ts)). Use the field-usage tables for grounding, not the action items.
+
 Last reviewed: 2026-03-26
 
 ## Summary

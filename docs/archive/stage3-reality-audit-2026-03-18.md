@@ -1,5 +1,7 @@
 # Stage 3 Reality Audit
 
+> **Archived 2026-05-12.** Point-in-time audit from 2026-03-18. The "Misaligned" items it called out (stem_summary profile, terminology drift) have since been resolved or rolled into the canonical staged-runs API. Treat this as a historical snapshot; use [`docs/ARCHITECTURE_STRATEGY.md`](../ARCHITECTURE_STRATEGY.md) for current state. The three `deep-research-report*.md` files cited below were external research inputs and are not present in the repo.
+
 **Date:** 2026-03-18  
 **Purpose:** Compare the current repo state to the Stage 3 framing in `docs/ARCHITECTURE_STRATEGY.md` and the attached research inputs:
 

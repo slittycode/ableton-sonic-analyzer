@@ -1,6 +1,7 @@
 # Phase 1/Phase 2 Integration Optimization Plan
 
-**Status:** Complete  
+> **Status: shipped (Q1 2026 — historical reference only).** Most items in this plan landed; see [`CHANGELOG.md`](CHANGELOG.md) for ship status. Some HOLD gates here cite older module structure — the `analyze.py` monolith has since been split (commit `5c40dd44`) into `analyze_core/_detection/_rhythm/_segments/_structure/_transcription.py`, so line-number references in this file are no longer valid. Don't drive new work from this document; use it for the framing of the original optimization targets.
+
 **Target:** ableton-sonic-analyzer monorepo  
 **Goal:** Maximize value extraction from local DSP + LLM integration  
 **Constraint:** No Ableton file generation (out of scope)

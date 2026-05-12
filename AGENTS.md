@@ -94,24 +94,35 @@ asa/
 │   │   │   └── smoke/         # Playwright E2E tests
 │   │   ├── package.json
 │   │   └── tsconfig.json
-│   └── backend/               # Python backend
-│       ├── analyze.py         # CLI analyzer (DSP engine)
-│       ├── server.py          # FastAPI HTTP server
+│   └── backend/                # Python backend
+│       ├── analyze.py          # CLI entry; coordinates analyze_*.py modules
+│       ├── analyze_core.py, analyze_detection.py, analyze_rhythm.py,
+│       │   analyze_segments.py, analyze_structure.py,
+│       │   analyze_transcription.py, analyze_audio_io.py,
+│       │   analyze_estimate.py, analyze_fast.py   # Feature modules (split from monolith)
+│       ├── server.py + server_phase1.py / server_phase2.py / server_upload.py
 │       ├── analysis_runtime.py # SQLite persistence layer
-│       ├── polyphonic_evaluation.py # Research-only polyphonic spike harness
-│       ├── requirements.txt   # Python dependencies
+│       ├── worker.py, runtime_profile.py, auth_context.py, artifact_storage.py
+│       │                       # Hosted-mode foundation
+│       ├── upload_limits.py    # 100/101 MiB upload contract
+│       ├── spectral_viz.py     # Spectrogram artifacts (non-critical)
+│       ├── polyphonic_evaluation.py # Research-only; not on product path
+│       ├── requirements.txt
 │       ├── scripts/
-│       │   ├── bootstrap.sh   # Environment setup
+│       │   ├── bootstrap.sh    # Environment setup
 │       │   └── evaluate_polyphonic.py # Research-only evaluator entry point
-│       ├── tests/             # unittest suite
-│       └── prompts/           # Gemini system prompts
+│       ├── tests/              # unittest suite
+│       └── prompts/            # Gemini system prompts + Live 12 device catalog
 ├── scripts/
-│   ├── dev.sh                 # Full-stack dev launcher
-│   └── test-e2e.sh            # E2E test runner
+│   ├── dev.sh                  # Full-stack dev launcher
+│   ├── test-e2e-integration.sh # Local-only integration E2E
+│   └── test-e2e.sh             # Live Gemini E2E
 ├── docs/
-│   ├── ARCHITECTURE_STRATEGY.md  # Architecture decisions
-│   └── *.md                   # Various technical docs
-└── AGENTS.md                  # This file
+│   ├── ARCHITECTURE_STRATEGY.md  # Why the architecture is shaped this way
+│   ├── PUBLIC_HOSTING_FOUNDATION.md # Hosted-mode boundaries
+│   ├── POLYPHONIC_TRANSCRIPTION_SPIKE.md # Research notes
+│   └── archive/                # Historical/invalidated docs
+└── AGENTS.md                   # This file
 ```
 
 ### Key Frontend Modules
@@ -119,10 +130,11 @@ asa/
 | File/Directory | Purpose |
 |----------------|---------|
 | `src/App.tsx` | Main application, upload flow, phase orchestration |
-| `src/services/analyzer.ts` | Analysis orchestration and Gemini entry |
-| `src/services/backendPhase1Client.ts` | Backend transport, parsing, error handling |
-| `src/services/analysisRunsClient.ts` | Typed transport for run APIs |
-| `src/types.ts` | Shared response contracts |
+| `src/services/analysisRunsClient.ts` | Canonical transport for `/api/analysis-runs*` |
+| `src/services/analyzer.ts` | Orchestration: run creation, polling, display payload projection |
+| `src/services/backendPhase1Client.ts` | Legacy multipart transport for `/api/analyze` (compat path) |
+| `src/services/phase2Validator.ts` | Runtime chain-of-custody validator (Phase 2 vs Phase 1) |
+| `src/types.ts` + `src/types/` | Shared response contracts (barrel re-export of `types/{measurement,backend,interpretation}.ts`) |
 | `src/components/AnalysisResults.tsx` | Results display |
 | `src/components/SessionMusicianPanel.tsx` | MIDI/piano roll UI |
 
@@ -130,11 +142,14 @@ asa/
 
 | File | Purpose |
 |------|---------|
-| `analyze.py` | DSP pipeline, CLI entry point, raw JSON output |
-| `server.py` | HTTP transport, temp file handling, response normalization |
-| `analysis_runtime.py` | SQLite persistence, stage queues, artifact storage |
+| `analyze.py` | DSP pipeline entry point; coordinates the `analyze_*.py` modules below |
+| `analyze_core/_detection/_rhythm/_segments/_structure/_transcription/_audio_io/_estimate/_fast.py` | Feature modules (split from the monolith in commit `5c40dd44`) |
+| `server.py` (+ `server_phase1.py`, `server_phase2.py`, `server_upload.py`) | HTTP transport, temp file handling, response normalization |
+| `analysis_runtime.py` | SQLite persistence, stage queues, artifact metadata |
+| `worker.py` / `runtime_profile.py` / `auth_context.py` / `artifact_storage.py` | Hosted-mode runtime |
+| `polyphonic_evaluation.py` | **Research-only.** Offline harness, not on product path |
 | `tests/test_server.py` | API contract tests |
-| `tests/test_analyze.py` | Structural snapshot tests |
+| `tests/test_analyze.py` | Structural snapshot tests; owns `EXPECTED_TOP_LEVEL_KEYS` |
 
 ## Build and Development Commands
 

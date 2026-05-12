@@ -4,17 +4,35 @@
 
 | Component | Role |
 | --- | --- |
-| `analyze.py` | Raw CLI analyzer. Loads audio, runs DSP, optionally separates stems and transcribes notes through torchcrepe, then prints JSON to `stdout`. |
-| `server.py` | FastAPI wrapper. Accepts uploads, computes estimates, manages the canonical staged run API, normalizes measurement results, and serves artifact access. |
+| `analyze.py` | Raw CLI analyzer entry point. Loads audio, coordinates the `analyze_*.py` feature modules (see [Analyzer Submodules](#analyzer-submodules) below), optionally separates stems and transcribes notes through torchcrepe, then prints JSON to `stdout`. |
+| `server.py` + `server_phase1.py` / `server_phase2.py` / `server_upload.py` | FastAPI app and router composition. Accepts uploads, computes estimates, manages the canonical staged run API, normalizes measurement results, and serves artifact access. |
 | `analysis_runtime.py` | Run-state persistence and staged-analysis orchestration. Owns run snapshots, stage status, artifact metadata, and ownership checks. |
 | `artifact_storage.py` | Artifact storage boundary. The current implementation uses the local filesystem, but the runtime now talks to a storage service interface instead of assuming every artifact is a local disk path forever. |
 | `runtime_profile.py` | Runtime/profile switchboard for `local` vs `hosted` behavior and `all` vs `api` vs `worker` process roles. |
 | `auth_context.py` | Hosted-mode user-context resolution. Establishes the current run owner in the canonical API path. |
 | `worker.py` | Dedicated worker-process entry point for hosted-style background stage execution. |
-| `tests/test_server.py` | Contract tests for estimate, timeout, and success envelopes. |
+| `upload_limits.py` | Canonical raw-audio (100 MiB) and request-envelope (101 MiB) limits, plus the protected-route list. Operator contract is generated, not hand-edited — see `scripts/render_upload_limit_contract.py`. |
 | `spectral_viz.py` | Librosa-based spectrogram generation and spectral time-series extraction. Produces mel/chroma PNG spectrograms and per-frame spectral evolution JSON. Called after successful measurement; failures are non-critical. |
-| `tests/test_analyze.py` | Structural snapshot tests for the raw analyzer JSON output. |
+| `polyphonic_evaluation.py` + `scripts/evaluate_polyphonic.py` | Research-only offline polyphonic-transcription evaluation harness. Not on the product path. |
+| `tests/test_server.py` | Contract tests for estimate, timeout, and success envelopes. |
+| `tests/test_analyze.py` | Structural snapshot tests for the raw analyzer JSON output. Owns `EXPECTED_TOP_LEVEL_KEYS` — update it whenever you add a root field. |
 | `tests/test_spectral_viz.py` | Unit tests for spectrogram generation, time-series computation, and artifact orchestration. |
+
+### Analyzer Submodules
+
+`analyze.py` was split from a monolith in commit `5c40dd44` and now imports from the modules below. Add new measurements in the module that matches the domain, not back into `analyze.py`.
+
+| Module | Domain |
+| --- | --- |
+| `analyze_core.py` | Shared coordination, BPM/key/loudness/stereo core measurements. |
+| `analyze_audio_io.py` | Audio loading (mono + stereo), duration, sample-rate handling. |
+| `analyze_detection.py` | Genre, acid, vocal, supersaw, sidechain, reverb, bass, kick detectors. |
+| `analyze_estimate.py` | Per-stage time/cost estimates for the staged-run API. |
+| `analyze_rhythm.py` | Rhythm extraction (shared once across BPM, groove, sidechain), groove timing, beats loudness. |
+| `analyze_segments.py` | Segment boundaries and per-segment measurements (loudness, stereo, spectral, key). |
+| `analyze_structure.py` | Arrangement structure and section labels. |
+| `analyze_transcription.py` | torchcrepe pitch/note translation on Demucs-separated stems. |
+| `analyze_fast.py` | Streamlined `--fast` pipeline (BPM, key, loudness, basic dynamics only). |
 
 ## Separation of Responsibilities
 
