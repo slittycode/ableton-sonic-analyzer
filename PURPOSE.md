@@ -136,6 +136,26 @@ These are non-negotiable properties of ASA. Any change that violates one of thes
 
 ---
 
+## Non-Goals
+
+Some adjacent features are **deliberately out of scope** for ASA. This section records decisions that have been considered and declined, so the question does not need to be re-litigated.
+
+### Source-material recommendation (sample libraries)
+
+ASA does not recommend specific samples, loops, one-shots, or preset packs from external libraries (Splice, Loopcloud, Freesound, etc.) — neither inside Phase 2's `abletonRecommendations` nor as a companion panel.
+
+**Why not:**
+
+- The citation chain (Quality Invariant #2) is not honestly extensible to sample recommendations. "Use this Splice drum pack" cannot be justified by citing measured crest factor or spectral centroid — sample similarity is a different kind of evidence than DSP measurement.
+- ASA's mission is "rebuild this sound in Ableton with stock devices." Sample lookup answers a different question — "find a pre-made sound that's close" — and pulling that into the same surface dilutes the reconstruction blueprint.
+- Third-party catalog dependencies introduce subscription gates, licensing ambiguity, and API-uptime risk that the deterministic-measurement core is deliberately free of.
+
+**The in-scope answer to "where does the source material come from":** `patchSmith` (see `BACKLOG.md`) — generate Vital/Operator patch parameters from measurements so the user can rebuild the sound from stock synthesis. This stays inside the citation chain.
+
+**If you want sample-search workflows alongside ASA:** see the separate `sample-search-mcp` project in `~/code/projects/incubation/`. Intentionally a sibling tool, composed by the user (or an agentic shell like Claude Code), not an ASA feature.
+
+---
+
 ## Decision Framework for New Features
 
 When evaluating whether to add a new feature or capability:
