@@ -72,7 +72,7 @@ ASA's hybrid architecture splits work into three layers. Read `docs/ARCHITECTURE
 
 ```
 Layer 1 — MEASUREMENT (Essentia/DSP)    → deterministic, authoritative for numbers
-Layer 2 — PITCH/NOTE TRANSLATION (torchcrepe/PENN) → best-effort pitch/note extraction on stems
+Layer 2 — PITCH/NOTE TRANSLATION (torchcrepe) → best-effort pitch/note extraction on stems
 Layer 3 — INTERPRETATION (Gemini)        → contextual advice grounded in Layer 1 measurements
 ```
 
@@ -94,14 +94,34 @@ Frontend polling: `src/services/analysisRunsClient.ts` creates runs and polls st
 
 **Core files:**
 
-1. **`analyze.py`** (~112KB): Pure DSP pipeline. Runs as a subprocess invoked by `server.py`. Extracts BPM, key, LUFS, stereo width, spectral balance, rhythm/melody detail, transcription, stem separation. **Writes JSON to stdout, diagnostics to stderr** — this contract is load-bearing.
-2. **`server.py`** (~24KB): FastAPI HTTP wrapper. Accepts multipart uploads, invokes `analyze.py` as a subprocess, normalizes raw output into the `phase1` HTTP contract, returns structured JSON. Also hosts the staged run endpoints.
+1. **`analyze.py`** (~52KB): CLI entry point for the DSP pipeline. Runs as a subprocess invoked by `server.py`. Orchestrates analysis by delegating to `analyze_*.py` sub-modules. **Writes JSON to stdout, diagnostics to stderr** — this contract is load-bearing.
+2. **`server.py`** (~100KB): FastAPI app entry point. Hosts all HTTP routes and re-exports implementation from `server_phase1.py`, `server_phase2.py`, and `server_upload.py`. Also hosts the staged run endpoints.
 3. **`analysis_runtime.py`**: SQLite-backed run state and stage queue management. Artifacts stored in `.runtime/artifacts/`.
 4. **`analyze_fast.py`**: Streamlined analysis pipeline (BPM, key, loudness, basic dynamics) invoked when `--fast` is passed to `analyze.py`.
 
+**Analysis sub-modules (delegated from `analyze.py`):**
+- **`analyze_audio_io.py`**: Audio loading, format detection, and stem separation I/O.
+- **`analyze_core.py`** (~40KB): Core DSP — BPM, key, LUFS, spectral balance, stereo width.
+- **`analyze_detection.py`** (~40KB): Feature detection — acid patterns, reverb decay, vocal presence, supersaw, sidechain, genre classification.
+- **`analyze_rhythm.py`** (~32KB): Rhythm detail — onset/transient analysis, groove, swing.
+- **`analyze_segments.py`**: Section segmentation and boundary detection.
+- **`analyze_structure.py`** (~24KB): Structural analysis — arrangement, energy contour.
+- **`analyze_transcription.py`** (~24KB): Pitch/note extraction on Demucs-separated stems via torchcrepe.
+- **`analyze_estimate.py`**: Pre-analysis estimation (duration, loudness, cost prediction).
+
+**HTTP layer (delegated from `server.py`):**
+- **`server_phase1.py`** (~24KB): Phase 1 response building, normalization, and diagnostics.
+- **`server_phase2.py`** (~92KB): Phase 2 Gemini integration — audio upload (inline or Files API), prompt assembly, streaming.
+- **`server_upload.py`** (~12KB): Multipart upload handling and size enforcement.
+
 The subprocess isolation means `analyze.py` works as a standalone CLI. Check `apps/backend/JSON_SCHEMA.md` before adding new analyzer output fields. Check `apps/backend/ARCHITECTURE.md` for the full HTTP flow and contract details.
 
-**Phase 2 (`POST /api/phase2`):** Uploads audio to Gemini inline if ≤100MiB, or via the Gemini Files API if larger. Phase 1 JSON is appended to the system prompt from `prompts/phase2_system.txt`.
+**Phase 2** is implemented in `server_phase2.py`. Uploads audio to Gemini inline if ≤100MiB, or via the Gemini Files API if larger. Phase 1 JSON is appended to the system prompt from `prompts/phase2_system.txt`. A separate stem listening path uses `prompts/stem_summary_system.txt`.
+
+**Prompts and data (`apps/backend/prompts/`):**
+- **`phase2_system.txt`**: Phase 2 system prompt injected with Phase 1 measurements.
+- **`stem_summary_system.txt`**: System prompt for Gemini stem listening (Experiment B — per-stem advisory).
+- **`live12_device_catalog.json`**: Ableton Live 12 device reference data used in Phase 2 prompts.
 
 **Python version constraint:** Python 3.11.x required on macOS arm64. Essentia 2.1b6 wheels are only published for 3.11; this constraint may be relaxable if Essentia publishes 3.12+ wheels.
 
@@ -113,17 +133,15 @@ Single-page React 19 + Vite + TypeScript + Tailwind CSS v4 app with no router. V
 
 1. **`src/services/analysisRunsClient.ts`**: Typed transport for run-oriented APIs (create run, poll snapshots, fetch artifacts).
 2. **`src/services/backendPhase1Client.ts`**: Legacy HTTP transport. Multipart POST, typed error classes (`BackendClientError`), `AbortController` timeouts, identity probe via `/openapi.json`.
-3. **`src/services/backendPhase2Client.ts`**: Phase 2 transport to `/api/phase2`.
-4. **`src/services/analyzer.ts`**: Phase orchestration entry point — sequences run creation, polling, and display payload projection.
-5. **`src/types.ts`**: Source of truth for `Phase1Result`, `Phase2Result`, `AnalysisRunSnapshot`, and all backend response shapes.
-6. **`src/config.ts`**: Runtime resolution of `VITE_API_BASE_URL` and feature flags; falls back to `http://127.0.0.1:8100`. Supports window-level overrides (`window.__VITE_API_BASE_URL_OVERRIDE__`, `window.__VITE_ENABLE_PHASE2_GEMINI_OVERRIDE__`) for hosted deployments that inject config at runtime without a rebuild.
+3. **`src/services/analyzer.ts`**: Phase orchestration entry point — sequences run creation, polling, and display payload projection.
+4. **`src/types.ts`**: Source of truth for `Phase1Result`, `Phase2Result`, `AnalysisRunSnapshot`, and all backend response shapes.
+5. **`src/config.ts`**: Runtime resolution of `VITE_API_BASE_URL` and feature flags; falls back to `http://127.0.0.1:8100`. Supports window-level overrides (`window.__VITE_API_BASE_URL_OVERRIDE__`, `window.__VITE_ENABLE_PHASE2_GEMINI_OVERRIDE__`) for hosted deployments that inject config at runtime without a rebuild.
+6. **`src/services/spectralArtifactsClient.ts`**: Fetches spectral artifact payloads from the backend.
+7. **`src/services/mixDoctor.ts`**: Mix advisory logic — client-side scoring and suggestions.
+8. **`src/services/phase2Validator.ts`**: Validates Phase 2 consistency against Phase 1.
+9. **`src/services/midi/`**: MIDI export, preview, and quantization utilities (`midiExport.ts`, `midiPreview.ts`, `quantization.ts`).
 
-7. **`src/services/spectralArtifactsClient.ts`**: Fetches spectral artifact payloads from the backend.
-8. **`src/services/mixDoctor.ts`**: Mix advisory logic — client-side scoring and suggestions.
-9. **`src/services/phase2Validator.ts`**: Validates Phase 2 consistency against Phase 1.
-10. **`src/services/midi/`**: MIDI export, preview, and quantization utilities (`midiExport.ts`, `midiPreview.ts`, `quantization.ts`).
-
-`AnalysisResults.tsx` (~45KB) is lazy-loaded via Suspense. Manual vendor chunks in `vite.config.ts` control bundle splitting.
+`AnalysisResults.tsx` (~92KB) is lazy-loaded via Suspense. Manual vendor chunks in `vite.config.ts` control bundle splitting.
 
 ### Frontend-Backend Contract
 

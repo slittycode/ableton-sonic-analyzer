@@ -14,24 +14,25 @@ Source: active/sonic-architect-app (keep in active/ as reference)
 - `services/mixDoctor.ts` + `components/MixDoctorPanel.tsx` — compares audio features against
   genre profiles, scores spectral balance deviations
   → ASA slot: new UI panel consuming Phase 1 backend data; pairs with genreProfiles.ts
+  → Status: ✅ Backported to `apps/ui/src/services/mixDoctor.ts` + `apps/ui/src/components/MixDoctorPanel.tsx`
 
-## Detection Services (JS; decision needed: port to UI layer or reimplement in Python backend)
+## Detection Services (reimplemented in Python backend)
 - `services/sidechainDetection.ts` — pump/ducking pattern detection from amplitude envelope
-  → ASA slot: rhythm/dynamics section of Phase 1 analysis output
+  → Status: ✅ Implemented as `analyze_effects_detail()` in `apps/backend/analyze_detection.py`
 - `services/acidDetection.ts` — TB-303 resonance + filter-envelope pattern matching
-  → ASA slot: bass character classification in Phase 1
+  → Status: ✅ Implemented as `analyze_acid_detail()` in `apps/backend/analyze_detection.py`
 - `services/reverbAnalysis.ts` — RT60 decay time estimation from impulse response tail
-  → ASA slot: space/FX section of Phase 1 analysis; feeds Ableton reverb device selection
+  → Status: ✅ Implemented as `analyze_reverb_detail()` in `apps/backend/analyze_detection.py`
 - `services/vocalDetection.ts` — energy ratio in vocal frequency bands (300Hz–3kHz)
-  → ASA slot: stem classification; affects instrument rack recommendations
+  → Status: ✅ Implemented as `analyze_vocal_detail()` in `apps/backend/analyze_detection.py`
 - `services/supersawDetection.ts` — detuned sawtooth oscillator stack detection
-  → ASA slot: synth characterization; feeds Wavetable/Serum device mapping
+  → Status: ✅ Implemented as `analyze_supersaw_detail()` in `apps/backend/analyze_detection.py`
 - `services/bassAnalysis.ts` — sub-bass character, bass decay, swing/groove detection
-  → ASA slot: rhythm + bass section of Phase 1; swing value feeds MIDI quantization
+  → Status: ✅ Covered by `analyze_rhythm.py` and `analyze_detection.py`
 - `services/kickAnalysis.ts` — kick onset sharpness, pitch, THD (Total Harmonic Distortion)
-  → ASA slot: percussion analysis in Phase 1; feeds Ableton drum rack recommendations
+  → Status: ✅ Covered by `analyze_core.py` and `analyze_rhythm.py`
 - `services/genreClassifierEnhanced.ts` — orchestrates all 8 detectors above via Promise.all()
-  → ASA slot: replaces/augments basic genre detection; feeds genre label used in Phase 2
+  → Status: ✅ Implemented as `analyze_genre_detail()` in `apps/backend/analyze_detection.py`
 
 ## Synthesis / Generation
 - `services/patchSmith.ts` — generates Vital/Operator patch parameters from detected features
