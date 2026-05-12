@@ -743,7 +743,7 @@ Type: `object \| null`
 
 | Field | Type | Description | Units / Scale | LLM interpretation note |
 |---|---|---|---|---|
-| `bassDetail.fundamentalHz` | `int \| null` | Estimated bass fundamental via ZCR on the 150 Hz lowpassed signal. | Hz, clamped to 30-120 | Cite for Operator/Wavetable Coarse tuning; cross-reference with `key` to determine the bass note. |
+| `bassDetail.fundamentalHz` | `int \| null` | Estimated bass fundamental via ZCR on the 150 Hz lowpassed signal. **Approximation: ZCR/2 equals f₀ only for pure sinusoids. Harmonic-rich basses (e.g. a 35 Hz sub with strong 70 Hz second-harmonic energy) bias upward — prefer `pitchDetail` when stems are available.** | Hz, clamped to 30-120 | Cite for Operator/Wavetable Coarse tuning; cross-reference with `key` to determine the bass note. Avoid driving a narrow filter Q within ±15 Hz of this value without corroborating evidence from `pitchDetail`. |
 | `bassDetail.averageDecayMs` | `int \| null` | Mean decay time per detected bass transient (peak-anchored envelope decay to -6 dB). | milliseconds | Drives bass-type categorization. Cite for Glue Compressor release-time. <100 ms = punchy; 100-300 = medium; 300-600 = rolling; 600+ = sustained. |
 | `bassDetail.type` | `"punchy" \| "medium" \| "rolling" \| "sustained"` | Categorical bass character derived from `averageDecayMs`. | categorical | Drives device-choice direction: punchy → kick-bus-style compression; sustained → Glue Compressor with longer release. |
 | `bassDetail.transientCount` | `int` | Number of detected bass onsets. | count | A bass density proxy. |

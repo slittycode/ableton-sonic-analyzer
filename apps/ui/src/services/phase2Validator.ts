@@ -891,11 +891,14 @@ function validateCitationDiversity(phase2: Phase2Result): ValidationViolation[] 
  *      on either side (used for stem-scoped paths like
  *      `stemAnalysis.*.reverbDetail`)
  *
- * Wildcards only match a single segment — `stemAnalysis.*` won't match
- * `stemAnalysis.drums.spectralBalance`. To cover nested paths under a
- * wildcard, combine with the prefix rules: tracked `stemAnalysis.*.reverbDetail`
- * matches citation `stemAnalysis.bass.reverbDetail.preDelayMs` because the
- * tracked path is a wildcard-prefix of the citation.
+ * A wildcard token matches exactly one segment, but the segment-wise match
+ * also runs as a prefix scan — so a shorter tracked path with a trailing `*`
+ * still covers longer citations under the same prefix. Concretely:
+ *   - tracked `stemAnalysis.*` matches citation `stemAnalysis.drums.spectralBalance`
+ *     (length-2 tracked is a wildcard-prefix of length-3 citation).
+ *   - tracked `stemAnalysis.*.reverbDetail` matches citation
+ *     `stemAnalysis.bass.reverbDetail.preDelayMs` for the same reason.
+ * To require exact-length matching, add a non-wildcard leaf to the tracked path.
  */
 export function pathCoversTracked(citation: string, tracked: string): boolean {
   if (citation === tracked) return true;
