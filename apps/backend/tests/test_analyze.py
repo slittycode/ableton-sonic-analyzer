@@ -1433,6 +1433,44 @@ class BassDetailTests(unittest.TestCase):
 
         self.assertGreater(result["bassDetail"]["fundamentalHz"], 50)
 
+    def test_average_decay_ms_is_positive_for_bass_pulses(self):
+        """Regression for the envelope-decay fix: a series of decaying bass pulses must
+        report a sane positive averageDecayMs, never the sub-millisecond values the old
+        raw-waveform loop produced (a 50 Hz sine crosses zero every ~10 ms, which used
+        to trigger the -6 dB threshold almost immediately on every note).
+        """
+        sr = 44_100
+        duration = 4.0
+        n_samples = int(sr * duration)
+        mono = np.zeros(n_samples, dtype=np.float32)
+        # Eight 60 Hz pulses, each ~400 ms with a slow exponential decay envelope so
+        # the expected envelope-to-half time sits comfortably above the regression floor.
+        beat_samples = int(sr * 0.5)  # 120 BPM
+        pulse_len = int(sr * 0.4)
+        decay_const = pulse_len / 1.5  # ~177 ms time constant → ~123 ms to -6 dB
+        for i in range(8):
+            onset = i * beat_samples
+            if onset + pulse_len >= n_samples:
+                break
+            t = np.arange(pulse_len, dtype=np.float32)
+            env = np.exp(-t / decay_const)
+            pulse = (0.7 * env * np.sin(2 * np.pi * 60.0 * t / sr)).astype(np.float32)
+            mono[onset:onset + pulse_len] = pulse
+
+        result = self.analyze.analyze_bass_detail(mono, sr, bpm=120.0)
+        detail = result.get("bassDetail")
+        self.assertIsNotNone(detail)
+        self.assertIsNotNone(detail["averageDecayMs"])
+        # Pre-fix: averageDecayMs was effectively 0 (sub-ms) — the raw oscillating
+        # waveform's RMS over a small window crossed -6 dB on every zero crossing.
+        # Post-fix: the envelope-based search anchors at the per-pulse peak and waits
+        # for the smoothed envelope to fall -6 dB, so the reported value must be at
+        # least a few tens of ms for any realistic bass pulse.
+        self.assertGreaterEqual(
+            detail["averageDecayMs"], 30,
+            f"averageDecayMs={detail['averageDecayMs']} regressed near the pre-fix sub-ms range",
+        )
+
 
 class KickDetailTests(unittest.TestCase):
     """Tests for analyze_kick_detail — kick drum distortion and THD."""
@@ -1525,6 +1563,483 @@ class KickDetailTests(unittest.TestCase):
             )
 
         self.assertGreater(result["kickDetail"]["kickCount"], 1)
+
+
+def _make_drum_band_signal(
+    sr: int,
+    band_lo_hz: float,
+    band_hi_hz: float,
+    n_hits: int,
+    duration: float,
+    decay_samples: int = 1500,
+) -> np.ndarray:
+    """Synth a signal of band-limited transients spaced uniformly across `duration`.
+
+    Each hit is a noise burst windowed by exp(-t/decay) and weakly bandpass-shaped
+    by a centered sine, so band onset detectors light up reliably.
+    """
+    n_samples = int(sr * duration)
+    mono = np.zeros(n_samples, dtype=np.float32)
+    if n_hits <= 0:
+        return mono
+    center_hz = 0.5 * (band_lo_hz + band_hi_hz)
+    step = n_samples // n_hits
+    for i in range(n_hits):
+        onset = i * step
+        if onset >= n_samples:
+            break
+        burst_len = min(decay_samples, n_samples - onset)
+        t = np.arange(burst_len, dtype=np.float32)
+        env = np.exp(-t / (decay_samples * 0.35))
+        noise = np.random.default_rng(seed=42 + i).standard_normal(burst_len).astype(np.float32) * 0.3
+        carrier = np.sin(2 * np.pi * center_hz * t / sr).astype(np.float32)
+        mono[onset:onset + burst_len] += (0.8 * env * (carrier + 0.3 * noise)).astype(np.float32)
+    return mono
+
+
+class BandDrumDetailTests(unittest.TestCase):
+    """Tests for _analyze_band_drum_detail — shared snare/hi-hat band analyzer."""
+
+    @classmethod
+    def setUpClass(cls):
+        analyze_path = Path(__file__).resolve().parents[1] / "analyze.py"
+        spec = importlib.util.spec_from_file_location("analyze_band_drum_test", analyze_path)
+        if spec is None or spec.loader is None:
+            raise AssertionError("Could not load analyze.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        cls.analyze = module
+
+    def test_returns_none_for_empty_signal(self):
+        mono = np.array([], dtype=np.float32)
+        result = self.analyze._analyze_band_drum_detail(
+            mono, 44100, band_lo_hz=120.0, band_hi_hz=2000.0, bpm=120.0, stems=None,
+        )
+        self.assertIsNone(result)
+
+    def test_returns_none_for_short_signal(self):
+        mono = np.zeros(2048, dtype=np.float32)
+        result = self.analyze._analyze_band_drum_detail(
+            mono, 44100, band_lo_hz=120.0, band_hi_hz=2000.0, bpm=120.0, stems=None,
+        )
+        self.assertIsNone(result)
+
+    def test_returns_none_for_silence(self):
+        """Silent input has env_max == 0 → returns None."""
+        mono = np.zeros(int(44100 * 3.0), dtype=np.float32)
+        result = self.analyze._analyze_band_drum_detail(
+            mono, 44100, band_lo_hz=120.0, band_hi_hz=2000.0, bpm=120.0, stems=None,
+        )
+        self.assertIsNone(result)
+
+    def test_detects_band_limited_hits(self):
+        """A signal with 8 mid-band transients should yield ≥ 2 hits and a sane schema."""
+        sr = 44100
+        mono = _make_drum_band_signal(sr, 120.0, 2000.0, n_hits=8, duration=4.0)
+        result = self.analyze._analyze_band_drum_detail(
+            mono, sr, band_lo_hz=120.0, band_hi_hz=2000.0, bpm=120.0, stems=None,
+            min_event_dist_subdivisions=0.5, body_split_ratio=0.35,
+        )
+        self.assertIsNotNone(result)
+        expected_keys = {
+            "hitCount", "hitsPerSecond", "meanAttackSharpness",
+            "meanBodyEnergyRatio", "meanSnapEnergyRatio", "meanCentroidHz",
+            "meanDecayFrames", "meanDecaySeconds", "bandHz",
+        }
+        self.assertEqual(set(result.keys()), expected_keys)
+        self.assertGreaterEqual(result["hitCount"], 2)
+        self.assertGreater(result["hitsPerSecond"], 0.0)
+        self.assertGreater(result["meanAttackSharpness"], 0.0)
+        self.assertGreaterEqual(result["meanDecayFrames"], 0.0)
+        self.assertEqual(result["bandHz"], [120.0, 2000.0])
+
+    def test_uses_drums_stem_when_available(self):
+        """When a `drums` stem is provided via `_load_stem_mono`, it overrides the full-mix input."""
+        sr = 44100
+        mono = np.zeros(int(sr * 3.0), dtype=np.float32)  # silent full mix
+        stem_signal = _make_drum_band_signal(sr, 120.0, 2000.0, n_hits=6, duration=3.0)
+        with mock.patch.object(self.analyze, "_load_stem_mono", return_value=stem_signal):
+            result = self.analyze._analyze_band_drum_detail(
+                mono, sr, band_lo_hz=120.0, band_hi_hz=2000.0, bpm=120.0,
+                stems={"drums": "/tmp/drums.wav"},
+                min_event_dist_subdivisions=0.5, body_split_ratio=0.35,
+            )
+        self.assertIsNotNone(result)
+        self.assertGreaterEqual(result["hitCount"], 2)
+
+
+class SnareDetailTests(unittest.TestCase):
+    """Tests for analyze_snare_detail — 120-2000 Hz drum-band character."""
+
+    @classmethod
+    def setUpClass(cls):
+        analyze_path = Path(__file__).resolve().parents[1] / "analyze.py"
+        spec = importlib.util.spec_from_file_location("analyze_snare_test", analyze_path)
+        if spec is None or spec.loader is None:
+            raise AssertionError("Could not load analyze.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        cls.analyze = module
+
+    def test_returns_none_for_empty_signal(self):
+        mono = np.array([], dtype=np.float32)
+        result = self.analyze.analyze_snare_detail(mono, 44100, bpm=120.0)
+        self.assertEqual(result, {"snareDetail": None})
+
+    def test_returns_none_for_short_signal(self):
+        mono = np.zeros(2048, dtype=np.float32)
+        result = self.analyze.analyze_snare_detail(mono, 44100, bpm=120.0)
+        self.assertEqual(result, {"snareDetail": None})
+
+    def test_output_schema_fields(self):
+        sr = 44100
+        mono = _make_drum_band_signal(sr, 120.0, 2000.0, n_hits=8, duration=4.0)
+        result = self.analyze.analyze_snare_detail(mono, sr, bpm=120.0)
+        detail = result.get("snareDetail")
+        self.assertIsNotNone(detail)
+        expected_keys = {
+            "hitCount", "hitsPerSecond", "meanAttackSharpness",
+            "meanBodyEnergyRatio", "meanSnapEnergyRatio", "meanCentroidHz",
+            "meanDecayFrames", "meanDecaySeconds", "bandHz",
+        }
+        self.assertEqual(set(detail.keys()), expected_keys)
+        self.assertEqual(detail["bandHz"], [120.0, 2000.0])
+
+    def test_fallback_on_no_bpm(self):
+        sr = 44100
+        mono = _make_drum_band_signal(sr, 120.0, 2000.0, n_hits=6, duration=3.0)
+        result = self.analyze.analyze_snare_detail(mono, sr, bpm=None)
+        self.assertIn("snareDetail", result)
+
+
+class HihatDetailTests(unittest.TestCase):
+    """Tests for analyze_hihat_detail — 2000-12000 Hz drum-band character."""
+
+    @classmethod
+    def setUpClass(cls):
+        analyze_path = Path(__file__).resolve().parents[1] / "analyze.py"
+        spec = importlib.util.spec_from_file_location("analyze_hihat_test", analyze_path)
+        if spec is None or spec.loader is None:
+            raise AssertionError("Could not load analyze.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        cls.analyze = module
+
+    def test_returns_none_for_empty_signal(self):
+        mono = np.array([], dtype=np.float32)
+        result = self.analyze.analyze_hihat_detail(mono, 44100, bpm=120.0)
+        self.assertEqual(result, {"hihatDetail": None})
+
+    def test_returns_none_for_short_signal(self):
+        mono = np.zeros(2048, dtype=np.float32)
+        result = self.analyze.analyze_hihat_detail(mono, 44100, bpm=120.0)
+        self.assertEqual(result, {"hihatDetail": None})
+
+    def test_output_schema_fields(self):
+        sr = 44100
+        mono = _make_drum_band_signal(sr, 2000.0, 12000.0, n_hits=16, duration=4.0)
+        result = self.analyze.analyze_hihat_detail(mono, sr, bpm=120.0)
+        detail = result.get("hihatDetail")
+        self.assertIsNotNone(detail)
+        expected_keys = {
+            "hitCount", "hitsPerSecond", "meanAttackSharpness",
+            "meanBodyEnergyRatio", "meanSnapEnergyRatio", "meanCentroidHz",
+            "meanDecayFrames", "meanDecaySeconds", "bandHz",
+        }
+        self.assertEqual(set(detail.keys()), expected_keys)
+        self.assertEqual(detail["bandHz"], [2000.0, 12000.0])
+
+    def test_fallback_on_no_bpm(self):
+        sr = 44100
+        mono = _make_drum_band_signal(sr, 2000.0, 12000.0, n_hits=12, duration=3.0)
+        result = self.analyze.analyze_hihat_detail(mono, sr, bpm=None)
+        self.assertIn("hihatDetail", result)
+
+
+class TransientDensityDetailTests(unittest.TestCase):
+    """Tests for analyze_per_band_transient_density — per-band onset rates."""
+
+    @classmethod
+    def setUpClass(cls):
+        analyze_path = Path(__file__).resolve().parents[1] / "analyze.py"
+        spec = importlib.util.spec_from_file_location("analyze_transient_density_test", analyze_path)
+        if spec is None or spec.loader is None:
+            raise AssertionError("Could not load analyze.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        cls.analyze = module
+
+    def test_returns_none_for_empty_signal(self):
+        mono = np.array([], dtype=np.float32)
+        result = self.analyze.analyze_per_band_transient_density(mono, 44100)
+        self.assertEqual(result, {"transientDensityDetail": None})
+
+    def test_returns_none_for_zero_sample_rate(self):
+        mono = np.zeros(44100, dtype=np.float32)
+        result = self.analyze.analyze_per_band_transient_density(mono, 0)
+        self.assertEqual(result, {"transientDensityDetail": None})
+
+    def test_output_has_all_seven_bands(self):
+        """Each spectralBalance band must appear in the output with the documented field set."""
+        sr = 44100
+        # Mid-band transients should drive at least one band's onset rate above zero.
+        mono = _make_drum_band_signal(sr, 500.0, 2000.0, n_hits=8, duration=4.0)
+        result = self.analyze.analyze_per_band_transient_density(mono, sr)
+        detail = result.get("transientDensityDetail")
+        self.assertIsNotNone(detail)
+        self.assertEqual(set(detail.keys()), EXPECTED_SPECTRAL_BANDS)
+        for band_name, stats in detail.items():
+            self.assertEqual(
+                set(stats.keys()),
+                {"onsetRatePerSecond", "meanOnsetStrength", "peakOnsetStrength", "eventCount"},
+                f"band {band_name} missing fields",
+            )
+            self.assertGreaterEqual(stats["onsetRatePerSecond"], 0.0)
+            self.assertGreaterEqual(stats["meanOnsetStrength"], 0.0)
+            self.assertGreaterEqual(stats["peakOnsetStrength"], 0.0)
+            self.assertGreaterEqual(stats["eventCount"], 0)
+
+    def test_silence_yields_zero_rates(self):
+        """Pure silence must not invent onsets — every band's eventCount must be 0."""
+        sr = 44100
+        mono = np.zeros(int(sr * 3.0), dtype=np.float32)
+        result = self.analyze.analyze_per_band_transient_density(mono, sr)
+        detail = result.get("transientDensityDetail")
+        self.assertIsNotNone(detail)
+        for band_name, stats in detail.items():
+            self.assertEqual(stats["eventCount"], 0, f"band {band_name} hallucinated onsets in silence")
+            self.assertEqual(stats["onsetRatePerSecond"], 0.0)
+
+    def test_mid_band_transients_increase_mids_rate(self):
+        """Transients in the 500-2000 Hz band should produce a non-zero `mids` onset rate."""
+        sr = 44100
+        mono = _make_drum_band_signal(sr, 500.0, 2000.0, n_hits=10, duration=4.0)
+        result = self.analyze.analyze_per_band_transient_density(mono, sr)
+        detail = result["transientDensityDetail"]
+        # Any of mids / lowMids / upperMids should detect something. The cluster is
+        # asserted (rather than `mids` exactly) because the synthetic carrier sweeps
+        # both sides of the band edge after windowing.
+        nearby_event_total = (
+            detail["lowMids"]["eventCount"]
+            + detail["mids"]["eventCount"]
+            + detail["upperMids"]["eventCount"]
+        )
+        self.assertGreater(nearby_event_total, 0)
+
+
+class SaturationDetailTests(unittest.TestCase):
+    """Tests for analyze_saturation_detail — clip / compression telltales."""
+
+    @classmethod
+    def setUpClass(cls):
+        analyze_path = Path(__file__).resolve().parents[1] / "analyze.py"
+        spec = importlib.util.spec_from_file_location("analyze_saturation_test", analyze_path)
+        if spec is None or spec.loader is None:
+            raise AssertionError("Could not load analyze.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        cls.analyze = module
+
+    def test_returns_none_for_empty_mono(self):
+        mono = np.array([], dtype=np.float32)
+        result = self.analyze.analyze_saturation_detail(mono, None, 44100)
+        self.assertEqual(result, {"saturationDetail": None})
+
+    def test_output_schema_fields(self):
+        sr = 44100
+        t = np.linspace(0, 2.0, int(sr * 2.0), endpoint=False, dtype=np.float32)
+        mono = 0.3 * np.sin(2 * np.pi * 220 * t).astype(np.float32)
+        result = self.analyze.analyze_saturation_detail(mono, None, sr)
+        detail = result.get("saturationDetail")
+        self.assertIsNotNone(detail)
+        expected_keys = {
+            "clippedSampleCount", "clippedSamplePercent",
+            "nearClippedSampleCount", "nearClippedSamplePercent",
+            "peakRatio95to50", "rmsToPeakRatioDb", "saturationLikely",
+        }
+        self.assertEqual(set(detail.keys()), expected_keys)
+
+    def test_clean_signal_has_no_clipped_samples(self):
+        """A 0.3 amplitude sine produces zero clipped/near-clipped samples."""
+        sr = 44100
+        t = np.linspace(0, 2.0, int(sr * 2.0), endpoint=False, dtype=np.float32)
+        mono = 0.3 * np.sin(2 * np.pi * 220 * t).astype(np.float32)
+        result = self.analyze.analyze_saturation_detail(mono, None, sr)
+        detail = result["saturationDetail"]
+        self.assertEqual(detail["clippedSampleCount"], 0)
+        self.assertEqual(detail["clippedSamplePercent"], 0.0)
+        self.assertEqual(detail["nearClippedSampleCount"], 0)
+
+    def test_dynamic_signal_is_not_flagged_as_saturated(self):
+        """A transient-rich signal with natural crest factor must not trip saturationLikely.
+
+        A pure sine has rms_to_peak ≈ 3 dB and p95/p50 ≈ 1.4, which the heuristic
+        misreads as "compressed" — so we test against a realistic decaying-pulse signal
+        whose crest factor is well above the 8 dB heuristic threshold.
+        """
+        sr = 44100
+        n = int(sr * 2.0)
+        mono = np.zeros(n, dtype=np.float32)
+        pulse_len = int(sr * 0.05)
+        beat_samples = int(sr * 0.25)
+        rng = np.random.default_rng(seed=7)
+        for i in range(8):
+            onset = i * beat_samples
+            if onset + pulse_len >= n:
+                break
+            t = np.arange(pulse_len, dtype=np.float32)
+            env = np.exp(-t / (pulse_len * 0.2))
+            noise = rng.standard_normal(pulse_len).astype(np.float32) * 0.5
+            mono[onset:onset + pulse_len] = (0.7 * env * (np.sin(2 * np.pi * 200 * t / sr) + 0.3 * noise)).astype(np.float32)
+        result = self.analyze.analyze_saturation_detail(mono, None, sr)
+        detail = result["saturationDetail"]
+        self.assertEqual(detail["clippedSampleCount"], 0)
+        self.assertFalse(detail["saturationLikely"])
+
+    def test_clipped_signal_is_flagged(self):
+        """Hard-clipped signal must produce a non-zero clippedSampleCount and saturationLikely=True."""
+        sr = 44100
+        t = np.linspace(0, 2.0, int(sr * 2.0), endpoint=False, dtype=np.float32)
+        # 2.0-amplitude sine clipped to [-1, 1]: ~50% of samples sit at ±1.0.
+        raw = 2.0 * np.sin(2 * np.pi * 220 * t).astype(np.float32)
+        mono = np.clip(raw, -1.0, 1.0).astype(np.float32)
+        stereo = np.stack([mono, mono], axis=1)
+        result = self.analyze.analyze_saturation_detail(mono, stereo, sr)
+        detail = result["saturationDetail"]
+        self.assertGreater(detail["clippedSampleCount"], 100)
+        self.assertGreater(detail["clippedSamplePercent"], 0.0)
+        self.assertGreater(detail["nearClippedSamplePercent"], 0.5)
+        self.assertTrue(detail["saturationLikely"])
+
+    def test_peak_ratio_lower_for_compressed_signal(self):
+        """A nearly-flat (compressed) waveform has p95/p50 close to 1; a sine pattern is higher."""
+        sr = 44100
+        t = np.linspace(0, 2.0, int(sr * 2.0), endpoint=False, dtype=np.float32)
+        sine = (0.5 * np.sin(2 * np.pi * 220 * t)).astype(np.float32)
+        # Flat tone with low dynamic range
+        compressed = (0.4 * np.sign(np.sin(2 * np.pi * 220 * t))).astype(np.float32)
+        sine_detail = self.analyze.analyze_saturation_detail(sine, None, sr)["saturationDetail"]
+        compressed_detail = self.analyze.analyze_saturation_detail(compressed, None, sr)["saturationDetail"]
+        self.assertIsNotNone(sine_detail["peakRatio95to50"])
+        self.assertIsNotNone(compressed_detail["peakRatio95to50"])
+        self.assertGreater(sine_detail["peakRatio95to50"], compressed_detail["peakRatio95to50"])
+
+
+class RunPerStemAnalysesTests(unittest.TestCase):
+    """Tests for _run_per_stem_analyses — Phase 1.B stem-overlay orchestrator."""
+
+    @classmethod
+    def setUpClass(cls):
+        analyze_path = Path(__file__).resolve().parents[1] / "analyze.py"
+        spec = importlib.util.spec_from_file_location("analyze_per_stem_test", analyze_path)
+        if spec is None or spec.loader is None:
+            raise AssertionError("Could not load analyze.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        cls.analyze = module
+
+    @staticmethod
+    def _make_stem_mono(sr: int, duration: float = 1.5) -> np.ndarray:
+        t = np.linspace(0, duration, int(sr * duration), endpoint=False, dtype=np.float32)
+        return (0.3 * np.sin(2 * np.pi * 220.0 * t)).astype(np.float32)
+
+    @classmethod
+    def _make_stem_stereo(cls, sr: int, duration: float = 1.5) -> np.ndarray:
+        mono = cls._make_stem_mono(sr, duration)
+        return np.stack([mono, mono * 0.9], axis=1)
+
+    def test_returns_none_for_none_stems(self):
+        self.assertIsNone(self.analyze._run_per_stem_analyses(None, 44100))
+
+    def test_returns_none_for_empty_stems_dict(self):
+        self.assertIsNone(self.analyze._run_per_stem_analyses({}, 44100))
+
+    def test_returns_none_when_all_loads_fail(self):
+        """If _load_stem_mono returns None for every stem, the whole result collapses to None."""
+        stems = {"drums": "/tmp/d.wav", "bass": "/tmp/b.wav"}
+        with mock.patch.object(self.analyze, "_load_stem_mono", return_value=None):
+            result = self.analyze._run_per_stem_analyses(stems, 44100)
+        self.assertIsNone(result)
+
+    def test_returns_dict_for_two_loaded_stems(self):
+        """When two stems load successfully, the result is keyed by stem name."""
+        sr = 44100
+        stem_mono = self._make_stem_mono(sr)
+        stem_stereo = self._make_stem_stereo(sr)
+        stems = {"drums": "/tmp/d.wav", "bass": "/tmp/b.wav"}
+
+        def _mono_side_effect(stems_arg, name, sample_rate=44100):
+            if name in ("drums", "bass"):
+                return stem_mono
+            return None
+
+        def _stereo_side_effect(stems_arg, name):
+            if name in ("drums", "bass"):
+                return stem_stereo
+            return None
+
+        with mock.patch.object(self.analyze, "_load_stem_mono", side_effect=_mono_side_effect), \
+             mock.patch.object(self.analyze, "_load_stem_stereo", side_effect=_stereo_side_effect):
+            result = self.analyze._run_per_stem_analyses(stems, sr)
+
+        self.assertIsInstance(result, dict)
+        self.assertIn("drums", result)
+        self.assertIn("bass", result)
+        self.assertNotIn("other", result)
+        self.assertNotIn("vocals", result)
+        # Schema sanity: each stem block carries the documented set of overlay fields.
+        for stem_name, block in result.items():
+            self.assertIsInstance(block, dict)
+            self.assertIn("spectralBalance", block)
+            self.assertIn("spectralDetail", block)
+            self.assertIn("crestFactor", block)
+            self.assertIn("dynamicSpread", block)
+
+    def test_partial_analyzer_failure_does_not_drop_stem(self):
+        """If one analyzer raises for one stem, other analyzers' fields still appear."""
+        sr = 44100
+        stem_mono = self._make_stem_mono(sr)
+        stem_stereo = self._make_stem_stereo(sr)
+        stems = {"drums": "/tmp/d.wav"}
+
+        original_spectral_balance = self.analyze.analyze_spectral_balance
+
+        def _failing_spectral_balance(mono, sample_rate):
+            raise RuntimeError("simulated spectralBalance failure")
+
+        with mock.patch.object(self.analyze, "_load_stem_mono", return_value=stem_mono), \
+             mock.patch.object(self.analyze, "_load_stem_stereo", return_value=stem_stereo), \
+             mock.patch.object(self.analyze, "analyze_spectral_balance", side_effect=_failing_spectral_balance):
+            result = self.analyze._run_per_stem_analyses(stems, sr)
+
+        self.assertIsNotNone(result)
+        self.assertIn("drums", result)
+        drums_block = result["drums"]
+        # spectralBalance failed → not present (or None), but other analyzers still produced fields.
+        self.assertNotIn("spectralBalance", drums_block)
+        self.assertIn("crestFactor", drums_block)
+        # Sanity: the unmocked analyzer is still callable on the same input.
+        _ = original_spectral_balance
+
+    def test_skips_stem_when_stereo_is_unavailable(self):
+        """Stereo-only analyzers (LUFS, stereoDetail) must be silently skipped when stereo load fails."""
+        sr = 44100
+        stem_mono = self._make_stem_mono(sr)
+        stems = {"drums": "/tmp/d.wav"}
+
+        with mock.patch.object(self.analyze, "_load_stem_mono", return_value=stem_mono), \
+             mock.patch.object(self.analyze, "_load_stem_stereo", return_value=None):
+            result = self.analyze._run_per_stem_analyses(stems, sr)
+
+        self.assertIsNotNone(result)
+        drums_block = result["drums"]
+        # Mono-only fields still appear.
+        self.assertIn("spectralBalance", drums_block)
+        self.assertIn("crestFactor", drums_block)
+        # Stereo-only LUFS/stereoDetail/truePeak fields are skipped.
+        self.assertNotIn("lufsIntegrated", drums_block)
+        self.assertNotIn("stereoDetail", drums_block)
+        self.assertNotIn("truePeak", drums_block)
 
 
 class SidechainDetailTests(unittest.TestCase):
