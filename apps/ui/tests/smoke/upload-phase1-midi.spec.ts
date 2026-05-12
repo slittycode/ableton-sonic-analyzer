@@ -81,7 +81,7 @@ async function pressSliderKey(locator: import('@playwright/test').Locator, key: 
   }
 }
 
-test('phase1 dual-source session musician panel toggles between pitch-note and melody-guide views', async ({ page }) => {
+test('phase1 dual-source session musician panel renders both blocks simultaneously', async ({ page }) => {
   await stubGeminiPhase2(page);
   await page.route('**/api/analysis-runs/estimate', async (route) => {
     const body = route.request().postData() ?? '';
@@ -357,72 +357,81 @@ test('phase1 dual-source session musician panel toggles between pitch-note and m
 
   await expect(page.getByText('Analysis Results')).toBeVisible();
   await expect(panel.getByRole('heading', { name: /SESSION MUSICIAN/i }).first()).toBeVisible();
-  await expect(panel.getByText('Pitch detection and melody guide')).toBeVisible();
-  await expect(panel.getByRole('button', { name: 'PITCH/NOTE' })).toBeVisible();
-  await expect(panel.getByRole('button', { name: 'MELODY' })).toBeVisible();
-  await expect(panel.getByText('PITCH/NOTE: TORCHCREPE').first()).toBeVisible();
-  await expect(panel.getByText('Range: C3 - G4')).toHaveCount(1);
-  await expect(panel.getByText('Confidence: 83%')).toHaveCount(1);
-  await expect(panel.getByText('2 / 2 NOTES')).toBeVisible();
-  await expect(panel.getByText('STEM-AWARE')).toBeVisible();
-  await expect(panel.getByText('STEMS:')).toBeVisible();
-  await expect(panel.getByRole('button', { name: 'bass' })).toBeVisible();
-  await expect(panel.getByRole('button', { name: 'other' })).toBeVisible();
-  await expect(panel.getByText(/TORCHCREPE pitch detection/)).toBeVisible();
-  const previewButton = panel.getByRole('button', { name: /Preview/i });
-  const downloadButton = panel.getByRole('button', { name: /Download \.mid/i });
-  await expect(previewButton).toBeVisible();
-  await expect(previewButton).toBeEnabled();
-  await expect(downloadButton).toBeVisible();
-  await expect(downloadButton).toBeEnabled();
-  const sliders = panel.locator('input[type="range"]');
-  const confidenceSlider = sliders.nth(0);
-  const swingSlider = sliders.nth(1);
-  await expect(confidenceSlider).toBeEnabled();
-  await expect(swingSlider).toBeDisabled();
 
-  await pressSliderKey(confidenceSlider, 'End', 1);
-  await pressSliderKey(confidenceSlider, 'ArrowLeft', 4);
-  await expect(confidenceSlider).toHaveValue('0.8');
-  await expect(panel.getByText('80%')).toBeVisible();
-  await expect(panel.getByText('1 / 2 NOTES')).toBeVisible();
+  // Both blocks render at once — no toggle.
+  const noteDraft = panel.getByTestId('note-draft-block');
+  const melodyContour = panel.getByTestId('melody-contour-block');
+  await expect(noteDraft).toBeVisible();
+  await expect(melodyContour).toBeVisible();
+  await expect(panel.getByRole('button', { name: /^PITCH\/NOTE$/ })).toHaveCount(0);
+  await expect(panel.getByRole('button', { name: /^MELODY$/ })).toHaveCount(0);
 
-  await panel.getByRole('button', { name: '1/16 note' }).click();
-  await expect(swingSlider).toBeEnabled();
-  await pressSliderKey(swingSlider, 'ArrowRight', 30);
-  await expect(swingSlider).toHaveValue('30');
+  // Confidence band pills show "label · NN%" with the matching tier copy.
+  await expect(noteDraft.getByText('Solid scaffold · 83%')).toBeVisible();
+  await expect(melodyContour.getByText('Workable draft · 72%')).toBeVisible();
 
-  const downloadPromise = page.waitForEvent('download');
-  await downloadButton.click();
-  const download = await downloadPromise;
-  expect(download.suggestedFilename()).toBe('track-analysis.mid');
+  // Stem note draft has stem filter + per-note confidence slider; melody does not.
+  await expect(noteDraft.getByRole('button', { name: 'bass' })).toBeVisible();
+  await expect(noteDraft.getByRole('button', { name: 'other' })).toBeVisible();
+  await expect(noteDraft.locator('input[type="range"]')).toHaveCount(2); // confidence + swing
+  await expect(melodyContour.locator('input[type="range"]')).toHaveCount(1); // swing only
 
-  await panel.getByRole('button', { name: 'MELODY' }).click();
-  await expect(panel.getByText('MELODY GUIDE: ESSENTIA').first()).toBeVisible();
-  await expect(panel.getByText(/Essentia melody guide\./)).toBeVisible();
-  await expect(panel.getByText('STEM-AWARE')).toHaveCount(0);
-  await expect(panel.getByText('STEMS:')).toHaveCount(0);
-  await expect(panel.getByText('3 NOTES')).toBeVisible();
-  await expect(panel.getByText('3 / 3 NOTES')).toHaveCount(0);
-  await expect(panel.getByText('Per-note confidence not available in melody-guide mode')).toBeVisible();
-  await expect(panel.getByText('Adjust confidence threshold to filter noise before export.')).toHaveCount(0);
-  await expect(confidenceSlider).toBeDisabled();
-  await expect(confidenceSlider).toHaveValue('0.8');
+  // Both blocks expose their own MIDI controls with distinct test IDs.
+  const stemsPreview = noteDraft.getByTestId('midi-preview-stems');
+  const stemsDownload = noteDraft.getByTestId('midi-download-stems');
+  const melodyPreview = melodyContour.getByTestId('midi-preview-melody');
+  const melodyDownload = melodyContour.getByTestId('midi-download-melody');
+  await expect(stemsPreview).toBeEnabled();
+  await expect(stemsDownload).toBeEnabled();
+  await expect(melodyPreview).toBeEnabled();
+  await expect(melodyDownload).toBeEnabled();
 
-  await panel.getByRole('button', { name: 'PITCH/NOTE' }).click();
-  await expect(panel.getByText('PITCH/NOTE: TORCHCREPE').first()).toBeVisible();
-  await expect(panel.getByText(/TORCHCREPE pitch detection/)).toBeVisible();
-  await expect(panel.getByText('STEM-AWARE')).toBeVisible();
-  await expect(panel.getByText('STEMS:')).toBeVisible();
-  await expect(panel.getByText('1 / 2 NOTES')).toBeVisible();
-  await expect(confidenceSlider).toBeEnabled();
-  await expect(confidenceSlider).toHaveValue('0.8');
+  // Quantize controls still work inside Block A.
+  await noteDraft.getByRole('button', { name: '1/16 note' }).click();
+  const stemsSwing = noteDraft.locator('input[type="range"]').nth(1);
+  await expect(stemsSwing).toBeEnabled();
+  await pressSliderKey(stemsSwing, 'ArrowRight', 30);
+  await expect(stemsSwing).toHaveValue('30');
 
+  // Stem-note Download produces the per-block filename.
+  const stemsDownloadPromise = page.waitForEvent('download');
+  await stemsDownload.click();
+  const stemsFile = await stemsDownloadPromise;
+  expect(stemsFile.suggestedFilename()).toBe('track-analysis-stems.mid');
+
+  // Melody Download produces its own filename.
+  const melodyDownloadPromise = page.waitForEvent('download');
+  await melodyDownload.click();
+  const melodyFile = await melodyDownloadPromise;
+  expect(melodyFile.suggestedFilename()).toBe('track-analysis-melody.mid');
+
+  // Shared preview controller: only one preview is active at a time. Starting
+  // melody preview while stems is playing flips the stems button back to
+  // "Preview" and the melody button shows "Stop".
+  await stemsPreview.click();
+  await expect(stemsPreview).toContainText(/Stop/);
+  await melodyPreview.click();
+  await expect(melodyPreview).toContainText(/Stop/);
+  await expect(stemsPreview).not.toContainText(/Stop/);
+  await melodyPreview.click(); // stop melody so the test ends cleanly
+  await expect(melodyPreview).not.toContainText(/Stop/);
+
+  // Slider-filtered-to-zero: drag the confidence slider above the highest
+  // per-note confidence (0.92) so every note is filtered. Download hides;
+  // the explanatory note appears; the piano roll remains.
+  const stemsConfidenceSlider = noteDraft.locator('input[type="range"]').nth(0);
+  await stemsConfidenceSlider.focus();
+  await pressSliderKey(stemsConfidenceSlider, 'End', 1);
+  await expect(stemsConfidenceSlider).toHaveValue('1');
+  await expect(noteDraft.getByText(/Confidence slider filtered every note/i)).toBeVisible();
+  await expect(noteDraft.getByTestId('midi-download-stems')).toHaveCount(0);
+  await expect(noteDraft.getByTestId('note-draft-piano-roll')).toBeVisible();
+
+  // Collapse hides the blocks; expand restores them.
   await panel.getByRole('button', { name: /Collapse session musician panel/i }).click();
-  await expect(panel.getByRole('button', { name: '1/16 note' })).toHaveCount(0);
-
+  await expect(noteDraft.getByRole('button', { name: '1/16 note' })).toHaveCount(0);
   await panel.getByRole('button', { name: /Expand session musician panel/i }).click();
-  await expect(panel.getByRole('button', { name: '1/16 note' })).toBeVisible();
+  await expect(noteDraft.getByRole('button', { name: '1/16 note' })).toBeVisible();
 });
 
 test('missing melodyDetail shows MIDI unavailable state', async ({ page }) => {
@@ -608,11 +617,15 @@ test('missing melodyDetail shows MIDI unavailable state', async ({ page }) => {
   await page.getByRole('button', { name: /Run Analysis/i }).click();
 
   const panel = page.locator('section').filter({ hasText: /SESSION MUSICIAN/i }).first();
-  // With pitchNoteMode='off', the panel shows opted-out state even when melodyDetail is absent.
-  // "PITCH & MELODY UNAVAILABLE" no longer renders; the opted-out banner is the primary cue.
-  await expect(panel.locator('p').filter({ hasText: /Pitch\/note translation is off/i }).first()).toBeVisible();
-  await expect(panel.getByRole('button', { name: /Preview/i })).toBeDisabled();
-  await expect(panel.getByRole('button', { name: /Download \.mid/i })).toBeDisabled();
+  // pitchNoteMode='off' + no melodyDetail: the off-state banner is the only thing rendered.
+  // Neither block renders, so the Preview / Download buttons are not in the DOM at all.
+  await expect(panel.getByTestId('session-musician-off-banner')).toBeVisible();
+  await expect(panel.getByTestId('note-draft-block')).toHaveCount(0);
+  await expect(panel.getByTestId('melody-contour-block')).toHaveCount(0);
+  await expect(panel.getByTestId('midi-preview-stems')).toHaveCount(0);
+  await expect(panel.getByTestId('midi-download-stems')).toHaveCount(0);
+  await expect(panel.getByTestId('midi-preview-melody')).toHaveCount(0);
+  await expect(panel.getByTestId('midi-download-melody')).toHaveCount(0);
 });
 
 test('pitch/note off with melody present shows opted-out state', async ({ page }) => {
@@ -781,11 +794,21 @@ test('pitch/note off with melody present shows opted-out state', async ({ page }
 
   const panel = page.locator('section').filter({ hasText: /SESSION MUSICIAN/i }).first();
   // Opted-out banner is the primary disclosure
-  await expect(panel.locator('p').filter({ hasText: /Pitch\/note translation is off/i }).first()).toBeVisible();
-  await expect(panel.locator('p').filter({ hasText: /Re-enable the Stem Pitch\/Note Translation toggle/i }).first()).toBeVisible();
-  // Preview and Download are disabled
-  await expect(panel.getByRole('button', { name: /Preview/i })).toBeDisabled();
-  await expect(panel.getByRole('button', { name: /Download \.mid/i })).toBeDisabled();
-  // Quantize controls are absent (not rendered for opted-out state)
-  await expect(panel.getByRole('button', { name: /1\/16 note/i })).toHaveCount(0);
+  await expect(panel.getByTestId('session-musician-off-banner')).toBeVisible();
+  await expect(
+    panel.locator('p').filter({ hasText: /Re-enable the Stem Pitch\/Note Translation toggle/i }).first(),
+  ).toBeVisible();
+
+  // Block A (stem note draft) is absent because pitchNoteMode='off'.
+  await expect(panel.getByTestId('note-draft-block')).toHaveCount(0);
+  await expect(panel.getByTestId('midi-preview-stems')).toHaveCount(0);
+  await expect(panel.getByTestId('midi-download-stems')).toHaveCount(0);
+
+  // Block B (melody contour) still renders normally, with its own controls.
+  const melodyContour = panel.getByTestId('melody-contour-block');
+  await expect(melodyContour).toBeVisible();
+  await expect(melodyContour.getByTestId('midi-preview-melody')).toBeEnabled();
+  await expect(melodyContour.getByTestId('midi-download-melody')).toBeEnabled();
+  // Block B owns its own quantize controls.
+  await expect(melodyContour.getByRole('button', { name: '1/16 note' })).toBeVisible();
 });

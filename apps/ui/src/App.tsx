@@ -1018,7 +1018,7 @@ export default function App() {
                         <div className="space-y-1">
                           <p className="text-[10px] font-mono uppercase tracking-wider">STEM PITCH/NOTE TRANSLATION</p>
                           <p className="text-[10px] font-mono uppercase tracking-wide opacity-80">
-                            Optional. Slower and heavier. Turns on the extra stem-based note draft. The separate melody guide may still appear when measurement can produce one.
+                            Optional. Slower and heavier. Turns on the stem-aware note draft (Demucs + torchcrepe on bass and lead). When off, the measurement-layer melody contour and Gemini stem listening notes can still appear when those stages run.
                           </p>
                         </div>
                       </div>
