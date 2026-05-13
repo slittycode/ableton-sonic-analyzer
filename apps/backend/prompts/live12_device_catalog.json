@@ -391,7 +391,11 @@
         "Makeup",
         "Dry/Wet",
         "Soft Clip",
-        "Peak Clip"
+        "Peak Clip",
+        "Range",
+        "Sidechain",
+        "Sidechain Gain",
+        "Sidechain Dry/Wet"
       ]
     },
     {
@@ -531,7 +535,11 @@
         "LFO Rate",
         "LFO Waveform",
         "Dry/Wet"
-      ]
+      ],
+      "parameterAliases": {
+        "Filter Resonance": "Resonance",
+        "Filter Frequency": "Frequency"
+      }
     },
     {
       "name": "Auto Pan-Tremolo",

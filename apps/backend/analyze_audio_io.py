@@ -47,6 +47,33 @@ def _load_stem_mono(
         return None
 
 
+def _load_stem_stereo(
+    stems: dict | None,
+    stem_name: str,
+) -> np.ndarray | None:
+    """Load a Demucs-produced stem as a (N, 2) stereo array.
+
+    Demucs writes stems as 44.1 kHz stereo PCM16 WAV via `_write_wav_pcm16`
+    above. The stereo path is what `analyze_loudness` (LoudnessEBUR128) and
+    `analyze_stereo` consume. Returns None when the stem is missing or
+    unreadable.
+    """
+    if not isinstance(stems, dict):
+        return None
+
+    stem_path = stems.get(stem_name)
+    if not isinstance(stem_path, str) or not os.path.isfile(stem_path):
+        return None
+
+    try:
+        audio, _sr, _channels = load_stereo(stem_path)
+        if audio is None:
+            return None
+        return audio
+    except Exception:
+        return None
+
+
 def _write_wav_pcm16(path: str, audio: np.ndarray, sample_rate: int) -> None:
     """Write a float waveform array to PCM16 WAV."""
     data = np.asarray(audio, dtype=np.float32)

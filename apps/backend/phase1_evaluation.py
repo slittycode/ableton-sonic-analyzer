@@ -17,6 +17,7 @@ import numpy as np
 REPO_DIR = Path(__file__).resolve().parent
 DEFAULT_MANIFEST_PATH = REPO_DIR / "tests" / "fixtures" / "phase1_eval_manifest.json"
 DEFAULT_REPORT_PATH = REPO_DIR / ".runtime" / "reports" / "phase1_eval_report.json"
+DEFAULT_BENCH_TRACKS_DIR = REPO_DIR / "tests" / "fixtures" / "bench_tracks"
 EXPECTED_SPECTRAL_KEYS = {
     "subBass",
     "lowBass",
@@ -33,6 +34,18 @@ class FixtureCheck:
     name: str
     passed: bool
     message: str
+
+
+@dataclass
+class RealTrackResult:
+    track_id: str
+    audio_path: str
+    category: str
+    description: str
+    status: str  # "evaluated" | "skipped_audio_missing" | "skipped_analyze_failed"
+    skip_reason: str | None
+    checks: list[FixtureCheck]
+    all_passed: bool
 
 
 def _write_stereo_wav(path: Path, mono: np.ndarray, sample_rate: int) -> None:
@@ -81,8 +94,10 @@ def _generate_fixture_audio(generator: dict[str, Any]) -> tuple[np.ndarray, int]
     raise ValueError(f"Unsupported fixture generator type '{fixture_type}'.")
 
 
-def _run_analyze(audio_path: Path) -> dict[str, Any]:
+def _run_analyze(audio_path: Path, extra_flags: list[str] | None = None) -> dict[str, Any]:
     command = [sys.executable, str(REPO_DIR / "analyze.py"), str(audio_path), "--yes"]
+    if extra_flags:
+        command.extend(extra_flags)
     completed = subprocess.run(
         command,
         cwd=REPO_DIR,
@@ -186,6 +201,92 @@ def _evaluate_plr_consistency(payload: dict[str, Any]) -> FixtureCheck:
     )
 
 
+def _evaluate_real_track(
+    entry: dict[str, Any],
+    real_tracks_dir: Path,
+) -> RealTrackResult:
+    """Evaluate a single real-track entry from the manifest.
+
+    Gracefully skips with a clear reason when the audio file is absent, so that
+    a missing bench track never fails the run — opt-in real-track gate only
+    surfaces failures when audio is present AND analyzer output disagrees with
+    ground truth.
+    """
+    track_id = str(entry.get("id") or "unknown")
+    audio_rel = str(entry.get("audioPath") or "")
+    category = str(entry.get("category") or "uncategorized")
+    description = str(entry.get("description") or "")
+    thresholds = entry.get("thresholds")
+    analyze_flags = entry.get("analyzeFlags")
+
+    if not isinstance(thresholds, dict):
+        thresholds = {}
+    if isinstance(analyze_flags, list):
+        flags_list = [str(flag) for flag in analyze_flags]
+    else:
+        flags_list = None
+
+    if not audio_rel:
+        return RealTrackResult(
+            track_id=track_id,
+            audio_path="",
+            category=category,
+            description=description,
+            status="skipped_audio_missing",
+            skip_reason="manifest entry has no audioPath",
+            checks=[],
+            all_passed=True,
+        )
+
+    audio_path = (real_tracks_dir / audio_rel).resolve()
+    if not audio_path.exists():
+        return RealTrackResult(
+            track_id=track_id,
+            audio_path=str(audio_path),
+            category=category,
+            description=description,
+            status="skipped_audio_missing",
+            skip_reason=(
+                f"audio not present at {audio_path} — add the file locally to "
+                "include this track in real-track evaluation"
+            ),
+            checks=[],
+            all_passed=True,
+        )
+
+    try:
+        payload = _run_analyze(audio_path, flags_list)
+    except subprocess.CalledProcessError as exc:
+        stderr_tail = (exc.stderr or "")[-400:]
+        return RealTrackResult(
+            track_id=track_id,
+            audio_path=str(audio_path),
+            category=category,
+            description=description,
+            status="skipped_analyze_failed",
+            skip_reason=f"analyze.py failed (exit {exc.returncode}): {stderr_tail}",
+            checks=[],
+            all_passed=False,
+        )
+
+    checks: list[FixtureCheck] = []
+    for field, config in thresholds.items():
+        if not isinstance(config, dict):
+            continue
+        checks.append(_evaluate_threshold(payload, field, config))
+
+    return RealTrackResult(
+        track_id=track_id,
+        audio_path=str(audio_path),
+        category=category,
+        description=description,
+        status="evaluated",
+        skip_reason=None,
+        checks=checks,
+        all_passed=all(check.passed for check in checks),
+    )
+
+
 def _evaluate_stability(
     outputs: list[dict[str, Any]],
     stability_checks: list[dict[str, Any]],
@@ -237,12 +338,17 @@ def run_phase1_evaluation(
     manifest_path: Path = DEFAULT_MANIFEST_PATH,
     report_path: Path = DEFAULT_REPORT_PATH,
     runs_per_fixture: int = 2,
+    include_real: bool = False,
+    real_tracks_dir: Path = DEFAULT_BENCH_TRACKS_DIR,
 ) -> dict[str, Any]:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     fixtures = manifest.get("fixtures", [])
     stability_checks = manifest.get("stabilityChecks", [])
+    real_tracks_manifest = manifest.get("realTracks", []) if include_real else []
     if not isinstance(fixtures, list) or len(fixtures) == 0:
         raise ValueError("Manifest must define one or more fixtures.")
+    if not isinstance(real_tracks_manifest, list):
+        raise ValueError("Manifest 'realTracks' must be a list when present.")
 
     fixture_reports: list[dict[str, Any]] = []
     passed_checks = 0
@@ -295,20 +401,69 @@ def run_phase1_evaluation(
                 }
             )
 
+    real_track_reports: list[dict[str, Any]] = []
+    real_evaluated = 0
+    real_skipped = 0
+    real_failed_subprocess = 0
+
+    if include_real:
+        for raw_entry in real_tracks_manifest:
+            if not isinstance(raw_entry, dict):
+                continue
+            result = _evaluate_real_track(raw_entry, real_tracks_dir)
+            if result.status == "evaluated":
+                real_evaluated += 1
+                passed_checks += sum(1 for check in result.checks if check.passed)
+                failed_checks += sum(1 for check in result.checks if not check.passed)
+            elif result.status == "skipped_audio_missing":
+                real_skipped += 1
+            elif result.status == "skipped_analyze_failed":
+                # An analyze.py crash on a present audio file is a real failure
+                # — count it once so summary.allPassed reflects the breakage.
+                real_failed_subprocess += 1
+                failed_checks += 1
+
+            real_track_reports.append(
+                {
+                    "id": result.track_id,
+                    "audioPath": result.audio_path,
+                    "category": result.category,
+                    "description": result.description,
+                    "status": result.status,
+                    "skipReason": result.skip_reason,
+                    "checks": [
+                        {
+                            "name": check.name,
+                            "passed": check.passed,
+                            "message": check.message,
+                        }
+                        for check in result.checks
+                    ],
+                    "allPassed": result.all_passed,
+                }
+            )
+
     summary = {
         "fixtures": len(fixture_reports),
+        "realTracksEvaluated": real_evaluated,
+        "realTracksSkipped": real_skipped,
+        "realTracksAnalyzeFailed": real_failed_subprocess,
         "checksPassed": passed_checks,
         "checksFailed": failed_checks,
         "allPassed": failed_checks == 0,
     }
 
-    report = {
+    report: dict[str, Any] = {
         "generatedAt": datetime.now(timezone.utc).isoformat(),
         "manifestPath": str(manifest_path),
         "runsPerFixture": runs_per_fixture,
+        "includeReal": include_real,
+        "realTracksDir": str(real_tracks_dir) if include_real else None,
         "fixtures": fixture_reports,
         "summary": summary,
     }
+    if include_real:
+        report["realTracks"] = real_track_reports
 
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")

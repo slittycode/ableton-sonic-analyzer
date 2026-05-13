@@ -35,5 +35,24 @@ apps/backend/.runtime/
 # UI prototypes
 apps/ui/redesign-concept.html
 
+# Runtime-generated MIDI artifacts under public/. The Phase 1 melody/transcription
+# analyzers export .mid files for "Session Musician" downloads; when those land
+# under apps/ui/public/ during a local dev session they should NOT be committed.
+# The intentional reference assets (demo.mp3) keep their own line.
+apps/ui/public/*.mid
+apps/ui/public/demo_melody.mid
+
 # Local-only superpowers plans
 docs/superpowers/
+
+# Track 2 bench tracks: copyrighted reference audio + derived per-track
+# artifacts. Audio files and per-track derivatives live in your local
+# checkout only — keep the README so the directory shape is checked in.
+apps/backend/tests/fixtures/bench_tracks/*
+!apps/backend/tests/fixtures/bench_tracks/README.md
+apps/backend/tests/fixtures/estimations/
+
+# Ephemeral local state
+.claude/scheduled_tasks.lock
+.continue.sh
+.plan.md

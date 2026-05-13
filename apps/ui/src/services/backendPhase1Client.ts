@@ -585,6 +585,9 @@ export function parsePhase1Result(value: unknown): Phase1Result {
     lufsRange: toNumber(phase1.lufsRange),
     lufsMomentaryMax: toNumber(phase1.lufsMomentaryMax),
     lufsShortTermMax: toNumber(phase1.lufsShortTermMax),
+    lufsCurve: isRecord(phase1.lufsCurve)
+      ? (phase1.lufsCurve as unknown as Phase1Result["lufsCurve"])
+      : null,
     truePeak,
     plr: normalizedPlr,
     crestFactor: toNumber(phase1.crestFactor),
@@ -604,7 +607,25 @@ export function parsePhase1Result(value: unknown): Phase1Result {
       highs: expectNumber(spectralBalance, "highs", "spectralBalance.highs"),
       brilliance: expectNumber(spectralBalance, "brilliance", "spectralBalance.brilliance"),
     },
+    spectralBalanceTimeSeries: Array.isArray(phase1.spectralBalanceTimeSeries)
+      ? (phase1.spectralBalanceTimeSeries as unknown as Phase1Result["spectralBalanceTimeSeries"])
+      : null,
     spectralDetail: isRecord(phase1.spectralDetail) ? phase1.spectralDetail as Phase1Result["spectralDetail"] : null,
+    stemAnalysis: isRecord(phase1.stemAnalysis)
+      ? (phase1.stemAnalysis as unknown as Phase1Result["stemAnalysis"])
+      : null,
+    transientDensityDetail: isRecord(phase1.transientDensityDetail)
+      ? (phase1.transientDensityDetail as unknown as Phase1Result["transientDensityDetail"])
+      : null,
+    saturationDetail: isRecord(phase1.saturationDetail)
+      ? (phase1.saturationDetail as unknown as Phase1Result["saturationDetail"])
+      : null,
+    snareDetail: isRecord(phase1.snareDetail)
+      ? (phase1.snareDetail as unknown as Phase1Result["snareDetail"])
+      : null,
+    hihatDetail: isRecord(phase1.hihatDetail)
+      ? (phase1.hihatDetail as unknown as Phase1Result["hihatDetail"])
+      : null,
     rhythmDetail: isRecord(phase1.rhythmDetail) ? phase1.rhythmDetail as unknown as Phase1Result["rhythmDetail"] : null,
     melodyDetail,
     transcriptionDetail,

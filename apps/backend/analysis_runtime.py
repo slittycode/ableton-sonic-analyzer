@@ -1554,13 +1554,21 @@ class AnalysisRuntime:
     def resolve_measurement_flags(
         requested_pitch_note_mode: str,
     ) -> tuple[bool, bool]:
-        # Symbolic work (separation + transcription) is handled by the dedicated
-        # pitch_note_translation stage enqueued via _enqueue_requested_followups().
-        # Running it inline during measurement was redundant — the result was
-        # stripped anyway (see complete_measurement: pop("transcriptionDetail")).
+        # Transcription is handled by the dedicated pitch_note_translation
+        # stage enqueued via _enqueue_requested_followups() — running it inline
+        # during measurement was redundant since transcriptionDetail is popped
+        # in complete_measurement.
+        #
+        # Separation is needed at MEASUREMENT time for the Phase 1.B stem-first
+        # overlay (stemAnalysis namespace) — analyze.py only emits per-stem
+        # analyzers when stems exist when the orchestrator runs. So when the
+        # user opts into pitch-note translation (mode != "off"), run separation
+        # inline so stemAnalysis is in the payload that Phase 2 sees, without
+        # waiting on a second separation pass.
         if requested_pitch_note_mode not in ("off", "stem_notes"):
             raise UnsupportedPitchNoteModeError(requested_pitch_note_mode)
-        return False, False
+        run_separation = requested_pitch_note_mode == "stem_notes"
+        return run_separation, False
 
     @staticmethod
     def _preferred_pitch_note_row(

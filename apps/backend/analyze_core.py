@@ -9,7 +9,14 @@ try:
 except ImportError:
     es = None
 
-from dsp_utils import _safe_db, _compute_stereo_metrics
+from dsp_utils import (
+    _compute_stereo_correlation_curve,
+    _compute_stereo_metrics,
+    _downsample_band_energies_curve,
+    _downsample_lufs_array,
+    _pearson_corr,
+    _safe_db,
+)
 
 
 def extract_rhythm(mono: np.ndarray) -> dict | None:
@@ -177,7 +184,15 @@ def analyze_key(mono: np.ndarray) -> dict:
 
 
 def analyze_loudness(stereo: np.ndarray) -> dict:
-    """LUFS integrated loudness, range, and max momentary/short-term via LoudnessEBUR128."""
+    """LUFS integrated loudness, range, max momentary/short-term, plus the
+    downsampled momentary + short-term curves over time.
+
+    The curve series surface what EBU R128 already computes internally but the
+    pre-existing call discarded: producers can now see when the loudest
+    moments occur, not just how loud they peaked. Phase 2 cites
+    ``lufsCurve.shortTerm`` to explain drop vs breakdown contrast in section
+    advice.
+    """
     try:
         loudness = es.LoudnessEBUR128()
         momentary, short_term, integrated, loudness_range = loudness(stereo)
@@ -193,15 +208,26 @@ def analyze_loudness(stereo: np.ndarray) -> dict:
             finite_short_term = short_term_arr[np.isfinite(short_term_arr)]
             if finite_short_term.size > 0:
                 lufs_short_term_max = round(float(np.max(finite_short_term)), 1)
+        lufs_curve = {
+            "shortTerm": _downsample_lufs_array(short_term_arr),
+            "momentary": _downsample_lufs_array(momentary_arr),
+        }
         return {
             "lufsIntegrated": round(float(integrated), 1),
             "lufsRange": round(float(loudness_range), 1),
             "lufsMomentaryMax": lufs_momentary_max,
             "lufsShortTermMax": lufs_short_term_max,
+            "lufsCurve": lufs_curve,
         }
     except Exception as e:
         print(f"[warn] LUFS extraction failed: {e}", file=sys.stderr)
-        return {"lufsIntegrated": None, "lufsRange": None, "lufsMomentaryMax": None, "lufsShortTermMax": None}
+        return {
+            "lufsIntegrated": None,
+            "lufsRange": None,
+            "lufsMomentaryMax": None,
+            "lufsShortTermMax": None,
+            "lufsCurve": None,
+        }
 
 
 def analyze_true_peak(stereo: np.ndarray) -> dict:
@@ -528,14 +554,27 @@ def analyze_spectral_balance(
     *,
     precomputed_band_energies: dict | None = None,
 ) -> dict:
-    """Spectral balance across 7 frequency bands using EnergyBand + spectrum."""
+    """Spectral balance across 7 frequency bands using EnergyBand + spectrum.
+
+    Returns the existing per-band mean dB values under ``spectralBalance``
+    (scalar-shape contract preserved verbatim) AND a sibling
+    ``spectralBalanceTimeSeries`` array of ``{t, <band>: dB, ...}`` rows so
+    Phase 2 can cite section-relative spectral motion ("the high-end opens up
+    at 1:23") instead of static averages alone. The sibling field deliberately
+    sits outside ``spectralBalance`` because ``spectralBalance``'s exact-keys
+    shape is asserted by ``test_spectral_balance_has_seven_numeric_bands``.
+    """
     try:
+        bands = SPECTRAL_BALANCE_BANDS
+        # Hop matches both the precomputed path (analyze_spectral_detail) and
+        # this function's own frame loop, both at 1024-sample hops.
+        hop_size = 1024
+        frame_hop_seconds = hop_size / float(sample_rate) if sample_rate > 0 else 0.0
+
         if precomputed_band_energies is not None:
             band_energies = precomputed_band_energies
         else:
-            bands = SPECTRAL_BALANCE_BANDS
             frame_size = 2048
-            hop_size = 1024
             window = es.Windowing(type="hann", size=frame_size)
             spectrum = es.Spectrum(size=frame_size)
 
@@ -560,10 +599,19 @@ def analyze_spectral_balance(
             db = 10 * np.log10(mean_energy) if mean_energy > 0 else -100.0
             result[name] = round(float(db), 1)
 
-        return {"spectralBalance": result}
+        time_series = _downsample_band_energies_curve(
+            band_energies,
+            band_names=list(bands.keys()),
+            frame_hop_seconds=frame_hop_seconds,
+        )
+
+        return {
+            "spectralBalance": result,
+            "spectralBalanceTimeSeries": time_series,
+        }
     except Exception as e:
         print(f"[warn] Spectral balance analysis failed: {e}", file=sys.stderr)
-        return {"spectralBalance": None}
+        return {"spectralBalance": None, "spectralBalanceTimeSeries": None}
 
 
 def analyze_plr(lufs_integrated: float | None, true_peak: float | None) -> dict:
@@ -819,6 +867,7 @@ def analyze_stereo(stereo: np.ndarray, sample_rate: int = 44100) -> dict:
                     "stereoCorrelation": None,
                     "subBassCorrelation": None,
                     "subBassMono": None,
+                    "correlationCurve": None,
                 }
             }
 
@@ -872,12 +921,34 @@ def analyze_stereo(stereo: np.ndarray, sample_rate: int = 44100) -> dict:
         sub_corr = sub_metrics.get("stereoCorrelation")
         sub_mono = None if sub_corr is None else bool(float(sub_corr) > 0.85)
 
+        # 1-second windowed correlation timeline — surfaces stereo automation
+        # (utility width sweeps, mono-collapsing the drop) that the global
+        # scalars conflate into one number.
+        correlation_curve = _compute_stereo_correlation_curve(
+            left,
+            right,
+            left_sub,
+            right_sub,
+            sample_rate=sample_rate,
+        )
+
+        # Phase 1.C #2: per-frequency-band L/R correlation (goniometer-style).
+        # Splits the global stereoCorrelation into the same 7 bands used by
+        # spectralBalance so Phase 2 can say "bass is mono, mids are wide,
+        # highs are narrow" instead of one global ratio. Each band gets a
+        # BandPass filter and Pearson correlation; bands with no energy
+        # (e.g. brilliance on a dark master) return null rather than a
+        # misleading zero.
+        band_correlations = _compute_band_stereo_correlations(left, right, sample_rate)
+
         return {
             "stereoDetail": {
                 "stereoWidth": stereo_metrics.get("stereoWidth"),
                 "stereoCorrelation": stereo_metrics.get("stereoCorrelation"),
                 "subBassCorrelation": sub_corr,
                 "subBassMono": sub_mono,
+                "correlationCurve": correlation_curve,
+                "bandCorrelations": band_correlations,
             }
         }
     except Exception as e:
@@ -887,9 +958,126 @@ def analyze_stereo(stereo: np.ndarray, sample_rate: int = 44100) -> dict:
                 "stereoWidth": None,
                 "stereoCorrelation": None,
                 "subBassCorrelation": None,
+                "correlationCurve": None,
                 "subBassMono": None,
+                "bandCorrelations": None,
             }
         }
+
+
+def _compute_band_stereo_correlations(
+    left: np.ndarray,
+    right: np.ndarray,
+    sample_rate: int,
+) -> dict[str, float | None]:
+    """Per-frequency-band L/R Pearson correlation across SPECTRAL_BALANCE_BANDS.
+
+    Returns a dict keyed by band name with values in [-1, 1] (or None when the
+    band's bandpassed output has zero variance — i.e. the band is silent).
+    Phase 2 cites these to anchor element-band-specific stereo recommendations
+    (Utility width per band, mid-side EQ moves, etc.).
+    """
+    if es is None:
+        return {name: None for name in SPECTRAL_BALANCE_BANDS}
+    results: dict[str, float | None] = {}
+    left_f32 = np.asarray(left, dtype=np.float32)
+    right_f32 = np.asarray(right, dtype=np.float32)
+    for name, (lo, hi) in SPECTRAL_BALANCE_BANDS.items():
+        # Clamp to Nyquist defensively so a 22 kHz "brilliance" band stops at fs/2 - 1.
+        nyquist = sample_rate / 2.0 - 1.0
+        lo_clamped = max(20.0, min(float(lo), nyquist))
+        hi_clamped = max(lo_clamped + 1.0, min(float(hi), nyquist))
+        cutoff = (lo_clamped + hi_clamped) / 2.0
+        bandwidth = hi_clamped - lo_clamped
+        try:
+            bp_l = es.BandPass(cutoffFrequency=cutoff, bandwidth=bandwidth, sampleRate=sample_rate)
+            bp_r = es.BandPass(cutoffFrequency=cutoff, bandwidth=bandwidth, sampleRate=sample_rate)
+            band_left = np.asarray(bp_l(left_f32), dtype=np.float64)
+            band_right = np.asarray(bp_r(right_f32), dtype=np.float64)
+            corr = _pearson_corr(band_left, band_right)
+            results[name] = round(float(corr), 3) if np.isfinite(corr) else None
+        except Exception as exc:
+            print(f"[warn] band correlation {name} failed: {exc}", file=sys.stderr)
+            results[name] = None
+    return results
+
+
+def analyze_saturation_detail(
+    mono: np.ndarray,
+    stereo: np.ndarray | None,
+    sample_rate: int = 44100,
+) -> dict:
+    """Phase 1.C #5 — saturation / clipping / over-compression telltales.
+
+    Cheap proxies for the kind of mastering decisions Phase 2 needs to make.
+    For each track we report:
+
+    - clippedSampleCount / clippedSamplePercent: stereo samples whose absolute
+      value crosses 0.9999 (hard clipping threshold).
+    - nearClippedSamplePercent: stereo samples above 0.95 (mastering-loud territory).
+    - peakRatio95to50: ratio of |audio| 95th-percentile to 50th-percentile —
+      higher means more dynamic, lower means harder compression / limiting.
+    - rmsToPeakRatioDb: peak vs RMS in dB. Roughly the inverse of crest factor;
+      kept here so saturation analysis is self-contained.
+    - saturationLikely: heuristic boolean from the above. NOT a definitive
+      "is there saturation" — Phase 2 should treat as a hint.
+
+    Cost: O(N) on the mono/stereo buffer. ~0.5 s on a 2-min track. No new
+    library dependencies.
+    """
+    try:
+        if mono is None or getattr(mono, "size", 0) == 0:
+            return {"saturationDetail": None}
+
+        # Clipping math on the stereo buffer when available; fall back to mono.
+        if stereo is not None and isinstance(stereo, np.ndarray) and stereo.size > 0:
+            sample_buffer = np.asarray(np.abs(stereo).max(axis=1) if stereo.ndim == 2 else np.abs(stereo), dtype=np.float64)
+        else:
+            sample_buffer = np.abs(np.asarray(mono, dtype=np.float64))
+
+        total = int(sample_buffer.size)
+        if total == 0:
+            return {"saturationDetail": None}
+
+        clipped_mask = sample_buffer >= 0.9999
+        near_clipped_mask = sample_buffer >= 0.95
+        clipped_count = int(np.sum(clipped_mask))
+        near_clipped_count = int(np.sum(near_clipped_mask))
+
+        # Compressed-ness proxy.
+        p95 = float(np.percentile(sample_buffer, 95))
+        p50 = float(np.percentile(sample_buffer, 50)) if total > 0 else 0.0
+        peak_ratio = round(p95 / p50, 3) if p50 > 1e-9 else None
+
+        # Crest factor from |mono| (mirror analyze_dynamics math). Stays here for
+        # the saturationDetail summary so consumers can cite a single object.
+        mono_64 = np.asarray(mono, dtype=np.float64)
+        peak = float(np.max(np.abs(mono_64))) if mono_64.size > 0 else 0.0
+        rms = float(np.sqrt(np.mean(mono_64 ** 2))) if mono_64.size > 0 else 0.0
+        rms_to_peak_db = round(20.0 * np.log10(peak / rms), 2) if rms > 1e-9 and peak > 1e-9 else None
+
+        # Heuristic: any of (1) >100 clipped samples in stereo, (2) >0.5% near-clipped,
+        # or (3) peak-ratio below 2.0 with low crest signals saturation/limiting.
+        saturation_likely = (
+            clipped_count > 100
+            or (total > 0 and (near_clipped_count / total) > 0.005)
+            or (peak_ratio is not None and peak_ratio < 2.0 and rms_to_peak_db is not None and rms_to_peak_db < 8.0)
+        )
+
+        return {
+            "saturationDetail": {
+                "clippedSampleCount": clipped_count,
+                "clippedSamplePercent": round(100.0 * clipped_count / total, 4),
+                "nearClippedSampleCount": near_clipped_count,
+                "nearClippedSamplePercent": round(100.0 * near_clipped_count / total, 3),
+                "peakRatio95to50": peak_ratio,
+                "rmsToPeakRatioDb": rms_to_peak_db,
+                "saturationLikely": bool(saturation_likely),
+            }
+        }
+    except Exception as exc:
+        print(f"[warn] saturation analysis failed: {exc}", file=sys.stderr)
+        return {"saturationDetail": None}
 
 
 def analyze_perceptual(mono: np.ndarray, sample_rate: int = 44100) -> dict:
@@ -1012,8 +1200,36 @@ def analyze_duration_and_sr(mono: np.ndarray, sample_rate: int = 44100) -> dict:
         return {"durationSeconds": None, "sampleRate": None}
 
 
-def analyze_time_signature(rhythm_data: dict | None) -> dict:
-    """Estimate time signature from shared rhythm data."""
+_TIME_SIG_BAR_CANDIDATES = (3, 4, 5, 6, 7)
+_TIME_SIG_LABELS = {3: "3/4", 4: "4/4", 5: "5/4", 6: "6/8", 7: "7/8"}
+_TIME_SIG_MARGIN_THRESHOLD = 0.20  # winner must beat 4/4 by 20% to override
+
+
+def analyze_time_signature(
+    rhythm_data: dict | None,
+    mono: np.ndarray | None = None,
+    sample_rate: int = 44100,
+) -> dict:
+    """Phase 1.C #0 — onset-accent autocorrelation for meter detection.
+
+    Previously this function always returned ``"4/4"`` with confidence 0
+    (assumed). Now:
+
+    1. Collect raw onset times via ``_detect_onset_times`` on ``mono`` (lazy
+       import to avoid a circular dependency with analyze_rhythm).
+    2. For each beat tick, count onsets within ±half-beat-duration.
+    3. For each candidate bar length B in (3, 4, 5, 6, 7), reshape the
+       per-beat onset counts into bars of B and compute "downbeat
+       dominance" = mean accent at position 1 / mean accent at positions 2..B.
+    4. The candidate with the highest dominance wins, but only overrides 4/4
+       when it beats 4/4's dominance by ``_TIME_SIG_MARGIN_THRESHOLD`` (20%).
+
+    Falls back cleanly to the previous "assumed 4/4" behavior when:
+    - rhythm_data is missing
+    - fewer than 16 beats are detected
+    - mono is not provided (legacy callers)
+    - onset detection fails
+    """
     try:
         if rhythm_data is None:
             return {
@@ -1021,13 +1237,122 @@ def analyze_time_signature(rhythm_data: dict | None) -> dict:
                 "timeSignatureSource": None,
                 "timeSignatureConfidence": None,
             }
+
+        raw_ticks = rhythm_data.get("ticks")
+        # Defensive: rhythm_data["ticks"] may already be a numpy array.
+        # ``arr or []`` raises "truth value of array is ambiguous" so use a
+        # None / len check instead.
+        if raw_ticks is None:
+            ticks = np.asarray([], dtype=np.float64)
+        else:
+            ticks = np.asarray(raw_ticks, dtype=np.float64)
+        if mono is None or ticks.size < 16:
+            # Not enough information to disambiguate — preserve the
+            # "assumed 4/4" contract that consumers expect today.
+            return {
+                "timeSignature": "4/4",
+                "timeSignatureSource": "assumed_four_four",
+                "timeSignatureConfidence": 0.0,
+            }
+
+        # Lazy import — analyze_rhythm is loaded after analyze_core at the
+        # module level. Importing at function-call time avoids the cycle.
+        try:
+            from analyze_rhythm import _detect_onset_times
+        except Exception:
+            return {
+                "timeSignature": "4/4",
+                "timeSignatureSource": "assumed_four_four",
+                "timeSignatureConfidence": 0.0,
+            }
+
+        onset_times = _detect_onset_times(mono, sample_rate)
+        if onset_times.size < 16:
+            return {
+                "timeSignature": "4/4",
+                "timeSignatureSource": "assumed_four_four",
+                "timeSignatureConfidence": 0.0,
+            }
+
+        beat_diffs = np.diff(ticks)
+        beat_diffs = beat_diffs[beat_diffs > 0]
+        if beat_diffs.size == 0:
+            return {
+                "timeSignature": "4/4",
+                "timeSignatureSource": "assumed_four_four",
+                "timeSignatureConfidence": 0.0,
+            }
+        beat_duration = float(np.median(beat_diffs))
+        half_beat = beat_duration / 2.0
+
+        # Count onsets falling within ±half-beat-duration of each beat tick —
+        # this is the "accent strength" signal at beat resolution.
+        beat_onset_counts = np.zeros(ticks.size, dtype=np.float64)
+        # Use searchsorted for O(N log N) instead of O(N*M) loop.
+        sorted_onsets = np.sort(onset_times)
+        for i, beat_t in enumerate(ticks):
+            left = np.searchsorted(sorted_onsets, beat_t - half_beat, side="left")
+            right = np.searchsorted(sorted_onsets, beat_t + half_beat, side="left")
+            beat_onset_counts[i] = float(right - left)
+
+        # Compute downbeat dominance for each candidate bar length.
+        scores: dict[int, float] = {}
+        per_position_means: dict[int, list[float]] = {}
+        for B in _TIME_SIG_BAR_CANDIDATES:
+            if B <= 0:
+                continue
+            n_bars = beat_onset_counts.size // B
+            if n_bars < 2:
+                continue
+            matrix = beat_onset_counts[: n_bars * B].reshape(n_bars, B)
+            mean_per_position = matrix.mean(axis=0)
+            others_mean = float(np.mean(mean_per_position[1:]))
+            if others_mean <= 0.0:
+                continue
+            dominance = float(mean_per_position[0] / others_mean)
+            scores[B] = dominance
+            per_position_means[B] = [round(float(v), 3) for v in mean_per_position]
+
+        if 4 not in scores:
+            # We couldn't even score 4/4 — fall back to the assumption.
+            return {
+                "timeSignature": "4/4",
+                "timeSignatureSource": "assumed_four_four",
+                "timeSignatureConfidence": 0.0,
+            }
+
+        baseline = scores[4]
+        best_B = max(scores, key=scores.get)
+        best_score = scores[best_B]
+        winner_label = _TIME_SIG_LABELS.get(best_B, "4/4")
+
+        if best_B == 4:
+            # 4/4 won outright; confidence rises with downbeat dominance.
+            confidence = max(0.0, min(1.0, (baseline - 1.0) / 2.0))
+            return {
+                "timeSignature": "4/4",
+                "timeSignatureSource": "onset_autocorrelation",
+                "timeSignatureConfidence": round(float(confidence), 2),
+            }
+
+        # Non-4/4 candidate won. Require a margin over 4/4 to override.
+        margin = (best_score - baseline) / max(baseline, 0.1)
+        if margin < _TIME_SIG_MARGIN_THRESHOLD:
+            confidence = max(0.0, min(1.0, (baseline - 1.0) / 2.0))
+            return {
+                "timeSignature": "4/4",
+                "timeSignatureSource": "onset_autocorrelation_low_margin",
+                "timeSignatureConfidence": round(float(confidence), 2),
+            }
+
+        confidence = max(0.0, min(1.0, margin))
         return {
-            "timeSignature": "4/4",
-            "timeSignatureSource": "assumed_four_four",
-            "timeSignatureConfidence": 0.0,
+            "timeSignature": winner_label,
+            "timeSignatureSource": "onset_autocorrelation",
+            "timeSignatureConfidence": round(float(confidence), 2),
         }
-    except Exception as e:
-        print(f"[warn] Time signature estimation failed: {e}", file=sys.stderr)
+    except Exception as exc:
+        print(f"[warn] Time signature estimation failed: {exc}", file=sys.stderr)
         return {
             "timeSignature": None,
             "timeSignatureSource": None,

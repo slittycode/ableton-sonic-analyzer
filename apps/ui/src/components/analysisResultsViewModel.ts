@@ -127,6 +127,19 @@ export interface PatchCardViewModel {
   transcriptionDerived?: boolean;
 }
 
+/**
+ * "source" disambiguates which Phase 1 path produced the note insights:
+ * - "transcription" — torchcrepe-derived notes from Demucs-separated stems
+ *   (only present when pitch/note translation ran); higher-confidence.
+ * - "melody" — full-mix melody extraction via PredominantPitchMelodia, which
+ *   runs in full analysis mode regardless of pitch/note mode. This is the
+ *   "low-confidence full-mix draft" path — labelling it as transcription
+ *   misled users (PR feedback: PDF showed "PITCH/NOTE TRANSLATION IS OFF"
+ *   while still rendering "Transcribed Notes 439"). Callers should label
+ *   melody-sourced insights as "Melody Notes (full-mix draft)" or similar.
+ */
+export type MelodyInsightsSource = "transcription" | "melody";
+
 export interface MelodyInsightsViewModel {
   noteCount: number;
   dominantNotes: string[];
@@ -134,6 +147,7 @@ export interface MelodyInsightsViewModel {
   confidence: number;
   confidenceLabel: ConfidenceLevel;
   isDraft: boolean;
+  source: MelodyInsightsSource;
 }
 
 interface SonicElementDefinition {
@@ -424,6 +438,7 @@ export function buildMelodyInsights(phase1: Phase1Result): MelodyInsightsViewMod
       confidence,
       confidenceLabel,
       isDraft: confidence < LOW_TRANSCRIPTION_CONFIDENCE_THRESHOLD,
+      source: "transcription",
     };
   }
 
@@ -446,6 +461,7 @@ export function buildMelodyInsights(phase1: Phase1Result): MelodyInsightsViewMod
     confidence,
     confidenceLabel,
     isDraft: confidence < LOW_MELODY_CONFIDENCE_THRESHOLD,
+    source: "melody",
   };
 }
 
@@ -471,7 +487,18 @@ function getSonicMeasurements(
       { icon: "🧭", label: "Meter", value: phase1.timeSignature },
       ...(melodyInsights
         ? [
-            { icon: "🧮", label: "Transcribed Notes", value: `${melodyInsights.noteCount}` },
+            {
+              icon: "🧮",
+              // Distinguish the two source paths: torchcrepe stem-aware
+              // transcription vs full-mix melody extraction. Labelling the
+              // full-mix path as "Transcribed Notes" misled users whose
+              // pitch/note translation was OFF.
+              label:
+                melodyInsights.source === "transcription"
+                  ? "Transcribed Notes"
+                  : "Melody Notes (full-mix draft)",
+              value: `${melodyInsights.noteCount}`,
+            },
             { icon: "📐", label: "Note Range", value: melodyInsights.rangeLabel },
             {
               icon: "🎵",
@@ -480,7 +507,10 @@ function getSonicMeasurements(
             },
             {
               icon: "📝",
-              label: "Transcription",
+              label:
+                melodyInsights.source === "transcription"
+                  ? "Transcription"
+                  : "Melody Confidence",
               value: `${melodyInsights.confidenceLabel} (${Math.round(melodyInsights.confidence * 100)}%)`,
             },
           ]
@@ -992,11 +1022,13 @@ function buildPatchFallbackParameters(phase1: Phase1Result): ChainParameterViewM
 }
 
 function buildMelodyPatchParameters(insights: MelodyInsightsViewModel): ChainParameterViewModel[] {
+  const noteLabel = insights.source === "transcription" ? "Transcribed Notes" : "Melody Notes (full-mix draft)";
+  const confidenceLabel = insights.source === "transcription" ? "Transcription Confidence" : "Melody Confidence";
   return [
-    { label: "Transcribed Notes", value: `${insights.noteCount}` },
+    { label: noteLabel, value: `${insights.noteCount}` },
     { label: "Note Range", value: insights.rangeLabel },
     { label: "Dominant Notes", value: insights.dominantNotes.slice(0, 3).join(", ") || "n/a" },
-    { label: "Transcription Confidence", value: `${Math.round(insights.confidence * 100)}% (${insights.confidenceLabel})` },
+    { label: confidenceLabel, value: `${Math.round(insights.confidence * 100)}% (${insights.confidenceLabel})` },
   ];
 }
 

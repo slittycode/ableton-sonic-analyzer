@@ -9,8 +9,155 @@ try:
 except ImportError:
     es = None
 
+try:
+    import librosa
+except ImportError:
+    librosa = None  # type: ignore[assignment]
+
+try:
+    from scipy import signal as scipy_signal  # type: ignore[import-not-found]
+except ImportError:
+    scipy_signal = None  # type: ignore[assignment]
+
 from dsp_utils import _safe_db, _compute_bark_db
 from analyze_audio_io import _load_stem_mono
+
+
+# Phase 1.D #5 — bands for per-band RT60 estimation. Chosen to roughly mirror
+# the SPECTRAL_BALANCE_BANDS aggregation but at octave granularity for
+# decay-slope stability — wider bands give more energy per band → less
+# noise-floor contamination during the dB-decay fit.
+_REVERB_BANDS = (
+    ("low", 20.0, 250.0),
+    ("lowMids", 250.0, 2000.0),
+    ("highMids", 2000.0, 8000.0),
+    ("highs", 8000.0, 16000.0),
+)
+
+
+def _bandpass_signal(mono: np.ndarray, sample_rate: int, lo_hz: float, hi_hz: float) -> np.ndarray | None:
+    """4th-order Butterworth bandpass via scipy.signal. Returns None on failure."""
+    if scipy_signal is None or mono.size == 0:
+        return None
+    nyquist = 0.5 * sample_rate
+    lo = max(1.0, lo_hz) / nyquist
+    hi = min(sample_rate * 0.49, hi_hz) / nyquist
+    if not (0.0 < lo < hi < 1.0):
+        return None
+    try:
+        sos = scipy_signal.butter(4, [lo, hi], btype="bandpass", output="sos")
+        return scipy_signal.sosfiltfilt(sos, mono).astype(np.float32, copy=False)
+    except Exception:
+        return None
+
+
+# Mirrors apps/backend/analyze_core.py SPECTRAL_BALANCE_BANDS — imported lazily
+# below to avoid a circular import (analyze_core imports from this module's
+# kin elsewhere). Falls back to a literal copy when the import path is
+# unavailable at module-load time.
+def _spectral_balance_bands() -> dict[str, tuple[int, int]]:
+    try:
+        from analyze_core import SPECTRAL_BALANCE_BANDS
+        return SPECTRAL_BALANCE_BANDS
+    except Exception:
+        return {
+            "subBass": (20, 80),
+            "lowBass": (80, 250),
+            "lowMids": (250, 500),
+            "mids": (500, 2000),
+            "upperMids": (2000, 5000),
+            "highs": (5000, 10000),
+            "brilliance": (10000, 20000),
+        }
+
+
+def analyze_per_band_transient_density(
+    mono: np.ndarray,
+    sample_rate: int = 44100,
+) -> dict:
+    """Per-frequency-band onset density across the 7 spectralBalance bands.
+
+    Phase 1.C #1. Augments the global kick/transient detail with hi-hat
+    density / snare hit counts per band, computed via librosa onset
+    detection on bandpass-filtered audio. For each band we report:
+
+    - onsetRatePerSecond: detected onset events per second (transient density)
+    - meanOnsetStrength: mean onset-envelope value at detected peaks
+    - peakOnsetStrength: max onset-envelope value across the track
+    - eventCount: number of detected onsets
+
+    Phase 2 cites e.g. ``transientDensityDetail.highs.onsetRatePerSecond``
+    to anchor hi-hat-bus recommendations, ``transientDensityDetail.lowBass``
+    for kick density, etc.
+    """
+    if librosa is None or mono is None or getattr(mono, "size", 0) == 0:
+        return {"transientDensityDetail": None}
+
+    try:
+        from scipy.signal import butter, sosfiltfilt
+    except Exception:
+        return {"transientDensityDetail": None}
+
+    duration_seconds = float(mono.size) / float(sample_rate) if sample_rate > 0 else 0.0
+    if duration_seconds <= 0.0:
+        return {"transientDensityDetail": None}
+
+    bands = _spectral_balance_bands()
+    result: dict[str, dict] = {}
+    nyquist = sample_rate / 2.0
+    mono_64 = np.asarray(mono, dtype=np.float64)
+
+    for name, (lo, hi) in bands.items():
+        try:
+            lo_clamped = max(20.0, min(float(lo), nyquist - 2.0))
+            hi_clamped = max(lo_clamped + 1.0, min(float(hi), nyquist - 1.0))
+            sos = butter(
+                4,
+                [lo_clamped / nyquist, hi_clamped / nyquist],
+                btype="band",
+                output="sos",
+            )
+            band_audio = sosfiltfilt(sos, mono_64)
+            onset_env = librosa.onset.onset_strength(
+                y=np.asarray(band_audio, dtype=np.float32),
+                sr=sample_rate,
+                hop_length=512,
+            )
+            if onset_env.size == 0:
+                result[name] = {
+                    "onsetRatePerSecond": 0.0,
+                    "meanOnsetStrength": 0.0,
+                    "peakOnsetStrength": 0.0,
+                    "eventCount": 0,
+                }
+                continue
+            onset_frames = librosa.onset.onset_detect(
+                onset_envelope=onset_env,
+                sr=sample_rate,
+                hop_length=512,
+            )
+            n_events = int(len(onset_frames))
+            rate = n_events / duration_seconds if duration_seconds > 0 else 0.0
+            if n_events > 0:
+                mean_strength = float(np.mean(onset_env[onset_frames]))
+            else:
+                mean_strength = 0.0
+            peak_strength = float(np.max(onset_env)) if onset_env.size > 0 else 0.0
+            result[name] = {
+                "onsetRatePerSecond": round(rate, 2),
+                "meanOnsetStrength": round(mean_strength, 3),
+                "peakOnsetStrength": round(peak_strength, 3),
+                "eventCount": n_events,
+            }
+        except Exception as exc:
+            print(f"[warn] transient density {name} failed: {exc}", file=sys.stderr)
+            result[name] = {
+                "onsetRatePerSecond": 0.0,
+                "meanOnsetStrength": 0.0,
+                "peakOnsetStrength": 0.0,
+                "eventCount": 0,
+            }
+    return {"transientDensityDetail": result}
 
 
 def analyze_effects_detail(
@@ -244,6 +391,83 @@ def analyze_acid_detail(
         return {"acidDetail": None}
 
 
+def _measure_rt60_from_envelope(
+    envelope: np.ndarray,
+    hop_ms: float,
+    transient_indices: list[int],
+    *,
+    analysis_window_s: float = 2.0,
+    direct_ms: float = 50.0,
+) -> tuple[list[float], list[float], list[float]]:
+    """Shared RT60-slope-fit helper.
+
+    Returns three parallel lists for each transient that produced a measurable
+    decay slope: (rt60_seconds, tail_ratio, pre_delay_ms). Caller decides how
+    to aggregate (mean / median / per-band etc.).
+    """
+    max_decay_frames = int(np.floor((analysis_window_s * 1000.0) / hop_ms))
+    direct_end_frames = max(1, int(np.floor(direct_ms / hop_ms)))
+
+    rt60_estimates: list[float] = []
+    tail_ratios: list[float] = []
+    pre_delay_estimates_ms: list[float] = []
+
+    for t_idx in range(len(transient_indices) - 1):
+        start_f = transient_indices[t_idx]
+        peak_e = float(envelope[start_f])
+        if peak_e < 0.001:
+            continue
+
+        end_f = min(start_f + max_decay_frames, transient_indices[t_idx + 1])
+        if end_f <= start_f + 5:
+            continue
+
+        direct_end = start_f + direct_end_frames
+        direct_energy = float(np.sum(envelope[start_f : min(direct_end, end_f)] ** 2))
+        tail_energy = float(np.sum(envelope[min(direct_end, end_f) : end_f] ** 2))
+        total_energy = direct_energy + tail_energy
+        if total_energy > 0:
+            tail_ratios.append(tail_energy / total_energy)
+
+        # Pre-delay heuristic: between the peak frame and the first envelope
+        # minimum within the next 100 ms, then "the tail starts". For
+        # impulsive content this is the dry-tail boundary; for sustained
+        # content the minimum may be very close to the peak — that's the
+        # honest signal that there's no measurable pre-delay.
+        pre_delay_search_end = min(start_f + int(round(100.0 / hop_ms)), end_f)
+        if pre_delay_search_end > start_f + 2:
+            window_after_peak = envelope[start_f + 1 : pre_delay_search_end]
+            if window_after_peak.size > 0:
+                local_min_offset = int(np.argmin(window_after_peak))
+                pre_delay_ms = (local_min_offset + 1) * hop_ms
+                if 0.0 <= pre_delay_ms <= 100.0:
+                    pre_delay_estimates_ms.append(pre_delay_ms)
+
+        seg = envelope[start_f:end_f]
+        valid = seg > 0
+        if not np.any(valid):
+            continue
+        decay_db = 20.0 * np.log10(np.clip(seg[valid] / peak_e, 1e-10, None))
+        if decay_db.size < 5:
+            continue
+
+        n = decay_db.size
+        x = np.arange(n, dtype=np.float64)
+        x_mean, y_mean = float(np.mean(x)), float(np.mean(decay_db))
+        num = float(np.sum((x - x_mean) * (decay_db - y_mean)))
+        den = float(np.sum((x - x_mean) ** 2))
+        if den == 0:
+            continue
+        slope = num / den
+        if slope >= 0:
+            continue
+        rt60 = abs(-60.0 / (slope / (hop_ms / 1000.0)))
+        if 0.0 < rt60 < 5.0:
+            rt60_estimates.append(rt60)
+
+    return rt60_estimates, tail_ratios, pre_delay_estimates_ms
+
+
 def analyze_reverb_detail(
     mono: np.ndarray,
     sample_rate: int = 44100,
@@ -251,7 +475,14 @@ def analyze_reverb_detail(
 ) -> dict:
     """Estimate RT60 reverberation time from energy decay slopes after transients.
 
-    Ported from sonic-architect-app/services/reverbAnalysis.ts.
+    Ported from sonic-architect-app/services/reverbAnalysis.ts. Phase 1.D #5
+    adds:
+    - `perBandRt60` — RT60 estimated separately in 4 octave bands (low /
+      lowMids / highMids / highs) by bandpassing the input before envelope
+      extraction. Each band measures the same transient stream.
+    - `preDelayMs` — median time between direct peak and first envelope
+      minimum within the next 100 ms, across all detected transients. A
+      proxy for reverb pre-delay; close to zero on dry sources.
     """
     _TRANSIENT_THRESHOLD = 2.0
     _MIN_TRANSIENTS = 4
@@ -277,7 +508,7 @@ def analyze_reverb_detail(
             envelope[i] = float(np.sqrt(np.mean(seg ** 2)))
 
         if envelope.size < 20:
-            return {"reverbDetail": {"rt60": None, "isWet": False, "tailEnergyRatio": None, "measured": False}}
+            return {"reverbDetail": {"rt60": None, "isWet": False, "tailEnergyRatio": None, "measured": False, "perBandRt60": None, "preDelayMs": None}}
 
         min_dist_frames = max(1, int(np.floor((((60.0 / bpm) * 1000.0) / _HOP_MS) * 0.5)))
         transient_indices: list[int] = []
@@ -295,64 +526,63 @@ def analyze_reverb_detail(
                     transient_indices.append(i)
 
         if len(transient_indices) < _MIN_TRANSIENTS:
-            return {"reverbDetail": {"rt60": None, "isWet": False, "tailEnergyRatio": None, "measured": False}}
+            return {"reverbDetail": {"rt60": None, "isWet": False, "tailEnergyRatio": None, "measured": False, "perBandRt60": None, "preDelayMs": None}}
 
-        max_decay_frames = int(np.floor((_ANALYSIS_WINDOW_S * 1000.0) / _HOP_MS))
-        direct_end_frames = max(1, int(np.floor(_DIRECT_MS / _HOP_MS)))
-        rt60_estimates: list[float] = []
-        tail_ratios: list[float] = []
-
-        for t_idx in range(len(transient_indices) - 1):
-            start_f = transient_indices[t_idx]
-            peak_e = envelope[start_f]
-            if peak_e < 0.001:
-                continue
-
-            end_f = min(start_f + max_decay_frames, transient_indices[t_idx + 1])
-            if end_f <= start_f + 5:
-                continue
-
-            direct_end = start_f + direct_end_frames
-            direct_energy = float(np.sum(envelope[start_f : min(direct_end, end_f)] ** 2))
-            tail_energy = float(np.sum(envelope[min(direct_end, end_f) : end_f] ** 2))
-            total_energy = direct_energy + tail_energy
-            if total_energy > 0:
-                tail_ratios.append(tail_energy / total_energy)
-
-            seg = envelope[start_f:end_f]
-            valid = seg > 0
-            if not np.any(valid):
-                continue
-            decay_db = 20.0 * np.log10(np.clip(seg[valid] / peak_e, 1e-10, None))
-            if decay_db.size < 5:
-                continue
-
-            n = decay_db.size
-            x = np.arange(n, dtype=np.float64)
-            x_mean, y_mean = float(np.mean(x)), float(np.mean(decay_db))
-            num = float(np.sum((x - x_mean) * (decay_db - y_mean)))
-            den = float(np.sum((x - x_mean) ** 2))
-            if den == 0:
-                continue
-            slope = num / den
-            if slope >= 0:
-                continue
-            rt60 = abs(-60.0 / (slope / (_HOP_MS / 1000.0)))
-            if 0.0 < rt60 < 5.0:
-                rt60_estimates.append(rt60)
+        rt60_estimates, tail_ratios, pre_delay_estimates_ms = _measure_rt60_from_envelope(
+            envelope,
+            hop_ms=_HOP_MS,
+            transient_indices=transient_indices,
+            analysis_window_s=_ANALYSIS_WINDOW_S,
+            direct_ms=_DIRECT_MS,
+        )
 
         if not rt60_estimates:
-            return {"reverbDetail": {"rt60": None, "isWet": False, "tailEnergyRatio": None, "measured": False}}
+            return {"reverbDetail": {"rt60": None, "isWet": False, "tailEnergyRatio": None, "measured": False, "perBandRt60": None, "preDelayMs": None}}
 
         avg_rt60 = float(np.mean(rt60_estimates))
         avg_tail = float(np.mean(tail_ratios)) if tail_ratios else 0.2
         capped_rt60 = round(min(3.0, avg_rt60), 2)
+
+        # Per-band RT60: re-use the SAME transient indices on the broadband
+        # envelope so each band measures the same events. Bandpass the raw
+        # signal first, recompute the per-band envelope, then run the slope
+        # fit. Requires scipy.signal — if unavailable, omit per-band.
+        per_band_rt60: dict[str, float] | None = None
+        if scipy_signal is not None:
+            per_band: dict[str, float] = {}
+            for band_name, lo_hz, hi_hz in _REVERB_BANDS:
+                filtered = _bandpass_signal(mono_arr, sample_rate, lo_hz, hi_hz)
+                if filtered is None:
+                    continue
+                band_envelope = np.zeros(n_frames, dtype=np.float64)
+                for i in range(n_frames):
+                    s = i * hop_samples
+                    seg_b = filtered[s : s + hop_samples].astype(np.float64)
+                    band_envelope[i] = float(np.sqrt(np.mean(seg_b ** 2)))
+                band_rt60, _, _ = _measure_rt60_from_envelope(
+                    band_envelope,
+                    hop_ms=_HOP_MS,
+                    transient_indices=transient_indices,
+                    analysis_window_s=_ANALYSIS_WINDOW_S,
+                    direct_ms=_DIRECT_MS,
+                )
+                if band_rt60:
+                    per_band[band_name] = round(min(3.0, float(np.mean(band_rt60))), 2)
+            if per_band:
+                per_band_rt60 = per_band
+
+        median_pre_delay_ms: float | None = None
+        if pre_delay_estimates_ms:
+            median_pre_delay_ms = round(float(np.median(pre_delay_estimates_ms)), 2)
+
         return {
             "reverbDetail": {
                 "rt60": capped_rt60,
                 "isWet": avg_rt60 > 0.5,
                 "tailEnergyRatio": round(float(np.clip(avg_tail, 0.0, 1.0)), 2),
                 "measured": True,
+                "perBandRt60": per_band_rt60,
+                "preDelayMs": median_pre_delay_ms,
             }
         }
     except Exception as e:
@@ -373,7 +603,68 @@ def analyze_vocal_detail(
     for formant detection instead of browser FFT.
     """
     try:
+        # Demucs-ghost-stem check #1: vocals-stem RMS vs full-mix RMS. A vocals
+        # stem on a vocal-led track typically lands at 15-45% of full-mix RMS;
+        # a Demucs ghost stem on a track with NO real vocal drops below ~5%
+        # because Demucs has nothing real to extract and emits residual leakage.
+        full_mix_rms = float(
+            np.sqrt(np.mean(np.asarray(mono, dtype=np.float32) ** 2))
+        ) if mono is not None and getattr(mono, "size", 0) > 0 else 0.0
+
         source_mono = _load_stem_mono(stems, "vocals", sample_rate)
+        stem_energy_ratio: float | None = None
+        if source_mono is not None and full_mix_rms > 1e-6:
+            stem_rms = float(
+                np.sqrt(np.mean(np.asarray(source_mono, dtype=np.float32) ** 2))
+            )
+            stem_energy_ratio = float(min(2.0, stem_rms / full_mix_rms))
+
+        # Demucs-ghost-stem check #2: vocals-vs-other cross-correlation. The
+        # energy check above only catches *quiet* ghost stems; tracks with a
+        # melodic lead that Demucs misclassifies push real lead-synth content
+        # into the vocals stem at 20-40% RMS — energy alone won't flag those.
+        # But a genuine vocal is uncorrelated with the synth/melody stem (they
+        # come from different sources, different mics, different rooms); a
+        # misclassified lead is heavily correlated with the "other" stem
+        # because both are looking at the same underlying source. We compute
+        # Pearson correlation on a 200 Hz envelope-rate downsample, which is
+        # robust to phase differences while preserving amplitude structure.
+        stem_other_correlation: float | None = None
+        if source_mono is not None and stems is not None:
+            try:
+                other_mono = _load_stem_mono(stems, "other", sample_rate)
+                if (
+                    other_mono is not None
+                    and source_mono is not None
+                    and getattr(source_mono, "size", 0) > sample_rate // 100
+                    and getattr(other_mono, "size", 0) > sample_rate // 100
+                ):
+                    # Decimate to a 200 Hz envelope via |signal| then mean-pool.
+                    target_rate_hz = 200
+                    decimate = max(1, sample_rate // target_rate_hz)
+                    v_arr = np.abs(np.asarray(source_mono, dtype=np.float32))
+                    o_arr = np.abs(np.asarray(other_mono, dtype=np.float32))
+                    common = min(v_arr.size, o_arr.size)
+                    common -= common % decimate
+                    if common >= decimate * 4:
+                        v_env = v_arr[:common].reshape(-1, decimate).mean(axis=1)
+                        o_env = o_arr[:common].reshape(-1, decimate).mean(axis=1)
+                        v_std = float(np.std(v_env))
+                        o_std = float(np.std(o_env))
+                        if v_std > 1e-9 and o_std > 1e-9:
+                            corr = float(
+                                np.mean(
+                                    (v_env - v_env.mean()) * (o_env - o_env.mean())
+                                )
+                                / (v_std * o_std)
+                            )
+                            if np.isfinite(corr):
+                                stem_other_correlation = float(
+                                    max(-1.0, min(1.0, corr))
+                                )
+            except Exception:
+                stem_other_correlation = None
+
         if source_mono is None:
             source_mono = mono
         mono_arr = np.asarray(source_mono, dtype=np.float32)
@@ -398,9 +689,16 @@ def analyze_vocal_detail(
 
         # Expected formant centre frequencies for an average adult voice
         expected_formants = [500.0, 1500.0, 2500.0]
-        formant_tolerance = 200.0  # Hz
-        formant_match_total = 0
+        formant_tolerance = 100.0  # Hz — tightened from 200 to reject sustained
+                                   # synth harmonics that trivially fall inside a
+                                   # 400 Hz window around each expected formant.
         formant_frames = 0
+        # Per-sampled-frame record of which expected formants were matched and at
+        # what peak frequency. Used after the loop to compute a temporal-stability
+        # penalty: real vocals shift formants by 100+ Hz across syllables; a
+        # sustained synth lead has near-static "formants" because the harmonic
+        # series of a fixed pitch lands at nearly the same bin every frame.
+        per_frame_matches: list[list[float | None]] = []
 
         spectral_peaks_algo = es.SpectralPeaks(
             orderBy="frequency",
@@ -425,22 +723,64 @@ def analyze_vocal_detail(
                 if formant_low <= freq <= formant_high:
                     formant_energy_sum += energy
 
-            # Formant peak matching via SpectralPeaks (every 4th frame for speed)
+            # Formant peak matching via SpectralPeaks (every 4th frame for speed).
+            # Record the *closest* matched peak per expected formant so we can
+            # later compute the temporal variance of each formant's position.
             formant_frames += 1
             if formant_frames % 4 == 0:
-                peak_freqs, peak_mags = spectral_peaks_algo(spec)
-                frame_matches = 0
+                peak_freqs, _peak_mags = spectral_peaks_algo(spec)
+                matched: list[float | None] = []
                 for ef in expected_formants:
+                    closest: float | None = None
+                    closest_dist = formant_tolerance
                     for pf in peak_freqs:
-                        if abs(float(pf) - ef) < formant_tolerance:
-                            frame_matches += 1
-                            break
-                formant_match_total += frame_matches
+                        d = abs(float(pf) - ef)
+                        if d < closest_dist:
+                            closest_dist = d
+                            closest = float(pf)
+                    matched.append(closest)
+                per_frame_matches.append(matched)
 
         vocal_energy_ratio = vocal_energy_sum / total_energy_sum if total_energy_sum > 0 else 0.0
 
-        sampled_formant_frames = max(1, formant_frames // 4)
-        formant_strength = min(1.0, formant_match_total / sampled_formant_frames / 3.0)
+        sampled_formant_frames = max(1, len(per_frame_matches))
+        # 1) Count frames with at least 2 of 3 expected formants matched
+        #    (single-formant matches are noise; real vocal phones produce
+        #    coherent F1+F2 or F1+F2+F3 patterns).
+        coherent_frames = sum(
+            1 for matches in per_frame_matches
+            if sum(1 for m in matches if m is not None) >= 2
+        )
+        coherent_fraction = coherent_frames / sampled_formant_frames
+
+        # 2) Temporal-stability penalty: compute std-dev of the matched peak
+        #    frequency for each expected formant across the sampled frames.
+        #    A singer's formants drift 100-500 Hz with syllables and vibrato;
+        #    a sustained synth tone produces near-zero variance.
+        formant_movement_hz = 0.0
+        if sampled_formant_frames >= 4:
+            stds: list[float] = []
+            for slot in range(len(expected_formants)):
+                values = [
+                    matches[slot]
+                    for matches in per_frame_matches
+                    if matches[slot] is not None
+                ]
+                if len(values) >= 4:
+                    stds.append(float(np.std(values)))
+            if stds:
+                formant_movement_hz = float(np.mean(stds))
+        # Map mean std-dev to a [0.2, 1.0] multiplier. Below ~30 Hz movement
+        # the score is clamped at 0.2 (static-tone penalty); above ~120 Hz
+        # it saturates at 1.0 (normal vocal motion).
+        if formant_movement_hz <= 30.0:
+            movement_factor = 0.2
+        elif formant_movement_hz >= 120.0:
+            movement_factor = 1.0
+        else:
+            movement_factor = 0.2 + 0.8 * (formant_movement_hz - 30.0) / 90.0
+
+        formant_strength = min(1.0, coherent_fraction * movement_factor)
 
         # --- MFCC vocal likelihood ---
         mfcc_algo = es.MFCC(
@@ -481,7 +821,47 @@ def analyze_vocal_detail(
         # --- Composite score (35 / 35 / 30 weighting) ---
         energy_score = min(1.0, max(0.0, (vocal_energy_ratio - 0.1) / 0.3))
         confidence = energy_score * 0.35 + formant_strength * 0.35 + mfcc_likelihood * 0.30
-        has_vocals = confidence > 0.45
+
+        # Demucs-ghost-stem scaling #1 (low energy): when a vocals stem was
+        # loaded and its RMS is below ~5% of the full-mix RMS, the "vocals"
+        # Demucs produced are leakage from a track with no real vocal content.
+        # Scale composite confidence down linearly: at 0% stem energy → 0.0×;
+        # at 5% stem energy → 1.0× (no penalty). Above 5% the multiplier stays
+        # at 1.0.
+        if stem_energy_ratio is not None and stem_energy_ratio < 0.05:
+            ghost_multiplier = max(0.0, stem_energy_ratio / 0.05)
+            confidence = confidence * ghost_multiplier
+
+        # Demucs-ghost-stem scaling #2 (other-correlation): when the vocals
+        # stem is highly correlated with the "other" stem at the 200 Hz
+        # envelope rate, Demucs is splitting one source (typically a melodic
+        # lead) into two stems; the vocals stem is then misclassified content
+        # rather than a genuine voice. Empirical thresholds — corr ≤ 0.30 is
+        # uncorrelated and gets no penalty; corr ≥ 0.55 is heavily entangled
+        # and gets a 0.30× multiplier; in between we ramp.
+        if stem_other_correlation is not None and stem_other_correlation > 0.30:
+            if stem_other_correlation >= 0.55:
+                corr_multiplier = 0.30
+            else:
+                corr_multiplier = 1.0 - (
+                    (stem_other_correlation - 0.30) / 0.25
+                ) * 0.70
+            confidence = confidence * corr_multiplier
+
+        # Threshold raised from 0.45 to 0.55 (2026-05-12): the temporal-stability
+        # check on formant_strength now downweights synth leads that previously
+        # scored ~1.0 there. With the tighter formant logic, real vocals on
+        # representative material still clear 0.55 (energy_score≈0.7 +
+        # formant_strength≈0.6 + mfcc_likelihood≈0.7 ≈ 0.66 composite).
+        #
+        # Hard formant-strength gate (2026-05-12 follow-up): a sustained synth
+        # lead can still drag composite confidence above 0.55 via high
+        # energy_score + mfcc_likelihood, even with the static-formant penalty.
+        # Require formant_strength > 0.3 for the boolean decision — without
+        # measurable formant motion, the content is melodic/instrumental, not
+        # vocal phonemes. The numeric confidence field is unchanged so the UI
+        # can still display the hedged value; only `hasVocals` flips.
+        has_vocals = confidence > 0.55 and formant_strength > 0.3
 
         return {
             "vocalDetail": {
@@ -490,6 +870,14 @@ def analyze_vocal_detail(
                 "vocalEnergyRatio": round(float(vocal_energy_ratio), 2),
                 "formantStrength": round(float(formant_strength), 2),
                 "mfccLikelihood": round(float(mfcc_likelihood), 2),
+                "stemEnergyRatio": (
+                    round(float(stem_energy_ratio), 3)
+                    if stem_energy_ratio is not None else None
+                ),
+                "stemOtherCorrelation": (
+                    round(float(stem_other_correlation), 3)
+                    if stem_other_correlation is not None else None
+                ),
             }
         }
     except Exception as e:

@@ -21,10 +21,12 @@ class AnalysisRuntimeTests(unittest.TestCase):
     def test_resolve_measurement_flags_supports_known_pitch_note_modes(self) -> None:
         runtime = self._runtime()
 
-        # Pitch/note translation work is now handled by the dedicated pitch_note_translation stage,
-        # not inline during measurement. Both modes return (False, False).
+        # Phase 1.B change: ``stem_notes`` mode now also runs separation at
+        # measurement time so the stem-first overlay (stemAnalysis) populates
+        # without waiting on the pitch-note worker stage. Transcription still
+        # runs in its own stage, so ``run_transcribe`` stays False.
         self.assertEqual(runtime.resolve_measurement_flags("off"), (False, False))
-        self.assertEqual(runtime.resolve_measurement_flags("stem_notes"), (False, False))
+        self.assertEqual(runtime.resolve_measurement_flags("stem_notes"), (True, False))
 
     def test_resolve_measurement_flags_rejects_unknown_pitch_note_mode(self) -> None:
         runtime = self._runtime()

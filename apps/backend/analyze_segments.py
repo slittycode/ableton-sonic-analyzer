@@ -1,6 +1,7 @@
 """Per-segment analysis — loudness, stereo, spectral, key, and chords."""
 
 import sys
+from collections import Counter
 
 import numpy as np
 
@@ -9,7 +10,13 @@ try:
 except ImportError:
     es = None
 
-from dsp_utils import _safe_db, _compute_bark_db, _slice_segments, _to_finite_float
+from dsp_utils import (
+    _compute_bark_db,
+    _compute_stereo_metrics,
+    _safe_db,
+    _slice_segments,
+    _to_finite_float,
+)
 
 
 def analyze_segment_loudness(
@@ -333,6 +340,8 @@ def analyze_chords(mono: np.ndarray, sample_rate: int = 44100) -> dict:
                     "chordStrength": 0.0,
                     "progression": [],
                     "dominantChords": [],
+                    "chordTimeline": [],
+                    "chordChangeCount": 0,
                 }
             }
 
@@ -356,12 +365,94 @@ def analyze_chords(mono: np.ndarray, sample_rate: int = 44100) -> dict:
 
         dominant_chords = [label for label, _count in Counter(chords).most_common(4)]
 
+        # Phase 1.D #2 — temporal chord timeline. Each per-frame label is
+        # smoothed with a 5-frame median (≈ 250 ms at hop_size=2048/44.1k),
+        # then consecutive same-label frames are merged into segments with
+        # start/end times and the mean strength across that segment. Segments
+        # shorter than the smoothing window (after merging) are dropped to
+        # suppress noise; the cap of 64 segments keeps the payload bounded.
+        frame_duration_s = float(hop_size) / float(sample_rate)
+        smooth_window = 5  # frames
+
+        def _median_label(window: list[str]) -> str:
+            counts: dict[str, int] = {}
+            for label in window:
+                counts[label] = counts.get(label, 0) + 1
+            return max(counts.items(), key=lambda kv: kv[1])[0]
+
+        smoothed: list[str] = []
+        n_chords = len(chords)
+        for i in range(n_chords):
+            lo = max(0, i - smooth_window // 2)
+            hi = min(n_chords, i + smooth_window // 2 + 1)
+            smoothed.append(_median_label(chords[lo:hi]))
+
+        chord_timeline: list[dict] = []
+        if smoothed:
+            seg_label = smoothed[0]
+            seg_start_idx = 0
+            for idx in range(1, n_chords):
+                if smoothed[idx] != seg_label:
+                    seg_end_idx = idx
+                    seg_strength_slice = strength[seg_start_idx:seg_end_idx]
+                    seg_conf = (
+                        float(np.mean(seg_strength_slice))
+                        if seg_strength_slice.size > 0 else 0.0
+                    )
+                    chord_timeline.append({
+                        "startSec": round(seg_start_idx * frame_duration_s, 3),
+                        "endSec": round(seg_end_idx * frame_duration_s, 3),
+                        "label": seg_label,
+                        "confidence": round(seg_conf, 4),
+                    })
+                    seg_label = smoothed[idx]
+                    seg_start_idx = idx
+            # Flush the final open segment.
+            seg_strength_slice = strength[seg_start_idx:n_chords]
+            seg_conf = (
+                float(np.mean(seg_strength_slice))
+                if seg_strength_slice.size > 0 else 0.0
+            )
+            chord_timeline.append({
+                "startSec": round(seg_start_idx * frame_duration_s, 3),
+                "endSec": round(n_chords * frame_duration_s, 3),
+                "label": seg_label,
+                "confidence": round(seg_conf, 4),
+            })
+
+            # Drop segments shorter than the smoothing-window equivalent
+            # (≈ 250 ms). They typically reflect chord-detector noise around
+            # transitions rather than real harmonic events.
+            min_segment_s = smooth_window * frame_duration_s
+            chord_timeline = [
+                seg for seg in chord_timeline
+                if (seg["endSec"] - seg["startSec"]) >= min_segment_s
+            ]
+
+            # Cap at 64 segments. If we overflow, keep the 64 longest
+            # by duration — those carry the most musical weight.
+            if len(chord_timeline) > 64:
+                chord_timeline.sort(
+                    key=lambda seg: seg["endSec"] - seg["startSec"], reverse=True
+                )
+                chord_timeline = sorted(chord_timeline[:64], key=lambda s: s["startSec"])
+
+        # Count of unique chord-to-chord transitions in the smoothed sequence
+        # (a proxy for "how harmonically active is this track" — flat 1-chord
+        # tracks score 0; rapid-changes tracks score 16+).
+        chord_change_count = sum(
+            1 for i in range(1, len(chord_timeline))
+            if chord_timeline[i]["label"] != chord_timeline[i - 1]["label"]
+        )
+
         return {
             "chordDetail": {
                 "chordSequence": chord_sequence,
                 "chordStrength": chord_strength,
                 "progression": progression,
                 "dominantChords": dominant_chords,
+                "chordTimeline": chord_timeline,
+                "chordChangeCount": chord_change_count,
             }
         }
     except Exception as e:

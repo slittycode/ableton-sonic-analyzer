@@ -7,7 +7,12 @@ from pathlib import Path
 from typing import Any, Callable
 
 from analysis_runtime import AnalysisRuntime, UnsupportedPitchNoteModeError
-from server_phase1 import _coerce_nullable_number, _coerce_nullable_string, _safe_snippet
+from server_phase1 import (
+    _coerce_nullable_number,
+    _coerce_nullable_string,
+    _normalize_spectral_detail,
+    _safe_snippet,
+)
 
 
 GEMINI_RETRYABLE_SUBSTRINGS = [
@@ -167,6 +172,31 @@ def _load_live12_device_catalog(path: Path | None = None) -> dict[str, Any]:
             raise RuntimeError(
                 f"Live 12 device catalog entry '{name}' must have a non-empty allowedParameters array."
             )
+
+        # Optional parameterAliases: {alias_string: canonical_string} where every
+        # canonical_string must already be in allowedParameters. Catches typos in
+        # the alias-target at startup rather than at runtime.
+        aliases = device.get("parameterAliases")
+        if aliases is not None:
+            if not isinstance(aliases, dict):
+                raise RuntimeError(
+                    f"Live 12 device catalog entry '{name}' parameterAliases must be an object."
+                )
+            allowed_set = set(allowed_parameters)
+            for alias, canonical in aliases.items():
+                if not isinstance(alias, str) or not alias.strip():
+                    raise RuntimeError(
+                        f"Live 12 device catalog entry '{name}' parameterAliases has a non-string key."
+                    )
+                if not isinstance(canonical, str) or not canonical.strip():
+                    raise RuntimeError(
+                        f"Live 12 device catalog entry '{name}' parameterAliases['{alias}'] must be a non-empty string."
+                    )
+                if canonical not in allowed_set:
+                    raise RuntimeError(
+                        f"Live 12 device catalog entry '{name}' parameterAliases['{alias}'] -> "
+                        f"'{canonical}' is not in allowedParameters."
+                    )
 
     return catalog
 
@@ -461,6 +491,10 @@ PHASE2_RESPONSE_SCHEMA = {
                     "parameter": {"type": "STRING"},
                     "value": {"type": "STRING"},
                     "reason": {"type": "STRING"},
+                    "phase1Fields": {
+                        "type": "ARRAY",
+                        "items": {"type": "STRING"},
+                    },
                 },
                 "required": [
                     "order",
@@ -471,6 +505,7 @@ PHASE2_RESPONSE_SCHEMA = {
                     "parameter",
                     "value",
                     "reason",
+                    "phase1Fields",
                 ],
             },
         },
@@ -493,6 +528,10 @@ PHASE2_RESPONSE_SCHEMA = {
                             "value": {"type": "STRING"},
                             "instruction": {"type": "STRING"},
                             "measurementJustification": {"type": "STRING"},
+                            "phase1Fields": {
+                                "type": "ARRAY",
+                                "items": {"type": "STRING"},
+                            },
                         },
                         "required": [
                             "step",
@@ -502,6 +541,7 @@ PHASE2_RESPONSE_SCHEMA = {
                             "value",
                             "instruction",
                             "measurementJustification",
+                            "phase1Fields",
                         ],
                     },
                 },
@@ -534,6 +574,10 @@ PHASE2_RESPONSE_SCHEMA = {
                     "value": {"type": "STRING"},
                     "reason": {"type": "STRING"},
                     "advancedTip": {"type": "STRING"},
+                    "phase1Fields": {
+                        "type": "ARRAY",
+                        "items": {"type": "STRING"},
+                    },
                 },
                 "required": [
                     "device",
@@ -545,6 +589,7 @@ PHASE2_RESPONSE_SCHEMA = {
                     "value",
                     "reason",
                     "advancedTip",
+                    "phase1Fields",
                 ],
             },
         },
@@ -693,6 +738,46 @@ def _is_retryable_gemini_error(error_message: str) -> bool:
 
 
 
+def _normalize_measurement_result_for_gemini(payload: dict[str, Any]) -> dict[str, Any]:
+    """Rename the spectral fields Gemini sees so they match what the frontend
+    parses and what the Phase 2 citation contract names.
+
+    The analyzer emits ``spectralDetail.spectralCentroid`` (without the
+    ``Mean`` suffix) but ``server_phase1._build_phase1`` renames those keys to
+    ``spectralCentroidMean`` etc. when shaping the snapshot for the frontend.
+    Gemini was previously seeing the raw names, then citing them under
+    ``phase1Fields`` — and the validator (which checks against the
+    frontend-shaped Phase 1 payload) flagged those citations as invented
+    paths.
+
+    Applying the same renames here unifies the field-name contract: the JSON
+    Gemini reads, the JSON the frontend parses, and the paths the validator
+    accepts all line up. The normalization is applied to both the top-level
+    ``spectralDetail`` AND to every per-stem ``stemAnalysis.{stem}.spectralDetail``
+    so Gemini sees one consistent name everywhere.
+    """
+    if not isinstance(payload, dict):
+        return payload
+    normalized = dict(payload)
+    spectral_detail = normalized.get("spectralDetail")
+    if isinstance(spectral_detail, dict):
+        normalized["spectralDetail"] = _normalize_spectral_detail(spectral_detail)
+    stem_analysis = normalized.get("stemAnalysis")
+    if isinstance(stem_analysis, dict):
+        normalized_stems = {}
+        for stem_name, stem_entry in stem_analysis.items():
+            if not isinstance(stem_entry, dict):
+                normalized_stems[stem_name] = stem_entry
+                continue
+            stem_copy = dict(stem_entry)
+            stem_spectral_detail = stem_copy.get("spectralDetail")
+            if isinstance(stem_spectral_detail, dict):
+                stem_copy["spectralDetail"] = _normalize_spectral_detail(stem_spectral_detail)
+            normalized_stems[stem_name] = stem_copy
+        normalized["stemAnalysis"] = normalized_stems
+    return normalized
+
+
 def _build_phase2_prompt(
     *,
     measurement_result: dict[str, Any],
@@ -700,10 +785,11 @@ def _build_phase2_prompt(
     grounding_metadata: dict[str, Any],
     descriptor_hooks: dict[str, Any] | None = None,
 ) -> str:
+    measurement_for_gemini = _normalize_measurement_result_for_gemini(measurement_result)
     sections = [
         PRODUCER_SUMMARY_PROMPT_TEMPLATE.rstrip(),
         "\n\nAUTHORITATIVE_MEASUREMENT_RESULT_JSON:\n",
-        json.dumps(measurement_result, indent=2),
+        json.dumps(measurement_for_gemini, indent=2),
         "\n\nOPTIONAL_PITCH_NOTE_TRANSLATION_RESULT_JSON:\n",
         json.dumps(pitch_note_result, indent=2),
         "\n\nLIVE_12_DEVICE_CATALOG_JSON:\n",
@@ -2217,8 +2303,16 @@ def _validate_phase2_catalog_entry(
             )
         )
 
+    # Resolve aliases before membership check. parameterAliases is a
+    # per-device map of {wrong-but-defensible-name: canonical-name}. The
+    # alias only affects validation — the recommendation's emitted
+    # `parameter` value is NOT mutated by this layer. Closes the long-form
+    # naming bleed (instrument-side "Filter Resonance" misapplied to the
+    # Auto Filter audio effect).
+    alias_map = catalog_entry.get("parameterAliases") or {}
+    canonical_parameter = alias_map.get(parameter, parameter)
     allowed_parameters = set(catalog_entry.get("allowedParameters", []))
-    if parameter not in allowed_parameters:
+    if canonical_parameter not in allowed_parameters:
         warnings.append(
             _build_phase2_validation_warning(
                 code="UNKNOWN_PARAMETER",
