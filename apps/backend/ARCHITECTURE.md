@@ -70,6 +70,7 @@ Custom routes:
 - `POST /api/analysis-runs/estimate`
 - `POST /api/analysis-runs` — multipart upload OR URL ingestion. Provide *exactly one* of `track` (multipart `UploadFile`) or `url` (form field with a public `http`/`https` URL). URL mode is SSRF-guarded against private/loopback/link-local addresses and enforces the same 100 MiB cap via streaming. See [`url_ingest.py`](url_ingest.py).
 - `GET /api/analysis-runs/{run_id}`
+- `POST /api/analysis-runs/{run_id}/interrupt` — request graceful interruption of a queued/running run.
 - `DELETE /api/analysis-runs/{run_id}`
 - `GET /api/analysis-runs/{run_id}/artifacts` and `…/artifacts/{artifact_id}`
 - `GET /api/analysis-runs/{run_id}/export/csv/{field_path}` — CSV export of a Phase 1 time-series field. See [`docs/adr/0001-phase1-json-schema-v1.md`](../../docs/adr/0001-phase1-json-schema-v1.md) and the registry in [`csv_export.py`](csv_export.py).
@@ -190,42 +191,42 @@ Query parameters accepted by both routes:
 - `phase1`
 - `diagnostics`
 
-`phase1` contains normalized scalars:
+`phase1` contains normalized scalars (see [`server_phase1.py`](server_phase1.py) `_build_phase1` for the authoritative list):
 
-- `bpm`
-- `bpmConfidence`
-- `bpmPercival`
-- `bpmAgreement`
-- `key`
-- `keyConfidence`
-- `keyProfile`
-- `tuningFrequency`
-- `tuningCents`
-- `timeSignature`
-- `durationSeconds`
-- `sampleRate`
-- `lufsIntegrated`
-- `lufsRange`
-- `lufsMomentaryMax`
-- `lufsShortTermMax`
-- `truePeak`
-- `crestFactor`
-- `dynamicSpread`
-- `stereoWidth`
-- `stereoCorrelation`
-- `spectralBalance`
+- BPM family: `bpm`, `bpmConfidence`, `bpmPercival`, `bpmAgreement`, `bpmDoubletime`, `bpmSource`, `bpmRawOriginal`
+- Key family: `key`, `keyConfidence`, `keyProfile`, `tuningFrequency`, `tuningCents`
+- Time signature: `timeSignature`, `timeSignatureSource`, `timeSignatureConfidence`
+- Duration / sample rate: `durationSeconds`, `sampleRate`
+- Loudness: `lufsIntegrated`, `lufsRange`, `lufsMomentaryMax`, `lufsShortTermMax`, `lufsCurve`, `truePeak`, `plr`, `crestFactor`, `dynamicSpread`
+- Dynamics character: `dynamicCharacter`, `textureCharacter`
+- Stereo: `stereoWidth`, `stereoCorrelation`, `monoCompatible`
+- Spectral balance: `spectralBalance` (seven-band scalar object)
 
-`phase1` forwards these raw analyzer sections unchanged:
+`phase1` forwards these raw analyzer sections (re-normalized where noted):
 
-- `dynamicCharacter`
 - `stereoDetail`
-- `spectralDetail`
-- `rhythmDetail` (includes `tempoStability`, `phraseGrid`)
+- `spectralDetail` (per-stem keys are renamed to the top-level `Mean`-suffix shape by `_normalize_spectral_detail`)
+- `spectralBalanceTimeSeries`
+- `stemAnalysis` (per-stem spectralDetail renamed to match the top-level contract by `_normalize_stem_analysis`)
+- `transientDensityDetail`
+- `saturationDetail`
+- `snareDetail`
+- `hihatDetail`
+- `rhythmDetail` (includes `tempoStability`, `phraseGrid`, `tempoCurve`)
+- `rhythmTimeline`
 - `melodyDetail`
 - `transcriptionDetail`
+- `pitchDetail`
 - `grooveDetail`
 - `beatsLoudness`
 - `sidechainDetail` (includes `envelopeShape`)
+- `acidDetail`
+- `reverbDetail`
+- `vocalDetail`
+- `supersawDetail`
+- `bassDetail`
+- `kickDetail`
+- `genreDetail`
 - `effectsDetail`
 - `synthesisCharacter`
 - `danceability`

@@ -1,5 +1,7 @@
 # UI/UX Improvement Plan
 
+> **Archived 2026-05-13.** Completion record for the three-tier UI/UX polish workstream. Every tier shipped; verification numbers (33 smoke / 73 unit) reflect the snapshot at archive time and have since grown — see [`apps/ui/CHANGELOG.md`](../../../apps/ui/CHANGELOG.md) for current counts. Moved here from `apps/ui/UI_UX_IMPROVEMENTS.md` so the app directory holds only living docs.
+
 Prioritized backlog of UI/UX improvements for `sonic-analyzer-UI`.
 All three tiers are implemented.
 
