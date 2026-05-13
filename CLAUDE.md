@@ -177,10 +177,11 @@ DISABLE_HMR="false"              # set "true" for dev environments that need HMR
 
 # Backend (env var, no .env file)
 SONIC_ANALYZER_PORT=8100
-GEMINI_API_KEY="your_key_here"  # read by server.py at runtime, not in browser bundle
+GEMINI_API_KEY="your_key_here"           # read by server.py at runtime, not in browser bundle
+SONIC_ANALYZER_ADMIN_KEY="optional"      # if set, DELETE /api/analysis-runs/{run_id} accepts an X-Admin-Key header that bypasses ownership for operator-level purge. Unset by default; admin path is closed.
 ```
 
-Phase 2 is gated by `VITE_ENABLE_PHASE2_GEMINI`. `GEMINI_API_KEY` is backend-only.
+Phase 2 is gated by `VITE_ENABLE_PHASE2_GEMINI`. `GEMINI_API_KEY` is backend-only. `SONIC_ANALYZER_ADMIN_KEY` is backend-only and never exposed to clients.
 
 ## Key Guardrails
 

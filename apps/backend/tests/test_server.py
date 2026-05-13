@@ -1361,6 +1361,198 @@ class ServerContractTests(unittest.TestCase):
         payload = self._decode_json_response(response)
         self.assertEqual(response.status_code, 202)
         self.assertTrue(payload["deleted"])
+        # New: every deletion records who performed it.
+        self.assertEqual(payload["deletedBy"], "owner")
+
+    def test_delete_analysis_run_admin_key_can_delete_other_users_run(self) -> None:
+        """With SONIC_ANALYZER_ADMIN_KEY set and the matching header,
+        an operator can delete a run owned by a different user."""
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_server_runtime_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            created = runtime.create_run(
+                filename="track.mp3",
+                content=b"fake-audio",
+                mime_type="audio/mpeg",
+                owner_user_id="some_other_user",
+                analysis_mode="full",
+                pitch_note_mode="off",
+                pitch_note_backend="auto",
+                interpretation_mode="off",
+                interpretation_profile="producer_summary",
+                interpretation_model=None,
+            )
+            with (
+                patch.object(server, "get_analysis_runtime", return_value=runtime),
+                patch.object(
+                    server,
+                    "_interrupt_active_child_processes",
+                    return_value=[],
+                ),
+                patch.dict(
+                    server.os.environ,
+                    {
+                        "SONIC_ANALYZER_RUNTIME_PROFILE": "hosted",
+                        "SONIC_ANALYZER_ADMIN_KEY": "s3cret",
+                    },
+                    clear=False,
+                ),
+            ):
+                response = asyncio.run(
+                    server.delete_analysis_run(
+                        created["runId"],
+                        # Note: a *different* user makes the request,
+                        # OR no user header at all — the admin key
+                        # bypasses the ownership check entirely.
+                        x_asa_user_id="someone_else",
+                        x_admin_key="s3cret",
+                    )
+                )
+
+        payload = self._decode_json_response(response)
+        self.assertEqual(response.status_code, 202)
+        self.assertTrue(payload["deleted"])
+        self.assertEqual(payload["deletedBy"], "admin")
+
+    def test_delete_analysis_run_admin_key_works_without_user_header(self) -> None:
+        """The PR description claims the admin key skips user-context
+        resolution entirely. This test pins that claim: a request that
+        omits X-ASA-User-Id (which would fail in hosted mode under
+        ownership rules) still succeeds when X-Admin-Key matches.
+        """
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_server_runtime_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            created = runtime.create_run(
+                filename="track.mp3",
+                content=b"fake-audio",
+                mime_type="audio/mpeg",
+                owner_user_id="owner_user",
+                analysis_mode="full",
+                pitch_note_mode="off",
+                pitch_note_backend="auto",
+                interpretation_mode="off",
+                interpretation_profile="producer_summary",
+                interpretation_model=None,
+            )
+            with (
+                patch.object(server, "get_analysis_runtime", return_value=runtime),
+                patch.object(
+                    server,
+                    "_interrupt_active_child_processes",
+                    return_value=[],
+                ),
+                patch.dict(
+                    server.os.environ,
+                    {
+                        "SONIC_ANALYZER_RUNTIME_PROFILE": "hosted",
+                        "SONIC_ANALYZER_ADMIN_KEY": "s3cret",
+                    },
+                    clear=False,
+                ),
+            ):
+                response = asyncio.run(
+                    server.delete_analysis_run(
+                        created["runId"],
+                        # No X-ASA-User-Id header — admin path bypasses
+                        # user-context resolution. Under ownership rules
+                        # alone, this would 401 in hosted mode.
+                        x_asa_user_id=None,
+                        x_admin_key="s3cret",
+                    )
+                )
+
+        payload = self._decode_json_response(response)
+        self.assertEqual(response.status_code, 202)
+        self.assertTrue(payload["deleted"])
+        self.assertEqual(payload["deletedBy"], "admin")
+
+    def test_delete_analysis_run_wrong_admin_key_falls_back_to_ownership(self) -> None:
+        """Wrong X-Admin-Key value does not grant access; the request
+        is treated as a regular (non-admin) ownership-based delete.
+        A non-owner gets RUN_NOT_FOUND."""
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_server_runtime_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            created = runtime.create_run(
+                filename="track.mp3",
+                content=b"fake-audio",
+                mime_type="audio/mpeg",
+                owner_user_id="owner_user",
+                analysis_mode="full",
+                pitch_note_mode="off",
+                pitch_note_backend="auto",
+                interpretation_mode="off",
+                interpretation_profile="producer_summary",
+                interpretation_model=None,
+            )
+            with (
+                patch.object(server, "get_analysis_runtime", return_value=runtime),
+                patch.dict(
+                    server.os.environ,
+                    {
+                        "SONIC_ANALYZER_RUNTIME_PROFILE": "hosted",
+                        "SONIC_ANALYZER_ADMIN_KEY": "s3cret",
+                    },
+                    clear=False,
+                ),
+            ):
+                response = asyncio.run(
+                    server.delete_analysis_run(
+                        created["runId"],
+                        x_asa_user_id="not_the_owner",
+                        x_admin_key="WRONG",
+                    )
+                )
+
+        payload = self._decode_json_response(response)
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(payload["error"]["code"], "RUN_NOT_FOUND")
+
+    def test_delete_analysis_run_admin_key_unset_ignores_header(self) -> None:
+        """When SONIC_ANALYZER_ADMIN_KEY is unset, supplying any
+        X-Admin-Key header must NOT grant cross-user access."""
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_server_runtime_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            created = runtime.create_run(
+                filename="track.mp3",
+                content=b"fake-audio",
+                mime_type="audio/mpeg",
+                owner_user_id="owner_user",
+                analysis_mode="full",
+                pitch_note_mode="off",
+                pitch_note_backend="auto",
+                interpretation_mode="off",
+                interpretation_profile="producer_summary",
+                interpretation_model=None,
+            )
+            with (
+                patch.object(server, "get_analysis_runtime", return_value=runtime),
+                patch.dict(
+                    server.os.environ,
+                    {"SONIC_ANALYZER_RUNTIME_PROFILE": "hosted"},
+                    clear=False,
+                ),
+            ):
+                # Explicitly remove the admin env var to prove the
+                # admin path is closed.
+                server.os.environ.pop("SONIC_ANALYZER_ADMIN_KEY", None)
+                response = asyncio.run(
+                    server.delete_analysis_run(
+                        created["runId"],
+                        x_asa_user_id="not_the_owner",
+                        x_admin_key="anything-here",
+                    )
+                )
+
+        payload = self._decode_json_response(response)
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(payload["error"]["code"], "RUN_NOT_FOUND")
 
     @patch.object(server, "get_audio_duration_seconds", return_value=214.6, create=True)
     @patch.object(
