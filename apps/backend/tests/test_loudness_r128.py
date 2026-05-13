@@ -22,11 +22,16 @@ What we test:
    the original spike (``analyze_core.analyze_loudness`` now takes
    ``sample_rate`` and threads it to ``LoudnessEBUR128(sampleRate=…)``).
 
+5. Parameter-wiring tests (``TestAnalyzeLoudnessThreadsSampleRateToEssentia``)
+   that patch ``analyze_core.es.LoudnessEBUR128`` and assert
+   ``sampleRate=<the value passed>`` reaches Essentia. These cover the gap
+   the 1 kHz tolerance tests cannot: at 1 kHz the K-weighting bias between
+   44.1 kHz and 48 kHz coefficient sets is under 0.05 LU and the function
+   rounds to one decimal, so a silently-swallowed parameter would still
+   pass a tolerance assertion. The mock-based assertions catch that.
+
 The ±0.1 LU tolerance is the EBU R128 compliance gate for "EBU Mode" loudness
-meters. See the "NOTE on coverage limits" at the bottom of this file for
-what these tests do and do not catch — in particular, the 1 kHz signals
-cannot tightly prove that the ``sample_rate`` parameter actually reaches
-Essentia.
+meters.
 
 All synthetic signals are generated procedurally; no test fixtures are
 downloaded or committed.
@@ -38,6 +43,7 @@ import math
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 
@@ -49,11 +55,13 @@ if str(_BACKEND_ROOT) not in sys.path:
 
 try:
     import essentia.standard as es  # noqa: F401
+    import analyze_core
     from analyze_core import analyze_loudness
     ESSENTIA_AVAILABLE = True
 except Exception:  # pragma: no cover - guarded by skip
     ESSENTIA_AVAILABLE = False
     es = None  # type: ignore[assignment]
+    analyze_core = None  # type: ignore[assignment]
     analyze_loudness = None  # type: ignore[assignment]
 
 
@@ -234,24 +242,85 @@ class TestLoudnessR128ThroughAnalyzeLoudnessAt48kHz(unittest.TestCase):
         )
 
 
+@unittest.skipUnless(ESSENTIA_AVAILABLE, "Essentia not available in test env")
+class TestAnalyzeLoudnessThreadsSampleRateToEssentia(unittest.TestCase):
+    """White-box: ``analyze_loudness`` must construct ``LoudnessEBUR128``
+    with ``sampleRate=<the value the caller passed>``.
+
+    The tolerance-based tests above (1 kHz Tech 3341 cases) cannot prove
+    this on their own. At 1 kHz the K-weighting bias between 44.1 kHz and
+    48 kHz coefficient sets is well under 0.05 LU, and ``analyze_loudness``
+    rounds the integrated value to one decimal — so a silently-swallowed
+    ``sample_rate`` parameter would still pass the 1 kHz compliance tests.
+
+    These tests assert the parameter wiring directly by patching
+    ``analyze_core.es.LoudnessEBUR128`` and inspecting the kwargs passed
+    to it. Mock-based and white-box, by design.
+    """
+
+    @staticmethod
+    def _make_fake_loudness_class() -> mock.MagicMock:
+        """Build a stand-in for ``es.LoudnessEBUR128``.
+
+        Calling ``LoudnessEBUR128(sampleRate=X)`` returns an *instance*;
+        the instance is then called with the stereo array and returns
+        ``(momentary_array, short_term_array, integrated_scalar,
+        loudness_range_scalar)``. The mock matches that shape so
+        ``analyze_loudness`` can complete without raising.
+        """
+        fake_class = mock.MagicMock(name="LoudnessEBUR128_class")
+        fake_instance = mock.MagicMock(name="LoudnessEBUR128_instance")
+        fake_instance.return_value = (
+            np.zeros(10, dtype=np.float64),
+            np.zeros(10, dtype=np.float64),
+            -23.0,
+            5.0,
+        )
+        fake_class.return_value = fake_instance
+        return fake_class
+
+    def test_explicit_sample_rate_is_passed_to_LoudnessEBUR128(self) -> None:
+        stereo = _make_stereo_sine(
+            peak_dbfs=-23.0, duration_s=1.0, sample_rate=48_000
+        )
+
+        fake_class = self._make_fake_loudness_class()
+        with mock.patch.object(
+            analyze_core.es, "LoudnessEBUR128", new=fake_class
+        ):
+            analyze_loudness(stereo, sample_rate=48_000)
+
+        fake_class.assert_called_once_with(sampleRate=48_000)
+
+    def test_default_sample_rate_is_44100(self) -> None:
+        stereo = _make_stereo_sine(
+            peak_dbfs=-23.0, duration_s=1.0, sample_rate=44_100
+        )
+
+        fake_class = self._make_fake_loudness_class()
+        with mock.patch.object(
+            analyze_core.es, "LoudnessEBUR128", new=fake_class
+        ):
+            analyze_loudness(stereo)  # no sample_rate kwarg
+
+        fake_class.assert_called_once_with(sampleRate=44_100)
+
+    def test_unusual_sample_rate_is_passed_verbatim(self) -> None:
+        """Guards against a future change that might clamp or normalize the
+        sample_rate argument. Whatever the caller passes must reach Essentia.
+        """
+        stereo = _make_stereo_sine(
+            peak_dbfs=-23.0, duration_s=1.0, sample_rate=96_000
+        )
+
+        fake_class = self._make_fake_loudness_class()
+        with mock.patch.object(
+            analyze_core.es, "LoudnessEBUR128", new=fake_class
+        ):
+            analyze_loudness(stereo, sample_rate=96_000)
+
+        fake_class.assert_called_once_with(sampleRate=96_000)
+
+
 if __name__ == "__main__":
     unittest.main()
-
-
-# NOTE on coverage limits
-# -----------------------
-# The 1 kHz tone in TestLoudnessR128ThroughAnalyzeLoudnessAt48kHz proves
-# ``analyze_loudness`` is callable with ``sample_rate=48000`` and produces
-# a compliance-grade integrated LUFS. It does NOT tightly prove that the
-# ``sample_rate`` argument reaches Essentia — at 1 kHz, K-weighting bias
-# between 44.1 kHz and 48 kHz coefficient sets is well under 0.05 LU, and
-# ``analyze_loudness`` rounds the integrated value to one decimal, so a
-# silently-swallowed parameter would still pass.
-#
-# A tighter wiring test would need either (a) white-box mocking of
-# ``es.LoudnessEBUR128`` to assert the ``sampleRate=…`` kwarg is passed,
-# or (b) a broadband fixture and a tighter (sub-0.1 LU) tolerance against
-# a pre-computed reference value derived from Essentia's specific
-# K-filter coefficient adaptation. Both are deferred — the function's
-# behavior is small and inspectable, and analyze_fast.py + analyze_segments.py
-# have been doing this correctly for some time.
