@@ -1,32 +1,37 @@
-"""EBU R128 verification spike for ASA's loudness path.
+"""EBU R128 verification + regression gate for ASA's loudness path.
 
 Track 1 of the external-repo incorporation plan (docs/external-repo-review-2026-05-13.md)
 asked: is ASA's integrated-LUFS implementation correct, or does it lag the BS.1770-5
 revision? This module answers that with the EBU Tech 3341 compliance signals — the
-canonical loudness conformance test set.
+canonical loudness conformance test set — and now also gates the sample-rate
+threading fix that closed the spike's open finding.
 
 What we test:
 
-1. Tech 3341 Case 1 — stereo 1 kHz sine at -23.0 dB FS for 20 s.
-   Expected integrated loudness: -23.0 ±0.1 LUFS.
+1. Tech 3341 Case 1 — stereo 1 kHz sine at -23.0 dB FS for 20 s @ 44.1 kHz.
+   Expected integrated loudness: -23.0 ±0.1 LUFS via ``analyze_loudness``.
 
-2. Tech 3341 Case 2 — stereo 1 kHz sine at -33.0 dB FS for 20 s.
-   Expected integrated loudness: -33.0 ±0.1 LUFS.
+2. Tech 3341 Case 2 — stereo 1 kHz sine at -33.0 dB FS for 20 s @ 44.1 kHz.
+   Expected integrated loudness: -33.0 ±0.1 LUFS via ``analyze_loudness``.
+
+3. Case 1 at 48 kHz against Essentia directly — proves the BS.1770 algorithm
+   is correct at non-44.1 rates when the sample rate is threaded through.
+
+4. Case 1 at 48 kHz via ``analyze_loudness(stereo, sample_rate=48000)`` —
+   end-to-end regression gate for the fix that closed the open finding from
+   the original spike (``analyze_core.analyze_loudness`` now takes
+   ``sample_rate`` and threads it to ``LoudnessEBUR128(sampleRate=…)``).
+
+5. Parameter-wiring tests (``TestAnalyzeLoudnessThreadsSampleRateToEssentia``)
+   that patch ``analyze_core.es.LoudnessEBUR128`` and assert
+   ``sampleRate=<the value passed>`` reaches Essentia. These cover the gap
+   the 1 kHz tolerance tests cannot: at 1 kHz the K-weighting bias between
+   44.1 kHz and 48 kHz coefficient sets is under 0.05 LU and the function
+   rounds to one decimal, so a silently-swallowed parameter would still
+   pass a tolerance assertion. The mock-based assertions catch that.
 
 The ±0.1 LU tolerance is the EBU R128 compliance gate for "EBU Mode" loudness
-meters. If both cases pass on ASA's actual call path (`analyze_loudness` →
-Essentia's `LoudnessEBUR128`), the review's premise check is positive: no
-algorithm rewrite needed.
-
-Both tests run at 44.1 kHz because that is the sample rate ASA's full pipeline
-uses for the LUFS call (`analyze_core.py:197` calls `LoudnessEBUR128()` with no
-explicit `sampleRate`, defaulting to 44100). A third test calls Essentia
-directly at 48 kHz with the sample rate threaded through, demonstrating that
-the algorithm itself is correct at non-44.1 rates when given the right input —
-which is the case `analyze_fast.py:100` already handles. The gap between
-`analyze_core` and `analyze_fast` on sample-rate threading is logged as a
-follow-up finding from this spike (not fixed here — out of scope for a
-verification-only spike).
+meters.
 
 All synthetic signals are generated procedurally; no test fixtures are
 downloaded or committed.
@@ -38,6 +43,7 @@ import math
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 
@@ -49,11 +55,13 @@ if str(_BACKEND_ROOT) not in sys.path:
 
 try:
     import essentia.standard as es  # noqa: F401
+    import analyze_core
     from analyze_core import analyze_loudness
     ESSENTIA_AVAILABLE = True
 except Exception:  # pragma: no cover - guarded by skip
     ESSENTIA_AVAILABLE = False
     es = None  # type: ignore[assignment]
+    analyze_core = None  # type: ignore[assignment]
     analyze_loudness = None  # type: ignore[assignment]
 
 
@@ -151,11 +159,13 @@ class TestLoudnessR128AtNon441kHz(unittest.TestCase):
     observed on 48 kHz sources via ``analyze_loudness`` is a *call-site
     bug* (sample rate not threaded), not an algorithm bug.
 
-    This is the open finding from the spike documented in
-    docs/external-repo-review-2026-05-13.md (Track 1 follow-up): the
-    full pipeline calls ``analyze_loudness(stereo)`` after
-    ``load_stereo`` returns audio at the source's native rate, so any
-    48 kHz source today gets measured against 44.1 kHz K-weighting.
+    Originally the open finding from the verification spike documented
+    in docs/external-repo-review-2026-05-13.md (Track 1 follow-up). The
+    follow-up fix lives in this branch's companion edits to
+    ``analyze_core.analyze_loudness`` (now takes ``sample_rate``) and
+    its call sites in ``analyze.py``; the regression test below
+    (``TestLoudnessR128ThroughAnalyzeLoudnessAt48kHz``) is the
+    end-to-end gate for that fix.
     """
 
     SAMPLE_RATE_HZ = 48_000
@@ -185,6 +195,131 @@ class TestLoudnessR128AtNon441kHz(unittest.TestCase):
                 f"rates and the call-site fix would not help."
             ),
         )
+
+
+@unittest.skipUnless(ESSENTIA_AVAILABLE, "Essentia not available in test env")
+class TestLoudnessR128ThroughAnalyzeLoudnessAt48kHz(unittest.TestCase):
+    """End-to-end gate for the sample-rate threading fix.
+
+    Before the fix, ``analyze_loudness(stereo)`` instantiated
+    ``LoudnessEBUR128()`` with no ``sampleRate`` argument (defaulting
+    to 44100), so a 48 kHz stereo array got measured against K-weighting
+    coefficients tuned for 44.1 kHz. The bias is small at 1 kHz but
+    non-zero, and grows with frequency.
+
+    After the fix, ``analyze_loudness(stereo, sample_rate=48000)`` must
+    produce the same -23.0 ±0.1 LUFS that the direct-Essentia probe
+    above produces. A failure here is a regression on the fix.
+    """
+
+    SAMPLE_RATE_HZ = 48_000
+    DURATION_S = 20.0
+
+    def test_case1_through_analyze_loudness_at_48khz(self) -> None:
+        """At 48 kHz, analyze_loudness must produce -23.0 ±0.1 LUFS
+        when the caller threads the sample rate through.
+        """
+        stereo = _make_stereo_sine(
+            peak_dbfs=-23.0,
+            duration_s=self.DURATION_S,
+            sample_rate=self.SAMPLE_RATE_HZ,
+        )
+
+        result = analyze_loudness(stereo, sample_rate=self.SAMPLE_RATE_HZ)
+        integrated = result.get("lufsIntegrated")
+
+        self.assertIsNotNone(integrated)
+        self.assertAlmostEqual(
+            integrated,
+            -23.0,
+            delta=LUFS_TOLERANCE,
+            msg=(
+                f"analyze_loudness at 48 kHz: expected -23.0 ±{LUFS_TOLERANCE} "
+                f"LUFS, got {integrated}. If this fails, either the "
+                f"sample_rate parameter is not being threaded to Essentia "
+                f"or the K-weighting filter is mis-tuned."
+            ),
+        )
+
+
+@unittest.skipUnless(ESSENTIA_AVAILABLE, "Essentia not available in test env")
+class TestAnalyzeLoudnessThreadsSampleRateToEssentia(unittest.TestCase):
+    """White-box: ``analyze_loudness`` must construct ``LoudnessEBUR128``
+    with ``sampleRate=<the value the caller passed>``.
+
+    The tolerance-based tests above (1 kHz Tech 3341 cases) cannot prove
+    this on their own. At 1 kHz the K-weighting bias between 44.1 kHz and
+    48 kHz coefficient sets is well under 0.05 LU, and ``analyze_loudness``
+    rounds the integrated value to one decimal — so a silently-swallowed
+    ``sample_rate`` parameter would still pass the 1 kHz compliance tests.
+
+    These tests assert the parameter wiring directly by patching
+    ``analyze_core.es.LoudnessEBUR128`` and inspecting the kwargs passed
+    to it. Mock-based and white-box, by design.
+    """
+
+    @staticmethod
+    def _make_fake_loudness_class() -> mock.MagicMock:
+        """Build a stand-in for ``es.LoudnessEBUR128``.
+
+        Calling ``LoudnessEBUR128(sampleRate=X)`` returns an *instance*;
+        the instance is then called with the stereo array and returns
+        ``(momentary_array, short_term_array, integrated_scalar,
+        loudness_range_scalar)``. The mock matches that shape so
+        ``analyze_loudness`` can complete without raising.
+        """
+        fake_class = mock.MagicMock(name="LoudnessEBUR128_class")
+        fake_instance = mock.MagicMock(name="LoudnessEBUR128_instance")
+        fake_instance.return_value = (
+            np.zeros(10, dtype=np.float64),
+            np.zeros(10, dtype=np.float64),
+            -23.0,
+            5.0,
+        )
+        fake_class.return_value = fake_instance
+        return fake_class
+
+    def test_explicit_sample_rate_is_passed_to_LoudnessEBUR128(self) -> None:
+        stereo = _make_stereo_sine(
+            peak_dbfs=-23.0, duration_s=1.0, sample_rate=48_000
+        )
+
+        fake_class = self._make_fake_loudness_class()
+        with mock.patch.object(
+            analyze_core.es, "LoudnessEBUR128", new=fake_class
+        ):
+            analyze_loudness(stereo, sample_rate=48_000)
+
+        fake_class.assert_called_once_with(sampleRate=48_000)
+
+    def test_default_sample_rate_is_44100(self) -> None:
+        stereo = _make_stereo_sine(
+            peak_dbfs=-23.0, duration_s=1.0, sample_rate=44_100
+        )
+
+        fake_class = self._make_fake_loudness_class()
+        with mock.patch.object(
+            analyze_core.es, "LoudnessEBUR128", new=fake_class
+        ):
+            analyze_loudness(stereo)  # no sample_rate kwarg
+
+        fake_class.assert_called_once_with(sampleRate=44_100)
+
+    def test_unusual_sample_rate_is_passed_verbatim(self) -> None:
+        """Guards against a future change that might clamp or normalize the
+        sample_rate argument. Whatever the caller passes must reach Essentia.
+        """
+        stereo = _make_stereo_sine(
+            peak_dbfs=-23.0, duration_s=1.0, sample_rate=96_000
+        )
+
+        fake_class = self._make_fake_loudness_class()
+        with mock.patch.object(
+            analyze_core.es, "LoudnessEBUR128", new=fake_class
+        ):
+            analyze_loudness(stereo, sample_rate=96_000)
+
+        fake_class.assert_called_once_with(sampleRate=96_000)
 
 
 if __name__ == "__main__":
