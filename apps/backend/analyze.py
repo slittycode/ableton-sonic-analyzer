@@ -1239,7 +1239,12 @@ def _run_per_stem_analyses(
 
         if stereo is not None and isinstance(stereo, np.ndarray) and stereo.ndim == 2 and stereo.shape[1] >= 2:
             try:
-                loudness_block = analyze_loudness(stereo)
+                # Demucs writes stems at 44.1 kHz regardless of the source's
+                # native rate (see analyze_audio_io._load_stem_stereo, which
+                # does not resample). The function's `sample_rate` parameter
+                # targets the resampled mono path, not the stereo stem, so
+                # we hardcode 44.1 kHz here for the K-weighting filter.
+                loudness_block = analyze_loudness(stereo, sample_rate=44_100)
                 per_stem["lufsIntegrated"] = loudness_block.get("lufsIntegrated")
                 per_stem["lufsRange"] = loudness_block.get("lufsRange")
                 per_stem["lufsMomentaryMax"] = loudness_block.get("lufsMomentaryMax")
@@ -1492,9 +1497,12 @@ def main():
     result.update(analyze_time_signature(rhythm_data, mono=mono, sample_rate=sample_rate))
     result.update(analyze_duration_and_sr(mono, sample_rate))
 
-    # LUFS + LRA (needs stereo)
+    # LUFS + LRA (needs stereo at its native sample rate — load_stereo does
+    # not resample, so a 48 kHz source must be measured against 48 kHz
+    # K-weighting coefficients. `sr` here is the source rate returned by
+    # load_stereo above; thread it through so Essentia's filter is correct.
     if stereo is not None:
-        result.update(analyze_loudness(stereo))
+        result.update(analyze_loudness(stereo, sample_rate=sr))
     else:
         result["lufsIntegrated"] = None
         result["lufsRange"] = None

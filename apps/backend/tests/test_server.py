@@ -4204,5 +4204,138 @@ class Phase2CatalogValidationTests(unittest.TestCase):
         self.assertEqual(self._codes(warnings), ["UNKNOWN_PARAMETER"])
 
 
+class CsvExportRouteTests(unittest.TestCase):
+    """Route tests for GET /api/analysis-runs/{run_id}/export/csv/{field_path}.
+
+    The pure CSV serialization logic is covered by tests/test_csv_export.py.
+    These tests verify only the HTTP shell: status codes, error envelopes,
+    headers, and that the route correctly pulls the measurement payload
+    out of the run snapshot.
+    """
+
+    def _decode_json_response(self, response) -> dict:
+        return json.loads(response.body.decode("utf-8"))
+
+    def _make_run_with_measurement(self, runtime, measurement_payload: dict) -> str:
+        created = runtime.create_run(
+            filename="track.mp3",
+            content=b"fake-audio",
+            mime_type="audio/mpeg",
+            pitch_note_mode="off",
+            pitch_note_backend="auto",
+            interpretation_mode="off",
+            interpretation_profile="producer_summary",
+            interpretation_model=None,
+        )
+        runtime.complete_measurement(
+            created["runId"],
+            payload=measurement_payload,
+            provenance={"schemaVersion": "measurement.v1", "engineVersion": "analyze.py"},
+            diagnostics={"backendDurationMs": 1000},
+        )
+        return created["runId"]
+
+    def test_returns_csv_with_attachment_disposition_on_success(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_csv_export_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            run_id = self._make_run_with_measurement(
+                runtime,
+                measurement_payload={
+                    "lufsCurve": {
+                        "shortTerm": [
+                            {"t": 0.0, "lufs": -23.0},
+                            {"t": 0.5, "lufs": -22.5},
+                        ],
+                        "momentary": None,
+                    },
+                },
+            )
+
+            with patch.object(server, "get_analysis_runtime", return_value=runtime):
+                response = asyncio.run(
+                    server.export_run_field_as_csv(
+                        run_id,
+                        "lufsCurve.shortTerm",
+                    )
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            response.media_type.startswith("text/csv"),
+            f"Expected text/csv media type, got {response.media_type!r}",
+        )
+        # Body is bytes — decode and check the header row
+        body_text = response.body.decode("utf-8")
+        self.assertTrue(body_text.startswith("time,duration,lufs"))
+        self.assertIn("0.000000,3.0,-23.00", body_text)
+        # Content-Disposition includes the run id and dotless field path
+        disposition = response.headers.get("content-disposition", "")
+        self.assertIn(f"{run_id}_lufsCurve_shortTerm.csv", disposition)
+
+    def test_unsupported_field_path_returns_404(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_csv_export_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            run_id = self._make_run_with_measurement(
+                runtime, measurement_payload={"bpm": 128}
+            )
+
+            with patch.object(server, "get_analysis_runtime", return_value=runtime):
+                response = asyncio.run(
+                    server.export_run_field_as_csv(run_id, "bpm")
+                )
+
+        self.assertEqual(response.status_code, 404)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["error"]["code"], "EXPORT_FIELD_NOT_SUPPORTED")
+        # The error message must list the supported paths so the caller
+        # can fix their request without reading the source.
+        self.assertIn("lufsCurve.shortTerm", payload["error"]["message"])
+
+    def test_field_supported_but_not_populated_returns_404(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_csv_export_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            run_id = self._make_run_with_measurement(
+                runtime,
+                measurement_payload={
+                    # tempoCurve is explicitly null — the analyzer ran but
+                    # produced no per-point data for this audio.
+                    "rhythmDetail": {"tempoCurve": None},
+                },
+            )
+
+            with patch.object(server, "get_analysis_runtime", return_value=runtime):
+                response = asyncio.run(
+                    server.export_run_field_as_csv(
+                        run_id, "rhythmDetail.tempoCurve"
+                    )
+                )
+
+        self.assertEqual(response.status_code, 404)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["error"]["code"], "EXPORT_FIELD_NOT_AVAILABLE")
+
+    def test_unknown_run_returns_404(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_csv_export_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            with patch.object(server, "get_analysis_runtime", return_value=runtime):
+                response = asyncio.run(
+                    server.export_run_field_as_csv(
+                        "does-not-exist", "lufsCurve.shortTerm"
+                    )
+                )
+
+        self.assertEqual(response.status_code, 404)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["error"]["code"], "RUN_NOT_FOUND")
+
+
 if __name__ == "__main__":
     unittest.main()

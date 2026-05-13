@@ -183,7 +183,7 @@ def analyze_key(mono: np.ndarray) -> dict:
         return {"key": None, "keyConfidence": None, "keyProfile": "edma", "tuningFrequency": None, "tuningCents": None}
 
 
-def analyze_loudness(stereo: np.ndarray) -> dict:
+def analyze_loudness(stereo: np.ndarray, sample_rate: int = 44_100) -> dict:
     """LUFS integrated loudness, range, max momentary/short-term, plus the
     downsampled momentary + short-term curves over time.
 
@@ -192,9 +192,16 @@ def analyze_loudness(stereo: np.ndarray) -> dict:
     moments occur, not just how loud they peaked. Phase 2 cites
     ``lufsCurve.shortTerm`` to explain drop vs breakdown contrast in section
     advice.
+
+    ``sample_rate`` must be the rate of ``stereo`` (e.g. what ``load_stereo``
+    returns alongside the audio). Essentia's K-weighting filter coefficients
+    are sample-rate dependent; passing the wrong rate quietly mis-tunes the
+    filter and biases the reported LUFS — small for 1 kHz tones, larger for
+    broadband program material. EBU R128 compliance against the Tech 3341
+    test set is asserted by ``tests/test_loudness_r128.py``.
     """
     try:
-        loudness = es.LoudnessEBUR128()
+        loudness = es.LoudnessEBUR128(sampleRate=sample_rate)
         momentary, short_term, integrated, loudness_range = loudness(stereo)
         momentary_arr = np.asarray(momentary, dtype=np.float64)
         short_term_arr = np.asarray(short_term, dtype=np.float64)
