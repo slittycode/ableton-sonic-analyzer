@@ -1,6 +1,8 @@
- Phase 1 Hardening Plan
+# Phase 1 Hardening Plan (alt)
 
- Context
+> **Archived 2026-05-12.** Superseded by the more detailed [`PLAN-phase1-hardening.md`](../../PLAN-phase1-hardening.md) at the repo root. Both plans pre-date the `analyze.py` module split (commit `5c40dd44`), so every Python line number they cite is now invalid — the functions live in `analyze_core.py`, `analyze_detection.py`, `analyze_rhythm.py`, `analyze_structure.py`, `analyze_segments.py`, and `analyze_transcription.py`. Use this file only for the framing of what hardening targets were originally proposed; ship status lives in [`CHANGELOG.md`](../../CHANGELOG.md).
+
+## Context
 
  The ASA DSP engine (analyze.py) computes ~41 feature fields but server.py drops 7 of them and the UI renders only ~50% of what arrives. This plan unblocks the full pipeline end-to-end: pass all measurements through, add 6 DSP extensions achievable with existing
  Essentia/NumPy, strongly type the TypeScript contract (eliminating all Record<string, unknown>), and build an 8-section grouped measurement dashboard.

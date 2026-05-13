@@ -1,5 +1,7 @@
 # ASA Refactor — Architecture State
 
+> **Archived 2026-05-12.** This is a completion record for the Phase A / B1 / B2 refactor finished on 2026-03-18. The "What's Left" items it lists (artifact TTL, terminology sweep) were not separately tracked — re-open them in `BACKLOG.md` if still needed. For the current architecture see [`docs/ARCHITECTURE_STRATEGY.md`](../ARCHITECTURE_STRATEGY.md) and [`docs/PUBLIC_HOSTING_FOUNDATION.md`](../PUBLIC_HOSTING_FOUNDATION.md).
+
 _Last updated: 2026-03-18_
 
 ## Current State

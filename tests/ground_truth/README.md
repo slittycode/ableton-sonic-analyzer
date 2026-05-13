@@ -42,6 +42,6 @@ python3 scripts/calibrate_confidence.py \
 
 ## Related files
 
-- `scripts/calibrate_confidence.py` — the calibration runner
-- `docs/confidence_calibration_results.md` — the output report, currently invalidated
+- `scripts/calibrate_confidence.py` — the calibration runner (writes to `docs/confidence_calibration_results.md` by default; create that file fresh on the next real-audio run)
+- [`docs/archive/confidence-calibration-results-stubs.md`](../../docs/archive/confidence-calibration-results-stubs.md) — invalidated historical run against stub data, kept for reference
 - `apps/backend/scripts/genre_corpus.md` — genre selection criteria

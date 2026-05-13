@@ -106,10 +106,16 @@ python3.11 -m venv venv
 
 ## File Map
 
-- `analyze.py`: DSP pipeline, raw JSON generation, optional separation/transcription.
-- `server.py`: HTTP transport, temp file handling, estimate/timeout logic, subprocess execution, response normalization.
+- `analyze.py`: CLI entry point. Coordinates the split `analyze_*.py` feature modules and emits the raw JSON.
+- `analyze_core.py`, `analyze_audio_io.py`, `analyze_detection.py`, `analyze_estimate.py`, `analyze_rhythm.py`, `analyze_segments.py`, `analyze_structure.py`, `analyze_transcription.py`, `analyze_fast.py`: Feature modules (BPM/key/LUFS/stereo, rhythm/melody/groove, segments, structure, transcription, the `--fast` pipeline). Split from the original monolith in commit `5c40dd44` — keep the split when adding features.
+- `server.py` + `server_phase1.py`, `server_phase2.py`, `server_upload.py`: FastAPI app + route modules. Multipart upload handling, subprocess execution, envelope normalization.
+- `analysis_runtime.py`: SQLite-backed run state, stage queue, artifact metadata.
+- `worker.py`, `runtime_profile.py`, `auth_context.py`, `artifact_storage.py`: Hosted-mode foundation. Local mode shouldn't branch through these unless it has to.
+- `upload_limits.py`: Canonical 100 MiB raw-audio / 101 MiB request-envelope limits. Operator contract is generated, not hand-edited.
+- `spectral_viz.py`: Librosa spectrogram and spectral time-series artifacts. Non-critical — failures don't break a run.
+- `polyphonic_evaluation.py` + `scripts/evaluate_polyphonic.py`: **Research-only.** Offline polyphonic-transcription evaluation harness, not part of the shipped product path.
 - `tests/test_server.py`: OpenAPI and envelope contract tests.
-- `tests/test_analyze.py`: generated WAV fixture and raw payload assertions.
+- `tests/test_analyze.py`: generated WAV fixture, `EXPECTED_TOP_LEVEL_KEYS` snapshot, raw payload assertions.
 - `ARCHITECTURE.md`: backend responsibilities and request flow.
 - `JSON_SCHEMA.md`: raw CLI schema plus HTTP mapping notes.
 

@@ -49,11 +49,11 @@ npm run test:smoke -- tests/smoke/upload-phase1.spec.ts
 ### Backend (`apps/backend`)
 
 ```bash
-./scripts/bootstrap.sh              # Create/recreate venv (Python 3.11.x required)
-./venv/bin/python server.py         # FastAPI server on 8100
-./venv/bin/python analyze.py <file> [--separate] [--transcribe] [--fast] [--yes]
+./apps/backend/scripts/bootstrap.sh         # Create/recreate venv (Python 3.11.x required)
+./apps/backend/venv/bin/python apps/backend/server.py  # FastAPI server on 8100
+./apps/backend/venv/bin/python apps/backend/analyze.py <file> [--separate] [--transcribe] [--fast] [--yes]
 
-# All backend tests
+# All backend tests (run from apps/backend/)
 ./venv/bin/python -m unittest discover -s tests
 # Single test module
 ./venv/bin/python -m unittest tests.test_server
@@ -64,6 +64,13 @@ npm run test:smoke -- tests/smoke/upload-phase1.spec.ts
 ./venv/bin/python -m unittest tests.test_server.ServerContractTests.test_analyze_endpoint_combines_separate_and_transcribe_in_subprocess
 ```
 
+### End-to-End Integration
+
+```bash
+./scripts/test-e2e-integration.sh   # Local-only, boots real backend, drives UI via /api/analysis-runs. No Gemini key required.
+TEST_FLAC_PATH=/path/to/track.flac GEMINI_API_KEY=… VITE_ENABLE_PHASE2_GEMINI=true ./scripts/test-e2e.sh  # Full live Gemini run
+```
+
 ## Architecture
 
 ### Three-Layer Model
@@ -72,11 +79,28 @@ ASA's hybrid architecture splits work into three layers. Read `docs/ARCHITECTURE
 
 ```
 Layer 1 — MEASUREMENT (Essentia/DSP)    → deterministic, authoritative for numbers
-Layer 2 — PITCH/NOTE TRANSLATION (torchcrepe/PENN) → best-effort pitch/note extraction on stems
-Layer 3 — INTERPRETATION (Gemini)        → contextual advice grounded in Layer 1 measurements
+Layer 2 — PITCH/NOTE TRANSLATION (torchcrepe) → best-effort pitch/note extraction on stems
+Layer 3 — INTERPRETATION (Gemini)       → contextual advice grounded in Layer 1 measurements
 ```
 
 Core thesis: measure locally, translate pitch/notes where honest, interpret with AI grounded in measurements. Phase 2 (Gemini) never overrides Phase 1 measured values.
+
+**One-request trace** (useful for orienting):
+
+```
+file in FileUpload.tsx
+   └─► analysisRunsClient.ts (multipart POST /api/analysis-runs)
+        └─► server.py route + analysis_runtime.py (persist run, enqueue stages)
+             └─► analyze.py subprocess with --yes  ──► stdout: camelCase JSON
+                                                  └─► stderr: timings, [warn] lines
+                  └─► server.py normalizes into `phase1` envelope
+                       └─► analysisRunsClient.ts polls snapshot
+                            └─► analyzer.ts projects display payload
+                                 └─► AnalysisResults.tsx renders
+                                      └─► phase2Validator.ts checks chain of custody
+```
+
+The two contracts that matter on that path: `analyze.py` stdout (raw schema in [JSON_SCHEMA.md](apps/backend/JSON_SCHEMA.md)) and the `phase1` HTTP envelope ([src/types.ts](apps/ui/src/types.ts)). Everything else is plumbing.
 
 ### Staged Analysis Runs
 
@@ -86,22 +110,37 @@ The backend supports staged execution via `analysis_runtime.py`, which persists 
 2. **pitch/note translation** — pitch/note extraction on Demucs-separated stems
 3. **interpretation** — Gemini Phase 2 advisory
 
-Run-oriented endpoints (`/api/analysis-runs*`) are the canonical interface for staged execution. Legacy `POST /api/analyze` and `POST /api/analyze/estimate` remain but are not the primary path.
+Run-oriented endpoints (`/api/analysis-runs*`) are the canonical interface for staged execution. Legacy `POST /api/analyze`, `POST /api/analyze/estimate`, and `POST /api/phase2` remain only as temporary compatibility wrappers — do not build new functionality on them.
 
 Frontend polling: `src/services/analysisRunsClient.ts` creates runs and polls stage snapshots. `src/services/analyzer.ts` orchestrates the create-run + poll loop and projects display payloads.
+
+### Runtime Profiles
+
+The backend supports two profiles, selected at startup via `SONIC_ANALYZER_RUNTIME_PROFILE` (`local` | `hosted`) and `SONIC_ANALYZER_PROCESS_ROLE` (`all` | `api` | `worker`):
+
+1. **`local`**: SQLite + local artifact files + in-process workers. Default for development.
+2. **`hosted`**: Adds auth-context resolution (`auth_context.py`) and worker-process separation (`worker.py`). Designed so the local product path is unaffected by hosted concerns.
+
+Artifact access goes through `artifact_storage.py` rather than direct disk paths — preserve this indirection when adding new artifacts.
 
 ### Backend (`apps/backend`)
 
 **Core files:**
 
-1. **`analyze.py`** (~112KB): Pure DSP pipeline. Runs as a subprocess invoked by `server.py`. Extracts BPM, key, LUFS, stereo width, spectral balance, rhythm/melody detail, transcription, stem separation. **Writes JSON to stdout, diagnostics to stderr** — this contract is load-bearing.
-2. **`server.py`** (~24KB): FastAPI HTTP wrapper. Accepts multipart uploads, invokes `analyze.py` as a subprocess, normalizes raw output into the `phase1` HTTP contract, returns structured JSON. Also hosts the staged run endpoints.
-3. **`analysis_runtime.py`**: SQLite-backed run state and stage queue management. Artifacts stored in `.runtime/artifacts/`.
-4. **`analyze_fast.py`**: Streamlined analysis pipeline (BPM, key, loudness, basic dynamics) invoked when `--fast` is passed to `analyze.py`.
+1. **`analyze.py`**: Pure DSP pipeline entry point. Runs as a subprocess invoked by `server.py`. Coordinates the split feature modules below. **Writes JSON to stdout, diagnostics to stderr** — this contract is load-bearing.
+2. **`analyze_core.py`, `analyze_audio_io.py`, `analyze_detection.py`, `analyze_estimate.py`, `analyze_rhythm.py`, `analyze_segments.py`, `analyze_structure.py`, `analyze_transcription.py`, `analyze_fast.py`**: Feature modules. Loadouts: BPM/key/LUFS/stereo/spectral balance, rhythm/melody detail, segment boundaries, transcription. `analyze_fast.py` is the streamlined pipeline used by `--fast`.
+3. **`server.py`**: FastAPI app and router composition. Routes are organized into `server_phase1.py`, `server_phase2.py`, `server_upload.py`. Handles multipart uploads, invokes `analyze.py` (or worker), normalizes raw output into the `phase1` HTTP contract.
+4. **`analysis_runtime.py`**: SQLite-backed run state and stage queue management. Run state in `.runtime/analysis_runs.sqlite3`; artifacts in `.runtime/artifacts/`.
+5. **`worker.py`**: Dedicated worker-process entry point for hosted-style background stage execution. In `local` profile, work runs in-process; in `hosted` profile, this is the worker role.
+6. **`runtime_profile.py`**: Switchboard for `local` vs `hosted` profile and `all` vs `api` vs `worker` process roles (env: `SONIC_ANALYZER_RUNTIME_PROFILE`, `SONIC_ANALYZER_PROCESS_ROLE`).
+7. **`artifact_storage.py`**: Storage-service boundary. Today writes to local disk; the interface is designed so callers do not assume disk paths forever.
+8. **`auth_context.py`**: Hosted-mode user-context resolution and ownership checks on canonical run routes.
+9. **`upload_limits.py`**: Canonical 100 MiB raw-audio / 101 MiB request-envelope limits. Regenerate the operator contract via `scripts/render_upload_limit_contract.py` if numbers change.
+10. **`spectral_viz.py`**: Librosa-based spectrogram/time-series artifacts. Called after measurement; failures are non-critical.
 
 The subprocess isolation means `analyze.py` works as a standalone CLI. Check `apps/backend/JSON_SCHEMA.md` before adding new analyzer output fields. Check `apps/backend/ARCHITECTURE.md` for the full HTTP flow and contract details.
 
-**Phase 2 (`POST /api/phase2`):** Uploads audio to Gemini inline if ≤100MiB, or via the Gemini Files API if larger. Phase 1 JSON is appended to the system prompt from `prompts/phase2_system.txt`.
+**Phase 2 (`POST /api/phase2`, legacy compat):** Uploads audio to Gemini inline if ≤100 MiB, or via the Gemini Files API if larger. Phase 1 JSON is appended to the system prompt from `prompts/phase2_system.txt`. Also relevant: `prompts/stem_summary_system.txt` and `prompts/live12_device_catalog.json`.
 
 **Python version constraint:** Python 3.11.x required on macOS arm64. Essentia 2.1b6 wheels are only published for 3.11; this constraint may be relaxable if Essentia publishes 3.12+ wheels.
 
@@ -111,23 +150,21 @@ Single-page React 19 + Vite + TypeScript + Tailwind CSS v4 app with no router. V
 
 **Key service files:**
 
-1. **`src/services/analysisRunsClient.ts`**: Typed transport for run-oriented APIs (create run, poll snapshots, fetch artifacts).
-2. **`src/services/backendPhase1Client.ts`**: Legacy HTTP transport. Multipart POST, typed error classes (`BackendClientError`), `AbortController` timeouts, identity probe via `/openapi.json`.
-3. **`src/services/backendPhase2Client.ts`**: Phase 2 transport to `/api/phase2`.
-4. **`src/services/analyzer.ts`**: Phase orchestration entry point — sequences run creation, polling, and display payload projection.
-5. **`src/types.ts`**: Source of truth for `Phase1Result`, `Phase2Result`, `AnalysisRunSnapshot`, and all backend response shapes.
-6. **`src/config.ts`**: Runtime resolution of `VITE_API_BASE_URL` and feature flags; falls back to `http://127.0.0.1:8100`. Supports window-level overrides (`window.__VITE_API_BASE_URL_OVERRIDE__`, `window.__VITE_ENABLE_PHASE2_GEMINI_OVERRIDE__`) for hosted deployments that inject config at runtime without a rebuild.
+1. **`src/services/analysisRunsClient.ts`**: Canonical transport. Creates runs against `/api/analysis-runs`, polls snapshots, fetches pitch/note translations and interpretations.
+2. **`src/services/analyzer.ts`**: Phase orchestration entry point — sequences run creation, polling, and display payload projection.
+3. **`src/services/backendPhase1Client.ts`**: Legacy multipart transport (typed error classes, `AbortController` timeouts, identity probe via `/openapi.json`). Kept for the compatibility wrappers; new flows should go through `analysisRunsClient.ts`.
+4. **`src/services/spectralArtifactsClient.ts`**: Fetches spectrogram/spectral-evolution artifacts via `/api/analysis-runs/{run_id}/artifacts/…`.
+5. **`src/services/mixDoctor.ts`**: Mix advisory logic — client-side scoring and suggestions against measured spectral balance.
+6. **`src/services/phase2Validator.ts`**: Runtime guardrail. Validates Phase 2 consistency against Phase 1 (`validateBPMConsistency`, `validateKeyConsistency`, `validateLUFSConsistency`, `validateGenreDSPConsistency`, `validateNumericBounds`).
+7. **`src/services/midi/`**: MIDI export, preview, and quantization utilities (`midiExport.ts`, `midiPreview.ts`, `quantization.ts`).
+8. **`src/types.ts`** + **`src/types/`**: `types.ts` is a barrel re-export of `./types/{measurement,interpretation,backend}.ts`. `Phase1Result` lives in `types/measurement.ts`; `AnalysisRunSnapshot` in `types/backend.ts`; `Phase2Result` in `types/interpretation.ts`.
+9. **`src/config.ts`**: Runtime resolution of `VITE_API_BASE_URL` and feature flags; falls back to `http://127.0.0.1:8100`. Supports window-level overrides (`window.__VITE_API_BASE_URL_OVERRIDE__`, `window.__VITE_ENABLE_PHASE2_GEMINI_OVERRIDE__`) for hosted deployments that inject config at runtime without a rebuild.
 
-7. **`src/services/spectralArtifactsClient.ts`**: Fetches spectral artifact payloads from the backend.
-8. **`src/services/mixDoctor.ts`**: Mix advisory logic — client-side scoring and suggestions.
-9. **`src/services/phase2Validator.ts`**: Validates Phase 2 consistency against Phase 1.
-10. **`src/services/midi/`**: MIDI export, preview, and quantization utilities (`midiExport.ts`, `midiPreview.ts`, `quantization.ts`).
-
-`AnalysisResults.tsx` (~45KB) is lazy-loaded via Suspense. Manual vendor chunks in `vite.config.ts` control bundle splitting.
+`AnalysisResults.tsx` is the large results surface, lazy-loaded via Suspense. Manual vendor chunks in `vite.config.ts` control bundle splitting.
 
 ### Frontend-Backend Contract
 
-`Phase1Result` in `src/types.ts` and the `phase1` field in `BackendAnalyzeResponse` are the interface between apps. **Do not rename fields on either side without updating both.** Error envelopes always include `requestId`, `error.code`, `error.message`, `error.retryable`, and `diagnostics`.
+The interface between apps is `Phase1Result` (in [src/types/measurement.ts](apps/ui/src/types/measurement.ts)) matched against the `phase1` payload inside the analysis-run snapshot (`AnalysisRunSnapshot` in [src/types/backend.ts](apps/ui/src/types/backend.ts)). **Do not rename fields on either side without updating both.** Error envelopes always include `requestId`, `error.code`, `error.message`, `error.retryable`, and `diagnostics`.
 
 ## Environment Variables
 
@@ -154,8 +191,58 @@ Phase 2 is gated by `VITE_ENABLE_PHASE2_GEMINI`. `GEMINI_API_KEY` is backend-onl
 - **`npm run lint`** only type-checks `src/`; test files and `playwright.config.ts` are excluded from `tsconfig.json`.
 - **Canonical ports:** UI on 3100, backend on 8100. `./scripts/dev.sh` fails loudly if either port is occupied.
 - **`--fast` flag** runs a streamlined pipeline (BPM, key, loudness, basic dynamics) via `analyze_fast.py`. It is forwarded through the HTTP API via form field or query param.
-- **`dsp_json_override`** is accepted by the server but ignored.
+- **`dsp_json_override`** is accepted by the server but ignored. It's a legacy field; don't repurpose it.
+
+## Tripwires
+
+Things that look like normal code changes but silently break the contract. Most have bitten this codebase before:
+
+1. **`print(...)` in [analyze.py](apps/backend/analyze.py) without `file=sys.stderr`.** Stdout is the JSON contract. Any stray print corrupts it and the server reports a parse error with no useful trace. The existing code is consistent about this — match the pattern (`print(f"[warn] ...", file=sys.stderr)`).
+2. **Calling `analyze.py` as a subprocess without `--yes`.** The CLI prompts for confirmation when stdin is a TTY. Subprocess invocations must pass `--yes` or hang waiting for input. `server.py` already does; new callers must too.
+3. **Renaming a field on only one side.** Python emits *camelCase* JSON directly (`bpmConfidence`, not `bpm_confidence`) — there is no conversion layer. A rename in [analyze.py](apps/backend/analyze.py) without a matching update in [src/types.ts](apps/ui/src/types.ts) is undetectable by either type system; the field just disappears from the UI.
+4. **Adding a top-level key without updating `EXPECTED_TOP_LEVEL_KEYS`.** [tests/test_analyze.py](apps/backend/tests/test_analyze.py) holds a snapshot of every root key. New fields require updating that set *and* [JSON_SCHEMA.md](apps/backend/JSON_SCHEMA.md). The same test enforces that `--fast` only populates `FAST_MODE_POPULATED_FIELDS`.
+5. **Using `document` or `window` in `tests/services/`.** Vitest runs in `node`, not `jsdom`. Service-layer tests are pure logic; if you need DOM, it's a Playwright test in `tests/smoke/` instead.
+6. **Hard-coding `Path(...)` for artifacts in new code.** Artifact access must go through [artifact_storage.py](apps/backend/artifact_storage.py). Direct paths work in `local` profile and break silently in `hosted`.
+7. **Editing `apps/ui/.env` and expecting `dev.sh` to honor it.** `dev.sh` reads `apps/ui/.env` but *overrides* `VITE_API_BASE_URL` for the spawned UI process so stale `.env` files don't break the stack. To point the UI at a non-canonical backend, edit `dev.sh` or run the UI directly with the env var on the command line.
+8. **Phase 2 prompts that don't reference Phase 1 measurements.** The chain-of-custody invariant is enforced at runtime by [phase2Validator.ts](apps/ui/src/services/phase2Validator.ts) (`validateBPMConsistency`, `validateKeyConsistency`, `validateLUFSConsistency`, `validateGenreDSPConsistency`). If a prompt change lets Phase 2 emit a contradicting value, the validator surfaces it in the UI as a violation — not a silent failure, but worth knowing where the check lives.
+
+## Where to Make the Change
+
+A quick map from intent to the right place to start:
+
+| If you're changing… | Touch | Then |
+|---|---|---|
+| What gets measured | [analyze.py](apps/backend/analyze.py) + the relevant `analyze_*.py` module | Update [JSON_SCHEMA.md](apps/backend/JSON_SCHEMA.md), `EXPECTED_TOP_LEVEL_KEYS` in [test_analyze.py](apps/backend/tests/test_analyze.py), and [src/types.ts](apps/ui/src/types.ts) |
+| How a measurement renders | `apps/ui/src/components/` | Add Vitest coverage in `tests/services/` if any new parsing/projection logic |
+| How Phase 2 advises | [prompts/phase2_system.txt](apps/backend/prompts/phase2_system.txt) and/or [prompts/live12_device_catalog.json](apps/backend/prompts/live12_device_catalog.json) | Verify with the live Gemini smoke (`RUN_GEMINI_LIVE_SMOKE=true`) on a known track |
+| The HTTP envelope shape | [server.py](apps/backend/server.py) (router) + the `server_*.py` module | [test_server.py](apps/backend/tests/test_server.py) contract tests + frontend client types |
+| Run-state or stage flow | [analysis_runtime.py](apps/backend/analysis_runtime.py) | Frontend polling in [analysisRunsClient.ts](apps/ui/src/services/analysisRunsClient.ts) |
+| Upload limits or proxies | [upload_limits.py](apps/backend/upload_limits.py) | Regenerate the operator contract via `scripts/render_upload_limit_contract.py` |
+| Hosted-mode behavior | [runtime_profile.py](apps/backend/runtime_profile.py), [auth_context.py](apps/backend/auth_context.py), [worker.py](apps/backend/worker.py) | Keep the `local` profile path unaffected — that's the load-bearing dev loop |
+
+## Debugging Recipes
+
+- **"The UI is missing a field that should be there."** Hit `http://127.0.0.1:8100/openapi.json` to confirm the server contract, then run `analyze.py <same file> --yes` directly and grep its stdout for the field name. If the analyzer emits it but the UI doesn't see it, the rename slipped — check both sides of the camelCase boundary.
+- **"Subprocess returned no usable JSON."** Re-run `analyze.py` directly. If stderr shows real diagnostics but stdout has extra text, search for `print(` without `file=sys.stderr` in the modules you touched.
+- **"Backend test passes locally, fails on a fresh checkout."** Usually a `venv` issue. Recreate with `./apps/backend/scripts/bootstrap.sh` — Python 3.11.x is required and Essentia wheels don't exist for 3.12+.
+- **"Phase 2 says something the measurements don't support."** Open the analysis result in the UI; [phase2Validator.ts](apps/ui/src/services/phase2Validator.ts) violations render inline. The validator is the source of truth for "did Phase 2 break the chain of custody."
+- **"Reproduce a hung subprocess."** Try `./venv/bin/python analyze.py <file>` *without* `--yes` and you'll see the confirmation prompt that hangs in non-TTY contexts.
+
+## Recent Refactors (don't undo)
+
+- **Backend and frontend monoliths were intentionally split** (commit `5c40dd44`, "refactor: split monoliths into domain modules") into domain modules — `analyze_core/_detection/_rhythm/_segments/_structure/_transcription` on the backend, focused service files on the frontend. The split is the current target shape; resist consolidating it back.
+- **Hosted runtime foundation landed without disturbing local mode.** `runtime_profile.py`, `worker.py`, `artifact_storage.py`, and `auth_context.py` are the seams. Local-mode code should not branch on profile unless it has to; the boundary handles it.
 
 ## Backport Candidates
 
-`BACKLOG.md` lists 12 DSP services + 2 data files from `active/sonic-architect-app` that are candidates for porting into ASA. Consult it before implementing genre detection, mix analysis, or synthesis features — implementations may already exist in that reference project.
+Most of the original `sonic-architect-app` port (genre profiles, Ableton device mappings, mix doctor, eight detectors) is **shipped**. The remaining open item in [`BACKLOG.md`](BACKLOG.md) is `patchSmith.ts` (Phase 3 synth-patch generation). Consult `BACKLOG.md` before re-implementing genre detection, mix analysis, acid/reverb/vocal/supersaw/bass/kick detection — they're already in [`apps/backend/analyze_detection.py`](apps/backend/analyze_detection.py) and emit fields visible in `EXPECTED_TOP_LEVEL_KEYS`.
+
+## Companion Agent Docs
+
+This repo carries parallel guidance for non-Claude agents. The files largely cover the same ground but with different framings; read whichever matches the context you need:
+
+1. **`AGENTS.md`** (root + `apps/*/AGENTS.md`) — general AI-agent policy, technology stack tables, change checklist, common task recipes.
+2. **`CODEX.md`** (root + `apps/*/CODEX.md`) — Codex-tailored read-order and mission-gate questions, derived from `PURPOSE.md`.
+3. **`docs/ARCHITECTURE_STRATEGY.md`** — *why* the three-layer architecture is shaped the way it is.
+
+When information conflicts, `PURPOSE.md` > `AGENTS.md` chain > this file.
