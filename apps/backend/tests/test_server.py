@@ -4204,6 +4204,230 @@ class Phase2CatalogValidationTests(unittest.TestCase):
         self.assertEqual(self._codes(warnings), ["UNKNOWN_PARAMETER"])
 
 
+class CreateAnalysisRunUrlIngestionTests(unittest.TestCase):
+    """Route tests for POST /api/analysis-runs URL-mode.
+
+    The pure URL-fetch logic is covered by tests/test_url_ingest.py.
+    These tests verify the HTTP shell: source-selection branching,
+    error envelopes for each failure mode, and that a successful URL
+    fetch flows through the same downstream create_run path that a
+    multipart upload would.
+    """
+
+    def _decode_json_response(self, response) -> dict:
+        return json.loads(response.body.decode("utf-8"))
+
+    def test_url_mode_success_creates_a_run(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+        import url_ingest
+
+        fetched = url_ingest.FetchedUrl(
+            content=b"fake-audio-from-url",
+            filename="track.mp3",
+            mime_type="audio/mpeg",
+        )
+
+        with tempfile.TemporaryDirectory(prefix="asa_url_ingest_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            with patch.object(server, "get_analysis_runtime", return_value=runtime), \
+                 patch.object(
+                     server.url_ingest,
+                     "fetch_url_to_bytes",
+                     return_value=fetched,
+                 ):
+                response = asyncio.run(
+                    server.create_analysis_run(
+                        track=None,
+                        url="https://example.com/track.mp3",
+                        **self.DEFAULT_FORM_KWARGS,
+                    )
+                )
+
+        payload = self._decode_json_response(response)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("runId", payload)
+        self.assertEqual(payload["stages"]["measurement"]["status"], "queued")
+
+    # Default form-field kwargs used by every test below. When calling the
+    # route function directly (not through HTTP dispatch), FastAPI's
+    # ``Form(...)`` defaults are unresolved sentinel objects, not the
+    # strings they wrap — so each test must pass the full set explicitly.
+    DEFAULT_FORM_KWARGS = dict(
+        analysis_mode="full",
+        pitch_note_mode="off",
+        pitch_note_backend="auto",
+        interpretation_mode="off",
+        interpretation_profile="producer_summary",
+        interpretation_model=None,
+    )
+
+    def test_neither_track_nor_url_returns_missing_audio_source(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_url_ingest_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            with patch.object(server, "get_analysis_runtime", return_value=runtime):
+                response = asyncio.run(
+                    server.create_analysis_run(
+                        track=None,
+                        url=None,
+                        **self.DEFAULT_FORM_KWARGS,
+                    )
+                )
+
+        self.assertEqual(response.status_code, 400)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["error"]["code"], "MISSING_AUDIO_SOURCE")
+
+    def test_both_track_and_url_returns_ambiguous_audio_source(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+        from fastapi import UploadFile
+
+        with tempfile.TemporaryDirectory(prefix="asa_url_ingest_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            track = UploadFile(filename="track.mp3", file=io.BytesIO(b"x"))
+            with patch.object(server, "get_analysis_runtime", return_value=runtime):
+                response = asyncio.run(
+                    server.create_analysis_run(
+                        track=track,
+                        url="https://example.com/track.mp3",
+                        **self.DEFAULT_FORM_KWARGS,
+                    )
+                )
+
+        self.assertEqual(response.status_code, 400)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["error"]["code"], "AMBIGUOUS_AUDIO_SOURCE")
+
+    def test_url_invalid_returns_400_with_url_invalid(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+        import url_ingest
+
+        with tempfile.TemporaryDirectory(prefix="asa_url_ingest_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            with patch.object(server, "get_analysis_runtime", return_value=runtime), \
+                 patch.object(
+                     server.url_ingest,
+                     "fetch_url_to_bytes",
+                     side_effect=url_ingest.UrlInvalidError("bad scheme"),
+                 ):
+                response = asyncio.run(
+                    server.create_analysis_run(
+                        track=None,
+                        url="file:///etc/passwd",
+                        **self.DEFAULT_FORM_KWARGS,
+                    )
+                )
+
+        self.assertEqual(response.status_code, 400)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["error"]["code"], "URL_INVALID")
+
+    def test_url_blocked_private_host_returns_400(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+        import url_ingest
+
+        with tempfile.TemporaryDirectory(prefix="asa_url_ingest_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            with patch.object(server, "get_analysis_runtime", return_value=runtime), \
+                 patch.object(
+                     server.url_ingest,
+                     "fetch_url_to_bytes",
+                     side_effect=url_ingest.UrlBlockedPrivateHostError(
+                         "10.0.0.5 is private"
+                     ),
+                 ):
+                response = asyncio.run(
+                    server.create_analysis_run(
+                        track=None,
+                        url="http://internal.example.com/audio.mp3",
+                        **self.DEFAULT_FORM_KWARGS,
+                    )
+                )
+
+        self.assertEqual(response.status_code, 400)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["error"]["code"], "URL_BLOCKED_PRIVATE_HOST")
+
+    def test_url_too_large_returns_413(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+        import url_ingest
+
+        with tempfile.TemporaryDirectory(prefix="asa_url_ingest_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            with patch.object(server, "get_analysis_runtime", return_value=runtime), \
+                 patch.object(
+                     server.url_ingest,
+                     "fetch_url_to_bytes",
+                     side_effect=url_ingest.UrlTooLargeError("body 200 MiB"),
+                 ):
+                response = asyncio.run(
+                    server.create_analysis_run(
+                        track=None,
+                        url="https://example.com/huge.flac",
+                        **self.DEFAULT_FORM_KWARGS,
+                    )
+                )
+
+        self.assertEqual(response.status_code, 413)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["error"]["code"], "URL_TOO_LARGE")
+
+    def test_url_fetch_failed_returns_502(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+        import url_ingest
+
+        with tempfile.TemporaryDirectory(prefix="asa_url_ingest_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            with patch.object(server, "get_analysis_runtime", return_value=runtime), \
+                 patch.object(
+                     server.url_ingest,
+                     "fetch_url_to_bytes",
+                     side_effect=url_ingest.UrlFetchFailedError("timed out"),
+                 ):
+                response = asyncio.run(
+                    server.create_analysis_run(
+                        track=None,
+                        url="https://example.com/slow.mp3",
+                        **self.DEFAULT_FORM_KWARGS,
+                    )
+                )
+
+        self.assertEqual(response.status_code, 502)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["error"]["code"], "URL_FETCH_FAILED")
+        # 502 means upstream issue — the client can reasonably retry.
+        # ARCHITECTURE.md contract says envelopes always carry retryable;
+        # this is the first 502 the route returns, so it's the cleanest
+        # place to anchor the assertion.
+        self.assertTrue(payload["error"]["retryable"])
+
+    def test_url_invalid_envelope_is_not_retryable(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+        import url_ingest
+
+        with tempfile.TemporaryDirectory(prefix="asa_url_ingest_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            with patch.object(server, "get_analysis_runtime", return_value=runtime), \
+                 patch.object(
+                     server.url_ingest,
+                     "fetch_url_to_bytes",
+                     side_effect=url_ingest.UrlInvalidError("bad scheme"),
+                 ):
+                response = asyncio.run(
+                    server.create_analysis_run(
+                        track=None,
+                        url="file:///etc/passwd",
+                        **self.DEFAULT_FORM_KWARGS,
+                    )
+                )
+
+        payload = self._decode_json_response(response)
+        # Malformed URL won't succeed on retry without a different URL,
+        # so retryable must be False.
+        self.assertFalse(payload["error"]["retryable"])
+
+
 class CsvExportRouteTests(unittest.TestCase):
     """Route tests for GET /api/analysis-runs/{run_id}/export/csv/{field_path}.
 
