@@ -4711,10 +4711,16 @@ class GetRunSourceAudioRouteTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory(prefix="asa_source_audio_") as temp_dir:
             runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
-            with patch.object(server, "get_analysis_runtime", return_value=runtime):
+            with patch.object(server, "get_analysis_runtime", return_value=runtime), \
+                 patch.dict(
+                     server.os.environ,
+                     {"SONIC_ANALYZER_RUNTIME_PROFILE": "hosted"},
+                     clear=False,
+                 ):
                 response = asyncio.run(
                     server.get_run_source_audio(
                         "does-not-exist",
+                        x_asa_user_id="some_user",
                     )
                 )
 
@@ -4760,6 +4766,8 @@ class GetRunSourceAudioRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
         payload = self._decode_json_response(response)
         self.assertEqual(payload["error"]["code"], "SOURCE_AUDIO_NOT_FOUND")
+        # Server-side corruption — naive client retry won't recover.
+        self.assertFalse(payload["error"]["retryable"])
 
     def test_missing_file_on_disk_returns_source_audio_file_missing(self) -> None:
         """If the artifact row exists but resolve_artifact_local_path
@@ -4796,6 +4804,9 @@ class GetRunSourceAudioRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
         payload = self._decode_json_response(response)
         self.assertEqual(payload["error"]["code"], "SOURCE_AUDIO_FILE_MISSING")
+        # File bytes missing — operator must re-ingest; client retry
+        # of the same id will not recover.
+        self.assertFalse(payload["error"]["retryable"])
 
 
 class CsvExportRouteTests(unittest.TestCase):

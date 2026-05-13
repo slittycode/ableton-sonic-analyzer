@@ -2322,7 +2322,9 @@ async def get_run_source_audio(
     except KeyError:
         # Run was found by get_run() above, but the source_artifact_id
         # column was null or pointed at a missing row. Defensive — not
-        # expected on the normal create_run path.
+        # expected on the normal create_run path. ``retryable`` is
+        # ``False`` because the run state is corrupted; a retry on the
+        # same id will fail identically.
         return JSONResponse(
             status_code=404,
             content={
@@ -2332,6 +2334,7 @@ async def get_run_source_audio(
                         f"Run '{run_id}' has no source audio artifact "
                         f"registered."
                     ),
+                    "retryable": False,
                 }
             },
         )
@@ -2348,6 +2351,10 @@ async def get_run_source_audio(
                     "message": (
                         "Source audio file is no longer available on disk."
                     ),
+                    # The artifact metadata is intact but the bytes are
+                    # gone; an operator would need to re-ingest. A naive
+                    # retry from the client will not recover.
+                    "retryable": False,
                 }
             },
         )
