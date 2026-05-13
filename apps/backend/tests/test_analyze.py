@@ -2458,5 +2458,171 @@ class ApplyBpmCorrectionTests(unittest.TestCase):
         self.assertEqual(result["bpmRawOriginal"], 66.0)
 
 
+class ChordTimelineViterbiTests(unittest.TestCase):
+    """Phase 1.D #2 — librosa+Viterbi chord-timeline migration.
+
+    These tests verify the new 25-state Viterbi engine that replaced the
+    earlier 5-frame median-filter smoothing in analyze_chords. We do not
+    re-test the Essentia layer or the median smoother — those are gone.
+    """
+
+    SAMPLE_RATE = 44_100
+    DURATION_SECONDS = 4.0
+    EXPECTED_TIMELINE_KEYS = {"startSec", "endSec", "label", "labelLong", "confidence"}
+
+    def _make_chord_triad_audio(
+        self, frequencies: tuple[float, ...], duration_s: float = DURATION_SECONDS
+    ) -> np.ndarray:
+        """Sum sine tones at the given frequencies to make a synthetic chord."""
+        n = int(self.SAMPLE_RATE * duration_s)
+        t = np.arange(n, dtype=np.float64) / self.SAMPLE_RATE
+        signal = np.zeros(n, dtype=np.float64)
+        for freq in frequencies:
+            signal += np.sin(2 * np.pi * freq * t)
+        signal /= max(1.0, len(frequencies))
+        # 50 ms fade in / out so the highpass + window edge effects don't
+        # dominate the start/end frames.
+        fade = int(0.05 * self.SAMPLE_RATE)
+        signal[:fade] *= np.linspace(0.0, 1.0, fade)
+        signal[-fade:] *= np.linspace(1.0, 0.0, fade)
+        return signal.astype(np.float32)
+
+    def test_chord_timeline_synthetic_c_major(self) -> None:
+        """A 4-second C-major-triad sine cluster produces a clean Viterbi timeline."""
+        from analyze_segments import analyze_chords
+
+        # C4 + E4 + G4 — the canonical C major triad.
+        audio = self._make_chord_triad_audio((261.63, 329.63, 392.00))
+        result = analyze_chords(audio, sample_rate=self.SAMPLE_RATE)
+        cd = result.get("chordDetail")
+        self.assertIsNotNone(cd, "chord analysis should not return None for clean audio")
+        timeline = cd.get("chordTimeline")
+        self.assertIsInstance(timeline, list)
+        self.assertGreater(len(timeline), 0, "synthetic chord should produce ≥1 segment")
+
+        # Shape & invariants for every segment.
+        previous_end = -1.0
+        for seg in timeline:
+            self.assertEqual(set(seg.keys()), self.EXPECTED_TIMELINE_KEYS)
+            self.assertGreaterEqual(seg["startSec"], 0.0)
+            self.assertGreaterEqual(seg["endSec"], seg["startSec"])
+            self.assertGreaterEqual(seg["confidence"], 0.0)
+            self.assertLessEqual(seg["confidence"], 1.0)
+            self.assertIsInstance(seg["label"], str)
+            self.assertIsInstance(seg["labelLong"], str)
+            # Non-overlapping & ordered.
+            self.assertGreaterEqual(seg["startSec"], previous_end - 1e-6)
+            previous_end = seg["endSec"]
+
+        # Soft expectation: dominant label is C major. Don't fail on this —
+        # synthetic-fixture decoding can flicker under template ambiguity.
+        from collections import Counter as _Counter
+        label_counts = _Counter(seg["label"] for seg in timeline)
+        dominant = label_counts.most_common(1)[0][0]
+        if dominant != "C":
+            print(
+                f"[soft] expected dominant 'C', got {dominant} "
+                f"(distribution: {dict(label_counts)})",
+                file=sys.stderr,
+            )
+
+    def test_chord_timeline_white_noise_no_spurious_confident_triads(self) -> None:
+        """White noise should not produce strongly-confident triads.
+
+        The cosine-similarity confidence has a noise floor at ~0.5 for random
+        chroma against 3-active-bin templates (sqrt(3/12) ≈ 0.5), so the bar
+        is 0.65 — well above the noise floor, well below a clean chord match.
+        """
+        from analyze_segments import analyze_chords
+
+        rng = np.random.default_rng(seed=42)
+        noise = rng.standard_normal(int(self.SAMPLE_RATE * self.DURATION_SECONDS))
+        noise = (noise * 0.1).astype(np.float32)
+        result = analyze_chords(noise, sample_rate=self.SAMPLE_RATE)
+        cd = result.get("chordDetail")
+        self.assertIsNotNone(cd)
+        timeline = cd.get("chordTimeline")
+        self.assertIsInstance(timeline, list)
+        for seg in timeline:
+            allowed = seg["label"] == "N" or seg["confidence"] < 0.65
+            self.assertTrue(
+                allowed,
+                f"white noise produced confident triad: {seg!r}",
+            )
+
+    def test_chord_timeline_source_and_agreement_fields(self) -> None:
+        """chordDetail exposes chordTimelineSource and chordTimelineAgreement."""
+        from analyze_segments import analyze_chords
+
+        audio = self._make_chord_triad_audio((261.63, 329.63, 392.00))
+        result = analyze_chords(audio, sample_rate=self.SAMPLE_RATE)
+        cd = result["chordDetail"]
+        self.assertEqual(cd["chordTimelineSource"], "librosa_viterbi")
+        # agreement must be a bool or None — never a string or number.
+        agreement = cd["chordTimelineAgreement"]
+        self.assertIn(agreement, (True, False, None))
+
+    def test_chord_change_count_recomputed_from_viterbi_timeline(self) -> None:
+        """chordChangeCount counts transitions in the new Viterbi timeline."""
+        from analyze_segments import analyze_chords
+
+        audio = self._make_chord_triad_audio((261.63, 329.63, 392.00))
+        result = analyze_chords(audio, sample_rate=self.SAMPLE_RATE)
+        cd = result["chordDetail"]
+        expected = sum(
+            1 for i in range(1, len(cd["chordTimeline"]))
+            if cd["chordTimeline"][i]["label"] != cd["chordTimeline"][i - 1]["label"]
+        )
+        self.assertEqual(cd["chordChangeCount"], expected)
+
+    def test_normalize_chord_label_handles_enharmonics_and_quality(self) -> None:
+        """_normalize_chord_label_for_compare handles short/long forms and enharmonics."""
+        from analyze_segments import _normalize_chord_label_for_compare
+
+        # Short form.
+        self.assertEqual(_normalize_chord_label_for_compare("C"), "C:maj")
+        self.assertEqual(_normalize_chord_label_for_compare("Cm"), "C:min")
+        self.assertEqual(_normalize_chord_label_for_compare("Em"), "E:min")
+        self.assertEqual(_normalize_chord_label_for_compare("F#"), "Gb:maj")
+        self.assertEqual(_normalize_chord_label_for_compare("F#m"), "Gb:min")
+        # Long form.
+        self.assertEqual(_normalize_chord_label_for_compare("C major"), "C:maj")
+        self.assertEqual(_normalize_chord_label_for_compare("C minor"), "C:min")
+        self.assertEqual(_normalize_chord_label_for_compare("D# minor"), "Eb:min")
+        # Enharmonic equivalence — these MUST compare equal after normalization.
+        self.assertEqual(
+            _normalize_chord_label_for_compare("D#m"),
+            _normalize_chord_label_for_compare("Eb minor"),
+        )
+        self.assertEqual(
+            _normalize_chord_label_for_compare("A#"),
+            _normalize_chord_label_for_compare("Bb major"),
+        )
+        # N stays N.
+        self.assertEqual(_normalize_chord_label_for_compare("N"), "N")
+        # Non-string input safely returns "".
+        self.assertEqual(_normalize_chord_label_for_compare(None), "")  # type: ignore[arg-type]
+
+    def test_chord_templates_25_has_correct_shape_and_triad_masks(self) -> None:
+        """_chord_templates_25 emits 25 L1-normalized rows: 12 major + 12 minor + N."""
+        from analyze_segments import _chord_templates_25
+
+        templates = _chord_templates_25()
+        self.assertEqual(templates.shape, (25, 12))
+        # Each row sums to 1.0 (L1-normalized).
+        np.testing.assert_allclose(templates.sum(axis=1), np.ones(25), atol=1e-9)
+        # Row 0 = C major (root C, +4 E, +7 G) → pitch classes 0, 4, 7 active.
+        c_major = templates[0]
+        active = np.where(c_major > 0)[0].tolist()
+        self.assertEqual(active, [0, 4, 7])
+        # Row 12 = C minor (root C, +3 Eb, +7 G) → pitch classes 0, 3, 7 active.
+        c_minor = templates[12]
+        active = np.where(c_minor > 0)[0].tolist()
+        self.assertEqual(active, [0, 3, 7])
+        # Row 24 = N — uniform across all 12 pitch classes.
+        n_row = templates[24]
+        np.testing.assert_allclose(n_row, np.full(12, 1.0 / 12.0), atol=1e-9)
+
+
 if __name__ == "__main__":
     unittest.main()

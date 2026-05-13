@@ -7,6 +7,8 @@ import {
   BackendEstimateResponse,
   BassDetail,
   BeatsLoudness,
+  ChordDetail,
+  ChordTimelineEntry,
   DanceabilityResult,
   DynamicCharacter,
   GenreDetail,
@@ -643,7 +645,7 @@ export function parsePhase1Result(value: unknown): Phase1Result {
     segmentSpectral: Array.isArray(phase1.segmentSpectral) ? phase1.segmentSpectral as Phase1Result["segmentSpectral"] : null,
     segmentStereo: Array.isArray(phase1.segmentStereo) ? phase1.segmentStereo as Phase1Result["segmentStereo"] : null,
     segmentKey: Array.isArray(phase1.segmentKey) ? phase1.segmentKey as Phase1Result["segmentKey"] : null,
-    chordDetail: isRecord(phase1.chordDetail) ? phase1.chordDetail as Phase1Result["chordDetail"] : null,
+    chordDetail: parseOptionalChordDetail(phase1.chordDetail),
     perceptual: isRecord(phase1.perceptual) ? phase1.perceptual as unknown as Phase1Result["perceptual"] : null,
     essentiaFeatures: isRecord(phase1.essentiaFeatures) ? phase1.essentiaFeatures as Phase1Result["essentiaFeatures"] : null,
     acidDetail: parseOptionalAcidDetail(phase1.acidDetail),
@@ -822,6 +824,95 @@ function parseOptionalRhythmTimeline(value: unknown): RhythmTimeline | null {
     selectionMethod,
     windows,
   };
+}
+
+/**
+ * Tolerant parser for `chordDetail`. Modeled on `parseOptionalRhythmTimeline`:
+ * forwards the four Essentia fields as before, parses the new Viterbi fields
+ * (`chordTimeline`, `chordChangeCount`, `chordTimelineSource`,
+ * `chordTimelineAgreement`) defensively. One malformed `chordTimeline` entry
+ * is dropped silently rather than rejecting the whole `chordDetail` — Phase 1
+ * payloads sometimes come from disk caches written by older analyzer versions.
+ */
+function parseOptionalChordDetail(value: unknown): ChordDetail | null {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value)) return null;
+
+  const chordSequence = Array.isArray(value.chordSequence)
+    ? value.chordSequence.filter((entry): entry is string => typeof entry === "string")
+    : null;
+  const progression = Array.isArray(value.progression)
+    ? value.progression.filter((entry): entry is string => typeof entry === "string")
+    : null;
+  const dominantChords = Array.isArray(value.dominantChords)
+    ? value.dominantChords.filter((entry): entry is string => typeof entry === "string")
+    : null;
+
+  const chordStrength = toNumber(value.chordStrength);
+  const chordChangeCountRaw = toNumber(value.chordChangeCount);
+  const chordChangeCount =
+    chordChangeCountRaw === null ? null : Math.max(0, Math.round(chordChangeCountRaw));
+
+  const chordTimelineSource =
+    typeof value.chordTimelineSource === "string" ? value.chordTimelineSource : null;
+
+  const chordTimelineAgreement =
+    value.chordTimelineAgreement === true
+      ? true
+      : value.chordTimelineAgreement === false
+        ? false
+        : null;
+
+  const chordTimeline = parseOptionalChordTimeline(value.chordTimeline);
+
+  return {
+    chordSequence,
+    chordStrength,
+    progression,
+    dominantChords,
+    chordTimeline,
+    chordChangeCount,
+    chordTimelineSource,
+    chordTimelineAgreement,
+  };
+}
+
+function parseOptionalChordTimeline(value: unknown): ChordTimelineEntry[] | null {
+  if (!Array.isArray(value)) return null;
+
+  const parsed: ChordTimelineEntry[] = [];
+  for (const entry of value) {
+    if (!isRecord(entry)) continue;
+
+    const startSec = toNumber(entry.startSec);
+    const endSec = toNumber(entry.endSec);
+    const confidenceRaw = toNumber(entry.confidence);
+    const label = typeof entry.label === "string" ? entry.label : null;
+    if (
+      startSec === null ||
+      endSec === null ||
+      confidenceRaw === null ||
+      label === null ||
+      endSec < startSec
+    ) {
+      continue;
+    }
+
+    const labelLong = typeof entry.labelLong === "string" ? entry.labelLong : undefined;
+    const confidence = Math.min(1, Math.max(0, confidenceRaw));
+
+    const segment: ChordTimelineEntry = {
+      startSec,
+      endSec,
+      label,
+      confidence,
+    };
+    if (labelLong !== undefined) segment.labelLong = labelLong;
+    parsed.push(segment);
+  }
+
+  parsed.sort((a, b) => a.startSec - b.startSec);
+  return parsed;
 }
 
 function parseOptionalAcidDetail(value: unknown): AcidDetail | null {
