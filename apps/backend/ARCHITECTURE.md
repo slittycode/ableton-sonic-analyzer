@@ -71,6 +71,11 @@ Custom routes:
 - `POST /api/analysis-runs`
 - `GET /api/analysis-runs/{run_id}`
 - `DELETE /api/analysis-runs/{run_id}`
+- `GET /api/analysis-runs/{run_id}/artifacts` and `…/artifacts/{artifact_id}`
+- `GET /api/analysis-runs/{run_id}/export/csv/{field_path}` — CSV export of a Phase 1 time-series field. See [`docs/adr/0001-phase1-json-schema-v1.md`](../../docs/adr/0001-phase1-json-schema-v1.md) and the registry in [`csv_export.py`](csv_export.py).
+- `POST /api/analysis-runs/{run_id}/spectral-enhancements/{kind}`
+- `POST /api/analysis-runs/{run_id}/pitch-note-translations`
+- `POST /api/analysis-runs/{run_id}/interpretations`
 - `POST /api/analyze` (legacy compatibility)
 - `POST /api/analyze/estimate` (legacy compatibility)
 - `POST /api/phase2` (legacy compatibility)

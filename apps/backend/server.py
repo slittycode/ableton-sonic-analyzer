@@ -27,7 +27,7 @@ except ImportError:
 
 from fastapi import FastAPI, File, Form, Header, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 
 from auth_context import AuthenticationRequiredError, UserContext, resolve_api_user_context
 from analysis_runtime import (
@@ -46,6 +46,7 @@ from runtime_profile import (
     should_start_in_process_workers,
 )
 from utils.cleanup import cleanup_artifacts
+import csv_export
 import upload_limits
 from server_upload import (  # noqa: F401 — re-exported for test backward compat
     LEGACY_ENDPOINT_SUNSET,
@@ -2085,6 +2086,91 @@ async def get_run_artifact(
         path=str(artifact_local_path),
         media_type=match.get("mimeType", "application/octet-stream"),
         filename=match.get("filename", artifact_local_path.name),
+    )
+
+
+@app.get(
+    "/api/analysis-runs/{run_id}/export/csv/{field_path}",
+    response_model=None,
+)
+async def export_run_field_as_csv(
+    run_id: str,
+    field_path: str,
+    x_asa_user_id: str | None = Header(None),
+    x_asa_user_email: str | None = Header(None),
+) -> Response | JSONResponse:
+    """Export one Phase 1 time-series field as CSV.
+
+    The ``field_path`` is a simple dot-path into the measurement payload —
+    e.g. ``lufsCurve.shortTerm`` or ``rhythmDetail.tempoCurve``. Not
+    JSONPath; arbitrary nested-key descent is not supported. See
+    :func:`csv_export.list_supported_fields` for the registered list.
+
+    Returns:
+        - 200 ``text/csv`` with header row + data rows on success.
+        - 404 ``EXPORT_FIELD_NOT_SUPPORTED`` if the path is not in the
+          registry.
+        - 404 ``RUN_NOT_FOUND`` if the run does not exist or is not
+          owned by the requesting user.
+        - 404 ``EXPORT_FIELD_NOT_AVAILABLE`` if the field is registered
+          but missing/null/empty for this run (measurement may be
+          incomplete or the analyzer skipped that field for this audio).
+    """
+    user_context = _resolve_route_user_context(x_asa_user_id, x_asa_user_email)
+    if isinstance(user_context, JSONResponse):
+        return user_context
+
+    if not csv_export.is_supported_field(field_path):
+        supported = ", ".join(csv_export.list_supported_fields())
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": {
+                    "code": "EXPORT_FIELD_NOT_SUPPORTED",
+                    "message": (
+                        f"Field path '{field_path}' is not exportable. "
+                        f"Supported paths: {supported}."
+                    ),
+                }
+            },
+        )
+
+    runtime = get_analysis_runtime()
+    try:
+        snapshot = runtime.get_run(run_id, owner_user_id=user_context.user_id)
+    except (KeyError, PermissionError):
+        return _run_not_found_response(run_id)
+
+    measurement_result = (
+        snapshot.get("stages", {})
+        .get("measurement", {})
+        .get("result")
+    )
+    csv_text = csv_export.export_field_to_csv(measurement_result, field_path)
+    if csv_text is None:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": {
+                    "code": "EXPORT_FIELD_NOT_AVAILABLE",
+                    "message": (
+                        f"Field '{field_path}' is supported but not "
+                        f"populated in run '{run_id}'. The measurement "
+                        f"may be incomplete or the analyzer skipped this "
+                        f"field for this audio."
+                    ),
+                }
+            },
+        )
+
+    # Filename: <run_id>_<dotted_path_with_underscores>.csv
+    filename = f"{run_id}_{field_path.replace('.', '_')}.csv"
+    return Response(
+        content=csv_text,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
     )
 
 
