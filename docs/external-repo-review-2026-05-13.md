@@ -199,7 +199,7 @@ From the survey of [`server.py`](../apps/backend/server.py), [`server_phase1.py`
 
 **Error envelope:** Always includes `requestId`, `error.code`, `error.message`, `error.retryable`, `diagnostics`. Stage states: `queued`, `running`, `blocked`, `ready`, `completed`, `failed`, `interrupted`, `not_requested`.
 
-**Upload limit:** 100 MiB raw / 105 MiB request envelope ([`upload_limits.py:7-16`](../apps/backend/upload_limits.py)).
+**Upload limit:** 100 MiB raw / 101 MiB request envelope ([`upload_limits.py:7-16`](../apps/backend/upload_limits.py) — `MAX_UPLOAD_SIZE_BYTES` 104,857,600 + `UPLOAD_REQUEST_SIZE_SLACK_BYTES` 1,048,576 = 105,906,176 bytes = 101 MiB).
 
 ### What forever-jukebox exposes
 
@@ -261,7 +261,7 @@ From [`api/README.md`](https://github.com/creightonlinza/forever-jukebox/blob/ma
 | GPL contamination from reading openmeters/Partiels source | 1, 2 | Read ITU-R BS.1770-5 (PDF, gratis from ITU) and Partiels' user manual instead of source. Document algorithmic provenance per file. |
 | BS.1770 revision premise is wrong (Essentia already does -3 to -5 equivalent for stereo) | 1 | Run the verification spike first. Cheapest possible disproof. |
 | Spectral-reassignment requires WASM | 1 | False risk — use `librosa.reassigned_spectrogram` server-side. Same dependency family as `spectral_viz.py`. |
-| CSV exporter explosion (one endpoint per field path) | 2 | Generic `…/export/csv/{field_path}` resolves a JSONPath into the snapshot. One endpoint, finite serializers per type. |
+| CSV exporter explosion (one endpoint per field path) | 2 | Generic `…/export/csv/{field_path}` resolves a dot-path (e.g. `lufsCurve.shortTerm`) into the snapshot — not JSONPath, just nested-key descent. One endpoint, finite serializers per type. |
 | State-machine collapse breaks legacy clients | 3 | The legacy clients are ASA's own UI; map at the server boundary. Bump the `phase1` envelope version if external consumers ever exist. |
 | URL ingestion exposes the server to arbitrary network egress | 3 | Limit to a configurable allowlist of hosts in hosted-mode; in local mode, allow all. Reuse `upload_limits.py` to cap downloaded bytes. |
 
