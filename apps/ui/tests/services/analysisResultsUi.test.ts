@@ -539,7 +539,7 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).toContain('Draft — AI interpretation is incomplete or unavailable.');
   });
 
-  it('renders stem summary cards next to Session Musician with plain-language labels', () => {
+  it('renders stem listening notes adjacent to Session Musician with plain-language labels', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults as React.ComponentType<Record<string, unknown>>, {
         phase1: {
@@ -552,8 +552,13 @@ describe('AnalysisResults UI wiring', () => {
       }),
     );
 
-    expect(html).toContain('Draft notes for MIDI cleanup');
-    expect(html).toContain('AI stem summary for musical understanding');
+    // The two panels are paired inside a local wrapper.
+    expect(html).toContain('id="section-musician-suite"');
+    expect(html).toContain('id="section-session"');
+    expect(html).toContain('id="section-stem-summary"');
+    // Stem listening notes panel renders with its new header.
+    expect(html).toContain('data-testid="stem-listening-notes-panel"');
+    expect(html).toContain('Stem Listening Notes');
     expect(html).toContain('Bass stem');
     expect(html).toContain('Musical stem');
     expect(html).toContain('Upper melodic detail is approximate.');
@@ -1221,7 +1226,7 @@ describe('AnalysisResults UI wiring', () => {
     expect(MIDI_DOWNLOAD_FILE_NAME).toBe('track-analysis.mid');
   });
 
-  it('renders pitch/note unavailable state when melodyDetail is missing', () => {
+  it('renders the pitch & melody unavailable state when neither source is present', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
         phase1: baseMeasurement,
@@ -1231,10 +1236,11 @@ describe('AnalysisResults UI wiring', () => {
     );
 
     expect(html).toContain('PITCH &amp; MELODY UNAVAILABLE');
-    expect(html).toContain('Run with pitch/note translation enabled, or ensure melodyDetail is present in the DSP payload for a melody guide');
+    expect(html).toContain('Neither stem-aware transcription nor a measurement-layer melody contour');
+    expect(html).toContain('data-testid="session-musician-no-data"');
   });
 
-  it('shows the pitch/note toggle state by default when both sources are available', () => {
+  it('renders both Block A (stem note draft) and Block B (melody contour) simultaneously when both sources are available', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
         phase1: {
@@ -1259,23 +1265,23 @@ describe('AnalysisResults UI wiring', () => {
       }),
     );
 
-    expect(html).toContain('PITCH/NOTE');
-    expect(html).toContain('MELODY');
-    expect(html).toContain('TORCHCREPE pitch detection');
-    expect(html).toContain('Range: C3 - G4');
-    expect(html).toContain('Confidence: 83%');
-    expect(html.match(/Range: C3 - G4/g)?.length ?? 0).toBe(1);
-    expect(html.match(/Confidence: 83%/g)?.length ?? 0).toBe(1);
-    expect(html).toContain('2 / 2 NOTES');
-    expect(html).toContain('CONFIDENCE');
-    expect(html).toContain('20%');
-    expect(html).toContain('PITCH/NOTE: TORCHCREPE');
+    // Both blocks and both downloads render at once — no toggle.
+    expect(html).toContain('data-testid="note-draft-block"');
+    expect(html).toContain('data-testid="melody-contour-block"');
+    expect(html).toContain('data-testid="midi-download-stems"');
+    expect(html).toContain('data-testid="midi-download-melody"');
+    // Stem-aware specifics
+    expect(html).toContain('data-render-state="stem-aware"');
+    expect(html).toContain('TORCHCREPE');
     expect(html).toContain('STEM-AWARE');
-    expect(html).toContain('Adjust confidence threshold to filter noise before export.');
+    // Band pill uses "label · NN%" format
+    expect(html).toContain('Solid scaffold · 83%');
+    // Melody block uses its Unreliable band copy at 20% confidence
+    expect(html).toContain('Unreliable · 20%');
     expect(html).not.toContain('PITCH &amp; MELODY UNAVAILABLE');
   });
 
-  it('shows Essentia source badges when only melodyDetail is available', () => {
+  it('shows the Essentia melody block when only melodyDetail is available', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
         phase1: {
@@ -1303,10 +1309,15 @@ describe('AnalysisResults UI wiring', () => {
       }),
     );
 
-    expect(html).not.toContain('PITCH/NOTE: TORCHCREPE');
-    expect(html).not.toContain('TORCHCREPE pitch detection');
-    expect(html).toContain('MELODY GUIDE: ESSENTIA');
-    expect(html).toContain('Essentia melody guide.');
+    // No stem note draft (no transcriptionDetail)
+    expect(html).not.toContain('data-testid="note-draft-block"');
+    expect(html).not.toContain('data-testid="midi-download-stems"');
+    // Melody contour block renders with the right metadata
+    expect(html).toContain('data-testid="melody-contour-block"');
+    expect(html).toContain('data-testid="midi-download-melody"');
+    expect(html).toContain('ESSENTIA MELODY');
+    expect(html).toContain('SOURCE-SEPARATED');
+    expect(html).toContain('Workable draft · 72%');
   });
 
   it('renders full-mix provenance when transcription did not use Demucs stems', () => {

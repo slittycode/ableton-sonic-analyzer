@@ -1,43 +1,37 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ChevronDown,
-  ChevronUp,
-  Download,
-  Grid3X3,
-  Info,
-  Music2,
-  Play,
-  SlidersHorizontal,
-  Square,
-} from 'lucide-react';
-import { Phase1Result } from '../types';
-import { downloadMidiFile } from '../services/midi/midiExport';
-import { previewNotes, PreviewHandle } from '../services/midi/midiPreview';
-import { gridLabel, quantizeNotes } from '../services/midi/quantization';
-import { MidiDisplayNote, QuantizeGrid, QuantizeOptions } from '../services/midi/types';
-import { formatDisplayText, getTextRoleClassName } from '../utils/displayText';
+// Session Musician panel — orchestrates two stacked pitch reads (Block A:
+// stem-aware note draft, Block B: measurement-layer melody contour) plus the
+// off-state banner. The actual content rendering lives in the block
+// components in ./sessionMusician/; this file owns the panel shell, the
+// shared preview controller, and the off-state copy.
 
-const GRID_OPTIONS: QuantizeGrid[] = ['off', '1/4', '1/8', '1/16', '1/32'];
-const PIANO_ROLL_HEIGHT = 240;
-const KEY_WIDTH = 40;
+import React, { useMemo, useState } from 'react';
+import { ChevronDown, ChevronUp, Music2 } from 'lucide-react';
+import { Phase1Result, TranscriptionDetail } from '../types';
+import { formatDisplayText, getTextRoleClassName } from '../utils/displayText';
+import { MelodyContourBlock } from './sessionMusician/MelodyContourBlock';
+import { NoteDraftBlock } from './sessionMusician/NoteDraftBlock';
+import {
+  deriveNoteDraftRenderState,
+  isLegacyTranscriptionMethod,
+  type PitchNoteMode,
+} from '../services/sessionMusician/renderState';
+import { usePreviewController } from './sessionMusician/usePreviewController';
+import type { MidiDisplayNote } from '../services/midi/types';
+
+// ---------------------------------------------------------------------------
+// Backwards-compatible exports.
+//
+// These helpers were exported from the old panel; tests and external callers
+// still import them. The values and behaviour are preserved exactly — only
+// the panel implementation around them has been re-organised.
+// ---------------------------------------------------------------------------
+
 export const MIDI_DOWNLOAD_FILE_NAME = 'track-analysis.mid';
 
-const NOTE_COLORS = {
-  fill: '#ff8800',
-  fillHigh: '#ffb14d',
-  fillLow: '#664526',
-  stroke: '#e67e22',
-  grid: '#262626',
-  text: '#9ca3af',
-  bg: '#101010',
-};
-
-const LOW_CONFIDENCE_TITLE = "Low confidence — treat this as approximate.";
-const LOW_MELODY_CONFIDENCE_THRESHOLD = 0.2;
-const LOW_TRANSCRIPTION_CONFIDENCE_THRESHOLD = 0.15;
-type SessionMusicianSource = 'pitchNote' | 'melodyGuide' | 'none';
-
-export function filterNotesByConfidence(notes: MidiDisplayNote[], confidenceThreshold: number): MidiDisplayNote[] {
+export function filterNotesByConfidence(
+  notes: MidiDisplayNote[],
+  confidenceThreshold: number,
+): MidiDisplayNote[] {
   return notes.filter((note) => note.confidence >= confidenceThreshold);
 }
 
@@ -60,17 +54,15 @@ export function formatVibratoConfidence(confidence: number, vibratoPresent: bool
   return String(rounded);
 }
 
+type LegacySessionMusicianSource = 'pitchNote' | 'melodyGuide' | 'optedOut' | 'none';
+
 export function deriveTranscriptionProvenance(
-  activeSource: SessionMusicianSource,
-  transcriptionDetail: Phase1Result['transcriptionDetail'] | null | undefined,
+  activeSource: LegacySessionMusicianSource | string,
+  transcriptionDetail: TranscriptionDetail | null | undefined,
 ): { transcriptionPathLabel: string | null; stemSourcesLabel: string | null } {
   if (activeSource !== 'pitchNote' || !transcriptionDetail) {
-    return {
-      transcriptionPathLabel: null,
-      stemSourcesLabel: null,
-    };
+    return { transcriptionPathLabel: null, stemSourcesLabel: null };
   }
-
   return {
     transcriptionPathLabel: transcriptionDetail.stemSeparationUsed ? 'STEM-AWARE' : 'FULL MIX',
     stemSourcesLabel:
@@ -80,311 +72,78 @@ export function deriveTranscriptionProvenance(
   };
 }
 
-function formatPitchNoteMethodLabel(transcriptionMethod: string | null | undefined): string {
-  const normalized = (transcriptionMethod ?? '').trim().toLowerCase();
-  if (normalized === 'torchcrepe-viterbi' || normalized === 'torchcrepe') {
-    return 'TORCHCREPE';
-  }
-  // Defensive fallback for historical analysis data produced before torchcrepe migration
-  if (normalized === 'basic-pitch' || normalized === 'basic_pitch' || normalized === 'basic-pitch-legacy') {
-    return 'BASIC PITCH (LEGACY)';
-  }
-  if (!normalized) {
-    return 'PITCH/NOTE EXTRACTION';
-  }
-  return transcriptionMethod!.replace(/[_-]+/g, ' ').toUpperCase();
-}
+// Re-exports so existing imports (e.g. tests) can grab everything from the
+// panel module path.
+export { deriveNoteDraftRenderState, isLegacyTranscriptionMethod };
 
-function midiToNoteName(midi: number): string {
-  const names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const;
-  const clamped = Math.max(0, Math.min(127, Math.round(midi)));
-  const octave = Math.floor(clamped / 12) - 1;
-  return `${names[clamped % 12]}${octave}`;
-}
+// ---------------------------------------------------------------------------
+// Off-state banner copy
+// ---------------------------------------------------------------------------
 
-function drawPianoRoll(canvas: HTMLCanvasElement, notes: MidiDisplayNote[], duration: number) {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
+const OFF_BANNER_WITH_MELODY =
+  "Stem pitch/note translation is off. You're seeing the measurement-layer melody contour below. Re-enable the Stem Pitch/Note Translation toggle in the request panel to attempt a stem-aware note draft. The stem listening notes below still describe each stem in plain language when interpretation runs.";
 
-  const dpr = window.devicePixelRatio || 1;
-  const rect = canvas.getBoundingClientRect();
-  canvas.width = rect.width * dpr;
-  canvas.height = rect.height * dpr;
-  ctx.scale(dpr, dpr);
+const OFF_BANNER_NO_MELODY_WITH_LISTENING =
+  'Session Musician is off. You still get BPM, key, structure, and Phase 2 device recommendations. The measurement-layer melody contour appears when available. Re-enable the Stem Pitch/Note Translation toggle to attempt a stem-aware note draft. The stem listening notes below describe each stem in plain language.';
 
-  const width = rect.width;
-  const height = rect.height;
+const OFF_BANNER_NO_MELODY_NO_LISTENING =
+  'Session Musician is off. You still get BPM, key, structure, and Phase 2 device recommendations. The measurement-layer melody contour appears when available. Re-enable the Stem Pitch/Note Translation toggle to attempt a stem-aware note draft.';
 
-  ctx.fillStyle = NOTE_COLORS.bg;
-  ctx.fillRect(0, 0, width, height);
-
-  if (!notes.length) {
-    ctx.fillStyle = NOTE_COLORS.text;
-    ctx.font = '12px ui-monospace, monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('No notes detected', width / 2, height / 2);
-    return;
-  }
-
-  const midiValues = notes.map((note) => note.midi);
-  const minMidi = Math.max(0, Math.min(...midiValues) - 2);
-  const maxMidi = Math.min(127, Math.max(...midiValues) + 2);
-  const range = Math.max(1, maxMidi - minMidi);
-  const plotX = KEY_WIDTH;
-  const plotWidth = width - KEY_WIDTH;
-  const noteHeight = Math.max(3, height / range);
-
-  ctx.font = '9px ui-monospace, monospace';
-  ctx.textAlign = 'right';
-  for (let midi = minMidi; midi <= maxMidi; midi += 1) {
-    const y = height - ((midi - minMidi) / range) * height;
-    ctx.strokeStyle = midi % 12 === 0 ? '#424242' : NOTE_COLORS.grid;
-    ctx.lineWidth = midi % 12 === 0 ? 1 : 0.5;
-    ctx.beginPath();
-    ctx.moveTo(plotX, y);
-    ctx.lineTo(width, y);
-    ctx.stroke();
-
-    if (midi % 12 === 0 || range <= 24) {
-      ctx.fillStyle = NOTE_COLORS.text;
-      ctx.fillText(midiToNoteName(midi), KEY_WIDTH - 4, y + 3);
-    }
-  }
-
-  const secondsStep = duration > 30 ? 5 : duration > 10 ? 2 : 1;
-  for (let sec = 0; sec <= duration; sec += secondsStep) {
-    const x = plotX + (sec / duration) * plotWidth;
-    ctx.strokeStyle = NOTE_COLORS.grid;
-    ctx.lineWidth = 0.5;
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, height);
-    ctx.stroke();
-
-    ctx.fillStyle = '#5f5f5f';
-    ctx.font = '8px ui-monospace, monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(`${sec}s`, x, height - 2);
-  }
-
-  for (const note of notes) {
-    const x = plotX + (note.startTime / duration) * plotWidth;
-    const widthPx = Math.max(2, (note.duration / duration) * plotWidth);
-    const y = height - ((note.midi - minMidi) / range) * height - noteHeight / 2;
-
-    const alpha = 0.4 + note.confidence * 0.6;
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = note.confidence > 0.7 ? NOTE_COLORS.fillHigh : note.confidence > 0.3 ? NOTE_COLORS.fill : NOTE_COLORS.fillLow;
-    ctx.fillRect(x, y, widthPx, Math.max(2, noteHeight - 1));
-
-    ctx.globalAlpha = 1;
-    ctx.strokeStyle = NOTE_COLORS.stroke;
-    ctx.lineWidth = 0.5;
-    ctx.strokeRect(x, y, widthPx, Math.max(2, noteHeight - 1));
-  }
-}
+// ---------------------------------------------------------------------------
+// Panel
+// ---------------------------------------------------------------------------
 
 interface SessionMusicianPanelProps {
   phase1: Phase1Result;
   sourceFileName?: string | null;
-  pitchNoteMode?: 'stem_notes' | 'off' | null;
+  pitchNoteMode?: PitchNoteMode;
+  /** Set by AnalysisResults when the Gemini stem listening notes section will render. */
+  hasStemListeningNotes?: boolean;
 }
 
-export function SessionMusicianPanel({ phase1, sourceFileName, pitchNoteMode = null }: SessionMusicianPanelProps) {
-  const melodyDetail = phase1.melodyDetail;
+export function SessionMusicianPanel({
+  phase1,
+  pitchNoteMode = null,
+  hasStemListeningNotes = false,
+}: SessionMusicianPanelProps) {
+  const melodyDetail = phase1.melodyDetail ?? null;
   const transcriptionDetail = phase1.transcriptionDetail ?? null;
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const previewRef = useRef<PreviewHandle | null>(null);
-  const [isPreviewing, setIsPreviewing] = useState(false);
   const [expanded, setExpanded] = useState(true);
-  const [sourceMode, setSourceMode] = useState<'pitchNote' | 'melodyGuide'>('pitchNote');
-  const [confidenceThreshold, setConfidenceThreshold] = useState(0.2);
-  const [quantizeOptions, setQuantizeOptions] = useState<QuantizeOptions>({ grid: 'off', swing: 0 });
-  const [activeStemFilter, setActiveStemFilter] = useState<string | null>(null);
-  const hasTranscription = !!transcriptionDetail?.noteCount && transcriptionDetail.noteCount > 0;
-  const hasMelody = !!melodyDetail?.notes?.length;
-  const melodyGuideOnly = !hasTranscription && hasMelody;
-  const canToggle = hasTranscription && hasMelody;
-  const userOptedOutOfPitchNote = pitchNoteMode === 'off';
-  const activeSource = userOptedOutOfPitchNote
-    ? 'optedOut'
-    : canToggle
-      ? sourceMode
-      : hasTranscription
-        ? 'pitchNote'
-        : hasMelody
-          ? 'melodyGuide'
-          : 'none';
+  const controller = usePreviewController();
 
-  useEffect(() => {
-    if (activeSource !== 'pitchNote') {
-      setActiveStemFilter(null);
-    }
-  }, [activeSource]);
+  const isOptedOut = pitchNoteMode === 'off';
 
-  const activeNotes = useMemo<MidiDisplayNote[]>(() => {
-    if (activeSource === 'pitchNote' && transcriptionDetail?.notes?.length) {
-      let notes = transcriptionDetail.notes;
-      if (activeStemFilter) {
-        notes = notes.filter((note) => note.stemSource === activeStemFilter);
-      }
-      return notes.map((note) => ({
-        midi: note.pitchMidi,
-        name: note.pitchName,
-        startTime: note.onsetSeconds,
-        duration: note.durationSeconds,
-        velocity: 90,
-        confidence: note.confidence,
-      }));
-    }
-
-    if (activeSource === 'melodyGuide' && melodyDetail?.notes?.length) {
-      return melodyDetail.notes.map((note) => ({
-        midi: note.midi,
-        name: midiToNoteName(note.midi),
-        startTime: note.onset,
-        duration: note.duration,
-        velocity: 90,
-        confidence: melodyDetail.pitchConfidence,
-      }));
-    }
-
-    return [];
-  }, [activeSource, activeStemFilter, melodyDetail, transcriptionDetail]);
-
-  const filteredNotes = useMemo(() => {
-    if (activeSource === 'pitchNote') {
-      return filterNotesByConfidence(activeNotes, confidenceThreshold);
-    }
-    return activeNotes;
-  }, [activeNotes, activeSource, confidenceThreshold]);
-
-  const displayNotes = useMemo(
-    () => quantizeNotes(filteredNotes, phase1.bpm || 120, quantizeOptions),
-    [filteredNotes, phase1.bpm, quantizeOptions],
+  const renderState = useMemo(
+    () => deriveNoteDraftRenderState(transcriptionDetail, pitchNoteMode),
+    [transcriptionDetail, pitchNoteMode],
   );
 
-  const duration = useMemo(() => {
-    if (!displayNotes.length) return Math.max(1, phase1.durationSeconds || 1);
-    return Math.max(...displayNotes.map((note) => note.startTime + note.duration), phase1.durationSeconds || 1, 1);
-  }, [displayNotes, phase1.durationSeconds]);
+  const hasMelodyNotes = (melodyDetail?.notes?.length ?? 0) > 0;
+  const showNoteDraftBlock = renderState !== 'absent';
+  const showMelodyBlock = !!melodyDetail;
 
-  useEffect(() => {
-    if (!canvasRef.current || activeSource === 'none' || !expanded) return;
-    drawPianoRoll(canvasRef.current, displayNotes, duration);
-  }, [activeSource, displayNotes, duration, expanded]);
+  const offBannerCopy = useMemo(() => {
+    if (!isOptedOut) return null;
+    if (hasMelodyNotes) return OFF_BANNER_WITH_MELODY;
+    if (hasStemListeningNotes) return OFF_BANNER_NO_MELODY_WITH_LISTENING;
+    return OFF_BANNER_NO_MELODY_NO_LISTENING;
+  }, [hasMelodyNotes, hasStemListeningNotes, isOptedOut]);
 
-  useEffect(() => {
-    if (!canvasRef.current || activeSource === 'none' || !expanded) return;
-    const canvas = canvasRef.current;
-    const observer = new ResizeObserver(() => {
-      drawPianoRoll(canvas, displayNotes, duration);
-    });
-    observer.observe(canvas);
-    return () => observer.disconnect();
-  }, [activeSource, displayNotes, duration, expanded]);
-
-  useEffect(() => () => previewRef.current?.stop(), []);
-
-  const handlePreview = useCallback(() => {
-    if (isPreviewing) {
-      previewRef.current?.stop();
-      previewRef.current = null;
-      setIsPreviewing(false);
-      return;
+  const panelSummary = useMemo(() => {
+    if (isOptedOut) {
+      return 'Pitch/note translation is off';
     }
-
-    if (!displayNotes.length) return;
-
-    const handle = previewNotes(displayNotes, () => {
-      setIsPreviewing(false);
-      previewRef.current = null;
-    });
-    previewRef.current = handle;
-    setIsPreviewing(true);
-  }, [displayNotes, isPreviewing]);
-
-  const handleDownload = useCallback(() => {
-    if (!displayNotes.length) return;
-    downloadMidiFile(displayNotes, phase1.bpm, MIDI_DOWNLOAD_FILE_NAME);
-  }, [displayNotes, phase1.bpm]);
-
-  const stats = useMemo(() => {
-    if (activeSource === 'none' || !activeNotes.length) return null;
-    const midiValues = displayNotes.map((note) => note.midi);
-    const minMidi = midiValues.length ? Math.min(...midiValues) : null;
-    const maxMidi = midiValues.length ? Math.max(...midiValues) : null;
-    const avgConfidence = Math.round(
-      (activeSource === 'pitchNote'
-        ? transcriptionDetail?.averageConfidence ?? 0
-        : melodyDetail?.pitchConfidence ?? 0) * 100,
-    );
-    const totalDuration = displayNotes.reduce((sum, note) => sum + note.duration, 0).toFixed(1);
-    const countThreshold = activeSource === 'pitchNote' ? confidenceThreshold : 0;
-
-    return {
-      countLabel: formatFilteredNoteCount(filteredNotes.length, activeNotes.length, countThreshold),
-      range: minMidi === null || maxMidi === null ? 'n/a' : `${midiToNoteName(minMidi)} - ${midiToNoteName(maxMidi)}`,
-      avgConfidence,
-      totalDuration,
-      trackDuration: phase1.durationSeconds.toFixed(1),
-    };
-  }, [activeNotes.length, activeSource, confidenceThreshold, displayNotes, filteredNotes, melodyDetail, phase1.durationSeconds, transcriptionDetail]);
-  const hasSourceNotes = activeNotes.length > 0;
-  const hasNotes = displayNotes.length > 0;
-  const confidenceThresholdPercent = Math.round(confidenceThreshold * 100);
-  const dominantNoteNames =
-    activeSource === 'pitchNote'
-      ? transcriptionDetail?.dominantPitches.map((note) => note.pitchName) ?? []
-      : melodyDetail?.dominantNotes.map((note) => midiToNoteName(note)) ?? [];
-  const rangeLabel =
-    activeSource === 'pitchNote'
-      ? transcriptionDetail?.pitchRange.minName && transcriptionDetail?.pitchRange.maxName
-        ? `${transcriptionDetail.pitchRange.minName} - ${transcriptionDetail.pitchRange.maxName}`
-        : 'n/a'
-      : melodyDetail?.pitchRange.min === null || melodyDetail?.pitchRange.max === null || !melodyDetail?.pitchRange
-        ? 'n/a'
-        : `${midiToNoteName(melodyDetail.pitchRange.min)} - ${midiToNoteName(melodyDetail.pitchRange.max)}`;
-  const confidencePercent =
-    activeSource === 'pitchNote'
-      ? Math.round((transcriptionDetail?.averageConfidence ?? 0) * 100)
-      : activeSource === 'melodyGuide'
-        ? Math.round((melodyDetail?.pitchConfidence ?? 0) * 100)
-        : 0;
-  const isDraft =
-    activeSource === 'pitchNote'
-      ? (transcriptionDetail?.averageConfidence ?? 0) < LOW_TRANSCRIPTION_CONFIDENCE_THRESHOLD
-      : activeSource === 'melodyGuide'
-        ? (melodyDetail?.pitchConfidence ?? 0) < LOW_MELODY_CONFIDENCE_THRESHOLD
-        : false;
-  const sourceBadgeLabel =
-    activeSource === 'pitchNote'
-      ? `PITCH/NOTE: ${formatPitchNoteMethodLabel(transcriptionDetail?.transcriptionMethod)}`
-      : activeSource === 'melodyGuide'
-        ? 'MELODY GUIDE: ESSENTIA'
-        : null;
-  const { transcriptionPathLabel, stemSourcesLabel } = deriveTranscriptionProvenance(activeSource, transcriptionDetail);
-  const melodyIsApproximate =
-    !!melodyDetail && (melodyDetail.pitchConfidence ?? 1) <= LOW_MELODY_CONFIDENCE_THRESHOLD;
-  const melodyMetadataSummary = melodyDetail
-    ? {
-        midiFile: melodyDetail.midiFile ? 'available' : 'none',
-        source: melodyDetail.sourceSeparated ? 'separated' : 'full mix',
-        vibrato: melodyDetail.vibratoPresent
-          ? `present (${melodyDetail.vibratoRate.toFixed(1)} Hz / ${melodyDetail.vibratoExtent.toFixed(2)} cents / ${formatVibratoConfidence(melodyDetail.vibratoConfidence, true)}%)`
-          : `not detected (${Math.round(melodyDetail.vibratoConfidence * 100)}%)`,
-      }
-    : null;
-  const previewLabel = activeSource === 'melodyGuide' ? 'Preview melody' : 'Preview';
-  const downloadLabel = activeSource === 'melodyGuide' ? 'Download melody .mid' : 'Download .mid';
-  const panelSummaryTitle = userOptedOutOfPitchNote
-    ? 'Pitch/note translation is off'
-    : melodyGuideOnly
-      ? 'Measurement-layer melody guide'
-      : 'Pitch detection and melody guide';
-  const panelSummaryBody = userOptedOutOfPitchNote
-    ? 'Re-enable the Stem Pitch/Note Translation toggle to use the melody guide preview and MIDI export.'
-    : 'Draft notes for MIDI cleanup';
+    if (showNoteDraftBlock && showMelodyBlock) {
+      return 'Two reads of the pitched material in this track. Use either, neither, or both.';
+    }
+    if (showNoteDraftBlock) {
+      return "Stem-aware note draft. Designed for cleanup in Ableton's piano roll, not as exact note truth.";
+    }
+    if (showMelodyBlock) {
+      return 'Measurement-layer melody contour. Tracks the loudest pitched line across the full mix.';
+    }
+    return 'No pitched material detected. Check the stem listening notes below.';
+  }, [isOptedOut, showMelodyBlock, showNoteDraftBlock]);
 
   return (
     <section data-testid="session-musician-panel" className="space-y-4">
@@ -393,19 +152,12 @@ export function SessionMusicianPanel({ phase1, sourceFileName, pitchNoteMode = n
           data-text-role="section-title"
           className={[getTextRoleClassName('section-title'), 'flex items-center'].join(' ')}
         >
-          <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
+          <span className="w-2 h-2 bg-accent rounded-full mr-2" />
           {formatDisplayText('Session Musician', 'title')}
-          {melodyIsApproximate && (
-            <span
-              className="ml-2 text-[10px] font-mono text-warning"
-              title={LOW_CONFIDENCE_TITLE}
-              aria-label="Low confidence"
-            >
-              ⚠
-            </span>
-          )}
         </h2>
-        <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">PITCH & MELODY</span>
+        <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">
+          PITCH & MELODY
+        </span>
       </div>
 
       <div className="bg-bg-card border border-border rounded-sm p-4 space-y-4">
@@ -414,289 +166,69 @@ export function SessionMusicianPanel({ phase1, sourceFileName, pitchNoteMode = n
             <div className="p-2 rounded-full border border-accent/30 bg-accent/10">
               <Music2 className="w-4 h-4 text-accent" />
             </div>
-            <div className="space-y-2">
-              <p data-text-role="body" className={[getTextRoleClassName('body'), 'opacity-80'].join(' ')}>
-                {panelSummaryTitle}
-              </p>
-              <p data-text-role="body" className={[getTextRoleClassName('body'), 'text-accent/70'].join(' ')}>
-                {panelSummaryBody}
-              </p>
-            </div>
+            <p
+              data-text-role="body"
+              className={[getTextRoleClassName('body'), 'opacity-80'].join(' ')}
+            >
+              {panelSummary}
+            </p>
           </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handlePreview}
-              disabled={!displayNotes.length}
-              title={isPreviewing ? 'Stop preview' : previewLabel}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-accent/10 border border-accent/40 text-accent text-xs font-mono uppercase rounded-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-accent/20 transition-colors"
-            >
-              {isPreviewing ? <Square className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-              {isPreviewing ? 'Stop' : previewLabel}
-            </button>
-            <button
-              onClick={handleDownload}
-              disabled={!displayNotes.length}
-              title={downloadLabel}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-bg-panel border border-border text-text-primary text-xs font-mono uppercase rounded-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-bg-card transition-colors"
-            >
-              <Download className="w-3.5 h-3.5" />
-              {downloadLabel}
-            </button>
-            {canToggle && (
-              <div className="inline-flex items-center rounded-sm border border-border bg-bg-panel/40 p-0.5">
-                <button
-                  onClick={() => setSourceMode('pitchNote')}
-                  className={`px-2 py-1 rounded-sm text-[10px] font-mono uppercase transition-colors ${
-                    activeSource === 'pitchNote'
-                      ? 'bg-accent text-bg-app'
-                      : 'text-text-secondary hover:text-text-primary'
-                  }`}
-                >
-                  PITCH/NOTE
-                </button>
-                <button
-                  onClick={() => setSourceMode('melodyGuide')}
-                  className={`px-2 py-1 rounded-sm text-[10px] font-mono uppercase transition-colors ${
-                    activeSource === 'melodyGuide'
-                      ? 'bg-accent text-bg-app'
-                      : 'text-text-secondary hover:text-text-primary'
-                  }`}
-                >
-                  MELODY
-                </button>
-              </div>
-            )}
-            <button
-              onClick={() => setExpanded((prev) => !prev)}
-              aria-label={expanded ? 'Collapse session musician panel' : 'Expand session musician panel'}
-              title={expanded ? 'Collapse' : 'Expand'}
-              className="p-1.5 text-text-secondary hover:text-text-primary transition-colors"
-            >
-              {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => setExpanded((prev) => !prev)}
+            aria-label={expanded ? 'Collapse session musician panel' : 'Expand session musician panel'}
+            title={expanded ? 'Collapse' : 'Expand'}
+            className="p-1.5 text-text-secondary hover:text-text-primary transition-colors self-start"
+          >
+            {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
         </div>
 
-        {melodyGuideOnly && !userOptedOutOfPitchNote && (
-          <div className="rounded-sm border border-accent/20 bg-bg-panel p-3 space-y-1">
+        {offBannerCopy && (
+          <div
+            data-testid="session-musician-off-banner"
+            className="rounded-sm border border-accent/20 bg-bg-panel p-3 space-y-1"
+          >
             <p className="text-[10px] font-mono uppercase tracking-wide text-accent">
-              Stem pitch/note extraction is off.
+              Pitch/note translation is off
             </p>
-            <p className="text-[10px] font-mono text-text-secondary/80 leading-relaxed">
-              This panel is showing the measurement-layer melody guide instead, so preview and MIDI export still work, but this is not the stem note draft.
-            </p>
-          </div>
-        )}
-
-        {userOptedOutOfPitchNote && (
-          <div className="rounded-sm border border-accent/20 bg-bg-panel p-3 space-y-1">
-            <p className="text-[10px] font-mono uppercase tracking-wide text-accent">
-              Pitch/note translation is off.
-            </p>
-            <p className="text-[10px] font-mono text-text-secondary/80 leading-relaxed">
-              Re-enable the Stem Pitch/Note Translation toggle in the request panel to preview and export the melody guide.
+            <p className="text-[11px] font-mono text-text-secondary leading-relaxed">
+              {offBannerCopy}
             </p>
           </div>
         )}
 
         {expanded && (
           <>
-            {activeSource === 'none' && (
-              <div className="border border-border rounded-sm px-3 py-2 bg-bg-panel/40 space-y-1">
+            {showNoteDraftBlock && (
+              <NoteDraftBlock
+                transcriptionDetail={transcriptionDetail}
+                pitchNoteMode={pitchNoteMode}
+                controller={controller}
+                bpm={phase1.bpm}
+                trackDurationSeconds={phase1.durationSeconds}
+              />
+            )}
+            {showMelodyBlock && (
+              <MelodyContourBlock
+                melodyDetail={melodyDetail}
+                controller={controller}
+                bpm={phase1.bpm}
+                trackDurationSeconds={phase1.durationSeconds}
+              />
+            )}
+            {!showNoteDraftBlock && !showMelodyBlock && !offBannerCopy && (
+              <div
+                data-testid="session-musician-no-data"
+                className="border border-border rounded-sm px-3 py-2 bg-bg-panel/40 space-y-1"
+              >
                 <p className="text-[11px] font-mono text-text-secondary uppercase tracking-wide">
                   PITCH & MELODY UNAVAILABLE
                 </p>
-                <p className="text-[10px] font-mono text-text-secondary/80">
-                  Run with pitch/note translation enabled, or ensure melodyDetail is present in the DSP payload for a melody guide
+                <p className="text-[11px] font-mono text-text-secondary/80 leading-relaxed">
+                  Neither stem-aware transcription nor a measurement-layer melody contour were produced for this run. Check the stem listening notes if interpretation ran.
                 </p>
               </div>
-            )}
-
-            {(activeSource === 'pitchNote' || activeSource === 'melodyGuide') && (
-              <>
-                {stats && (
-                  <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono uppercase tracking-wide text-text-secondary">
-                    <span>{stats.countLabel}</span>
-                    <span className="opacity-50">|</span>
-                    <span>Range: {stats.range}</span>
-                    <span className="opacity-50">|</span>
-                    <span>Confidence: {stats.avgConfidence}%</span>
-                    <span className="opacity-50">|</span>
-                    <span>Total note time: {stats.totalDuration}s</span>
-                    <span className="opacity-50">|</span>
-                    <span>Track duration: {stats.trackDuration}s</span>
-                    {sourceBadgeLabel && (
-                      <>
-                        <span className="opacity-50">|</span>
-                        <span>{sourceBadgeLabel}</span>
-                      </>
-                    )}
-                  </div>
-                )}
-
-                {transcriptionPathLabel && (
-                  <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono uppercase tracking-wide text-text-secondary">
-                    <span
-                      className={`px-2 py-1 rounded border ${
-                        transcriptionDetail?.stemSeparationUsed
-                          ? 'border-accent/40 text-accent bg-accent/10'
-                          : 'border-border bg-bg-panel/40'
-                      }`}
-                    >
-                      {transcriptionPathLabel}
-                    </span>
-                    {stemSourcesLabel && (
-                      <div className="flex items-center gap-1">
-                        <span className="text-[10px] font-mono uppercase text-text-secondary mr-1">STEMS:</span>
-                        {transcriptionDetail!.stemsTranscribed.map((stem) => (
-                          <button
-                            key={stem}
-                            onClick={() => setActiveStemFilter((prev) => (prev === stem ? null : stem))}
-                            className={`px-2 py-1 rounded border text-[10px] font-mono uppercase transition-colors ${
-                              activeStemFilter === stem
-                                ? 'border-accent text-accent bg-accent/10'
-                                : 'border-border bg-bg-panel/40 text-text-secondary hover:text-text-primary hover:border-border'
-                            }`}
-                          >
-                            {stem}
-                          </button>
-                        ))}
-                        {activeStemFilter && (
-                          <button
-                            onClick={() => setActiveStemFilter(null)}
-                            className="px-2 py-1 rounded border border-border bg-bg-panel/40 text-[10px] font-mono uppercase text-text-secondary hover:text-text-primary transition-colors"
-                          >
-                            ALL
-                          </button>
-                        )}
-                      </div>
-                    )}
-                    {transcriptionDetail?.fullMixFallback && (
-                      <span className="px-2 py-1 rounded border border-warning/30 text-warning bg-warning/10">
-                        FULL MIX — quality limited
-                      </span>
-                    )}
-                  </div>
-                )}
-
-                {activeSource === 'melodyGuide' && melodyMetadataSummary && (
-                  <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono uppercase tracking-wide text-text-secondary">
-                    <span>Melody MIDI: {melodyMetadataSummary.midiFile}</span>
-                    <span className="opacity-50">|</span>
-                    <span>Melody source: {melodyMetadataSummary.source}</span>
-                    <span className="opacity-50">|</span>
-                    <span>Vibrato: {melodyMetadataSummary.vibrato}</span>
-                  </div>
-                )}
-
-                {!stats && (
-                  <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono uppercase tracking-wide text-text-secondary">
-                    <span className="px-2 py-1 rounded border border-border bg-bg-panel/40">
-                      {activeSource === 'pitchNote' ? transcriptionDetail?.noteCount ?? 0 : melodyDetail?.noteCount ?? 0} notes
-                    </span>
-                    <span className="px-2 py-1 rounded border border-border bg-bg-panel/40">Range: {rangeLabel}</span>
-                    <span className="px-2 py-1 rounded border border-border bg-bg-panel/40">Confidence: {confidencePercent}%</span>
-                    {sourceBadgeLabel && (
-                      <span className="px-2 py-1 rounded border border-border bg-bg-panel/40">{sourceBadgeLabel}</span>
-                    )}
-                    {isDraft && (
-                      <span className="px-2 py-1 rounded border border-warning/30 text-warning bg-warning/10">
-                        Draft transcription
-                      </span>
-                    )}
-                  </div>
-                )}
-
-                {dominantNoteNames.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {dominantNoteNames.map((name, idx) => (
-                      <span
-                        key={`${name}-${idx}`}
-                        className="px-2 py-1 rounded-sm border border-border text-[10px] font-mono text-text-primary bg-bg-panel/40"
-                      >
-                        {name}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                <div className="rounded-sm border border-border overflow-hidden">
-                  <canvas ref={canvasRef} className="w-full" style={{ height: PIANO_ROLL_HEIGHT }} />
-                </div>
-
-                <div className="flex flex-wrap items-center gap-4 p-3 border border-border rounded-sm bg-bg-panel/40">
-              <div className="flex items-center gap-2">
-                <Grid3X3 className="w-3.5 h-3.5 text-text-secondary" />
-                <span className="text-[10px] font-mono uppercase text-text-secondary">Quantize</span>
-              </div>
-
-              <div className="flex items-center gap-1">
-                {GRID_OPTIONS.map((grid) => (
-                  <button
-                    key={grid}
-                    onClick={() => setQuantizeOptions((prev) => ({ ...prev, grid }))}
-                    disabled={!hasNotes}
-                    className={`px-2 py-1 text-[10px] font-mono rounded border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                      quantizeOptions.grid === grid
-                        ? 'border-accent text-accent bg-accent/10'
-                        : 'border-border text-text-secondary bg-bg-card hover:bg-bg-panel'
-                    }`}
-                  >
-                    {gridLabel(grid)}
-                  </button>
-                ))}
-              </div>
-
-              <div
-                className="flex items-center gap-2 px-2 py-1 rounded border border-border bg-bg-card"
-                title={activeSource === 'melodyGuide' ? 'Per-note confidence not available in melody-guide mode' : undefined}
-              >
-                <span className="text-[10px] font-mono uppercase text-text-secondary">CONFIDENCE</span>
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={confidenceThreshold}
-                  onChange={(event) => setConfidenceThreshold(Number(event.target.value))}
-                  disabled={!hasSourceNotes || activeSource === 'melodyGuide'}
-                  className="w-20 h-1 accent-accent disabled:opacity-30"
-                />
-                <span className="text-[10px] font-mono text-text-secondary w-8 text-right">{confidenceThresholdPercent}%</span>
-              </div>
-
-              <div className="flex items-center gap-2 ml-auto">
-                <SlidersHorizontal className="w-3.5 h-3.5 text-text-secondary" />
-                <span className="text-[10px] font-mono uppercase text-text-secondary">Swing</span>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={quantizeOptions.swing}
-                  onChange={(event) =>
-                    setQuantizeOptions((prev) => ({
-                      ...prev,
-                      swing: Number(event.target.value),
-                    }))
-                  }
-                  disabled={quantizeOptions.grid === 'off' || !hasNotes}
-                  className="w-20 h-1 accent-accent disabled:opacity-30"
-                />
-                <span className="text-[10px] font-mono text-text-secondary w-8 text-right">{quantizeOptions.swing}%</span>
-              </div>
-            </div>
-
-                <div className="flex items-start gap-2 text-[10px] font-mono text-text-secondary/80">
-                  <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
-                  <span title="Session musician transcription details">
-                    {activeSource === 'pitchNote'
-                      ? `${formatPitchNoteMethodLabel(transcriptionDetail?.transcriptionMethod)} pitch detection. Adjust quantize before preview/export. Adjust confidence threshold to filter noise before export.`
-                      : 'Essentia melody guide. Adjust quantize before preview/export. Per-note confidence not available in melody-guide mode.'}
-                    {isDraft ? ' Confidence is low, so treat this clip as a draft scaffold.' : ''}
-                  </span>
-                </div>
-              </>
             )}
           </>
         )}

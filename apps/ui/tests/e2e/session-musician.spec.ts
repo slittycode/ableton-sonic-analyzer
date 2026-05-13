@@ -64,7 +64,9 @@ test('live artifact review generates spectral enhancements and keeps Session Mus
   expect(enhancementKinds).toContain('onset_strength');
   expect(enhancementKinds).toContain('spectrogram_onset');
 
+  // /Download \.mid/i matches the Block A "Download .mid" button (stem-aware).
+  // Block B's "Download melody .mid" doesn't match the regex.
   const midiArtifact = await downloadBinaryArtifact(page, /Download \.mid/i);
-  expect(midiArtifact.download.suggestedFilename()).toBe('track-analysis.mid');
+  expect(midiArtifact.download.suggestedFilename()).toBe('track-analysis-stems.mid');
   expect(midiArtifact.sizeBytes).toBeGreaterThan(0);
 });

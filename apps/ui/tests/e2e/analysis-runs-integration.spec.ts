@@ -69,7 +69,10 @@ test('local integration flow uses canonical analysis-runs routes without Gemini 
   expect(artifactKinds).toContain('spectrogram_mel');
   expect(artifactKinds).toContain('spectral_time_series');
 
+  // The stem-aware download is named track-analysis-stems.mid since the
+  // per-block downloads landed; Block B's "Download melody .mid" doesn't match
+  // the /Download \.mid/i regex.
   const midiArtifact = await downloadBinaryArtifact(page, /Download \.mid/i);
-  expect(midiArtifact.download.suggestedFilename()).toBe('track-analysis.mid');
+  expect(midiArtifact.download.suggestedFilename()).toBe('track-analysis-stems.mid');
   expect(midiArtifact.sizeBytes).toBeGreaterThan(0);
 });

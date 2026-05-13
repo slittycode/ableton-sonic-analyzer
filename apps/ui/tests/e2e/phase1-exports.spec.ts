@@ -63,8 +63,11 @@ test('live golden path uploads the external track and reviews the full analysis 
   expect(markdownArtifact.text).toContain('## Phase 1 Metadata');
   expect(markdownArtifact.text).toContain('## Phase 2');
 
+  // /Download \.mid/i matches Block A only (Block B's button reads
+  // "Download melody .mid"). The stem-aware export filename changed when
+  // per-block downloads were introduced.
   const midiArtifact = await downloadBinaryArtifact(page, /Download \.mid/i);
-  expect(midiArtifact.download.suggestedFilename()).toBe('track-analysis.mid');
+  expect(midiArtifact.download.suggestedFilename()).toBe('track-analysis-stems.mid');
   expect(midiArtifact.sizeBytes).toBeGreaterThan(0);
 
   const latestSnapshot = await fetchAnalysisRun(runId);
