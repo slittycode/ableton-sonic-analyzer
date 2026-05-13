@@ -149,6 +149,34 @@ def _select_transcription_winner(note: dict, candidate: dict, prefer_confidence_
     return note if float(note.get("onsetSeconds", 0.0)) <= float(candidate.get("onsetSeconds", 0.0)) else candidate
 
 
+def _per_stem_average_confidence(notes: list[dict]) -> dict[str, float]:
+    """Mean confidence per stemSource for the notes that survived dedup + cap.
+
+    Each transcription note carries the stem it came from ("bass", "other", or
+    "full_mix"). Returning per-stem averages lets the UI show a different
+    confidence band when the producer toggles the stem filter — a bass stem
+    that tracked well shouldn't be hidden behind a noisy lead stem's
+    confidence (or vice versa).
+    """
+    if not notes:
+        return {}
+    by_stem: dict[str, list[float]] = {}
+    for note in notes:
+        stem = note.get("stemSource")
+        if not isinstance(stem, str) or not stem:
+            continue
+        try:
+            conf = float(note.get("confidence", 0.0))
+        except (TypeError, ValueError):
+            continue
+        by_stem.setdefault(stem, []).append(conf)
+    return {
+        stem: round(float(np.mean(np.asarray(confidences, dtype=np.float64))), 4)
+        for stem, confidences in by_stem.items()
+        if confidences
+    }
+
+
 def _deduplicate_transcription_notes(notes: list[dict]) -> list[dict]:
     if len(notes) <= 1:
         return [dict(note) for note in notes]
@@ -541,6 +569,7 @@ class TorchcrepeBackend:
                         "stemSeparationUsed": stem_separation_used,
                         "fullMixFallback": full_mix_fallback,
                         "stemsTranscribed": stems_transcribed,
+                        "perStemAverageConfidence": {},
                         "notes": [],
                     }
                 }
@@ -561,6 +590,12 @@ class TorchcrepeBackend:
             average_confidence = round(
                 float(np.mean(np.asarray(confidence_values, dtype=np.float64))), 4
             )
+            # Empty in full-mix fallback so the UI doesn't show a per-stem
+            # band when there's no meaningful separation to report. The
+            # frontend falls back to averageConfidence in that case.
+            per_stem_confidence = (
+                {} if full_mix_fallback else _per_stem_average_confidence(notes)
+            )
 
             return {
                 "transcriptionDetail": {
@@ -577,6 +612,7 @@ class TorchcrepeBackend:
                     "stemSeparationUsed": stem_separation_used,
                     "fullMixFallback": full_mix_fallback,
                     "stemsTranscribed": stems_transcribed,
+                    "perStemAverageConfidence": per_stem_confidence,
                     "notes": notes,
                 }
             }

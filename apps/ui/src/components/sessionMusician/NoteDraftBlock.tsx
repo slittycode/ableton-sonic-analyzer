@@ -14,6 +14,7 @@ import type { QuantizeOptions } from '../../services/midi/types';
 import { quantizeNotes } from '../../services/midi/quantization';
 import {
   deriveNoteDraftRenderState,
+  selectNoteDraftBandConfidence,
   type NoteDraftRenderState,
   type PitchNoteMode,
 } from '../../services/sessionMusician/renderState';
@@ -186,6 +187,14 @@ export function NoteDraftBlock({
   const bandOverrideCopy = isOverride ? (notice ?? null) : undefined;
   const bandOverrideTone = isOverride ? ('rough' as const) : undefined;
 
+  // Per-stem band confidence selection — see services/sessionMusician/renderState.ts
+  // for the precedence and fallback rules.
+  const bandConfidence = selectNoteDraftBandConfidence(
+    transcriptionDetail,
+    stemFilter,
+    renderState,
+  );
+
   // Slider filtered everything out — keep the piano roll rendered (it shows
   // "no notes" gracefully) but hide the Download since there's nothing to ship.
   const sliderEmptiedNotes =
@@ -200,7 +209,7 @@ export function NoteDraftBlock({
       {headerBlock}
 
       <ConfidenceBandBadge
-        confidence={transcriptionDetail.averageConfidence}
+        confidence={bandConfidence}
         overrideLabel={bandOverrideLabel ?? null}
         overrideCopy={bandOverrideCopy ?? null}
         overrideTone={bandOverrideTone}
