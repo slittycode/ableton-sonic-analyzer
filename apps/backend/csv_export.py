@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import csv
 import io
+import math
 from typing import Any, Callable
 
 
@@ -135,6 +136,32 @@ def _resolve_dot_path(payload: dict, dot_path: str) -> Any:
     return node
 
 
+def _as_finite_float(value: Any) -> float | None:
+    """Convert ``value`` to a finite ``float``, or ``None``.
+
+    Returns ``None`` for: ``None`` input, non-numeric input (raises on
+    ``float()``), and ``NaN`` / ``Infinity`` / ``-Infinity``. The
+    non-finite case matters: Python's ``json.loads`` accepts ``NaN`` and
+    ``Infinity`` by default (non-standard JSON), so a pathological
+    measurement could round-trip an NaN into a snapshot and from there
+    into a CSV cell as the string ``"nan"`` — which most downstream
+    consumers (REAPER, Max, pandas) would mis-parse as a string.
+
+    Used at the per-row level: a row with any non-finite value is
+    skipped entirely, matching the existing "missing key → skip row"
+    behavior.
+    """
+    if value is None:
+        return None
+    try:
+        as_float = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(as_float):
+        return None
+    return as_float
+
+
 # ----------------------------------------------------------------------
 # Per-field serializers
 # ----------------------------------------------------------------------
@@ -143,7 +170,11 @@ def _resolve_dot_path(payload: dict, dot_path: str) -> Any:
 def _serialize_lufs_curve(
     points: Any, window_duration_s: float
 ) -> str | None:
-    """Serialize a list of ``{t, lufs}`` points with a constant duration column."""
+    """Serialize a list of ``{t, lufs}`` points with a constant duration column.
+
+    Skips any row where either ``t`` or ``lufs`` is missing, non-numeric,
+    or non-finite (NaN, Infinity).
+    """
     if not isinstance(points, list) or len(points) == 0:
         return None
     buf = io.StringIO()
@@ -153,19 +184,21 @@ def _serialize_lufs_curve(
     for point in points:
         if not isinstance(point, dict):
             continue
-        t = point.get("t")
-        lufs = point.get("lufs")
+        t = _as_finite_float(point.get("t"))
+        lufs = _as_finite_float(point.get("lufs"))
         if t is None or lufs is None:
             continue
-        writer.writerow(
-            [f"{float(t):.6f}", f"{window_duration_s}", f"{float(lufs):.2f}"]
-        )
+        writer.writerow([f"{t:.6f}", f"{window_duration_s}", f"{lufs:.2f}"])
         wrote_any = True
     return buf.getvalue() if wrote_any else None
 
 
 def _serialize_tempo_curve(points: Any) -> str | None:
-    """Serialize a list of ``{t, bpm}`` points."""
+    """Serialize a list of ``{t, bpm}`` points.
+
+    Skips any row where either ``t`` or ``bpm`` is missing, non-numeric,
+    or non-finite.
+    """
     if not isinstance(points, list) or len(points) == 0:
         return None
     buf = io.StringIO()
@@ -175,11 +208,11 @@ def _serialize_tempo_curve(points: Any) -> str | None:
     for point in points:
         if not isinstance(point, dict):
             continue
-        t = point.get("t")
-        bpm = point.get("bpm")
+        t = _as_finite_float(point.get("t"))
+        bpm = _as_finite_float(point.get("bpm"))
         if t is None or bpm is None:
             continue
-        writer.writerow([f"{float(t):.6f}", f"{float(bpm):.3f}"])
+        writer.writerow([f"{t:.6f}", f"{bpm:.3f}"])
         wrote_any = True
     return buf.getvalue() if wrote_any else None
 
@@ -187,8 +220,9 @@ def _serialize_tempo_curve(points: Any) -> str | None:
 def _serialize_spectral_balance_time_series(points: Any) -> str | None:
     """Serialize a list of ``{t, subBass, ..., brilliance}`` points.
 
-    Skips any row that is missing one of the band values rather than
-    writing a partial row — keeps the CSV regular and downstream-loadable.
+    Skips any row where ``t`` or any band value is missing, non-numeric,
+    or non-finite (NaN, Infinity) — keeps the CSV regular and
+    downstream-loadable.
     """
     if not isinstance(points, list) or len(points) == 0:
         return None
@@ -199,20 +233,20 @@ def _serialize_spectral_balance_time_series(points: Any) -> str | None:
     for point in points:
         if not isinstance(point, dict):
             continue
-        t = point.get("t")
+        t = _as_finite_float(point.get("t"))
         if t is None:
             continue
         band_values: list[str] = []
         skip = False
         for band in _SPECTRAL_BANDS:
-            value = point.get(band)
+            value = _as_finite_float(point.get(band))
             if value is None:
                 skip = True
                 break
-            band_values.append(f"{float(value):.4f}")
+            band_values.append(f"{value:.4f}")
         if skip:
             continue
-        writer.writerow([f"{float(t):.6f}", *band_values])
+        writer.writerow([f"{t:.6f}", *band_values])
         wrote_any = True
     return buf.getvalue() if wrote_any else None
 

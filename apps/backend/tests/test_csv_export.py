@@ -95,10 +95,136 @@ class ExportFieldToCsvTopLevelTests(unittest.TestCase):
         result = csv_export.export_field_to_csv({}, "lufsCurve.shortTerm")
         self.assertIsNone(result)
 
-    def test_empty_array_returns_none(self):
+    def test_empty_array_returns_none_for_lufs_curve(self):
         payload = {"lufsCurve": {"shortTerm": []}}
         result = csv_export.export_field_to_csv(payload, "lufsCurve.shortTerm")
         self.assertIsNone(result)
+
+    def test_empty_array_returns_none_for_tempo_curve(self):
+        payload = {"rhythmDetail": {"tempoCurve": []}}
+        result = csv_export.export_field_to_csv(payload, "rhythmDetail.tempoCurve")
+        self.assertIsNone(result)
+
+    def test_empty_array_returns_none_for_spectral_balance(self):
+        payload = {"spectralBalanceTimeSeries": []}
+        result = csv_export.export_field_to_csv(payload, "spectralBalanceTimeSeries")
+        self.assertIsNone(result)
+
+
+class FiniteFloatHelperTests(unittest.TestCase):
+    """_as_finite_float guards against NaN/Inf leaking into CSV cells.
+
+    Python's json.loads accepts NaN/Infinity by default (non-standard JSON
+    extension), so a pathological analyzer output could in principle put
+    a NaN into the snapshot. Without this guard, float() would happily
+    convert NaN/Inf to themselves and the CSV writer would emit \"nan\"
+    or \"inf\" as a string — which most downstream tools mis-parse.
+    """
+
+    def test_none_returns_none(self):
+        self.assertIsNone(csv_export._as_finite_float(None))
+
+    def test_normal_int_returns_float(self):
+        self.assertEqual(csv_export._as_finite_float(42), 42.0)
+
+    def test_normal_float_returns_self(self):
+        self.assertEqual(csv_export._as_finite_float(-23.5), -23.5)
+
+    def test_nan_returns_none(self):
+        self.assertIsNone(csv_export._as_finite_float(float("nan")))
+
+    def test_positive_inf_returns_none(self):
+        self.assertIsNone(csv_export._as_finite_float(float("inf")))
+
+    def test_negative_inf_returns_none(self):
+        self.assertIsNone(csv_export._as_finite_float(float("-inf")))
+
+    def test_non_numeric_string_returns_none(self):
+        self.assertIsNone(csv_export._as_finite_float("not-a-number"))
+
+    def test_numeric_string_is_coerced(self):
+        # We don't expect strings in the analyzer payload, but if one
+        # sneaks in and it's numeric, this is the same forgiving behavior
+        # float() always had.
+        self.assertEqual(csv_export._as_finite_float("3.14"), 3.14)
+
+
+class NonFiniteValueHandlingTests(unittest.TestCase):
+    """End-to-end: a row with any NaN/Inf field is skipped from the CSV."""
+
+    def test_lufs_curve_skips_nan_lufs(self):
+        payload = {
+            "lufsCurve": {
+                "shortTerm": [
+                    {"t": 0.0, "lufs": -23.0},
+                    {"t": 0.1, "lufs": float("nan")},  # skipped
+                    {"t": 0.2, "lufs": -22.0},
+                ]
+            }
+        }
+        result = csv_export.export_field_to_csv(payload, "lufsCurve.shortTerm")
+        self.assertIsNotNone(result)
+        self.assertNotIn("nan", result)
+        self.assertNotIn("NaN", result)
+        # header + 2 valid rows
+        self.assertEqual(len(result.strip().split("\n")), 3)
+
+    def test_lufs_curve_skips_inf_time(self):
+        payload = {
+            "lufsCurve": {
+                "shortTerm": [
+                    {"t": float("inf"), "lufs": -23.0},  # skipped
+                    {"t": 0.5, "lufs": -22.0},
+                ]
+            }
+        }
+        result = csv_export.export_field_to_csv(payload, "lufsCurve.shortTerm")
+        self.assertNotIn("inf", result.lower())
+        self.assertEqual(len(result.strip().split("\n")), 2)  # header + 1
+
+    def test_tempo_curve_skips_nan_bpm(self):
+        payload = {
+            "rhythmDetail": {
+                "tempoCurve": [
+                    {"t": 0.0, "bpm": float("nan")},  # skipped
+                    {"t": 1.0, "bpm": 128.0},
+                ]
+            }
+        }
+        result = csv_export.export_field_to_csv(payload, "rhythmDetail.tempoCurve")
+        self.assertNotIn("nan", result.lower())
+        self.assertEqual(len(result.strip().split("\n")), 2)
+
+    def test_spectral_balance_skips_row_with_nan_band(self):
+        payload = {
+            "spectralBalanceTimeSeries": [
+                {
+                    "t": 0.0,
+                    "subBass": 0.5,
+                    "lowBass": 0.5,
+                    "lowMids": 0.5,
+                    "mids": 0.5,
+                    "upperMids": 0.5,
+                    "highs": 0.5,
+                    "brilliance": float("nan"),  # one bad band → row skipped
+                },
+                {
+                    "t": 1.0,
+                    "subBass": 0.4,
+                    "lowBass": 0.4,
+                    "lowMids": 0.4,
+                    "mids": 0.4,
+                    "upperMids": 0.4,
+                    "highs": 0.4,
+                    "brilliance": 0.4,
+                },
+            ]
+        }
+        result = csv_export.export_field_to_csv(
+            payload, "spectralBalanceTimeSeries"
+        )
+        self.assertNotIn("nan", result.lower())
+        self.assertEqual(len(result.strip().split("\n")), 2)  # header + 1
 
 
 class LufsCurveShortTermTests(unittest.TestCase):
