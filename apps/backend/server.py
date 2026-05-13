@@ -1926,8 +1926,16 @@ async def create_analysis_run(
     # Exactly-one validation: caller must provide track XOR url. The
     # distinction matters because both modes go through different
     # validation paths.
+    #
+    # ``isinstance(url, str)`` is intentional rather than ``url is not None``:
+    # when this route is called directly in tests (not through HTTP
+    # dispatch), FastAPI's ``Form(None)`` default is an unresolved
+    # sentinel object — neither None nor a string. Existing multipart
+    # tests pre-date the URL field and don't pass ``url`` at all, so we
+    # must treat the sentinel as "not provided" rather than calling
+    # ``.strip()`` on it.
     track_provided = track is not None and getattr(track, "filename", None)
-    url_provided = url is not None and url.strip() != ""
+    url_provided = isinstance(url, str) and url.strip() != ""
     if track_provided and url_provided:
         if track is not None:
             await track.close()
