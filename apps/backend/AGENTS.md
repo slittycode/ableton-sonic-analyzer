@@ -3,7 +3,7 @@
 ## Scope
 
 - This file applies to `apps/backend` inside the `asa` monorepo.
-- Codex-specific instructions for this app live in `CODEX.md`.
+- Root-level agent guidance lives in `../../CLAUDE.md`; this file is the backend overlay.
 - The repo is a local Python audio-analysis service with two entry points:
   - `analyze.py`: raw CLI analyzer
   - `server.py`: FastAPI wrapper around the CLI

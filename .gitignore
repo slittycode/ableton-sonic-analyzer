@@ -31,6 +31,11 @@ apps/backend/.env
 
 # Backend runtime state (artifacts, sqlite, reports)
 apps/backend/.runtime/
+.runtime/
+
+# Generated/binary design docs kept locally, not in git
+ASA_System_Design.docx
+docs/PHASE2_TRUTHFULNESS_PHASES_A_B_C.docx
 
 # UI prototypes
 apps/ui/redesign-concept.html

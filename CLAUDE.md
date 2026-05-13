@@ -239,10 +239,11 @@ Most of the original `sonic-architect-app` port (genre profiles, Ableton device 
 
 ## Companion Agent Docs
 
-This repo carries parallel guidance for non-Claude agents. The files largely cover the same ground but with different framings; read whichever matches the context you need:
+This repo carries parallel guidance for non-Claude agents:
 
-1. **`AGENTS.md`** (root + `apps/*/AGENTS.md`) — general AI-agent policy, technology stack tables, change checklist, common task recipes.
-2. **`CODEX.md`** (root + `apps/*/CODEX.md`) — Codex-tailored read-order and mission-gate questions, derived from `PURPOSE.md`.
+1. **`AGENTS.md`** (root) — pointer for Codex / OpenHands / any tool that looks for `AGENTS.md` by name. Defers to this file.
+2. **`apps/backend/AGENTS.md`**, **`apps/ui/AGENTS.md`** — per-app overlays with technology-stack details and app-specific change checklists.
 3. **`docs/ARCHITECTURE_STRATEGY.md`** — *why* the three-layer architecture is shaped the way it is.
+4. **`docs/history/`** — completed plans and one-shot audits. Past-tense, not living docs.
 
-When information conflicts, `PURPOSE.md` > `AGENTS.md` chain > this file.
+When information conflicts: `PURPOSE.md` > this file > per-app `AGENTS.md`.
