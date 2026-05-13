@@ -10,11 +10,19 @@ import {
   type ConfidenceBand,
 } from '../../services/sessionMusician/confidenceBand';
 
+// Four-tone traffic-light ladder so the producer can distinguish all four
+// bands at a glance: green → orange → amber → red, best to worst. The
+// vocabulary mirrors what `MeasurementPrimitives`, `DiagnosticLog`, and
+// `FileUpload` already use for severity across the app — success = ready,
+// accent = active, warning = caution, error = critical. All four CSS
+// variables are defined in `apps/ui/src/index.css`; no new theme tokens
+// needed. Uniform opacity (`/30` border, `/10` bg) matches the established
+// BADGE_TONE_CLASSES convention; the color is what carries the distinction.
 const PILL_CLASSES: Record<ConfidenceBand['id'], string> = {
-  solid: 'border-accent/40 text-accent bg-accent/10',
-  workable: 'border-accent/30 text-accent bg-accent/5',
+  solid: 'border-success/30 text-success bg-success/10',
+  workable: 'border-accent/40 text-accent bg-accent/10',
   rough: 'border-warning/30 text-warning bg-warning/10',
-  unreliable: 'border-warning/40 text-warning bg-warning/15',
+  unreliable: 'border-error/30 text-error bg-error/10',
 };
 
 interface ConfidenceBandBadgeProps {
