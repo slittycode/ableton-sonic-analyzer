@@ -32,7 +32,7 @@ DEFAULT_RESULTS_CACHE_DIR = "tests/ground_truth/cache"
 DEFAULT_OUTPUT_PATH = "docs/confidence_calibration_results.md"
 ANALYZE_SCRIPT_PATH = "apps/backend/analyze.py"
 
-# Threshold ranges to test (as specified in OPTIMIZATION_PLAN.md)
+# Threshold ranges to test (as specified in docs/history/optimization-plan.md)
 PITCH_CONFIDENCE_THRESHOLDS = [0.05, 0.10, 0.15, 0.20, 0.25]
 CHORD_STRENGTH_THRESHOLDS = [0.50, 0.60, 0.70, 0.80, 0.90]
 PUMPING_CONFIDENCE_THRESHOLDS = [0.20, 0.30, 0.40, 0.50]

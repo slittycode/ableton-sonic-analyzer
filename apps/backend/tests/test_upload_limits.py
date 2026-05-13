@@ -63,18 +63,21 @@ class UploadLimitContractTests(unittest.TestCase):
         self.assertIn(str(upload_limits.MAX_UPLOAD_REQUEST_BYTES), result.stdout)
 
     def test_docs_reference_generator_and_current_contract_values(self) -> None:
-        root_readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+        # Operator-facing upload-limit detail lives in docs/SETUP.md (the
+        # canonical setup/operator doc that the root README links to). The
+        # backend README and ARCHITECTURE.md keep their app-local copies.
+        setup_doc = (REPO_ROOT / "docs" / "SETUP.md").read_text(encoding="utf-8")
         backend_readme = (BACKEND_DIR / "README.md").read_text(encoding="utf-8")
         architecture_doc = (BACKEND_DIR / "ARCHITECTURE.md").read_text(encoding="utf-8")
 
         expected_command = "./venv/bin/python scripts/render_upload_limit_contract.py"
-        self.assertIn(expected_command, root_readme)
+        self.assertIn(expected_command, setup_doc)
         self.assertIn(expected_command, backend_readme)
         self.assertIn("upload limit contract", architecture_doc.lower())
 
         self.assertIn(str(upload_limits.MAX_UPLOAD_REQUEST_BYTES), backend_readme)
         self.assertIn(f"{upload_limits.MAX_UPLOAD_REQUEST_BYTES:,}".replace(",", ""), backend_readme)
-        self.assertIn(f"{upload_limits.MAX_UPLOAD_SIZE_BYTES // (1024 * 1024)} MiB", root_readme)
+        self.assertIn(f"{upload_limits.MAX_UPLOAD_SIZE_BYTES // (1024 * 1024)} MiB", setup_doc)
 
 
 if __name__ == "__main__":
