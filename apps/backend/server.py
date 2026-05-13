@@ -48,6 +48,7 @@ from runtime_profile import (
 from utils.cleanup import cleanup_artifacts
 import csv_export
 import upload_limits
+import url_ingest
 from server_upload import (  # noqa: F401 — re-exported for test backward compat
     LEGACY_ENDPOINT_SUNSET,
     ERROR_PHASE_LOCAL_DSP,
@@ -579,6 +580,71 @@ async def _create_analysis_run_record(
     )
     return runtime, created["runId"]
 
+
+async def _create_analysis_run_record_from_url(
+    *,
+    url: str,
+    owner_user_id: str,
+    analysis_mode: str,
+    pitch_note_mode: str,
+    pitch_note_backend: str,
+    interpretation_mode: str,
+    interpretation_profile: str,
+    interpretation_model: str | None,
+    legacy_request_id: str | None = None,
+) -> tuple[AnalysisRuntime, str]:
+    """Parallel of ``_create_analysis_run_record`` but for URL-fetched audio.
+
+    The actual fetch is dispatched to a worker thread so the (blocking)
+    ``requests`` call doesn't pin the event loop. Typed URL-ingest
+    errors are surfaced unchanged to the caller, which is responsible
+    for translating them into HTTP envelopes.
+    """
+    runtime = get_analysis_runtime()
+    analysis_mode = _resolve_analysis_mode_value(analysis_mode)
+    if interpretation_mode != "off":
+        _resolve_interpretation_profile_config(interpretation_profile)
+
+    fetched = await asyncio.to_thread(url_ingest.fetch_url_to_bytes, url)
+
+    created = runtime.create_run(
+        filename=fetched.filename,
+        content=fetched.content,
+        mime_type=fetched.mime_type,
+        owner_user_id=owner_user_id,
+        analysis_mode=analysis_mode,
+        pitch_note_mode=pitch_note_mode,
+        pitch_note_backend=pitch_note_backend,
+        interpretation_mode=interpretation_mode,
+        interpretation_profile=interpretation_profile,
+        interpretation_model=interpretation_model,
+        legacy_request_id=legacy_request_id,
+    )
+    return runtime, created["runId"]
+
+
+def _url_ingest_error_response(exc: url_ingest.UrlIngestionError) -> JSONResponse:
+    """Map a typed URL-ingest error onto the canonical error envelope.
+
+    Status code follows the kind of failure:
+
+    - ``URL_INVALID`` / ``URL_BLOCKED_PRIVATE_HOST`` → 400 (user error,
+      request will never succeed as-is).
+    - ``URL_TOO_LARGE`` → 413 (matches the upload-too-large convention
+      already used by the multipart route).
+    - ``URL_FETCH_FAILED`` → 502 (upstream problem; retry might succeed).
+    """
+    code = exc.code
+    if code == "URL_TOO_LARGE":
+        status_code = 413
+    elif code == "URL_FETCH_FAILED":
+        status_code = 502
+    else:
+        status_code = 400
+    return JSONResponse(
+        status_code=status_code,
+        content={"error": {"code": code, "message": str(exc)}},
+    )
 
 
 async def _estimate_analysis_run(
@@ -1819,7 +1885,8 @@ def _legacy_upload_too_large_file_response(request_id: str) -> JSONResponse:
 
 @app.post("/api/analysis-runs")
 async def create_analysis_run(
-    track: UploadFile = File(...),
+    track: UploadFile | None = File(None),
+    url: str | None = Form(None),
     analysis_mode: str = Form("full"),
     pitch_note_mode: str = Form("off"),
     pitch_note_backend: str = Form("auto"),
@@ -1829,35 +1896,103 @@ async def create_analysis_run(
     x_asa_user_id: str | None = Header(None),
     x_asa_user_email: str | None = Header(None),
 ) -> JSONResponse:
+    """Create an analysis run from either a multipart upload OR a public URL.
+
+    Exactly one of ``track`` (multipart) or ``url`` (form field) must be
+    provided. URL ingestion fetches the file server-side, subject to:
+
+    - HTTP/HTTPS only (no ``file://``, ``ftp://``, etc.).
+    - SSRF guard: hostnames that resolve to private, loopback, or
+      link-local IPs are rejected pre-flight.
+    - Size cap: same 100 MiB limit as multipart uploads
+      (``upload_limits.MAX_UPLOAD_SIZE_BYTES``).
+    - Timeouts: 30 s connect, 60 s read per chunk.
+
+    See :mod:`url_ingest` for the validation/fetch contract.
+    """
     invalid_backend_response = _pitch_note_backend_unsupported_response(pitch_note_backend)
     if invalid_backend_response is not None:
         return invalid_backend_response
 
-    upload_size = _uploaded_file_size_bytes(track)
-    if upload_size is not None and upload_size > upload_limits.MAX_UPLOAD_SIZE_BYTES:
-        return _canonical_upload_too_large_file_response()
+    # Exactly-one validation: caller must provide track XOR url. The
+    # distinction matters because both modes go through different
+    # validation paths.
+    track_provided = track is not None and getattr(track, "filename", None)
+    url_provided = url is not None and url.strip() != ""
+    if track_provided and url_provided:
+        if track is not None:
+            await track.close()
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "code": "AMBIGUOUS_AUDIO_SOURCE",
+                    "message": (
+                        "Provide exactly one of 'track' (multipart upload) or "
+                        "'url' (form field), not both."
+                    ),
+                }
+            },
+        )
+    if not track_provided and not url_provided:
+        if track is not None:
+            await track.close()
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "code": "MISSING_AUDIO_SOURCE",
+                    "message": (
+                        "Provide either 'track' (multipart upload) or "
+                        "'url' (form field) as the audio source."
+                    ),
+                }
+            },
+        )
+
+    # Pre-flight size check is only meaningful for multipart uploads;
+    # URL fetches enforce the limit during streaming inside url_ingest.
+    if track_provided:
+        upload_size = _uploaded_file_size_bytes(track)
+        if upload_size is not None and upload_size > upload_limits.MAX_UPLOAD_SIZE_BYTES:
+            return _canonical_upload_too_large_file_response()
 
     user_context = _resolve_route_user_context(x_asa_user_id, x_asa_user_email)
     if isinstance(user_context, JSONResponse):
-        await track.close()
+        if track is not None:
+            await track.close()
         return user_context
     try:
-        runtime, run_id = await _create_analysis_run_record(
-            track=track,
-            owner_user_id=user_context.user_id,
-            analysis_mode=analysis_mode,
-            pitch_note_mode=pitch_note_mode,
-            pitch_note_backend=pitch_note_backend,
-            interpretation_mode=interpretation_mode,
-            interpretation_profile=interpretation_profile,
-            interpretation_model=interpretation_model,
-        )
+        if url_provided:
+            runtime, run_id = await _create_analysis_run_record_from_url(
+                url=url,  # type: ignore[arg-type]
+                owner_user_id=user_context.user_id,
+                analysis_mode=analysis_mode,
+                pitch_note_mode=pitch_note_mode,
+                pitch_note_backend=pitch_note_backend,
+                interpretation_mode=interpretation_mode,
+                interpretation_profile=interpretation_profile,
+                interpretation_model=interpretation_model,
+            )
+        else:
+            runtime, run_id = await _create_analysis_run_record(
+                track=track,  # type: ignore[arg-type]
+                owner_user_id=user_context.user_id,
+                analysis_mode=analysis_mode,
+                pitch_note_mode=pitch_note_mode,
+                pitch_note_backend=pitch_note_backend,
+                interpretation_mode=interpretation_mode,
+                interpretation_profile=interpretation_profile,
+                interpretation_model=interpretation_model,
+            )
         return JSONResponse(
             content=_normalize_run_snapshot(
                 runtime.get_run(run_id, owner_user_id=user_context.user_id),
                 runtime,
             )
         )
+    except url_ingest.UrlIngestionError as exc:
+        return _url_ingest_error_response(exc)
     except UnsupportedPitchNoteBackendError as exc:
         return JSONResponse(
             status_code=400,
@@ -1889,7 +2024,8 @@ async def create_analysis_run(
             },
         )
     finally:
-        await track.close()
+        if track is not None:
+            await track.close()
 
 
 @app.post("/api/analysis-runs/estimate")

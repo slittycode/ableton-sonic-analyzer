@@ -68,7 +68,7 @@ Responsibilities:
 Custom routes:
 
 - `POST /api/analysis-runs/estimate`
-- `POST /api/analysis-runs`
+- `POST /api/analysis-runs` — multipart upload OR URL ingestion. Provide *exactly one* of `track` (multipart `UploadFile`) or `url` (form field with a public `http`/`https` URL). URL mode is SSRF-guarded against private/loopback/link-local addresses and enforces the same 100 MiB cap via streaming. See [`url_ingest.py`](url_ingest.py).
 - `GET /api/analysis-runs/{run_id}`
 - `DELETE /api/analysis-runs/{run_id}`
 - `GET /api/analysis-runs/{run_id}/artifacts` and `…/artifacts/{artifact_id}`
