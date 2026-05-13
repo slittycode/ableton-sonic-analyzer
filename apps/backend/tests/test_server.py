@@ -1415,6 +1415,60 @@ class ServerContractTests(unittest.TestCase):
         self.assertTrue(payload["deleted"])
         self.assertEqual(payload["deletedBy"], "admin")
 
+    def test_delete_analysis_run_admin_key_works_without_user_header(self) -> None:
+        """The PR description claims the admin key skips user-context
+        resolution entirely. This test pins that claim: a request that
+        omits X-ASA-User-Id (which would fail in hosted mode under
+        ownership rules) still succeeds when X-Admin-Key matches.
+        """
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_server_runtime_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            created = runtime.create_run(
+                filename="track.mp3",
+                content=b"fake-audio",
+                mime_type="audio/mpeg",
+                owner_user_id="owner_user",
+                analysis_mode="full",
+                pitch_note_mode="off",
+                pitch_note_backend="auto",
+                interpretation_mode="off",
+                interpretation_profile="producer_summary",
+                interpretation_model=None,
+            )
+            with (
+                patch.object(server, "get_analysis_runtime", return_value=runtime),
+                patch.object(
+                    server,
+                    "_interrupt_active_child_processes",
+                    return_value=[],
+                ),
+                patch.dict(
+                    server.os.environ,
+                    {
+                        "SONIC_ANALYZER_RUNTIME_PROFILE": "hosted",
+                        "SONIC_ANALYZER_ADMIN_KEY": "s3cret",
+                    },
+                    clear=False,
+                ),
+            ):
+                response = asyncio.run(
+                    server.delete_analysis_run(
+                        created["runId"],
+                        # No X-ASA-User-Id header — admin path bypasses
+                        # user-context resolution. Under ownership rules
+                        # alone, this would 401 in hosted mode.
+                        x_asa_user_id=None,
+                        x_admin_key="s3cret",
+                    )
+                )
+
+        payload = self._decode_json_response(response)
+        self.assertEqual(response.status_code, 202)
+        self.assertTrue(payload["deleted"])
+        self.assertEqual(payload["deletedBy"], "admin")
+
     def test_delete_analysis_run_wrong_admin_key_falls_back_to_ownership(self) -> None:
         """Wrong X-Admin-Key value does not grant access; the request
         is treated as a regular (non-admin) ownership-based delete.
