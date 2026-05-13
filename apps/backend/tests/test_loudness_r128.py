@@ -1,32 +1,32 @@
-"""EBU R128 verification spike for ASA's loudness path.
+"""EBU R128 verification + regression gate for ASA's loudness path.
 
 Track 1 of the external-repo incorporation plan (docs/external-repo-review-2026-05-13.md)
 asked: is ASA's integrated-LUFS implementation correct, or does it lag the BS.1770-5
 revision? This module answers that with the EBU Tech 3341 compliance signals — the
-canonical loudness conformance test set.
+canonical loudness conformance test set — and now also gates the sample-rate
+threading fix that closed the spike's open finding.
 
 What we test:
 
-1. Tech 3341 Case 1 — stereo 1 kHz sine at -23.0 dB FS for 20 s.
-   Expected integrated loudness: -23.0 ±0.1 LUFS.
+1. Tech 3341 Case 1 — stereo 1 kHz sine at -23.0 dB FS for 20 s @ 44.1 kHz.
+   Expected integrated loudness: -23.0 ±0.1 LUFS via ``analyze_loudness``.
 
-2. Tech 3341 Case 2 — stereo 1 kHz sine at -33.0 dB FS for 20 s.
-   Expected integrated loudness: -33.0 ±0.1 LUFS.
+2. Tech 3341 Case 2 — stereo 1 kHz sine at -33.0 dB FS for 20 s @ 44.1 kHz.
+   Expected integrated loudness: -33.0 ±0.1 LUFS via ``analyze_loudness``.
+
+3. Case 1 at 48 kHz against Essentia directly — proves the BS.1770 algorithm
+   is correct at non-44.1 rates when the sample rate is threaded through.
+
+4. Case 1 at 48 kHz via ``analyze_loudness(stereo, sample_rate=48000)`` —
+   end-to-end regression gate for the fix that closed the open finding from
+   the original spike (``analyze_core.analyze_loudness`` now takes
+   ``sample_rate`` and threads it to ``LoudnessEBUR128(sampleRate=…)``).
 
 The ±0.1 LU tolerance is the EBU R128 compliance gate for "EBU Mode" loudness
-meters. If both cases pass on ASA's actual call path (`analyze_loudness` →
-Essentia's `LoudnessEBUR128`), the review's premise check is positive: no
-algorithm rewrite needed.
-
-Both tests run at 44.1 kHz because that is the sample rate ASA's full pipeline
-uses for the LUFS call (`analyze_core.py:197` calls `LoudnessEBUR128()` with no
-explicit `sampleRate`, defaulting to 44100). A third test calls Essentia
-directly at 48 kHz with the sample rate threaded through, demonstrating that
-the algorithm itself is correct at non-44.1 rates when given the right input —
-which is the case `analyze_fast.py:100` already handles. The gap between
-`analyze_core` and `analyze_fast` on sample-rate threading is logged as a
-follow-up finding from this spike (not fixed here — out of scope for a
-verification-only spike).
+meters. See the "NOTE on coverage limits" at the bottom of this file for
+what these tests do and do not catch — in particular, the 1 kHz signals
+cannot tightly prove that the ``sample_rate`` parameter actually reaches
+Essentia.
 
 All synthetic signals are generated procedurally; no test fixtures are
 downloaded or committed.
@@ -236,3 +236,22 @@ class TestLoudnessR128ThroughAnalyzeLoudnessAt48kHz(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# NOTE on coverage limits
+# -----------------------
+# The 1 kHz tone in TestLoudnessR128ThroughAnalyzeLoudnessAt48kHz proves
+# ``analyze_loudness`` is callable with ``sample_rate=48000`` and produces
+# a compliance-grade integrated LUFS. It does NOT tightly prove that the
+# ``sample_rate`` argument reaches Essentia — at 1 kHz, K-weighting bias
+# between 44.1 kHz and 48 kHz coefficient sets is well under 0.05 LU, and
+# ``analyze_loudness`` rounds the integrated value to one decimal, so a
+# silently-swallowed parameter would still pass.
+#
+# A tighter wiring test would need either (a) white-box mocking of
+# ``es.LoudnessEBUR128`` to assert the ``sampleRate=…`` kwarg is passed,
+# or (b) a broadband fixture and a tighter (sub-0.1 LU) tolerance against
+# a pre-computed reference value derived from Essentia's specific
+# K-filter coefficient adaptation. Both are deferred — the function's
+# behavior is small and inspectable, and analyze_fast.py + analyze_segments.py
+# have been doing this correctly for some time.
