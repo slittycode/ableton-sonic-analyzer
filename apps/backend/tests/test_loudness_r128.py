@@ -151,11 +151,13 @@ class TestLoudnessR128AtNon441kHz(unittest.TestCase):
     observed on 48 kHz sources via ``analyze_loudness`` is a *call-site
     bug* (sample rate not threaded), not an algorithm bug.
 
-    This is the open finding from the spike documented in
-    docs/external-repo-review-2026-05-13.md (Track 1 follow-up): the
-    full pipeline calls ``analyze_loudness(stereo)`` after
-    ``load_stereo`` returns audio at the source's native rate, so any
-    48 kHz source today gets measured against 44.1 kHz K-weighting.
+    Originally the open finding from the verification spike documented
+    in docs/external-repo-review-2026-05-13.md (Track 1 follow-up). The
+    follow-up fix lives in this branch's companion edits to
+    ``analyze_core.analyze_loudness`` (now takes ``sample_rate``) and
+    its call sites in ``analyze.py``; the regression test below
+    (``TestLoudnessR128ThroughAnalyzeLoudnessAt48kHz``) is the
+    end-to-end gate for that fix.
     """
 
     SAMPLE_RATE_HZ = 48_000
@@ -183,6 +185,51 @@ class TestLoudnessR128AtNon441kHz(unittest.TestCase):
                 f"must match -23.0 ±{LUFS_TOLERANCE} LUFS. Got {integrated}. "
                 f"If this fails, the algorithm itself is suspect at non-44.1 "
                 f"rates and the call-site fix would not help."
+            ),
+        )
+
+
+@unittest.skipUnless(ESSENTIA_AVAILABLE, "Essentia not available in test env")
+class TestLoudnessR128ThroughAnalyzeLoudnessAt48kHz(unittest.TestCase):
+    """End-to-end gate for the sample-rate threading fix.
+
+    Before the fix, ``analyze_loudness(stereo)`` instantiated
+    ``LoudnessEBUR128()`` with no ``sampleRate`` argument (defaulting
+    to 44100), so a 48 kHz stereo array got measured against K-weighting
+    coefficients tuned for 44.1 kHz. The bias is small at 1 kHz but
+    non-zero, and grows with frequency.
+
+    After the fix, ``analyze_loudness(stereo, sample_rate=48000)`` must
+    produce the same -23.0 ±0.1 LUFS that the direct-Essentia probe
+    above produces. A failure here is a regression on the fix.
+    """
+
+    SAMPLE_RATE_HZ = 48_000
+    DURATION_S = 20.0
+
+    def test_case1_through_analyze_loudness_at_48khz(self) -> None:
+        """At 48 kHz, analyze_loudness must produce -23.0 ±0.1 LUFS
+        when the caller threads the sample rate through.
+        """
+        stereo = _make_stereo_sine(
+            peak_dbfs=-23.0,
+            duration_s=self.DURATION_S,
+            sample_rate=self.SAMPLE_RATE_HZ,
+        )
+
+        result = analyze_loudness(stereo, sample_rate=self.SAMPLE_RATE_HZ)
+        integrated = result.get("lufsIntegrated")
+
+        self.assertIsNotNone(integrated)
+        self.assertAlmostEqual(
+            integrated,
+            -23.0,
+            delta=LUFS_TOLERANCE,
+            msg=(
+                f"analyze_loudness at 48 kHz: expected -23.0 ±{LUFS_TOLERANCE} "
+                f"LUFS, got {integrated}. If this fails, either the "
+                f"sample_rate parameter is not being threaded to Essentia "
+                f"or the K-weighting filter is mis-tuned."
             ),
         )
 

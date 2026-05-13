@@ -27,7 +27,22 @@ call site threads sample rate." If it passes, Essentia's algorithm is
 fine at 48 kHz when given the right sample rate; the call-site question
 is then orthogonal to BS.1770 compliance.
 
-## Open finding: sample-rate threading in `analyze_loudness`
+## ~~Open finding~~ Resolved: sample-rate threading in `analyze_loudness`
+
+**Resolution:** fixed in a follow-up PR on branch
+`claude/fix-loudness-sample-rate-5XA5r`. `analyze_loudness` now takes
+`sample_rate: int = 44_100`; the full pipeline at `analyze.py:1503`
+threads `sr` from `load_stereo`; the stem path at `analyze.py:1242`
+hardcodes 44_100 (matching Demucs's stem write rate, which is independent
+of the source). A new regression test
+`TestLoudnessR128ThroughAnalyzeLoudnessAt48kHz` in
+`tests/test_loudness_r128.py` asserts -23.0 ±0.1 LUFS through
+`analyze_loudness` at 48 kHz.
+
+The original finding is preserved below for context.
+
+---
+
 
 While tracing the loudness path, the spike surfaced an asymmetry between
 ASA's two call sites for `LoudnessEBUR128`:
