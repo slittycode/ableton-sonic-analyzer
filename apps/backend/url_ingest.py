@@ -162,9 +162,22 @@ def fetch_url_to_bytes(
             url,
             stream=True,
             timeout=(connect_timeout_s, read_timeout_s),
-            allow_redirects=True,
+            # Redirects are NOT followed automatically. The SSRF guard
+            # above only validates the initial hostname; if we followed
+            # a 3xx, an attacker controlling any public host could
+            # redirect us to a private/loopback target (e.g.
+            # 169.254.169.254 metadata endpoint) and bypass the guard.
+            # A 3xx is surfaced as a fetch failure; users should provide
+            # the canonical direct URL.
+            allow_redirects=False,
             headers={"User-Agent": user_agent},
         ) as response:
+            if 300 <= response.status_code < 400:
+                raise UrlFetchFailedError(
+                    f"Upstream returned HTTP {response.status_code} "
+                    f"(redirect). URL ingestion does not follow redirects; "
+                    f"provide a direct URL to the audio file."
+                )
             if response.status_code >= 400:
                 raise UrlFetchFailedError(
                     f"Upstream returned HTTP {response.status_code} for the URL."
@@ -303,14 +316,28 @@ def _is_non_public_address(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) ->
     """True for any address category we refuse to fetch from.
 
     Includes loopback, link-local, multicast, private RFC1918, reserved,
-    unspecified (0.0.0.0/::). Also blocks the AWS/GCP metadata endpoint
-    explicitly even though it's already caught by ``is_link_local``.
+    unspecified (0.0.0.0/::). The AWS/GCP cloud metadata endpoint
+    (169.254.169.254) is already caught by ``is_link_local``.
+
+    Also explicitly blocks RFC 6598 Shared Address Space (CGNAT,
+    ``100.64.0.0/10``). In Python's ``ipaddress``, ``is_private``
+    returns False for this range and ``is_reserved`` doesn't cover it,
+    so we check it directly.
     """
     if ip.is_loopback or ip.is_link_local or ip.is_multicast:
         return True
     if ip.is_private or ip.is_reserved or ip.is_unspecified:
         return True
+    if isinstance(ip, ipaddress.IPv4Address) and ip in _CGNAT_RFC6598:
+        return True
     return False
+
+
+# RFC 6598 Shared Address Space — carrier-grade NAT range. Not covered
+# by ``ipaddress.IPv4Address.is_private``.
+_CGNAT_RFC6598: Final[ipaddress.IPv4Network] = ipaddress.ip_network(
+    "100.64.0.0/10"
+)
 
 
 # ----------------------------------------------------------------------

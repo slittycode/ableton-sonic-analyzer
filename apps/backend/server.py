@@ -626,24 +626,33 @@ async def _create_analysis_run_record_from_url(
 def _url_ingest_error_response(exc: url_ingest.UrlIngestionError) -> JSONResponse:
     """Map a typed URL-ingest error onto the canonical error envelope.
 
-    Status code follows the kind of failure:
+    Status code and ``retryable`` flag follow the kind of failure:
 
-    - ``URL_INVALID`` / ``URL_BLOCKED_PRIVATE_HOST`` → 400 (user error,
-      request will never succeed as-is).
-    - ``URL_TOO_LARGE`` → 413 (matches the upload-too-large convention
-      already used by the multipart route).
-    - ``URL_FETCH_FAILED`` → 502 (upstream problem; retry might succeed).
+    - ``URL_INVALID`` / ``URL_BLOCKED_PRIVATE_HOST`` → 400, not
+      retryable (request will never succeed as-is).
+    - ``URL_TOO_LARGE`` → 413, not retryable (size is fundamental).
+    - ``URL_FETCH_FAILED`` → 502, retryable (transient upstream
+      problem; client can reasonably retry the same request).
     """
     code = exc.code
     if code == "URL_TOO_LARGE":
         status_code = 413
+        retryable = False
     elif code == "URL_FETCH_FAILED":
         status_code = 502
+        retryable = True
     else:
         status_code = 400
+        retryable = False
     return JSONResponse(
         status_code=status_code,
-        content={"error": {"code": code, "message": str(exc)}},
+        content={
+            "error": {
+                "code": code,
+                "message": str(exc),
+                "retryable": retryable,
+            }
+        },
     )
 
 
@@ -1931,6 +1940,7 @@ async def create_analysis_run(
                         "Provide exactly one of 'track' (multipart upload) or "
                         "'url' (form field), not both."
                     ),
+                    "retryable": False,
                 }
             },
         )
@@ -1946,6 +1956,7 @@ async def create_analysis_run(
                         "Provide either 'track' (multipart upload) or "
                         "'url' (form field) as the audio source."
                     ),
+                    "retryable": False,
                 }
             },
         )

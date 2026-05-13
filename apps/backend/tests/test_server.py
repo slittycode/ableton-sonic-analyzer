@@ -4239,6 +4239,7 @@ class CreateAnalysisRunUrlIngestionTests(unittest.TestCase):
                     server.create_analysis_run(
                         track=None,
                         url="https://example.com/track.mp3",
+                        **self.DEFAULT_FORM_KWARGS,
                     )
                 )
 
@@ -4247,6 +4248,19 @@ class CreateAnalysisRunUrlIngestionTests(unittest.TestCase):
         self.assertIn("runId", payload)
         self.assertEqual(payload["stages"]["measurement"]["status"], "queued")
 
+    # Default form-field kwargs used by every test below. When calling the
+    # route function directly (not through HTTP dispatch), FastAPI's
+    # ``Form(...)`` defaults are unresolved sentinel objects, not the
+    # strings they wrap — so each test must pass the full set explicitly.
+    DEFAULT_FORM_KWARGS = dict(
+        analysis_mode="full",
+        pitch_note_mode="off",
+        pitch_note_backend="auto",
+        interpretation_mode="off",
+        interpretation_profile="producer_summary",
+        interpretation_model=None,
+    )
+
     def test_neither_track_nor_url_returns_missing_audio_source(self) -> None:
         from analysis_runtime import AnalysisRuntime
 
@@ -4254,7 +4268,11 @@ class CreateAnalysisRunUrlIngestionTests(unittest.TestCase):
             runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
             with patch.object(server, "get_analysis_runtime", return_value=runtime):
                 response = asyncio.run(
-                    server.create_analysis_run(track=None, url=None)
+                    server.create_analysis_run(
+                        track=None,
+                        url=None,
+                        **self.DEFAULT_FORM_KWARGS,
+                    )
                 )
 
         self.assertEqual(response.status_code, 400)
@@ -4273,6 +4291,7 @@ class CreateAnalysisRunUrlIngestionTests(unittest.TestCase):
                     server.create_analysis_run(
                         track=track,
                         url="https://example.com/track.mp3",
+                        **self.DEFAULT_FORM_KWARGS,
                     )
                 )
 
@@ -4296,6 +4315,7 @@ class CreateAnalysisRunUrlIngestionTests(unittest.TestCase):
                     server.create_analysis_run(
                         track=None,
                         url="file:///etc/passwd",
+                        **self.DEFAULT_FORM_KWARGS,
                     )
                 )
 
@@ -4321,6 +4341,7 @@ class CreateAnalysisRunUrlIngestionTests(unittest.TestCase):
                     server.create_analysis_run(
                         track=None,
                         url="http://internal.example.com/audio.mp3",
+                        **self.DEFAULT_FORM_KWARGS,
                     )
                 )
 
@@ -4344,6 +4365,7 @@ class CreateAnalysisRunUrlIngestionTests(unittest.TestCase):
                     server.create_analysis_run(
                         track=None,
                         url="https://example.com/huge.flac",
+                        **self.DEFAULT_FORM_KWARGS,
                     )
                 )
 
@@ -4367,12 +4389,43 @@ class CreateAnalysisRunUrlIngestionTests(unittest.TestCase):
                     server.create_analysis_run(
                         track=None,
                         url="https://example.com/slow.mp3",
+                        **self.DEFAULT_FORM_KWARGS,
                     )
                 )
 
         self.assertEqual(response.status_code, 502)
         payload = self._decode_json_response(response)
         self.assertEqual(payload["error"]["code"], "URL_FETCH_FAILED")
+        # 502 means upstream issue — the client can reasonably retry.
+        # ARCHITECTURE.md contract says envelopes always carry retryable;
+        # this is the first 502 the route returns, so it's the cleanest
+        # place to anchor the assertion.
+        self.assertTrue(payload["error"]["retryable"])
+
+    def test_url_invalid_envelope_is_not_retryable(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+        import url_ingest
+
+        with tempfile.TemporaryDirectory(prefix="asa_url_ingest_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            with patch.object(server, "get_analysis_runtime", return_value=runtime), \
+                 patch.object(
+                     server.url_ingest,
+                     "fetch_url_to_bytes",
+                     side_effect=url_ingest.UrlInvalidError("bad scheme"),
+                 ):
+                response = asyncio.run(
+                    server.create_analysis_run(
+                        track=None,
+                        url="file:///etc/passwd",
+                        **self.DEFAULT_FORM_KWARGS,
+                    )
+                )
+
+        payload = self._decode_json_response(response)
+        # Malformed URL won't succeed on retry without a different URL,
+        # so retryable must be False.
+        self.assertFalse(payload["error"]["retryable"])
 
 
 class CsvExportRouteTests(unittest.TestCase):

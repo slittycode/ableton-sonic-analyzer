@@ -131,6 +131,21 @@ class SsrfGuardTests(unittest.TestCase):
     def test_blocks_ipv6_loopback(self):
         self._assert_blocks("::1")
 
+    def test_blocks_cgnat_rfc6598(self):
+        # 100.64.0.0/10 is CGNAT. Python's ipaddress.is_private does not
+        # return True for this range, so the helper must catch it
+        # explicitly. Sample a few addresses inside the block.
+        self._assert_blocks("100.64.0.1")
+        self._assert_blocks("100.100.50.50")
+        self._assert_blocks("100.127.255.254")
+
+    def test_allows_addresses_just_outside_cgnat(self):
+        # 100.63.x.x and 100.128.x.x are outside the /10 range and
+        # should pass — verifies the netmask is correct, not just
+        # a substring match on "100.".
+        self._assert_allows("100.63.255.255")
+        self._assert_allows("100.128.0.1")
+
     def test_allows_public_ipv4(self):
         self._assert_allows("8.8.8.8")  # Google DNS
 
@@ -261,6 +276,41 @@ class FetchUrlToBytesTests(unittest.TestCase):
             with self.assertRaises(url_ingest.UrlFetchFailedError) as ctx:
                 url_ingest.fetch_url_to_bytes(self.PUBLIC_URL)
             self.assertIn("404", str(ctx.exception))
+
+    def test_redirect_is_rejected_not_followed(self):
+        # An attacker who controls a public host could 302 us to a
+        # private/loopback target (e.g. AWS metadata at 169.254.169.254)
+        # to bypass the SSRF guard. We refuse to follow redirects and
+        # surface 3xx as a fetch failure.
+        response = _make_mock_response(status=302, body=b"")
+        # Add a Location header that points to a sensitive private target
+        # — the test asserts we don't even *try* to fetch it.
+        response.headers["Location"] = "http://169.254.169.254/latest/meta-data/"
+        with mock.patch(
+            "socket.getaddrinfo",
+            return_value=_make_addrinfo_for("93.184.216.34"),
+        ), mock.patch.object(
+            url_ingest.requests, "get", return_value=response
+        ) as mock_get:
+            with self.assertRaises(url_ingest.UrlFetchFailedError) as ctx:
+                url_ingest.fetch_url_to_bytes(self.PUBLIC_URL)
+            self.assertIn("redirect", str(ctx.exception).lower())
+            # requests.get must have been called with allow_redirects=False
+            # — that's the contract the SSRF defense rests on.
+            self.assertEqual(
+                mock_get.call_args.kwargs["allow_redirects"],
+                False,
+            )
+
+    def test_redirect_301_also_rejected(self):
+        response = _make_mock_response(status=301, body=b"")
+        response.headers["Location"] = "https://elsewhere.example.com/audio.mp3"
+        with mock.patch(
+            "socket.getaddrinfo",
+            return_value=_make_addrinfo_for("93.184.216.34"),
+        ), mock.patch.object(url_ingest.requests, "get", return_value=response):
+            with self.assertRaises(url_ingest.UrlFetchFailedError):
+                url_ingest.fetch_url_to_bytes(self.PUBLIC_URL)
 
     def test_content_length_too_large_raises(self):
         response = _make_mock_response(
