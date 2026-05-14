@@ -11,6 +11,7 @@ automatically. The user (or UI) explicitly POSTs to
 
 from __future__ import annotations
 
+import json
 import logging
 import tempfile
 from pathlib import Path
@@ -49,13 +50,13 @@ def _extract_phase2_from_snapshot(snapshot: dict[str, Any]) -> dict[str, Any] | 
     """Pull the preferred Phase 2 result if one has completed.
 
     Returns None if interpretation never ran or didn't complete — sample
-    generation still proceeds from Phase 1 alone in that case.
+    generation still proceeds from Phase 1 alone in that case. Any non-
+    "completed" status reaches that path through the isinstance gate below,
+    since stages without a completed attempt carry a `null` result anyway.
     """
     stages = snapshot.get("stages") or {}
     interpretation = stages.get("interpretation") or {}
-    if interpretation.get("status") not in {"completed", "ready"}:
-        # "ready" means measurement done but no interpretation attempt yet —
-        # treat as "no phase2 available".
+    if interpretation.get("status") != "completed":
         return None
     result = interpretation.get("result")
     return result if isinstance(result, dict) else None
@@ -185,8 +186,6 @@ def fetch_existing_manifest(
     manifest_path = runtime.resolve_artifact_local_path(latest.get("path"))
     if manifest_path is None or not manifest_path.is_file():
         return None
-    import json
-
     raw = json.loads(manifest_path.read_text())
     provenance = latest.get("provenance") or {}
     decorated = _decorate_manifest(

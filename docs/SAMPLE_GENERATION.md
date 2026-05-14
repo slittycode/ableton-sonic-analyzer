@@ -58,7 +58,8 @@ Each WAV is ≤ 5 seconds, mono or stereo, 44.1 kHz, 16-bit PCM — small enough
               │   server_samples.py                │
               │   - load phase1 + phase2 from      │
               │     analysis_runs / interpretation │
-              │   - reject if phase2 not completed │
+              │   - reject if measurement not      │
+              │     completed; phase2 is optional  │
               └────────────────┬───────────────────┘
                                │
                                ▼
@@ -79,7 +80,7 @@ Each WAV is ≤ 5 seconds, mono or stereo, 44.1 kHz, 16-bit PCM — small enough
                                │
                                ▼
               ┌────────────────────────────────────┐
-              │   artifact_storage.store_file()    │
+              │   runtime.record_artifact()        │
               │   - one row per sample in          │
               │     run_artifacts (kind=sample_*)  │
               │   - manifest as sample_manifest    │
@@ -163,15 +164,21 @@ Generate audition samples for a run. Synchronous — small clips, small CPU budg
 **Preconditions:** run exists, `stages.measurement.status == "completed"`, ownership matches if in hosted mode.
 **If interpretation is not completed:** still generate tonal+drum samples from Phase 1 (Phase 2 just enriches labels). Skip melody if `melodyDetail` is unavailable.
 
-**Response:** 200 with the manifest body (camelCase JSON). 409 if a manifest already exists and `?force=true` was not passed.
+**Response:** 201 with the manifest body (camelCase JSON). 409 if a manifest already exists and `?force=true` was not passed.
 
 ### `GET /api/analysis-runs/{run_id}/samples`
 
 Return the manifest if one has been generated, 404 otherwise.
 
-### `GET /api/analysis-runs/{run_id}/samples/{sample_id}`
+### Streaming individual samples
 
-Stream the underlying WAV (or MIDI, if `?format=midi`) for a given sample ID. Errors with 404 if the sample isn't in the manifest.
+There is no dedicated `/samples/{sample_id}` route. The manifest includes an `artifactId` on each sample (and `midiArtifactId` where a MIDI was rendered); clients stream the underlying file through the existing artifact route:
+
+```
+GET /api/analysis-runs/{run_id}/artifacts/{artifact_id}
+```
+
+This keeps audition WAV/MIDI access on the same code path as every other run-scoped artifact (spectrograms, stems, source audio).
 
 ### Snapshot integration
 
@@ -204,7 +211,7 @@ Both Python deps are added to `requirements.txt` because they install cleanly vi
 ## Test Strategy
 
 - **`tests/test_sample_theory.py`** — exercises both PyTheory and fallback paths for known keys, asserts MIDI note numbers are correct. Must pass without `pytheory` importable.
-- **`tests/test_sample_drums.py`** — generates a kick at 53 Hz, asserts the FFT peak lands within ±3 Hz of fundamental.
+- **`tests/test_sample_drums.py`** — generates a kick at 80 Hz, asserts the FFT peak lands within ±20 Hz of fundamental. The wide tolerance is intentional: the pitch envelope starts an octave above the requested fundamental and decays, so steady-state energy can sit a little above the target.
 - **`tests/test_sample_synthesis.py`** — renders a known MIDI plan through the sine fallback, asserts the WAV is well-formed and contains audio energy at expected frequencies.
 - **`tests/test_sample_generation.py`** — end-to-end with synthetic phase1+phase2 input. Asserts manifest contains every promised sample, each cites at least one phase1 field, low-confidence keys produce hedged labels.
 - **`tests/test_server_samples.py`** — contract test for the new endpoints using FastAPI TestClient.

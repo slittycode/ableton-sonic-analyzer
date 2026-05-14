@@ -117,12 +117,14 @@ def synth_hat(*, duration_seconds: float = 0.18) -> DrumOneShot:
     env = np.exp(-t / 0.035)
     noise = _RNG.standard_normal(num_samples)
 
-    # Two-tap high-pass (same idea as snare): emphasize >5 kHz content.
+    # Two-tap high-pass (same idea as snare, vectorized to match snare's style).
+    # The filter has no feedback, so it's an FIR we can express as array slices.
     hp = np.empty_like(noise)
     hp[0] = noise[0]
-    hp[1] = noise[1] - 0.98 * noise[0]
-    for i in range(2, num_samples):
-        hp[i] = noise[i] - 1.96 * noise[i - 1] + 0.97 * noise[i - 2]
+    if num_samples > 1:
+        hp[1] = noise[1] - 0.98 * noise[0]
+    if num_samples > 2:
+        hp[2:] = noise[2:] - 1.96 * noise[1:-1] + 0.97 * noise[:-2]
 
     samples = hp * env
     samples = _normalize(samples) * 0.7

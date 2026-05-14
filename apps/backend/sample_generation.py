@@ -120,7 +120,9 @@ def generate_samples(
         bass_result = sample_synthesis.render_clip(
             bass_plan, prefer_fluidsynth=prefer_fluidsynth
         )
-        selected_backend = selected_backend or bass_result.backend
+        # `selected_backend` is already pinned by the chord render above —
+        # `render_clip` always returns a concrete backend string, so the bass
+        # render can never narrow or widen the choice.
         bass_wav = output_dir / "tonal_bass_root.wav"
         bass_mid = output_dir / "tonal_bass_root.mid"
         sample_synthesis.write_wav(bass_result.samples, path=bass_wav)
@@ -242,7 +244,8 @@ def generate_samples(
             melody_result = sample_synthesis.render_clip(
                 melody_plan, prefer_fluidsynth=prefer_fluidsynth
             )
-            selected_backend = selected_backend or melody_result.backend
+            # See bass-render note above — `selected_backend` is pinned at the
+            # first chord render and `render_clip` never returns falsy.
             melody_wav = output_dir / "melody_lead.wav"
             melody_mid = output_dir / "melody_lead.mid"
             sample_synthesis.write_wav(melody_result.samples, path=melody_wav)
