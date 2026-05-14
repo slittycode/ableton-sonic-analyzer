@@ -236,11 +236,15 @@ test('re-upload after results resets to file-selected state', async ({ page }) =
   await page.getByRole('button', { name: /Run Analysis/i }).click();
   await expect(page.getByText('Analysis Results')).toBeVisible();
 
-  // Wait for analysis to fully complete (including Phase 2 if enabled)
-  // so that isAnalyzing=false and the clear button becomes visible.
-  const clearBtn = page.getByTitle('Remove File');
-  await expect(clearBtn).toBeVisible({ timeout: 30000 });
-  await clearBtn.click();
+  // Audit N9: post-analysis the Input Source panel collapses to a compact
+  // summary card; the legacy "Remove File" affordance on FileUpload is
+  // replaced by an "↺ Analyze new file" button that calls handleFileClear
+  // under the hood. Wait for the collapsed panel to render before clicking
+  // — the previous flow tested via the FileUpload remove control.
+  const reuploadBtn = page.getByRole('button', { name: /Analyze new file/i });
+  await expect(reuploadBtn).toBeVisible({ timeout: 30000 });
+  await reuploadBtn.click();
+
   await expect(page.getByText('Drop Audio Here')).toBeVisible();
   await page.setInputFiles('#audio-upload', fixturePath());
 

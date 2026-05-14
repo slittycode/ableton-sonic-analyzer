@@ -46,7 +46,8 @@ test('live golden path uploads the external track and reviews the full analysis 
   expect(finalSnapshot.artifacts.spectral?.spectrograms.length ?? 0).toBeGreaterThan(0);
   expect(finalSnapshot.artifacts.spectral?.timeSeries).toBeTruthy();
 
-  const jsonArtifact = await downloadTextArtifact(page, /JSON_DATA/i);
+  // Audit vocab cleanup: JSON_DATA → Download data; REPORT_MD → Download report.
+  const jsonArtifact = await downloadTextArtifact(page, /Download data/i);
   expect(jsonArtifact.download.suggestedFilename()).toBe('track-analysis.json');
   const parsedJson = JSON.parse(jsonArtifact.text) as {
     phase1?: unknown;
@@ -57,7 +58,7 @@ test('live golden path uploads the external track and reviews the full analysis 
   expect(parsedJson.phase2).toBeTruthy();
   expect(typeof parsedJson.exportedAt).toBe('string');
 
-  const markdownArtifact = await downloadTextArtifact(page, /REPORT_MD/i);
+  const markdownArtifact = await downloadTextArtifact(page, /Download report/i);
   expect(markdownArtifact.download.suggestedFilename()).toBe('track-analysis.md');
   expect(markdownArtifact.text).toContain('# Track Analysis Report');
   expect(markdownArtifact.text).toContain('## Phase 1 Metadata');

@@ -275,11 +275,14 @@ export function RetroVisualizer({ analyser, isPlaying, audioBuffer, onBeat, curr
     };
   }, [isPlaying]);
   
-  const COLOR_MODES: { id: ColorMode; css: string; activeCss: string; label: string; icon: string }[] = [
-    { id: 'three-band', css: 'border-accent/40', activeCss: 'border-accent bg-accent/20 shadow-[0_0_6px_rgba(255,136,0,0.4)]', label: '3-BND', icon: '|||' },
-    { id: 'amber', css: 'border-orange-500/40', activeCss: 'border-orange-500 bg-orange-500/20 shadow-[0_0_6px_rgba(249,115,22,0.4)]', label: 'AMB', icon: '~' },
-    { id: 'violet', css: 'border-purple-500/40', activeCss: 'border-purple-500 bg-purple-500/20 shadow-[0_0_6px_rgba(168,85,247,0.4)]', label: 'VIO', icon: '~' },
-    { id: 'sunset', css: 'border-rose-500/40', activeCss: 'border-rose-500 bg-rose-500/20 shadow-[0_0_6px_rgba(244,63,94,0.4)]', label: 'SUN', icon: '~' },
+  // Audit N7: the 3-letter chip labels (3-BND, AMB, VIO, SUN) are scannable
+  // landmarks but opaque on first encounter. The `title` attribute now spells
+  // out what each mode does so the chip is hover-discoverable.
+  const COLOR_MODES: { id: ColorMode; css: string; activeCss: string; label: string; title: string; icon: string }[] = [
+    { id: 'three-band', css: 'border-accent/40', activeCss: 'border-accent bg-accent/20 shadow-[0_0_6px_rgba(255,136,0,0.4)]', label: '3-BND', title: 'Three-band (low/mid/high) reactive waveform', icon: '|||' },
+    { id: 'amber', css: 'border-orange-500/40', activeCss: 'border-orange-500 bg-orange-500/20 shadow-[0_0_6px_rgba(249,115,22,0.4)]', label: 'AMB', title: 'Amber monochrome waveform', icon: '~' },
+    { id: 'violet', css: 'border-purple-500/40', activeCss: 'border-purple-500 bg-purple-500/20 shadow-[0_0_6px_rgba(168,85,247,0.4)]', label: 'VIO', title: 'Violet monochrome waveform', icon: '~' },
+    { id: 'sunset', css: 'border-rose-500/40', activeCss: 'border-rose-500 bg-rose-500/20 shadow-[0_0_6px_rgba(244,63,94,0.4)]', label: 'SUN', title: 'Sunset (rose) monochrome waveform', icon: '~' },
   ];
   
   return (
@@ -296,7 +299,7 @@ export function RetroVisualizer({ analyser, isPlaying, audioBuffer, onBeat, curr
             <button
               key={cm.id}
               onClick={() => setMode(cm.id)}
-              title={cm.label}
+              title={cm.title}
               className={`px-1.5 py-0.5 rounded-sm border text-[7px] font-mono uppercase tracking-wider transition-all ${
                 mode === cm.id
                   ? `${cm.activeCss} text-text-primary`
@@ -308,8 +311,13 @@ export function RetroVisualizer({ analyser, isPlaying, audioBuffer, onBeat, curr
           ))}
         </div>
       </div>
-      
-      {/* (3) Band legend — live-reactive brightness for LOW/MID/HIGH */}
+
+      {/* Audit N7: the 160px STANDBY canvas was wasted real estate when audio
+          wasn't playing — the most common state (track loaded, not yet played
+          or paused mid-analysis). Now we only render the live canvas during
+          playback; the chip toolbar above remains visible so the user can
+          pre-pick a color mode. */}
+      {isPlaying && (
       <div className="relative bg-black rounded-sm overflow-hidden" style={{ height: 160 }}>
         <canvas
           ref={canvasRef}
@@ -318,7 +326,8 @@ export function RetroVisualizer({ analyser, isPlaying, audioBuffer, onBeat, curr
           className="w-full h-full"
         />
       </div>
-      {mode === 'three-band' && (
+      )}
+      {mode === 'three-band' && isPlaying && (
         <BandLegend analyser={analyser} isPlaying={isPlaying} />
       )}
     </div>

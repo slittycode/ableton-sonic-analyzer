@@ -281,178 +281,34 @@ function stubRoutes(
   ]);
 }
 
-test('NO SIGNAL DETECTED placeholder is shown before any file is loaded', async ({ page }) => {
+// Audit Finding #5: the atmospheric `NO SIGNAL DETECTED` placeholder was
+// replaced by `IdleValuePropPanel` — a producer-readable explanation of what
+// ASA does and what to expect. The two tests below previously asserted the
+// placeholder text; they now assert the new panel's presence and that it
+// disappears once a file is selected (WaveformPlayer takes over the slot).
+
+test('IdleValuePropPanel is shown before any file is loaded', async ({ page }) => {
   await page.goto('/', { waitUntil: 'networkidle' });
-  await expect(page.getByText('NO SIGNAL DETECTED')).toBeVisible();
+  await expect(page.getByTestId('idle-value-prop')).toBeVisible();
+  // Spot-check the value-prop copy so a "panel renders, content broken"
+  // regression would still trip this assertion.
+  await expect(page.getByText('Upload a track. Get specific Ableton.')).toBeVisible();
 });
 
-test('NO SIGNAL DETECTED disappears when a file is selected', async ({ page }) => {
+test('IdleValuePropPanel disappears when a file is selected', async ({ page }) => {
   await stubRoutes(page);
   await page.goto('/', { waitUntil: 'networkidle' });
 
-  await expect(page.getByText('NO SIGNAL DETECTED')).toBeVisible();
+  await expect(page.getByTestId('idle-value-prop')).toBeVisible();
   await page.setInputFiles('#audio-upload', fixturePath());
-  await expect(page.getByText('NO SIGNAL DETECTED')).toHaveCount(0);
+  await expect(page.getByTestId('idle-value-prop')).toHaveCount(0);
 });
 
-test('CPU indicator bar is visible in the header', async ({ page }) => {
-  await page.goto('/', { waitUntil: 'networkidle' });
-  await expect(page.getByTestId('app-toolbar').getByText(/^CPU$/)).toBeVisible();
-});
-
-test('CPU indicator animates during analysis', async ({ page }) => {
-  await page.route('**/api/analysis-runs/estimate', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        requestId: 'req_est_cpu',
-        estimate: {
-          durationSeconds: 10,
-          totalLowMs: 22000,
-          totalHighMs: 38000,
-          stages: [{ key: 'local_dsp', label: 'Local DSP analysis', lowMs: 22000, highMs: 38000 }],
-        },
-      }),
-    });
-  });
-
-  await page.route('**/api/analysis-runs', async (route) => {
-    if (route.request().method() !== 'POST') {
-      await route.fallback();
-      return;
-    }
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        runId: 'run_cpu_001',
-        requestedStages: {
-          pitchNoteMode: 'off',
-          pitchNoteBackend: 'auto',
-          interpretationMode: 'async',
-          interpretationProfile: 'producer_summary',
-          interpretationModel: 'gemini-3.1-pro-preview',
-        },
-        artifacts: {
-          sourceAudio: {
-            artifactId: 'artifact_cpu_001',
-            filename: 'silence.wav',
-            mimeType: 'audio/wav',
-            sizeBytes: 2048,
-            contentSha256: 'abc123',
-            path: 'uploads/test.wav',
-          },
-        },
-        stages: {
-          measurement: {
-            status: 'queued',
-            authoritative: true,
-            result: null,
-            provenance: null,
-            diagnostics: null,
-            error: null,
-          },
-          pitchNoteTranslation: {
-            status: 'not_requested',
-            authoritative: false,
-            preferredAttemptId: null,
-            attemptsSummary: [],
-            result: null,
-            provenance: null,
-            diagnostics: null,
-            error: null,
-          },
-          interpretation: {
-            status: 'blocked',
-            authoritative: false,
-            preferredAttemptId: null,
-            attemptsSummary: [],
-            result: null,
-            provenance: null,
-            diagnostics: null,
-            error: null,
-          },
-        },
-      }),
-    });
-  });
-
-  let pollCount = 0;
-  await page.route('**/api/analysis-runs/run_cpu_001', async (route) => {
-    pollCount += 1;
-    if (pollCount === 1) {
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-    }
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        runId: 'run_cpu_001',
-        requestedStages: {
-          pitchNoteMode: 'off',
-          pitchNoteBackend: 'auto',
-          interpretationMode: 'async',
-          interpretationProfile: 'producer_summary',
-          interpretationModel: 'gemini-3.1-pro-preview',
-        },
-        artifacts: {
-          sourceAudio: {
-            artifactId: 'artifact_cpu_001',
-            filename: 'silence.wav',
-            mimeType: 'audio/wav',
-            sizeBytes: 2048,
-            contentSha256: 'abc123',
-            path: 'uploads/test.wav',
-          },
-        },
-        stages: {
-          measurement: {
-            status: 'completed',
-            authoritative: true,
-            result: PHASE1_STUB,
-            provenance: null,
-            diagnostics: { timings: { totalMs: 400, analysisMs: 360, serverOverheadMs: 40, flagsUsed: [], fileSizeBytes: 2048, fileDurationSeconds: 10, msPerSecondOfAudio: 40 } },
-            error: null,
-          },
-          pitchNoteTranslation: {
-            status: 'not_requested',
-            authoritative: false,
-            preferredAttemptId: null,
-            attemptsSummary: [],
-            result: null,
-            provenance: null,
-            diagnostics: null,
-            error: null,
-          },
-          interpretation: {
-            status: 'completed',
-            authoritative: false,
-            preferredAttemptId: 'int_cpu_001',
-            attemptsSummary: [
-              { attemptId: 'int_cpu_001', profileId: 'producer_summary', modelName: 'gemini-3.1-pro-preview', status: 'completed' },
-            ],
-            result: PHASE2_STUB,
-            provenance: null,
-            diagnostics: null,
-            error: null,
-          },
-        },
-      }),
-    });
-  });
-
-  await page.goto('/', { waitUntil: 'networkidle' });
-  await page.setInputFiles('#audio-upload', fixturePath());
-  await page.getByRole('button', { name: /Run Analysis/i }).click();
-
-  await expect(page.getByTestId('app-toolbar').getByText(/^CPU$/)).toBeVisible();
-
-  const cpuBar = page.getByTestId('cpu-meter-fill');
-  await expect(cpuBar).toBeVisible();
-
-  await expect(page.getByText('Analysis Results')).toBeVisible();
-});
+// Audit #11: CPU meter removed from the header. The two CPU-related smoke
+// tests that previously lived here asserted (a) visibility of the bar and
+// (b) pulsing during analysis. Both were removed because the affordance was
+// misleading — browser-tab CPU has no useful relationship to backend analysis
+// cost. There is no replacement test because there is no replacement element.
 
 test('rhythm section renders the DSP-grounded 8-bar sequencer and can expand to 16 bars', async ({ page }) => {
   await stubRoutes(page);
@@ -533,22 +389,28 @@ test('results panels expose shared typography roles for spectral, band diagnosti
   await expect(page.locator('[data-text-role="section-title"]').filter({ hasText: 'Mix & Master Chain' }).first()).toBeVisible();
 });
 
-test('header shows SonicAnalyzer brand and Local DSP Engine version label', async ({ page }) => {
+// Audit #7+#9: the "Local DSP Engine v1.6.0" eyebrow was removed because it
+// added header noise (5 competing identity signals at the top of the page)
+// and wrapped to 3 lines at 375px on mobile. The brand mark alone is enough.
+test('header shows SonicAnalyzer brand', async ({ page }) => {
   await page.goto('/', { waitUntil: 'networkidle' });
   await expect(page.getByText('SonicAnalyzer')).toBeVisible();
-  await expect(page.getByText('Local DSP Engine')).toBeVisible();
-  await expect(page.getByText(uiVersionLabel)).toBeVisible();
+  await expect(page.getByText('Local DSP Engine')).toHaveCount(0);
+  await expect(page.getByText(uiVersionLabel)).toHaveCount(0);
 });
 
-test('JSON_DATA and REPORT_MD buttons are visible after analysis', async ({ page }) => {
+// Audit vocab cleanup: `JSON_DATA` / `REPORT_MD` button labels were renamed to
+// the producer-readable `Download data` / `Download report`. The buttons
+// themselves (and their export plumbing) are unchanged.
+test('Download data and Download report buttons are visible after analysis', async ({ page }) => {
   await stubRoutes(page);
   await page.goto('/', { waitUntil: 'networkidle' });
   await page.setInputFiles('#audio-upload', fixturePath());
   await page.getByRole('button', { name: /Run Analysis/i }).click();
 
   await expect(page.getByText('Analysis Results')).toBeVisible();
-  await expect(page.getByRole('button', { name: /JSON_DATA/i })).toBeVisible();
-  await expect(page.getByRole('button', { name: /REPORT_MD/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Download data/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Download report/i })).toBeVisible();
 });
 
 test('audio observations panel appears when the interpretation includes perceptual notes', async ({ page }) => {

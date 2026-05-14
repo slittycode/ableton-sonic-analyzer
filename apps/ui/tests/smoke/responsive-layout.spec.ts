@@ -195,7 +195,8 @@ test('mobile viewport (375px) renders landing and results in single column', asy
   await page.goto('/', { waitUntil: 'networkidle' });
 
   await expect(page.getByText('Drop Audio Here')).toBeVisible();
-  await expect(page.getByText('NO SIGNAL DETECTED')).toBeVisible();
+  // Audit #5: `NO SIGNAL DETECTED` replaced by IdleValuePropPanel.
+  await expect(page.getByTestId('idle-value-prop')).toBeVisible();
 
   await page.setInputFiles('#audio-upload', fixturePath());
   await page.getByRole('button', { name: /Run Analysis/i }).click();
@@ -223,7 +224,8 @@ test('desktop viewport (1280px) renders two-column grid layout', async ({ page }
   await page.goto('/', { waitUntil: 'networkidle' });
 
   await expect(page.getByText('Drop Audio Here')).toBeVisible();
-  await expect(page.getByText('NO SIGNAL DETECTED')).toBeVisible();
+  // Audit #5: `NO SIGNAL DETECTED` replaced by IdleValuePropPanel.
+  await expect(page.getByTestId('idle-value-prop')).toBeVisible();
 
   const inputSection = page.locator('.lg\\:col-span-4');
   const monitorSection = page.locator('.lg\\:col-span-8');
@@ -243,7 +245,11 @@ test('desktop viewport (1280px) renders two-column grid layout', async ({ page }
   }
 });
 
-test('mobile viewport moves the model selector into the input panel and hides the toolbar CPU meter', async ({ page }) => {
+// Audit #11: CPU meter removed from the header. Tests below previously
+// asserted its presence/absence by viewport; the model-selector responsive
+// behavior remains and is what the tests now cover. CPU-presence assertions
+// dropped (there's no element to assert; this is the canonical state).
+test('mobile viewport renders the model selector inside the Input Source panel', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto('/', { waitUntil: 'networkidle' });
 
@@ -251,15 +257,13 @@ test('mobile viewport moves the model selector into the input panel and hides th
   await expect(page.getByLabel('AI INTERPRETATION')).toBeVisible();
   await expect(page.getByTestId('phase2-model-mobile')).toBeVisible();
   await expect(page.getByTestId('phase2-model-desktop')).not.toBeVisible();
-  await expect(page.getByText('CPU')).not.toBeVisible();
 });
 
-test('desktop viewport shows model selector and CPU meter', async ({ page }) => {
+test('desktop viewport renders the model selector in the header', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/', { waitUntil: 'networkidle' });
 
   await expect(page.getByText('SonicAnalyzer')).toBeVisible();
   await expect(page.getByTestId('phase2-model-desktop')).toBeVisible();
   await expect(page.getByTestId('phase2-model-mobile')).not.toBeVisible();
-  await expect(page.getByText('CPU')).toBeVisible();
 });

@@ -1,7 +1,7 @@
 import React from 'react';
 import { RotateCcw, Square } from 'lucide-react';
 
-import { AnalysisRunSnapshot, AnalysisStageStatus, BackendAnalysisEstimate } from '../types';
+import { AnalysisRunSnapshot, AnalysisStageError, AnalysisStageStatus, BackendAnalysisEstimate } from '../types';
 
 interface AnalysisStatusPanelProps {
   run: AnalysisRunSnapshot | null;
@@ -29,17 +29,36 @@ function formatEstimateRange(estimate: BackendAnalysisEstimate): string {
   return `${lo}s-${hi}s`;
 }
 
+export type ProgressTone = 'running' | 'success' | 'failed';
+
+export interface ProgressState {
+  percent: number;
+  indeterminate: boolean;
+  message: string;
+  tone: ProgressTone;
+  /**
+   * Audit Finding #6: which stage is producing this message. Lets the panel
+   * label the readout ("MEASURE · Measuring tempo, key, loudness…") so the
+   * user has the substance + context in one glance instead of having to
+   * cross-reference the stage chips. `null` for terminal/estimate states
+   * where no single stage is active.
+   */
+  activeStageKey: StageKey | null;
+}
+
 function computeEstimateProgress(
   elapsedMs: number,
   estimate?: BackendAnalysisEstimate | null,
-): { percent: number; indeterminate: boolean; message: string } {
-  if (!estimate) return { percent: 0, indeterminate: true, message: 'Estimating progress...' };
+): ProgressState {
+  if (!estimate) return { percent: 0, indeterminate: true, message: 'Estimating progress...', tone: 'running', activeStageKey: null };
   const midpointMs = (estimate.totalLowMs + estimate.totalHighMs) / 2;
-  if (midpointMs <= 0) return { percent: 0, indeterminate: true, message: 'Estimating progress...' };
+  if (midpointMs <= 0) return { percent: 0, indeterminate: true, message: 'Estimating progress...', tone: 'running', activeStageKey: null };
   return {
     percent: Math.min((elapsedMs / midpointMs) * 100, 95),
     indeterminate: false,
     message: 'Estimating progress from elapsed time.',
+    tone: 'running',
+    activeStageKey: null,
   };
 }
 
@@ -50,6 +69,19 @@ const STAGE_LABELS: Record<StageKey, string> = {
   pitchNoteTranslation: 'PITCH/NOTE',
   interpretation: 'INTERPRET',
 };
+
+/**
+ * Maps progress tone to the Tailwind background-color class for the progress
+ * bar fill. Used to surface failed/successful end-states visually, instead of
+ * leaving the bar accent-orange even when a stage has FAILED. Indeterminate
+ * fills use a lower-opacity variant so the pulsing partial bar reads as
+ * activity rather than solid colour. Audit N1 sibling.
+ */
+function progressFillClass(tone: ProgressTone, indeterminate: boolean): string {
+  if (tone === 'failed') return indeterminate ? 'bg-error/60' : 'bg-error';
+  if (tone === 'success') return indeterminate ? 'bg-success/60' : 'bg-success';
+  return indeterminate ? 'bg-accent/60' : 'bg-accent';
+}
 
 function statusDotClass(status: AnalysisStageStatus): string {
   switch (status) {
@@ -164,9 +196,9 @@ function stageSummary(run: AnalysisRunSnapshot | null, stageKey: StageKey): stri
   }
 }
 
-function computeLiveProgress(
+export function computeLiveProgress(
   run: AnalysisRunSnapshot | null,
-): { percent: number; indeterminate: boolean; message: string } | null {
+): ProgressState | null {
   if (!run) {
     return null;
   }
@@ -178,7 +210,26 @@ function computeLiveProgress(
   const totalStages = Math.max(trackedStageKeys.length, 1);
 
   if (!activeStageKey) {
-    return { percent: 100, indeterminate: false, message: 'Analysis complete.' };
+    // All stages reached a terminal state — but distinguish honest success
+    // from a failure or interruption. Previously this branch unconditionally
+    // returned "Analysis complete." even when a stage had failed, so the
+    // progress card lied alongside a red FAILED stage badge. (Audit N1.)
+    const failedKey = trackedStageKeys.find((key) => {
+      const status = getStageSnapshot(run, key).status;
+      return status === 'failed' || status === 'interrupted';
+    });
+    if (failedKey) {
+      const failedStatus = getStageSnapshot(run, failedKey).status;
+      const verb = failedStatus === 'failed' ? 'failed' : 'stopped';
+      return {
+        percent: 100,
+        indeterminate: false,
+        message: `${STAGE_LABELS[failedKey]} ${verb}.`,
+        tone: 'failed',
+        activeStageKey: failedKey,
+      };
+    }
+    return { percent: 100, indeterminate: false, message: 'Analysis complete.', tone: 'success', activeStageKey: null };
   }
 
   const activeStage = getStageSnapshot(run, activeStageKey);
@@ -190,6 +241,8 @@ function computeLiveProgress(
     percent: Math.min(((completedBeforeActive + stageFraction) / totalStages) * 100, 100),
     indeterminate: activeStage.status === 'running' && progressDetails.fraction == null,
     message: progressDetails.message ?? stageSummary(run, activeStageKey),
+    tone: 'running',
+    activeStageKey,
   };
 }
 
@@ -236,10 +289,30 @@ export function AnalysisStatusPanel({
 }: AnalysisStatusPanelProps) {
   const progress = computeLiveProgress(run) ?? computeEstimateProgress(elapsedMs, estimate);
 
-  const stages: { key: StageKey; status: AnalysisStageStatus; onRetry?: () => void }[] = [
-    { key: 'measurement', status: run?.stages.measurement.status ?? 'queued', onRetry: onRetryMeasurement },
-    { key: 'pitchNoteTranslation', status: run?.stages.pitchNoteTranslation.status ?? 'blocked', onRetry: onRetryPitchNote },
-    { key: 'interpretation', status: run?.stages.interpretation.status ?? 'blocked', onRetry: onRetryInterpretation },
+  const stages: {
+    key: StageKey;
+    status: AnalysisStageStatus;
+    error: AnalysisStageError | null;
+    onRetry?: () => void;
+  }[] = [
+    {
+      key: 'measurement',
+      status: run?.stages.measurement.status ?? 'queued',
+      error: run?.stages.measurement.error ?? null,
+      onRetry: onRetryMeasurement,
+    },
+    {
+      key: 'pitchNoteTranslation',
+      status: run?.stages.pitchNoteTranslation.status ?? 'blocked',
+      error: run?.stages.pitchNoteTranslation.error ?? null,
+      onRetry: onRetryPitchNote,
+    },
+    {
+      key: 'interpretation',
+      status: run?.stages.interpretation.status ?? 'blocked',
+      error: run?.stages.interpretation.error ?? null,
+      onRetry: onRetryInterpretation,
+    },
   ];
 
   return (
@@ -278,10 +351,46 @@ export function AnalysisStatusPanel({
         </div>
       </div>
 
+      {/* Audit Finding #6: primary readout. The stage diagnostic message used
+          to render at `text-[9px] text-secondary/50` below the percent — sized
+          as background fluff. During a 4–5 minute Phase 2 wait the producer
+          would tab away and miss any actual signal about what's happening.
+          Now it sits between the header and the stage chips as the visual
+          focus, with the active stage label as a mono eyebrow above it. The
+          chips below become the secondary "which stage is which" landmark. */}
+      <div
+        data-testid="status-panel-primary-readout"
+        className="rounded-sm border border-border/40 bg-bg-card/40 px-3 py-2.5"
+      >
+        {progress.activeStageKey && (
+          <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary/80 mb-1">
+            {STAGE_LABELS[progress.activeStageKey]}
+            {progress.tone === 'failed' ? ' · failure' : null}
+          </p>
+        )}
+        <p
+          className={`text-sm font-sans leading-snug ${
+            progress.tone === 'failed' ? 'text-error' : 'text-text-primary'
+          }`}
+        >
+          {progress.message}
+        </p>
+      </div>
+
       {/* Stage pipeline */}
       <div className="flex items-stretch gap-1">
         {stages.map((stage, i) => {
-          const isRetryable = stage.onRetry && (stage.status === 'failed' || stage.status === 'interrupted' || stage.status === 'ready');
+          // A retry button only makes sense when (a) the parent provided a
+          // handler, (b) the stage is in a retryable state, and (c) the
+          // backend hasn't explicitly marked the error as non-retryable
+          // (e.g. GEMINI_NOT_CONFIGURED: clicking RETRY won't fix a missing
+          // env var). Audit N1 sibling: previously the button rendered for
+          // every failed stage regardless of error.retryable.
+          const errorMarkedNonRetryable = stage.error?.retryable === false;
+          const isRetryable =
+            stage.onRetry &&
+            (stage.status === 'failed' || stage.status === 'interrupted' || stage.status === 'ready') &&
+            !errorMarkedNonRetryable;
           return (
             <div
               key={stage.key}
@@ -305,7 +414,7 @@ export function AnalysisStatusPanel({
                 <span className={`text-[10px] font-mono font-bold uppercase tracking-wider ${statusTextClass(stage.status)}`}>
                   {statusLabel(stage.status)}
                 </span>
-                {isRetryable && (
+                {isRetryable ? (
                   <button
                     onClick={stage.onRetry}
                     className="flex items-center gap-0.5 text-accent hover:text-accent/80 transition-colors"
@@ -314,7 +423,18 @@ export function AnalysisStatusPanel({
                     <RotateCcw className="w-3 h-3" />
                     <span className="text-[8px] font-mono uppercase tracking-wider">Retry</span>
                   </button>
-                )}
+                ) : errorMarkedNonRetryable && stage.error?.code ? (
+                  // Audit N1 sibling: a non-retryable failure (e.g.
+                  // GEMINI_NOT_CONFIGURED) used to render FAILED with no
+                  // actionable feedback. Surface the error code so the user
+                  // knows where to look; full message goes in the tooltip.
+                  <span
+                    className="text-[8px] font-mono uppercase tracking-wider text-error/70 truncate max-w-[8rem]"
+                    title={stage.error?.message ?? stage.error.code}
+                  >
+                    {stage.error.code}
+                  </span>
+                ) : null}
               </div>
             </div>
           );
@@ -325,10 +445,12 @@ export function AnalysisStatusPanel({
       <div className="space-y-1">
         <div className="w-full h-1 bg-bg-app border border-border/20 rounded-sm overflow-hidden">
           {progress.indeterminate ? (
-            <div className="h-full w-1/3 bg-accent/60 rounded-sm animate-pulse" />
+            <div className={`h-full w-1/3 rounded-sm animate-pulse ${progressFillClass(progress.tone, true)}`} />
           ) : (
             <div
-              className={`h-full bg-accent rounded-sm transition-all duration-500 ease-out ${progress.percent >= 95 ? 'animate-pulse' : ''}`}
+              className={`h-full rounded-sm transition-all duration-500 ease-out ${progressFillClass(progress.tone, false)} ${
+                progress.percent >= 95 && progress.tone === 'running' ? 'animate-pulse' : ''
+              }`}
               style={{ width: `${progress.percent}%` }}
             />
           )}
@@ -338,11 +460,10 @@ export function AnalysisStatusPanel({
             {progress.indeterminate ? 'estimating' : `${Math.round(progress.percent)}%`}
           </span>
         </div>
-        <div className="flex items-center justify-start">
-          <span className="text-[9px] font-mono text-text-secondary/50">
-            {progress.message}
-          </span>
-        </div>
+        {/* Audit Finding #6: the duplicate small `progress.message` that used
+            to render here was removed — the primary readout above is the
+            single source for "what's happening". Keeping it here would have
+            been visual noise repeating the same sentence twice. */}
       </div>
     </div>
   );

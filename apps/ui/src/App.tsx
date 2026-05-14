@@ -6,12 +6,16 @@ import { AnalysisStatusPanel } from './components/AnalysisStatusPanel';
 import { DiagnosticLog } from './components/DiagnosticLog';
 import { FileUpload } from './components/FileUpload';
 import { WaveformPlayer } from './components/WaveformPlayer';
-import { IdleSignalMonitor } from './components/IdleSignalMonitor';
-import { useCpuMeter } from './hooks/useCpuMeter';
+// Audit Finding #5: IdleValuePropPanel now occupies the Signal Monitor area
+// when no file is selected. It tells the producer what ASA does and what to
+// expect in 30s / 5min. The legacy IdleSignalMonitor (atmospheric
+// breathing-line canvas) is kept in the codebase for a potential future
+// "waiting between file-selected and analysis-started" state but is not
+// imported here.
+import { IdleValuePropPanel } from './components/IdleValuePropPanel';
 import { useGlobalDrag } from './hooks/useGlobalDrag';
 import {
   appConfig,
-  appVersionLabel,
   isGeminiPhase2ConfigEnabled,
 } from './config';
 import { getAudioMimeTypeOrDefault, isSupportedAudioFile } from './services/audioFile';
@@ -90,12 +94,22 @@ function formatEstimateRange(estimate: BackendAnalysisEstimate): string {
   return `${Math.round(estimate.totalLowMs / 1000)}s-${Math.round(estimate.totalHighMs / 1000)}s`;
 }
 
+// Audit N9: M:SS duration for the collapsed Input Source summary card. Returns
+// null for missing/invalid values so callers can skip the chip without juggling
+// conditionals around a placeholder string.
+export function formatTrackDuration(seconds: number | null | undefined): string | null {
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return null;
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.round(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
 function getInterpretationStatusBadge(
   phase2ConfigEnabled: boolean,
   phase2Requested: boolean,
 ): string | null {
-  if (!phase2ConfigEnabled) return 'INTERPRETATION CONFIG OFF';
-  if (!phase2Requested) return 'INTERPRETATION USER OFF';
+  if (!phase2ConfigEnabled) return 'NOT CONFIGURED';
+  if (!phase2Requested) return 'OFF';
   return null;
 }
 
@@ -104,7 +118,10 @@ function getInterpretationHelperCopy(
   phase2Requested: boolean,
 ): string {
   if (!phase2ConfigEnabled) {
-    return 'Developer kill-switch is off. AI interpretation is unavailable in this build.';
+    // Audit #12: drop developer-flavored copy. Give the user a concrete next step
+    // instead of a config-state assertion. On hosted deployments, an operator
+    // configures GEMINI_API_KEY on the backend; on local setups the user does it themselves.
+    return 'AI interpretation isn’t configured. Set GEMINI_API_KEY on the backend to enable Ableton recommendations.';
   }
 
   if (!phase2Requested) {
@@ -229,6 +246,12 @@ export default function App() {
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isDemoLoading, setIsDemoLoading] = useState(false);
+  // Audit N9: after analysis completes the Input Source panel collapses into a
+  // compact summary so the results below get the full top-of-page real estate.
+  // The user can re-open it via "Adjust settings"; the override resets at the
+  // start of each new analysis (useEffect below) so subsequent completions also
+  // collapse — that's the predictable behavior.
+  const [inputManuallyExpanded, setInputManuallyExpanded] = useState(false);
 
   const [analysisEstimate, setAnalysisEstimate] = useState<BackendAnalysisEstimate | null>(null);
   const [isEstimateLoading, setIsEstimateLoading] = useState(false);
@@ -247,8 +270,14 @@ export default function App() {
   const phase2StatusBadge = getInterpretationStatusBadge(phase2ConfigEnabled, interpretationRequested);
   const phase2HelperCopy = getInterpretationHelperCopy(phase2ConfigEnabled, interpretationRequested);
   const phase2ModelSelectorDisabled = isAnalyzing || !phase2ConfigEnabled || !interpretationRequested;
-  const cpuMeterPercent = useCpuMeter(isAnalyzing);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
+
+  // Audit N9: reset the manual-expand override whenever a new analysis kicks
+  // off, so every completion re-collapses (predictable). Without this, a user
+  // who clicked "Adjust settings" once would have the panel stay open forever.
+  useEffect(() => {
+    if (isAnalyzing) setInputManuallyExpanded(false);
+  }, [isAnalyzing]);
   const previousRunRef = useRef<AnalysisRunSnapshot | null>(null);
   const completionRef = useRef<{ measurement: boolean; interpretation: boolean }>({
     measurement: false,
@@ -904,6 +933,10 @@ export default function App() {
   );
   const shouldShowStatusPanel = Boolean(audioUrl && audioFile && analysisRun && (isAnalyzing || hasRetryableRunStage));
   const phase1ForRender: Phase1Result | null = analysisRun ? projectPhase1FromRun(analysisRun) : null;
+  // Audit N9: collapse the Input Source panel when results are visible and we
+  // aren't actively analyzing. A failed run keeps the panel open so the user
+  // can change settings before retry.
+  const showInputCollapsed = Boolean(phase1ForRender) && !isAnalyzing && !hasRetryableRunStage && !inputManuallyExpanded;
   const phase2ForRender = analysisRun ? projectPhase2FromRun(analysisRun) : null;
   const stemSummaryForRender = analysisRun ? projectStemSummaryFromRun(analysisRun) : null;
   const phase2SchemaVersion = analysisRun ? getPhase2SchemaVersionFromRun(analysisRun) : null;
@@ -919,24 +952,25 @@ export default function App() {
           data-testid="app-toolbar"
           className="ableton-toolbar h-10 border-b border-border flex items-center justify-between px-4"
         >
+          {/* Audit #7+#9: dropped "Local DSP Engine v1.6.0" eyebrow. Version was
+              header noise and wrapped to 3 lines at 375px. The brand mark alone
+              is enough at-a-glance; version lives on the about/help surface. */}
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
               <AudioWaveform className="w-4 h-4 text-accent" />
               <span className="text-xs font-bold text-text-primary tracking-wide">SonicAnalyzer</span>
             </div>
-            <div className="h-4 w-px bg-border"></div>
-            <div className="flex items-center space-x-2">
-              <span className="text-[10px] font-mono text-text-secondary uppercase">Local DSP Engine</span>
-              <span className="text-[10px] font-mono text-text-primary">{appVersionLabel}</span>
-            </div>
           </div>
 
           <div className="flex items-center gap-2 sm:gap-4">
+            {/* Audit #7: de-emphasized the Dense DAW Lab link. The accent-orange
+                chip competed with the brand mark and the model selector for the
+                user's eye on every page. It's still discoverable, just quieter. */}
             <a
               href={getAppViewHref('daw-concept')}
-              className="inline-flex items-center rounded-full border border-accent/35 bg-accent/10 px-3 py-1 text-[10px] font-mono uppercase tracking-[0.18em] text-accent transition-colors hover:border-accent hover:bg-accent/15 hover:text-[#ffd7b5]"
+              className="hidden sm:inline-flex items-center text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary transition-colors hover:text-accent"
             >
-              Dense DAW Lab
+              Dense DAW Lab →
             </a>
             <div className="hidden sm:flex items-center space-x-4">
               <div className="flex items-center space-x-2">
@@ -963,17 +997,10 @@ export default function App() {
                   {phase2StatusBadge}
                 </span>
               )}
-              <div className="h-4 w-px bg-border"></div>
-              <div className="flex items-center space-x-1">
-                <span className="text-[10px] font-mono text-text-secondary uppercase">CPU</span>
-                <div className="w-16 h-3 bg-bg-card border border-border rounded-sm overflow-hidden flex items-end p-[1px]">
-                  <div
-                    data-testid="cpu-meter-fill"
-                    className={`w-full bg-accent transition-[height] duration-200 ${isAnalyzing ? 'animate-pulse' : ''}`}
-                    style={{ height: `${cpuMeterPercent}%` }}
-                  />
-                </div>
-              </div>
+              {/* Audit #11: dropped the CPU meter. Analysis happens in the
+                  backend subprocess — the browser tab's CPU has no useful
+                  relationship to "how hard the analysis is working." The pulsing
+                  bar implied effort the page wasn't actually doing. */}
             </div>
           </div>
         </div>
@@ -991,6 +1018,69 @@ export default function App() {
                     data-testid="input-panel"
                     className="bg-bg-card border border-border rounded-b-sm p-4 flex flex-col min-h-[220px]"
                   >
+                    {showInputCollapsed && audioFile ? (
+                      // Audit N9: compact post-analysis summary. Replaces the
+                      // FileUpload dropzone + 3 toggles + estimate + run button
+                      // with one-line context + two actions. The user can swap
+                      // files or re-open the full panel from here.
+                      <div
+                        data-testid="input-panel-collapsed"
+                        className="space-y-3"
+                      >
+                        <div className="rounded-sm border border-border bg-bg-panel px-3 py-3 space-y-2">
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="text-[10px] font-mono uppercase tracking-wider text-text-secondary">Analyzed</p>
+                            {(() => {
+                              const formatted = formatTrackDuration(phase1ForRender?.durationSeconds);
+                              return formatted ? (
+                                <span className="text-[10px] font-mono text-text-secondary uppercase tracking-wider shrink-0">
+                                  {formatted}
+                                </span>
+                              ) : null;
+                            })()}
+                          </div>
+                          <p
+                            className="text-xs font-mono text-text-primary truncate"
+                            title={audioFile.name}
+                          >
+                            {audioFile.name}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={handleFileClear}
+                            className="flex-1 text-[10px] font-mono uppercase tracking-wider text-text-secondary border border-border bg-bg-panel hover:border-accent/40 hover:text-text-primary px-2 py-2 rounded-sm transition-colors"
+                          >
+                            ↺ Analyze new file
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setInputManuallyExpanded(true)}
+                            className="text-[10px] font-mono uppercase tracking-wider text-text-secondary border border-border bg-bg-panel hover:border-accent/40 hover:text-text-primary px-2 py-2 rounded-sm transition-colors"
+                          >
+                            Adjust settings
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        {phase1ForRender && inputManuallyExpanded && !isAnalyzing && (
+                          // Audit N9: re-expanded post-results — give the user a way back
+                          // to the compact view without having to clear the file.
+                          <div className="mb-3 flex items-center justify-between gap-3">
+                            <p className="text-[10px] font-mono uppercase tracking-wider text-text-secondary">
+                              Editing analysis settings
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => setInputManuallyExpanded(false)}
+                              className="text-[10px] font-mono uppercase tracking-wider text-text-secondary border border-border bg-bg-panel hover:border-accent/40 hover:text-text-primary px-2 py-1 rounded-sm transition-colors"
+                            >
+                              Hide
+                            </button>
+                          </div>
+                        )}
                     <FileUpload
                       onFileSelect={handleFileSelect}
                       onFileClear={handleFileClear}
@@ -1003,8 +1093,12 @@ export default function App() {
                       <div className="flex items-center justify-between gap-3">
                         <div className="space-y-1">
                           <p className="text-[10px] font-mono uppercase tracking-wider text-text-secondary">ANALYSIS MODE</p>
-                          <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary/80">
-                            Full keeps every measurement. Standard is faster and skips advanced Tier 3 detail.
+                          {/* Audit revised #4: helper paragraphs in the
+                              Input Source panel were all-caps mono walls.
+                              Switched to sans-serif sentence case (eyebrow
+                              above stays mono-uppercase for label scan). */}
+                          <p className="text-xs leading-snug text-text-secondary/80">
+                            Full keeps every measurement. Standard is faster and skips advanced detail.
                           </p>
                         </div>
                         <select
@@ -1037,7 +1131,8 @@ export default function App() {
                         />
                         <div className="space-y-1">
                           <p className="text-[10px] font-mono uppercase tracking-wider">STEM PITCH/NOTE TRANSLATION</p>
-                          <p className="text-[10px] font-mono uppercase tracking-wide opacity-80">
+                          {/* Audit revised #4: see ANALYSIS MODE helper above. */}
+                          <p className="text-xs leading-snug opacity-80">
                             Optional. Slower and heavier. Turns on the stem-aware note draft (Demucs + torchcrepe on bass and lead). When off, the measurement-layer melody contour and Gemini stem listening notes can still appear when those stages run.
                           </p>
                         </div>
@@ -1071,7 +1166,8 @@ export default function App() {
                               </span>
                             )}
                           </div>
-                          <p className="text-[10px] font-mono uppercase tracking-wide opacity-80">
+                          {/* Audit revised #4: see ANALYSIS MODE helper above. */}
+                          <p className="text-xs leading-snug opacity-80">
                             {phase2HelperCopy}
                           </p>
                         </div>
@@ -1150,6 +1246,8 @@ export default function App() {
                         </motion.div>
                       </>
                     )}
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1184,7 +1282,7 @@ export default function App() {
                       )}
                     </div>
                   ) : (
-                    <IdleSignalMonitor />
+                    <IdleValuePropPanel />
                   )}
                 </div>
               </div>
@@ -1251,6 +1349,12 @@ export default function App() {
                   apiBaseUrl={appConfig.apiBaseUrl}
                   runId={activeRunId ?? undefined}
                   pitchNoteMode={analysisRun?.requestedStages.pitchNoteMode ?? null}
+                  interpretationStatus={analysisRun?.stages.interpretation.status ?? null}
+                  // Audit Finding #14 + #15: hash from the backend's source-audio
+                  // artifact keys the per-file applied-recommendations tracker
+                  // in localStorage. When absent (e.g., legacy run snapshot),
+                  // AnalysisResults skips the checkbox affordance.
+                  audioContentHash={analysisRun?.artifacts?.sourceAudio?.contentSha256 ?? null}
                   onReanalyzeWithStemAware={
                     audioFile && !isAnalyzing
                       ? () => handleStartAnalysis({ pitchNoteRequested: true })

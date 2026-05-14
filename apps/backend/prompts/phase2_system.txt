@@ -388,6 +388,7 @@ mixAndMasterChain
   - reason
   - phase1Fields (see CITATION CONTRACT)
 - Keep the chain practical and grounded. Do not invent unsupported device names or parameter labels.
+- The reason field must be a complete, grammatical sentence. When using "by" before a verb, use the gerund (-ing) form. Write "Shapes drum impact by recreating the measured THD of 0.29" — NOT "by recreate the high measured harmonic distortion". Same rule for "controls bass energy by synthesizing", "tightens groove by sidechaining", "ensures translation by limiting". Never emit "by <bare-infinitive>".
 
 secretSauce
 - title: a track-specific named technique

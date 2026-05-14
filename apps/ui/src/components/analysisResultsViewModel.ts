@@ -11,6 +11,21 @@ const SENTENCE_BREAK_REGEX = /(?<=[.!?])\s+/;
 const LOW_MELODY_CONFIDENCE_THRESHOLD = 0.2;
 const LOW_TRANSCRIPTION_CONFIDENCE_THRESHOLD = 0.15;
 
+/**
+ * Prettifies an UPPER_SNAKE_CASE workflow-stage label (e.g. `SOUND_DESIGN`)
+ * to sentence case (`"Sound design"`) for user-facing display. Phase 2
+ * returns the raw enum value from the LLM prompt; we transform it once at
+ * the view-model layer so downstream renderers don't need to know about
+ * the original encoding. Audit N3/N8.
+ */
+export function prettifyWorkflowStage(stage: string | undefined | null): string | undefined {
+  if (!stage) return undefined;
+  return stage
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/^(.)/, (c) => c.toUpperCase());
+}
+
 const CONFIDENCE_LABEL_MAP: Record<string, string> = {
   "key signature": "Key",
   "true peak": "Peak",
@@ -84,6 +99,13 @@ export interface SonicElementCardViewModel {
   summary: string;
   description: string;
   measurements: SonicMeasurementViewModel[];
+  /**
+   * Audit Finding #2: dotted Phase 1 paths the CitationBlock above the card
+   * resolves to label/value rows. Sourced from SONIC_ELEMENT_FIELD_PATHS
+   * (parallel to the existing measurements table) — same fields, exposed
+   * instead of just rendered, so the chain-of-custody is structured data.
+   */
+  phase1Fields: string[];
   isWidthAndStereo: boolean;
   transcriptionDerived?: boolean;
   sources?: string[];
@@ -105,6 +127,14 @@ export interface MixChainCardViewModel {
   workflowStage?: string;
   parameters: ChainParameterViewModel[];
   proTip: string;
+  /**
+   * Audit Finding #2: Phase 2 `mixAndMasterChain[].phase1Fields` propagated
+   * to the card so the CitationBlock primitive can resolve each path to a
+   * label/value row. Always present at the view-model layer (defaults to []);
+   * the CitationBlock returns null when empty so cards without citations
+   * don't render an empty block.
+   */
+  phase1Fields: string[];
 }
 
 export interface MixChainGroupViewModel {
@@ -125,6 +155,24 @@ export interface PatchCardViewModel {
   parameters: ChainParameterViewModel[];
   proTip: string;
   transcriptionDerived?: boolean;
+  /**
+   * Audit Finding #2: Phase 2 `abletonRecommendations[].phase1Fields` merged
+   * across the items that group into this single patch card. Deduplicated.
+   */
+  phase1Fields: string[];
+}
+
+/**
+ * Audit follow-up: mirror Mix Chain's group structure on the Patches section.
+ * Mix Chain groups its 8 cards into Drum / Bass / Synth / Mid / High-end /
+ * Master eyebrows; Patches was a flat 2-col grid where producers had to scan
+ * 8 cards to find the bass patch. Grouping reuses the same `inferProcessingGroup`
+ * heuristic that Mix Chain uses, so the two sections render with parallel
+ * scannable structure.
+ */
+export interface PatchGroupViewModel {
+  name: string;
+  cards: PatchCardViewModel[];
 }
 
 /**
@@ -465,6 +513,32 @@ export function buildMelodyInsights(phase1: Phase1Result): MelodyInsightsViewMod
   };
 }
 
+/**
+ * Audit Finding #2: per-element Phase 1 dotted paths that the CitationBlock
+ * above each Sonic Element card renders as label/value rows. Parallel
+ * structure to the `sets` table inside `getSonicMeasurements` — same source
+ * of truth, just exposed as the field paths instead of as
+ * pre-formatted display rows. Keep the two tables in sync when adding
+ * elements: a measurement that's shown must be cited.
+ *
+ * `getSonicMeasurements` reads `melodyDetail.pitchConfidence` etc. as part
+ * of the optional melody-insights row stack; only the always-on Phase 1
+ * fields belong in this map (melody insights aren't always present).
+ */
+const SONIC_ELEMENT_FIELD_PATHS: Record<string, readonly string[]> = {
+  kick: ['spectralBalance.lowBass', 'truePeak', 'bpm'],
+  bass: ['spectralBalance.subBass', 'spectralBalance.lowBass', 'key'],
+  melodicArp: ['key', 'bpm', 'timeSignature', 'melodyDetail.pitchConfidence'],
+  grooveAndTiming: ['bpm', 'timeSignature', 'durationSeconds'],
+  effectsAndTexture: [
+    'spectralBalance.brilliance',
+    'stereoCorrelation',
+    'spectralBalance.highs',
+  ],
+  widthAndStereo: ['stereoWidth', 'stereoCorrelation', 'truePeak'],
+  harmonicContent: ['key', 'spectralBalance.mids', 'keyConfidence'],
+};
+
 function getSonicMeasurements(
   key: string,
   phase1: Phase1Result,
@@ -588,6 +662,12 @@ export function buildSonicElementCards(
         summary: toOneLineSummary(sanitized, 80),
         description: truncateBySentenceCount(sanitized, sentenceCap),
         measurements: getSonicMeasurements(key, phase1, melodyInsights),
+        // Audit Finding #2: surface the same dotted paths the CitationBlock
+        // resolves above the card body. Falls back to harmonicContent (the
+        // existing fallback set) for unknown element keys.
+        phase1Fields: [
+          ...(SONIC_ELEMENT_FIELD_PATHS[key] ?? SONIC_ELEMENT_FIELD_PATHS.harmonicContent),
+        ],
         isWidthAndStereo,
         transcriptionDerived,
         sources,
@@ -828,13 +908,17 @@ function makeLimiterFallbackCard(phase1: Phase1Result, nextOrder: number) {
     role: "Finalizes loudness control so peaks stay contained while preserving punch.",
     deviceFamily: "NATIVE" as const,
     trackContext: "Master",
-    workflowStage: "MASTER" as const,
+    workflowStage: prettifyWorkflowStage("MASTER"),
     parameters: [
       { label: "Ceiling", value: `${Math.min(-0.3, phase1.truePeak - 0.1).toFixed(1)} dB` },
       { label: "Integrated Loudness", value: `${phase1.lufsIntegrated.toFixed(1)} LUFS` },
       { label: "Stereo Width", value: phase1.stereoWidth.toFixed(2) },
     ],
     proTip: buildProTip("MASTER BUS"),
+    // Audit Finding #2: the synthetic fallback card cites the exact fields
+    // it consumes to derive its parameters, so the CitationBlock shows what
+    // makes this fallback specific to *this* track.
+    phase1Fields: ["truePeak", "lufsIntegrated", "stereoWidth"],
   };
 }
 
@@ -934,9 +1018,13 @@ export function buildMixChainGroups(
       role: buildRoleSentence(item.reason, group, highEnd.cues),
       deviceFamily: item.deviceFamily,
       trackContext: item.trackContext,
-      workflowStage: item.workflowStage,
+      workflowStage: prettifyWorkflowStage(item.workflowStage),
       parameters: safeParameters,
       proTip: buildProTip(group),
+      // Audit Finding #2: surface Phase 2's `phase1Fields` (required by the
+      // backend Phase 2 schema, enforced by server_phase2.py + phase2Validator)
+      // so the CitationBlock above each card has structured citations.
+      phase1Fields: Array.isArray(item.phase1Fields) ? [...item.phase1Fields] : [],
       group,
       highEndCues: highEnd.cues,
     } satisfies MixChainCardViewModel & { group: ProcessingGroup; highEndCues: string[] };
@@ -1059,7 +1147,7 @@ function buildStereoWidthPatchCard(
     ),
     deviceFamily: "NATIVE",
     trackContext: "Master",
-    workflowStage: "MIX",
+    workflowStage: prettifyWorkflowStage("MIX"),
     parameters: [
       { label: "Stereo Width", value: phase1.stereoWidth.toFixed(2) },
       { label: "Correlation Floor", value: phase1.stereoCorrelation.toFixed(2) },
@@ -1069,6 +1157,9 @@ function buildStereoWidthPatchCard(
     proTip:
       "Make width moves in the highs first, then mono-check kick and bass before committing the setting.",
     transcriptionDerived: false,
+    // Audit Finding #2: synthetic stereo-width card cites the fields it
+    // consumes when generating its parameter recommendations.
+    phase1Fields: ['stereoWidth', 'stereoCorrelation', 'truePeak'],
   };
 }
 
@@ -1121,6 +1212,18 @@ export function buildPatchCards(
 
     const firstTip = group.items.find((item) => item.advancedTip)?.advancedTip;
 
+    // Audit Finding #2: merge `phase1Fields` across the items that grouped
+    // into this single patch card (multiple parameter recommendations on the
+    // same device collapse to one card). Dedupe by Set to keep the row count
+    // sane inside the CitationBlock.
+    const mergedPhase1Fields = Array.from(
+      new Set(
+        group.items.flatMap((item) =>
+          Array.isArray(item.phase1Fields) ? item.phase1Fields : [],
+        ),
+      ),
+    );
+
     return {
       id: `patch-${index}-${group.device}`,
       device: group.device,
@@ -1129,13 +1232,14 @@ export function buildPatchCards(
       whyThisWorks,
       deviceFamily: primaryItem?.deviceFamily,
       trackContext: primaryItem?.trackContext,
-      workflowStage: primaryItem?.workflowStage,
+      workflowStage: prettifyWorkflowStage(primaryItem?.workflowStage),
       parameters: enrichedParameters,
       proTip: sanitizeText(
         firstTip || "Automate one macro over each phrase to keep motion while maintaining the core tone.",
         240,
       ),
       transcriptionDerived: midiFocused,
+      phase1Fields: mergedPhase1Fields,
     };
   });
 
@@ -1162,6 +1266,13 @@ export function buildPatchCards(
         ? "Start with this clip as rough contour, then simplify rhythm and re-voice intervals by ear."
         : "Duplicate the guide clip and vary only rhythm first, then alter note order to keep motif identity.",
       transcriptionDerived: true,
+      // Audit Finding #2: synthetic card derived from transcription/melody
+      // analysis. The fields it cites are those it actually consumes when
+      // building its parameter recommendations.
+      phase1Fields:
+        melodyInsights.source === 'transcription'
+          ? ['transcriptionDetail.averageConfidence', 'key', 'bpm']
+          : ['melodyDetail.pitchConfidence', 'key', 'bpm'],
     });
   }
 
@@ -1174,6 +1285,46 @@ export function buildPatchCards(
   }
 
   return cards;
+}
+
+/**
+ * Audit follow-up: same per-card inputs as `buildPatchCards`, but bucketed by
+ * Mix Chain's processing-group heuristic so the Patches section can render
+ * with matching emoji-eyebrow grouping. Returns only non-empty groups, in
+ * Mix Chain's canonical GROUP_ORDER.
+ *
+ * Callers that need a flat list (export tools, length checks) keep using
+ * `buildPatchCards` — both share the same underlying card pipeline so any
+ * fallback card (MIDI Clip Guide, stereo width) lands in both views.
+ */
+export function buildPatchGroups(
+  phase1: Phase1Result,
+  phase2: Phase2Result | null,
+): PatchGroupViewModel[] {
+  const cards = buildPatchCards(phase1, phase2);
+  if (cards.length === 0) return [];
+
+  const grouped = new Map<ProcessingGroup, PatchCardViewModel[]>();
+  for (const group of GROUP_ORDER) {
+    grouped.set(group, []);
+  }
+
+  cards.forEach((card, index) => {
+    // Reuse Mix Chain's inferProcessingGroup against text built from the
+    // card's own visible content. The positionRatio fallback only kicks in
+    // when no keyword matches; cards are already roughly ordered by intent
+    // (drum/bass first → master last) so the position-based fallback lands
+    // in a sensible bucket.
+    const text =
+      `${card.device} ${card.category} ${card.patchRole} ${card.whyThisWorks}`.toLowerCase();
+    const positionRatio = cards.length <= 1 ? 1 : index / (cards.length - 1);
+    const group = inferProcessingGroup(text, positionRatio);
+    grouped.get(group)?.push(card);
+  });
+
+  return GROUP_ORDER
+    .map((group) => ({ name: group as string, cards: grouped.get(group) ?? [] }))
+    .filter((group) => group.cards.length > 0);
 }
 
 export function calculateStereoBandStyle(width: number): { left: string; width: string } {

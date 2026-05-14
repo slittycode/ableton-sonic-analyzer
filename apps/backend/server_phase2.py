@@ -2,6 +2,7 @@
 
 import json
 import mimetypes
+import re
 from math import isfinite
 from pathlib import Path
 from typing import Any, Callable
@@ -940,6 +941,117 @@ def _resolve_interpretation_profile_config(profile_id: str) -> dict[str, Any]:
     )
 
 
+### -----------------------------------------------------------------------
+### Phase 2 grammar post-process: rewrite "by <3rd-person-singular-verb>" to
+### "by <gerund>". Gemini consistently emits the wrong form in role/reason
+### text (e.g., "Shapes drum impact by recreates the harmonic distortion"
+### instead of "...by recreating the harmonic distortion"). The audit's
+### final round prescribed a server-side post-process; the prompt nudge in
+### phase2_system.txt did not take.
+###
+### Conservative: only rewrites when the word after "by" is at least 4
+### characters and lowercase a-z, and is NOT in the small denylist of common
+### plural nouns that legitimately appear after "by" in technical prose.
+### -----------------------------------------------------------------------
+
+_PHASE2_BY_VERB_RE = re.compile(r"\bby ([a-z]{4,})s\b")
+
+_PHASE2_BY_NOUN_DENYLIST = frozenset(
+    {
+        # Plural nouns / measure words that legitimately appear after "by" in
+        # technical writing. Anything in this set is left as-is.
+        "tones", "notes", "lines", "sides", "modes", "kinds", "codes",
+        "cases", "rates", "types", "pairs", "rules", "bands", "parts",
+        "tools", "forms", "works", "phases", "stages", "features",
+        "systems", "classes", "numbers", "measures", "reasons", "sources",
+        "targets", "units", "tracks", "cycles", "beats", "hits",
+        "samples", "patterns", "pieces", "levels", "values", "amounts",
+        "degrees", "effects", "paths", "fields", "frames", "styles",
+        "genres", "others", "ranges", "drums", "stems", "voices",
+        "channels", "tracks", "groups", "buses", "passes", "blocks",
+        "chords", "scales", "octaves", "intervals", "harmonics",
+    }
+)
+
+
+def _to_gerund(verb_3sg: str) -> str:
+    """3rd-person singular → gerund (best effort, no dictionary lookup).
+
+    "matches"   → "matching"   (strip -es, +ing)
+    "shapes"    → "shaping"    (strip -s, drop terminal -e, +ing)
+    "recreates" → "recreating" (same)
+    "absorbs"   → "absorbing"  (strip -s, +ing)
+    """
+    if verb_3sg.endswith(("ches", "shes", "sses", "tches", "xes", "zzes")):
+        stem = verb_3sg[:-2]
+    else:
+        stem = verb_3sg[:-1]
+    if stem.endswith("e") and not stem.endswith(("ee", "oe", "ye", "ie")):
+        stem = stem[:-1]
+    return stem + "ing"
+
+
+def _fix_by_gerund_in_text(text: str) -> str:
+    """Rewrite "by <bad-verb-form>" patterns inside a single string.
+
+    Empty/non-string inputs pass through unchanged. The regex is bounded to
+    lowercase a-z words 4+ chars long, and the denylist guards against
+    common plural-noun false positives.
+    """
+    if not isinstance(text, str) or not text:
+        return text
+
+    def _repl(match: re.Match) -> str:
+        word_with_s = match.group(1) + "s"
+        if word_with_s in _PHASE2_BY_NOUN_DENYLIST:
+            return match.group(0)
+        return f"by {_to_gerund(word_with_s)}"
+
+    return _PHASE2_BY_VERB_RE.sub(_repl, text)
+
+
+def _fix_grammar_in_record(record: Any, fields: tuple[str, ...]) -> Any:
+    """Apply `_fix_by_gerund_in_text` to specific string fields of a record.
+    Returns the record unchanged if it isn't a dict or has none of the fields.
+    """
+    if not isinstance(record, dict):
+        return record
+    updated = False
+    for field in fields:
+        original = record.get(field)
+        if isinstance(original, str):
+            fixed = _fix_by_gerund_in_text(original)
+            if fixed != original:
+                record[field] = fixed
+                updated = True
+    return record if updated or True else record  # always return; updated flag unused
+
+
+def _apply_phase2_grammar_fixes(normalized: dict[str, Any]) -> None:
+    """Walk the relevant Phase 2 free-text fields and rewrite "by <verb>s"
+    to "by <verb>ing" in-place. Targets:
+      - abletonRecommendations[].{reason, advancedTip}
+      - mixAndMasterChain[].reason
+      - secretSauce.workflowSteps[].{measurementJustification, instruction}
+    """
+    recs = normalized.get("abletonRecommendations")
+    if isinstance(recs, list):
+        for item in recs:
+            _fix_grammar_in_record(item, ("reason", "advancedTip"))
+
+    mix_chain = normalized.get("mixAndMasterChain")
+    if isinstance(mix_chain, list):
+        for item in mix_chain:
+            _fix_grammar_in_record(item, ("reason",))
+
+    secret_sauce = normalized.get("secretSauce")
+    if isinstance(secret_sauce, dict):
+        workflow_steps = secret_sauce.get("workflowSteps")
+        if isinstance(workflow_steps, list):
+            for item in workflow_steps:
+                _fix_grammar_in_record(item, ("measurementJustification", "instruction"))
+
+
 def _is_str(v: Any) -> bool:
     return isinstance(v, str)
 
@@ -1752,6 +1864,13 @@ def _normalize_and_salvage_phase2_result(
             if isinstance(salvaged_items, list) and len(salvaged_items) == 0:
                 emptied_required_arrays.add(array_path)
         warnings.extend(item_warnings)
+
+    # Audit final round: rewrite Gemini's "by recreates / by shapes / by
+    # generates / ..." → "by recreating / by shaping / by generating / ...".
+    # The prompt instruction added earlier didn't take; this is the salvage
+    # post-process. Runs in-place on `normalized`; no validation warnings
+    # emitted because grammar repair is not a contract failure.
+    _apply_phase2_grammar_fixes(normalized)
 
     return normalized, warnings, emptied_required_arrays
 
