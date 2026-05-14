@@ -2272,6 +2272,101 @@ async def get_run_artifact(
 
 
 @app.get(
+    "/api/analysis-runs/{run_id}/source-audio",
+    response_model=None,
+)
+async def get_run_source_audio(
+    run_id: str,
+    x_asa_user_id: str | None = Header(None),
+    x_asa_user_email: str | None = Header(None),
+) -> FileResponse | JSONResponse:
+    """Re-serve the audio file originally ingested for ``run_id``.
+
+    The same bytes are reachable via
+    ``GET /api/analysis-runs/{run_id}/artifacts/{artifact_id}`` if the
+    caller already knows the artifact id, but this route is stable
+    (the path doesn't change per run) and saves a round-trip — the
+    caller does not need to fetch the snapshot first to learn the
+    artifact id. Useful for Phase 2 reruns where the client already
+    has the run id but no longer has the source bytes locally.
+
+    Owner-only. Unlike ``DELETE``, this route does not honor
+    ``X-Admin-Key``: re-serving another user's audio content has a
+    stronger privacy posture than purging another user's run, and the
+    review (Track 3) scoped admin bypass to delete operations.
+
+    Returns:
+        - 200 with the audio file (FileResponse with the original
+          filename in Content-Disposition and the stored MIME type).
+        - 404 ``RUN_NOT_FOUND`` if the run does not exist or is not
+          owned by the requesting user.
+        - 404 ``SOURCE_AUDIO_NOT_FOUND`` if the run exists but has no
+          source_artifact row (should be unreachable in practice; it
+          would indicate a corrupted runtime state).
+        - 404 ``SOURCE_AUDIO_FILE_MISSING`` if the artifact row exists
+          but the underlying file is gone from disk.
+    """
+    user_context = _resolve_route_user_context(x_asa_user_id, x_asa_user_email)
+    if isinstance(user_context, JSONResponse):
+        return user_context
+    runtime = get_analysis_runtime()
+
+    # Ownership check first; this also confirms the run exists.
+    try:
+        runtime.get_run(run_id, owner_user_id=user_context.user_id)
+    except (KeyError, PermissionError):
+        return _run_not_found_response(run_id)
+
+    try:
+        source_artifact = runtime.get_source_artifact(run_id)
+    except KeyError:
+        # Run was found by get_run() above, but the source_artifact_id
+        # column was null or pointed at a missing row. Defensive — not
+        # expected on the normal create_run path. ``retryable`` is
+        # ``False`` because the run state is corrupted; a retry on the
+        # same id will fail identically.
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": {
+                    "code": "SOURCE_AUDIO_NOT_FOUND",
+                    "message": (
+                        f"Run '{run_id}' has no source audio artifact "
+                        f"registered."
+                    ),
+                    "retryable": False,
+                }
+            },
+        )
+
+    artifact_local_path = runtime.resolve_artifact_local_path(
+        source_artifact.get("path")
+    )
+    if artifact_local_path is None or not artifact_local_path.is_file():
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": {
+                    "code": "SOURCE_AUDIO_FILE_MISSING",
+                    "message": (
+                        "Source audio file is no longer available on disk."
+                    ),
+                    # The artifact metadata is intact but the bytes are
+                    # gone; an operator would need to re-ingest. A naive
+                    # retry from the client will not recover.
+                    "retryable": False,
+                }
+            },
+        )
+
+    return FileResponse(
+        path=str(artifact_local_path),
+        media_type=source_artifact.get("mimeType", "application/octet-stream"),
+        filename=source_artifact.get("filename", artifact_local_path.name),
+    )
+
+
+@app.get(
     "/api/analysis-runs/{run_id}/export/csv/{field_path}",
     response_model=None,
 )

@@ -4620,6 +4620,195 @@ class CreateAnalysisRunUrlIngestionTests(unittest.TestCase):
         self.assertFalse(payload["error"]["retryable"])
 
 
+class GetRunSourceAudioRouteTests(unittest.TestCase):
+    """Route tests for GET /api/analysis-runs/{run_id}/source-audio.
+
+    The route re-serves the original ingested audio for a run so callers
+    don't have to re-upload for Phase 2 reruns. These tests cover the
+    HTTP shell: ownership enforcement, missing-source handling, and the
+    happy-path body/headers.
+    """
+
+    AUDIO_BYTES = b"FAKE-AUDIO-PAYLOAD"
+
+    def _decode_json_response(self, response) -> dict:
+        return json.loads(response.body.decode("utf-8"))
+
+    def _make_owned_run(self, runtime, *, owner: str = "owner_user") -> str:
+        created = runtime.create_run(
+            filename="reference.mp3",
+            content=self.AUDIO_BYTES,
+            mime_type="audio/mpeg",
+            owner_user_id=owner,
+            analysis_mode="full",
+            pitch_note_mode="off",
+            pitch_note_backend="auto",
+            interpretation_mode="off",
+            interpretation_profile="producer_summary",
+            interpretation_model=None,
+        )
+        return created["runId"]
+
+    def test_serves_audio_with_filename_and_mime(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_source_audio_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            run_id = self._make_owned_run(runtime)
+
+            with patch.object(server, "get_analysis_runtime", return_value=runtime), \
+                 patch.dict(
+                     server.os.environ,
+                     {"SONIC_ANALYZER_RUNTIME_PROFILE": "hosted"},
+                     clear=False,
+                 ):
+                response = asyncio.run(
+                    server.get_run_source_audio(
+                        run_id,
+                        x_asa_user_id="owner_user",
+                    )
+                )
+
+            # FileResponse points at the on-disk artifact; verify metadata.
+            self.assertEqual(response.status_code, 200)
+            # FileResponse.media_type is the configured mime
+            self.assertEqual(response.media_type, "audio/mpeg")
+            # The Content-Disposition filename comes from the original
+            # upload filename, not the stored path.
+            disposition = response.headers.get("content-disposition", "")
+            self.assertIn("reference.mp3", disposition)
+
+    def test_non_owner_request_returns_run_not_found(self) -> None:
+        """A different user MUST NOT be able to fetch another user's
+        source audio. Identical 404 envelope to a missing run — the
+        route does not disclose whether the run exists.
+        """
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_source_audio_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            run_id = self._make_owned_run(runtime, owner="owner_user")
+
+            with patch.object(server, "get_analysis_runtime", return_value=runtime), \
+                 patch.dict(
+                     server.os.environ,
+                     {"SONIC_ANALYZER_RUNTIME_PROFILE": "hosted"},
+                     clear=False,
+                 ):
+                response = asyncio.run(
+                    server.get_run_source_audio(
+                        run_id,
+                        x_asa_user_id="not_the_owner",
+                    )
+                )
+
+        self.assertEqual(response.status_code, 404)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["error"]["code"], "RUN_NOT_FOUND")
+
+    def test_unknown_run_returns_404(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_source_audio_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            with patch.object(server, "get_analysis_runtime", return_value=runtime), \
+                 patch.dict(
+                     server.os.environ,
+                     {"SONIC_ANALYZER_RUNTIME_PROFILE": "hosted"},
+                     clear=False,
+                 ):
+                response = asyncio.run(
+                    server.get_run_source_audio(
+                        "does-not-exist",
+                        x_asa_user_id="some_user",
+                    )
+                )
+
+        self.assertEqual(response.status_code, 404)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["error"]["code"], "RUN_NOT_FOUND")
+
+    def test_missing_source_artifact_returns_source_audio_not_found(self) -> None:
+        """If the run row exists but get_source_artifact raises (no
+        source_artifact_id linkage), the route surfaces the dedicated
+        SOURCE_AUDIO_NOT_FOUND code rather than the generic RUN_NOT_FOUND.
+
+        Distinct error codes matter because the recovery path differs:
+        RUN_NOT_FOUND → ownership / typo issue, the client should check
+        the id; SOURCE_AUDIO_NOT_FOUND → server-side corruption, the
+        client cannot recover, an operator needs to look.
+        """
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_source_audio_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            run_id = self._make_owned_run(runtime, owner="owner_user")
+
+            # Patch get_source_artifact to simulate missing-linkage path.
+            with patch.object(server, "get_analysis_runtime", return_value=runtime), \
+                 patch.object(
+                     runtime,
+                     "get_source_artifact",
+                     side_effect=KeyError(f"Run {run_id} is missing its source artifact"),
+                 ), \
+                 patch.dict(
+                     server.os.environ,
+                     {"SONIC_ANALYZER_RUNTIME_PROFILE": "hosted"},
+                     clear=False,
+                 ):
+                response = asyncio.run(
+                    server.get_run_source_audio(
+                        run_id,
+                        x_asa_user_id="owner_user",
+                    )
+                )
+
+        self.assertEqual(response.status_code, 404)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["error"]["code"], "SOURCE_AUDIO_NOT_FOUND")
+        # Server-side corruption — naive client retry won't recover.
+        self.assertFalse(payload["error"]["retryable"])
+
+    def test_missing_file_on_disk_returns_source_audio_file_missing(self) -> None:
+        """If the artifact row exists but resolve_artifact_local_path
+        returns None or the file isn't on disk, surface
+        SOURCE_AUDIO_FILE_MISSING. Distinct from SOURCE_AUDIO_NOT_FOUND
+        because the recovery is different: the artifact metadata is
+        intact, only the bytes are gone — operator can re-ingest from
+        the original source.
+        """
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_source_audio_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            run_id = self._make_owned_run(runtime, owner="owner_user")
+
+            with patch.object(server, "get_analysis_runtime", return_value=runtime), \
+                 patch.object(
+                     runtime,
+                     "resolve_artifact_local_path",
+                     return_value=None,
+                 ), \
+                 patch.dict(
+                     server.os.environ,
+                     {"SONIC_ANALYZER_RUNTIME_PROFILE": "hosted"},
+                     clear=False,
+                 ):
+                response = asyncio.run(
+                    server.get_run_source_audio(
+                        run_id,
+                        x_asa_user_id="owner_user",
+                    )
+                )
+
+        self.assertEqual(response.status_code, 404)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["error"]["code"], "SOURCE_AUDIO_FILE_MISSING")
+        # File bytes missing — operator must re-ingest; client retry
+        # of the same id will not recover.
+        self.assertFalse(payload["error"]["retryable"])
+
+
 class CsvExportRouteTests(unittest.TestCase):
     """Route tests for GET /api/analysis-runs/{run_id}/export/csv/{field_path}.
 

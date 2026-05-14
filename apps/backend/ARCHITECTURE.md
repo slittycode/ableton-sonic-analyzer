@@ -72,6 +72,7 @@ Custom routes:
 - `GET /api/analysis-runs/{run_id}`
 - `DELETE /api/analysis-runs/{run_id}` — owner can delete their own run; operators with `SONIC_ANALYZER_ADMIN_KEY` set can supply `X-Admin-Key` to delete any run. Admin path is closed when the env var is unset.
 - `GET /api/analysis-runs/{run_id}/artifacts` and `…/artifacts/{artifact_id}`
+- `GET /api/analysis-runs/{run_id}/source-audio` — re-serves the original ingested audio for the run. Owner-only (no admin bypass). Saves a round-trip vs looking up the source artifact id first.
 - `GET /api/analysis-runs/{run_id}/export/csv/{field_path}` — CSV export of a Phase 1 time-series field. See [`docs/adr/0001-phase1-json-schema-v1.md`](../../docs/adr/0001-phase1-json-schema-v1.md) and the registry in [`csv_export.py`](csv_export.py).
 - `POST /api/analysis-runs/{run_id}/spectral-enhancements/{kind}`
 - `POST /api/analysis-runs/{run_id}/pitch-note-translations`
