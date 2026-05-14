@@ -1,5 +1,6 @@
 """Detection analyzers — effects, acid, reverb, vocal, supersaw, and genre."""
 
+import functools
 import sys
 
 import numpy as np
@@ -21,6 +22,7 @@ except ImportError:
 
 from dsp_utils import _safe_db, _compute_bark_db
 from analyze_audio_io import _load_stem_mono
+from dsp_bandbank import BatchedBandpass
 
 
 # Phase 1.D #5 — bands for per-band RT60 estimation. Chosen to roughly mirror
@@ -35,20 +37,21 @@ _REVERB_BANDS = (
 )
 
 
+@functools.lru_cache(maxsize=4)
+def _bandbank_for(sample_rate: int) -> BatchedBandpass:
+    """One BatchedBandpass per sample rate (4 slots covers 22050/44100/48000/96000)."""
+    return BatchedBandpass(int(sample_rate))
+
+
 def _bandpass_signal(mono: np.ndarray, sample_rate: int, lo_hz: float, hi_hz: float) -> np.ndarray | None:
-    """4th-order Butterworth bandpass via scipy.signal. Returns None on failure."""
-    if scipy_signal is None or mono.size == 0:
-        return None
-    nyquist = 0.5 * sample_rate
-    lo = max(1.0, lo_hz) / nyquist
-    hi = min(sample_rate * 0.49, hi_hz) / nyquist
-    if not (0.0 < lo < hi < 1.0):
-        return None
-    try:
-        sos = scipy_signal.butter(4, [lo, hi], btype="bandpass", output="sos")
-        return scipy_signal.sosfiltfilt(sos, mono).astype(np.float32, copy=False)
-    except Exception:
-        return None
+    """4th-order Butterworth bandpass via scipy.signal. Returns None on failure.
+
+    Thin wrapper around ``BatchedBandpass.filter_one`` kept for callers that
+    pass ``sample_rate`` per call. Output is bit-identical to the previous
+    inline implementation; new code should obtain a ``BatchedBandpass``
+    directly via ``_bandbank_for(sample_rate)`` and use ``filter_many``.
+    """
+    return _bandbank_for(sample_rate).filter_one(mono, lo_hz, hi_hz)
 
 
 # Mirrors apps/backend/analyze_core.py SPECTRAL_BALANCE_BANDS — imported lazily
@@ -545,13 +548,16 @@ def analyze_reverb_detail(
 
         # Per-band RT60: re-use the SAME transient indices on the broadband
         # envelope so each band measures the same events. Bandpass the raw
-        # signal first, recompute the per-band envelope, then run the slope
-        # fit. Requires scipy.signal — if unavailable, omit per-band.
+        # signal once (filter_many designs each SOS only once and reuses
+        # them), recompute the per-band envelope, then run the slope fit.
+        # Requires scipy.signal — if unavailable, omit per-band.
         per_band_rt60: dict[str, float] | None = None
         if scipy_signal is not None:
+            bandbank = _bandbank_for(sample_rate)
+            filtered_bands = bandbank.filter_many(mono_arr, _REVERB_BANDS, dtype=np.float32)
             per_band: dict[str, float] = {}
-            for band_name, lo_hz, hi_hz in _REVERB_BANDS:
-                filtered = _bandpass_signal(mono_arr, sample_rate, lo_hz, hi_hz)
+            for band_name, _lo, _hi in _REVERB_BANDS:
+                filtered = filtered_bands.get(band_name)
                 if filtered is None:
                     continue
                 band_envelope = np.zeros(n_frames, dtype=np.float64)

@@ -27,6 +27,14 @@ dsp_utils = importlib.util.module_from_spec(_DSP_SPEC)
 _DSP_SPEC.loader.exec_module(dsp_utils)
 
 
+_BANDBANK_PATH = _BACKEND_ROOT / "dsp_bandbank.py"
+_BANDBANK_SPEC = importlib.util.spec_from_file_location("dsp_bandbank_test", _BANDBANK_PATH)
+if _BANDBANK_SPEC is None or _BANDBANK_SPEC.loader is None:
+    raise AssertionError("Could not load dsp_bandbank.py for direct helper tests.")
+dsp_bandbank = importlib.util.module_from_spec(_BANDBANK_SPEC)
+_BANDBANK_SPEC.loader.exec_module(dsp_bandbank)
+
+
 class PearsonCorrTests(unittest.TestCase):
     """Sanity-check the in-house Pearson correlation used across the analyzers."""
 
@@ -272,6 +280,129 @@ class ComputeStereoCorrelationCurveTests(unittest.TestCase):
         self.assertGreater(len(result), 0)
         for point in result:
             self.assertIsNone(point["sub"])
+
+
+class BatchedBandpassTests(unittest.TestCase):
+    """Verify ``BatchedBandpass`` is bit-identical to the inline scipy code
+    it replaces in ``analyze_detection.py``.
+
+    The load-bearing assertion is ``test_filter_one_matches_inline_scipy_bit_for_bit``:
+    if the new class deviates from ``butter(4, [lo/nyq, hi/nyq], output='sos')
+    + sosfiltfilt`` by more than 1e-12 (well below float32 last-bit precision
+    after the post-filter cast), Phase 1 numbers move and the refactor must
+    not land.
+    """
+
+    # _REVERB_BANDS, replicated here so the test doesn't drag in analyze_detection
+    # (which pulls essentia, librosa, etc.).
+    _REVERB_BANDS = (
+        ("low", 20.0, 250.0),
+        ("lowMids", 250.0, 2000.0),
+        ("highMids", 2000.0, 8000.0),
+        ("highs", 8000.0, 16000.0),
+    )
+    _SR = 44100
+
+    @classmethod
+    def setUpClass(cls):
+        # Fixed-seed signal so the parity assertion is reproducible.
+        cls._signal = np.random.default_rng(1234).standard_normal(2 * cls._SR)
+
+    def _inline_reference(self, mono, lo_hz, hi_hz):
+        """Literal pre-refactor implementation, copy-pasted from
+        ``analyze_detection._bandpass_signal``. Anything the new class
+        produces must match this byte-for-byte."""
+        from scipy import signal as scipy_signal
+
+        nyquist = 0.5 * self._SR
+        lo = max(1.0, lo_hz) / nyquist
+        hi = min(self._SR * 0.49, hi_hz) / nyquist
+        if not (0.0 < lo < hi < 1.0):
+            return None
+        sos = scipy_signal.butter(4, [lo, hi], btype="bandpass", output="sos")
+        return scipy_signal.sosfiltfilt(sos, mono).astype(np.float32, copy=False)
+
+    def test_filter_one_matches_inline_scipy_bit_for_bit(self):
+        bb = dsp_bandbank.BatchedBandpass(self._SR)
+        for name, lo, hi in self._REVERB_BANDS:
+            with self.subTest(band=name):
+                expected = self._inline_reference(self._signal, lo, hi)
+                got = bb.filter_one(self._signal, lo, hi)
+                self.assertIsNotNone(expected)
+                self.assertIsNotNone(got)
+                np.testing.assert_allclose(got, expected, atol=1e-12, rtol=1e-12)
+
+    def test_filter_many_returns_same_arrays_as_per_band_loop(self):
+        bb = dsp_bandbank.BatchedBandpass(self._SR)
+        many = bb.filter_many(self._signal, self._REVERB_BANDS, dtype=np.float32)
+        self.assertEqual(set(many.keys()), {n for n, *_ in self._REVERB_BANDS})
+        for name, lo, hi in self._REVERB_BANDS:
+            with self.subTest(band=name):
+                expected = self._inline_reference(self._signal, lo, hi)
+                np.testing.assert_allclose(many[name], expected, atol=1e-12, rtol=1e-12)
+
+    def test_filter_many_accepts_reverb_bands_tuple_shape(self):
+        bb = dsp_bandbank.BatchedBandpass(self._SR)
+        result = bb.filter_many(self._signal, self._REVERB_BANDS, dtype=np.float32)
+        self.assertEqual(set(result.keys()), {"low", "lowMids", "highMids", "highs"})
+
+    def test_filter_many_accepts_spectral_balance_dict_shape(self):
+        """SPECTRAL_BALANCE_BANDS in analyze_core is a ``Mapping[str, (lo, hi)]`` —
+        ``filter_many`` must accept that shape too, not just the reverb triple."""
+        bb = dsp_bandbank.BatchedBandpass(self._SR)
+        bands = {"subBass": (20, 80), "lowMids": (250, 500)}
+        result = bb.filter_many(self._signal, bands)
+        self.assertEqual(set(result.keys()), {"subBass", "lowMids"})
+        # Default dtype is float64 to match the upstream cast in
+        # analyze_per_band_transient_density.
+        self.assertEqual(result["subBass"].dtype, np.float64)
+
+    def test_invalid_band_returns_none_or_absent_key(self):
+        bb = dsp_bandbank.BatchedBandpass(self._SR)
+        # lo > hi forces the clamp predicate to fail.
+        self.assertIsNone(bb.filter_one(self._signal, 10000.0, 100.0))
+        many = bb.filter_many(
+            self._signal,
+            [("bad", 10000.0, 100.0), ("good", 100.0, 1000.0)],
+            dtype=np.float32,
+        )
+        self.assertNotIn("bad", many)
+        self.assertIn("good", many)
+
+    def test_filter_one_returns_none_for_empty_input(self):
+        bb = dsp_bandbank.BatchedBandpass(self._SR)
+        self.assertIsNone(bb.filter_one(np.array([], dtype=np.float64), 100.0, 1000.0))
+
+    def test_sos_coefficients_are_cached_per_band(self):
+        bb = dsp_bandbank.BatchedBandpass(self._SR)
+        bb.filter_one(self._signal, 100.0, 1000.0)
+        self.assertIn((100.0, 1000.0), bb._sos_cache)
+        sos_first = bb._sos_cache[(100.0, 1000.0)]
+        bb.filter_one(self._signal, 100.0, 1000.0)
+        sos_second = bb._sos_cache[(100.0, 1000.0)]
+        # Identity check — second call must hit the cache, not re-design.
+        self.assertIs(sos_first, sos_second)
+
+    def test_unsupported_backend_raises(self):
+        with self.assertRaises(ValueError):
+            dsp_bandbank.BatchedBandpass(self._SR, backend="torch")
+
+    def test_filter_one_default_dtype_is_float32(self):
+        """Locks the bit-identicality contract: ``filter_one`` with no dtype
+        kwarg must return float32 to match the pre-refactor _bandpass_signal."""
+        bb = dsp_bandbank.BatchedBandpass(self._SR)
+        out = bb.filter_one(self._signal, 100.0, 1000.0)
+        self.assertIsNotNone(out)
+        self.assertEqual(out.dtype, np.float32)
+
+    def test_filter_one_respects_dtype_override(self):
+        """Explicit ``dtype=np.float64`` must produce a float64 array — the
+        forward-looking override path for transient-density-style callers
+        that want to skip an upstream cast."""
+        bb = dsp_bandbank.BatchedBandpass(self._SR)
+        out = bb.filter_one(self._signal, 100.0, 1000.0, dtype=np.float64)
+        self.assertIsNotNone(out)
+        self.assertEqual(out.dtype, np.float64)
 
 
 if __name__ == "__main__":
