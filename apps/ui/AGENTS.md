@@ -91,7 +91,7 @@ RUN_GEMINI_LIVE_SMOKE=true VITE_ENABLE_PHASE2_GEMINI=true GEMINI_API_KEY=your_ke
 - `src/services/analysisRunsClient.ts`: canonical transport — creates runs against `/api/analysis-runs`, polls stage snapshots, fetches pitch/note translations and interpretations.
 - `src/services/backendPhase1Client.ts`: legacy multipart transport (typed errors, `AbortController` timeouts). Kept only for the compatibility wrappers; new flows go through `analysisRunsClient.ts`.
 - `src/services/analyzer.ts`: phase orchestration — sequences run creation, polling, and display payload projection.
-- `src/types.ts` + `src/types/`: shared frontend contract types. `types.ts` is a barrel re-export of `./types/{measurement,interpretation,backend,samples}.ts`.
+- `src/types.ts` + `src/types/`: shared frontend contract types. `types.ts` is a barrel re-export of `./types/{measurement,interpretation,backend}.ts`; `./types/samples.ts` exists but is imported directly, not through the barrel.
 - `src/index.css`: Tailwind theme tokens and visual language.
 - `tests/services/*`: unit and service tests.
 - `tests/smoke/*`: smoke and live smoke coverage.
