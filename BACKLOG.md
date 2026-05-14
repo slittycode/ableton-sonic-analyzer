@@ -30,3 +30,6 @@ All eight detectors emit fields visible in [`apps/backend/tests/test_analyze.py`
 
 ## Open
 - 🔲 `services/patchSmith.ts` — generates Vital/Operator patch parameters from detected features. Slot: Phase 3 (not yet built); unique differentiator (download-ready preset output). Evaluate against `PURPOSE.md` decision framework before scheduling.
+
+## In Progress
+- 🟡 **Audition samples (Phase 3 — branch `claude/gemini-sample-generation-U753E`).** Heuristic WAV/MIDI clips derived from Phase 1 measurements (and Phase 2 context when available) so producers can ear-check the measurement chain. PyTheory generates the musical plan, FluidSynth (with sine-additive fallback) renders audio, NumPy synthesizes drum one-shots, manifest carries citations. Design doc: [`docs/SAMPLE_GENERATION.md`](docs/SAMPLE_GENERATION.md). Endpoints: `POST/GET /api/analysis-runs/{run_id}/samples`. Adjacent to `patchSmith.ts` but solves a different problem — audition validates the measurements rather than producing a saveable preset.

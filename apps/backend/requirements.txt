@@ -70,3 +70,12 @@ typing_extensions==4.15.0
 urllib3==2.6.3
 google-genai>=1.14.0,<2.0.0
 uvicorn==0.41.0
+# Phase 3 (audition samples). Both deps are optional: sample_theory.py has a
+# pure-Python music-theory fallback and sample_synthesis.py has a NumPy
+# sine-additive fallback. Tests exercise the fallbacks so CI doesn't require
+# either of these to be importable, but installing them upgrades audition
+# quality from "in-tune" to "musical." pyfluidsynth additionally needs the
+# system `libfluidsynth` library and a General MIDI soundfont — see
+# docs/SAMPLE_GENERATION.md.
+pytheory>=0.42,<1.0
+pyfluidsynth>=1.3,<2.0

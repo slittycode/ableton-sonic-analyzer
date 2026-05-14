@@ -143,6 +143,8 @@ from server_phase2 import (  # noqa: F401 — re-exported for test backward comp
     _validate_phase2_semantics,
 )
 
+import server_samples
+
 
 app = FastAPI(title="Sonic Analyzer Local API")
 
@@ -2364,6 +2366,77 @@ async def get_run_source_audio(
         media_type=source_artifact.get("mimeType", "application/octet-stream"),
         filename=source_artifact.get("filename", artifact_local_path.name),
     )
+
+
+# ── Audition samples (Phase 3) ───────────────────────────────────────────────
+#
+# Heuristic reconstructions of the track's tonal foundation + drum kit, derived
+# from Phase 1 measurements (and enriched by Phase 2 when available). Used by
+# the UI to let producers ear-check the measurement chain. See
+# `docs/SAMPLE_GENERATION.md` for the chain-of-custody framing.
+
+@app.post("/api/analysis-runs/{run_id}/samples")
+async def create_run_samples(
+    run_id: str,
+    force: bool = Query(False, description="Regenerate even if a manifest exists"),
+    x_asa_user_id: str | None = Header(None),
+    x_asa_user_email: str | None = Header(None),
+) -> JSONResponse:
+    user_context = _resolve_route_user_context(x_asa_user_id, x_asa_user_email)
+    if isinstance(user_context, JSONResponse):
+        return user_context
+    runtime = get_analysis_runtime()
+    try:
+        snapshot = runtime.get_run(run_id, owner_user_id=user_context.user_id)
+    except (KeyError, PermissionError):
+        return _run_not_found_response(run_id)
+
+    try:
+        manifest = await asyncio.to_thread(
+            server_samples.generate_and_register_samples,
+            runtime=runtime,
+            run_id=run_id,
+            snapshot=snapshot,
+            force=force,
+        )
+    except server_samples.SamplesPreconditionError as exc:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"error": {"code": exc.code, "message": exc.message}},
+        )
+    return JSONResponse(status_code=201, content=manifest)
+
+
+@app.get("/api/analysis-runs/{run_id}/samples")
+async def get_run_samples(
+    run_id: str,
+    x_asa_user_id: str | None = Header(None),
+    x_asa_user_email: str | None = Header(None),
+) -> JSONResponse:
+    user_context = _resolve_route_user_context(x_asa_user_id, x_asa_user_email)
+    if isinstance(user_context, JSONResponse):
+        return user_context
+    runtime = get_analysis_runtime()
+    try:
+        runtime.get_run(run_id, owner_user_id=user_context.user_id)
+    except (KeyError, PermissionError):
+        return _run_not_found_response(run_id)
+
+    manifest = server_samples.fetch_existing_manifest(runtime=runtime, run_id=run_id)
+    if manifest is None:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": {
+                    "code": "SAMPLES_NOT_GENERATED",
+                    "message": (
+                        f"No audition samples have been generated for run '{run_id}'. "
+                        "POST to this URL to create them."
+                    ),
+                }
+            },
+        )
+    return JSONResponse(content=manifest)
 
 
 @app.get(
