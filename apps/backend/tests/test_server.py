@@ -1289,6 +1289,48 @@ class ServerContractTests(unittest.TestCase):
         self.assertEqual(payload["runId"], created["runId"])
         self.assertIn("artifacts", payload)
 
+    def test_get_analysis_run_attaches_public_status_to_every_stage(self) -> None:
+        """Track 3.4: every stage in the response carries publicStatus
+        alongside the internal status. Pitch-note and interpretation
+        stages here are not_requested (publicStatus must be null);
+        measurement stage is queued (publicStatus must be queued).
+        """
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_server_runtime_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            created = runtime.create_run(
+                filename="track.mp3",
+                content=b"fake-audio",
+                mime_type="audio/mpeg",
+                pitch_note_mode="off",
+                pitch_note_backend="auto",
+                interpretation_mode="off",
+                interpretation_profile="producer_summary",
+                interpretation_model=None,
+            )
+            with patch.object(server, "get_analysis_runtime", return_value=runtime):
+                response = asyncio.run(server.get_analysis_run(created["runId"]))
+
+        payload = self._decode_json_response(response)
+        stages = payload["stages"]
+
+        # measurement starts queued; publicStatus should match
+        self.assertEqual(stages["measurement"]["status"], "queued")
+        self.assertEqual(stages["measurement"]["publicStatus"], "queued")
+
+        # not_requested stages must surface publicStatus: null so a
+        # client can distinguish "you didn't ask for this" from
+        # "queued and waiting" without checking a specific string.
+        self.assertEqual(
+            stages["pitchNoteTranslation"]["status"], "not_requested"
+        )
+        self.assertIsNone(stages["pitchNoteTranslation"]["publicStatus"])
+        self.assertEqual(
+            stages["interpretation"]["status"], "not_requested"
+        )
+        self.assertIsNone(stages["interpretation"]["publicStatus"])
+
     def test_interrupt_analysis_run_marks_stages_interrupted_and_reports_terminated_children(self) -> None:
         from analysis_runtime import AnalysisRuntime
 

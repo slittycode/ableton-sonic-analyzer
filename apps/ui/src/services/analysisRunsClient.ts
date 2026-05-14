@@ -18,6 +18,7 @@ import {
   StemSummaryResult,
   PitchNoteTranslationAttemptSummary,
   PitchNoteTranslationStageSnapshot,
+  PublicStageStatus,
 } from '../types';
 import { parsePhase1Result } from './backendPhase1Client';
 import { requestBackendEstimate } from './backendPhase1Client';
@@ -58,6 +59,17 @@ const ANALYSIS_RUN_STATUSES = new Set<AnalysisStageStatus>([
   'failed',
   'interrupted',
   'not_requested',
+]);
+
+// Mirror of stage_status.PUBLIC_STATUS_VALUES on the backend. Five-value
+// collapse exposed as the additive `publicStatus` field; the Python
+// source of truth is `apps/backend/stage_status.py`.
+const PUBLIC_STAGE_STATUSES = new Set<PublicStageStatus>([
+  'queued',
+  'running',
+  'completed',
+  'failed',
+  'interrupted',
 ]);
 
 export async function estimateAnalysisRun(
@@ -288,6 +300,7 @@ function parseAnalysisRunSnapshot(value: unknown): AnalysisRunSnapshot {
     stages: {
       measurement: {
         status: expectStageStatus(measurement.status),
+        publicStatus: parsePublicStageStatus(measurement.publicStatus),
         authoritative: true,
         result: measurement.result == null ? null : parseCanonicalMeasurementResult(measurement.result),
         provenance: parseNullableRecord(measurement.provenance),
@@ -354,6 +367,7 @@ function parseSpectralArtifacts(value: unknown): SpectralArtifacts {
 function parsePitchNoteStage(value: Record<string, unknown>): PitchNoteTranslationStageSnapshot {
   return {
     status: expectStageStatus(value.status),
+    publicStatus: parsePublicStageStatus(value.publicStatus),
     authoritative: false,
     preferredAttemptId: asString(value.preferredAttemptId),
     attemptsSummary: Array.isArray(value.attemptsSummary)
@@ -385,6 +399,7 @@ function parseInterpretationStage(value: Record<string, unknown>): Interpretatio
     : undefined;
   return {
     status: expectStageStatus(value.status),
+    publicStatus: parsePublicStageStatus(value.publicStatus),
     authoritative: false,
     preferredAttemptId: asString(value.preferredAttemptId),
     attemptsSummary,
@@ -682,6 +697,21 @@ function expectStageStatus(value: unknown): AnalysisStageStatus {
     throw new Error(`Expected stage status to be one of ${Array.from(ANALYSIS_RUN_STATUSES).join(', ')}.`);
   }
   return value as AnalysisStageStatus;
+}
+
+/**
+ * Parse the additive `publicStatus` field on a stage. Returns `null` for
+ * either a JSON null (the documented "not in pipeline" signal) or for
+ * missing values on legacy snapshots that pre-date the field — callers
+ * that need the public collapse can use this without crashing on
+ * older runs.
+ */
+function parsePublicStageStatus(value: unknown): PublicStageStatus | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== 'string') return null;
+  return PUBLIC_STAGE_STATUSES.has(value as PublicStageStatus)
+    ? (value as PublicStageStatus)
+    : null;
 }
 
 function asString(value: unknown): string | null {

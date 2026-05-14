@@ -59,6 +59,17 @@ The following nested shapes are the load-bearing time-series fields exported via
 
 Adding a new exportable time-series field is an additive change: register a serializer in [`apps/backend/csv_export.py`](../../apps/backend/csv_export.py), update the test in `apps/backend/tests/test_csv_export.py`, and document the CSV columns in the table above.
 
+## Stage status field — `status` (internal) + `publicStatus` (additive)
+
+Every stage object inside the run snapshot (`stages.measurement`, `stages.pitchNoteTranslation`, `stages.interpretation`) carries two status fields:
+
+- **`status`** (8-state, internal vocabulary): `queued | running | blocked | ready | completed | failed | interrupted | not_requested`. This is the runtime's scheduling vocabulary and reflects internal state-machine transitions. Stable.
+- **`publicStatus`** (5-state collapse + null): `queued | running | completed | failed | interrupted | null`. Added in Track 3.4 of the external-repo incorporation work. Maps `blocked`/`ready` → `queued`, `not_requested` → `null`, everything else 1:1. Stable.
+
+The collapse exists so external consumers who don't care about the distinction between internal scheduling states (e.g. blocked-waiting-for-dependency vs queued-and-ready) can read one field with a smaller vocabulary. The internal `status` is preserved for tools that need to debug or inspect runtime behavior.
+
+Source of truth for the mapping: [`apps/backend/stage_status.py`](../../apps/backend/stage_status.py). TypeScript mirror: `PublicStageStatus` in [`apps/ui/src/types/backend.ts`](../../apps/ui/src/types/backend.ts).
+
 ## Where v1 is enforced
 
 | Layer | Enforcement | If you break v1 here |

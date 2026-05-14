@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 
 from analysis_runtime import AnalysisRuntime
 from server_upload import ERROR_PHASE_LOCAL_DSP
+from stage_status import to_public_status
 
 
 # ── Constants ────────────────────────────────────────────────────────────────
@@ -226,6 +227,30 @@ def _build_phase1(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _annotate_public_status(stages: dict[str, Any]) -> dict[str, Any]:
+    """Attach ``publicStatus`` to every stage whose ``status`` is set.
+
+    Returns a shallow-copy of ``stages`` with each stage dict updated.
+    The original ``status`` field is preserved untouched; ``publicStatus``
+    is the additive 5-state collapse documented in
+    :mod:`stage_status`.
+
+    Defensive against non-dict stage entries (e.g. nulls in legacy
+    snapshots) — those pass through unchanged.
+    """
+    annotated: dict[str, Any] = {}
+    for stage_name, stage_value in stages.items():
+        if not isinstance(stage_value, dict):
+            annotated[stage_name] = stage_value
+            continue
+        stage_copy = dict(stage_value)
+        # `status` may legitimately be absent on legacy/partial snapshots;
+        # to_public_status(None) yields None which we expose as null.
+        stage_copy["publicStatus"] = to_public_status(stage_copy.get("status"))
+        annotated[stage_name] = stage_copy
+    return annotated
+
+
 def _normalize_run_snapshot(
     snapshot: dict[str, Any], runtime: AnalysisRuntime | None = None
 ) -> dict[str, Any]:
@@ -236,22 +261,27 @@ def _normalize_run_snapshot(
     _build_phase1 produces for the legacy /api/analyze endpoint — notably,
     top-level stereoWidth/stereoCorrelation extracted from stereoDetail.
 
+    Each stage in ``stages`` is also annotated with a ``publicStatus`` field
+    that collapses the 8 internal stage statuses to 5 public ones (see
+    :mod:`stage_status`). The original ``status`` field is preserved; this
+    is purely additive.
+
     When *runtime* is provided, spectral visualization artifacts (spectrogram
     PNGs and time-series JSON) are attached under ``artifacts.spectral``.
     """
     stages = snapshot.get("stages")
     if not isinstance(stages, dict):
         return snapshot
-    measurement = stages.get("measurement")
-    if not isinstance(measurement, dict):
-        return snapshot
-    raw_result = measurement.get("result")
-    if not isinstance(raw_result, dict):
-        return snapshot
     snapshot = dict(snapshot)
-    snapshot["stages"] = dict(stages)
-    snapshot["stages"]["measurement"] = dict(measurement)
-    snapshot["stages"]["measurement"]["result"] = _build_phase1(raw_result)
+    snapshot["stages"] = _annotate_public_status(stages)
+
+    measurement = snapshot["stages"].get("measurement")
+    if isinstance(measurement, dict):
+        raw_result = measurement.get("result")
+        if isinstance(raw_result, dict):
+            # Reuse the dict we already copied in _annotate_public_status;
+            # no need to clone twice.
+            measurement["result"] = _build_phase1(raw_result)
 
     if runtime is not None:
         run_id = snapshot.get("runId")
