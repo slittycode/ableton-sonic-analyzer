@@ -40,6 +40,30 @@ export type AnalysisStageStatus =
   | 'interrupted'
   | 'not_requested';
 
+/**
+ * The 5-value collapse of {@link AnalysisStageStatus} that the response
+ * boundary attaches as `publicStatus` on every stage.
+ *
+ * Mapping (from `apps/backend/stage_status.py`):
+ * - queued | blocked | ready  → `'queued'`
+ * - running                   → `'running'`
+ * - completed                 → `'completed'`
+ * - failed                    → `'failed'`
+ * - interrupted               → `'interrupted'`
+ * - not_requested             → `null` (stage exists but not in pipeline)
+ *
+ * Additive over `status` — the original 8-state field is preserved on
+ * every stage. New code that doesn't need to distinguish blocked-vs-
+ * queued or ready-vs-queued can read `publicStatus` and ignore the
+ * internal vocabulary.
+ */
+export type PublicStageStatus =
+  | 'queued'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'interrupted';
+
 export interface AnalysisStageError {
   code: string;
   message: string;
@@ -124,6 +148,8 @@ export interface MeasurementAvailabilityContext {
 
 export interface MeasurementStageSnapshot {
   status: AnalysisStageStatus;
+  /** Additive 5-value collapse of `status`. `null` when status is `not_requested`. */
+  publicStatus: PublicStageStatus | null;
   authoritative: true;
   result: MeasurementResult | null;
   provenance: Record<string, unknown> | null;
@@ -147,6 +173,8 @@ export interface InterpretationAttemptSummary {
 
 export interface PitchNoteTranslationStageSnapshot {
   status: AnalysisStageStatus;
+  /** Additive 5-value collapse of `status`. `null` when status is `not_requested`. */
+  publicStatus: PublicStageStatus | null;
   authoritative: false;
   preferredAttemptId: string | null;
   attemptsSummary: PitchNoteTranslationAttemptSummary[];
@@ -158,6 +186,8 @@ export interface PitchNoteTranslationStageSnapshot {
 
 export interface InterpretationStageSnapshot {
   status: AnalysisStageStatus;
+  /** Additive 5-value collapse of `status`. `null` when status is `not_requested`. */
+  publicStatus: PublicStageStatus | null;
   authoritative: false;
   preferredAttemptId: string | null;
   attemptsSummary: InterpretationAttemptSummary[];
