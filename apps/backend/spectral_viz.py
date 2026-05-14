@@ -433,6 +433,15 @@ def generate_onset_enhancement(
 # attack transients and harmonic detail while hiding the floor.
 REASSIGNED_MAG_FLOOR_DB = -60.0
 
+# Render cap on scatter points. Each STFT cell becomes one scatter point,
+# so the raw count is ``(1 + n_fft/2) * n_frames``: ~8M points on a
+# 3-minute track and 15M+ on a 10-minute track at the defaults. Matplotlib's
+# scatter renderer takes seconds-to-tens-of-seconds at those sizes, well
+# above the librosa compute cost. 300K is a visual sweet spot — the PNG
+# still looks sharp at the default ~1200×400 px figure but renders in
+# well under a second.
+REASSIGNED_MAX_SCATTER_POINTS = 300_000
+
 
 def generate_reassigned_spectrogram(
     audio_path: str,
@@ -493,15 +502,34 @@ def generate_reassigned_spectrogram(
         & np.isfinite(flat_mags_db)
         & (flat_mags_db >= REASSIGNED_MAG_FLOOR_DB)
     )
+    times_visible = flat_times[mask]
+    freqs_visible = flat_freqs[mask]
+    mags_visible = flat_mags_db[mask]
+
+    # Cap the number of scatter points to keep matplotlib's render time
+    # well under a second on long inputs. Subsampling is deterministic
+    # (seeded RNG) so re-running the enhancement on the same audio
+    # produces a byte-identical PNG — matters for idempotency tests and
+    # content-hash artifact caching.
+    if times_visible.size > REASSIGNED_MAX_SCATTER_POINTS:
+        rng = np.random.default_rng(0)
+        idx = rng.choice(
+            times_visible.size,
+            size=REASSIGNED_MAX_SCATTER_POINTS,
+            replace=False,
+        )
+        times_visible = times_visible[idx]
+        freqs_visible = freqs_visible[idx]
+        mags_visible = mags_visible[idx]
 
     fig = mpl_figure.Figure(figsize=(FIG_WIDTH_INCHES, FIG_HEIGHT_INCHES), dpi=FIG_DPI)
     ax = fig.add_axes((0, 0, 1, 1))
     ax.set_axis_off()
-    if mask.any():
+    if times_visible.size > 0:
         ax.scatter(
-            flat_times[mask],
-            flat_freqs[mask],
-            c=flat_mags_db[mask],
+            times_visible,
+            freqs_visible,
+            c=mags_visible,
             cmap="magma",
             s=0.5,
             marker=",",
