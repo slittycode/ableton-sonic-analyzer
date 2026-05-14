@@ -28,6 +28,7 @@ import { motion } from 'motion/react';
 import { downloadFile, generateMarkdown } from '../utils/exportUtils';
 import { INTERPRETATION_LABEL } from '../services/phaseLabels';
 import { MeasurementDashboard } from './MeasurementDashboard';
+import { SamplePlayback } from './SamplePlayback';
 import { SessionMusicianPanel } from './SessionMusicianPanel';
 import { StemListeningNotesPanel } from './StemListeningNotesPanel';
 import { hasStemListeningNotesContent } from '../services/sessionMusician';
@@ -2290,6 +2291,13 @@ export function AnalysisResults({
           runId={runId}
         />
       </section>
+      {apiBaseUrl && runId && (
+        <SamplePlayback
+          runId={runId}
+          apiBaseUrl={apiBaseUrl}
+          measurementCompleted={Boolean(phase1)}
+        />
+      )}
     </motion.div>
   );
 }
