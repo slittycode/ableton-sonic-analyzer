@@ -10,7 +10,7 @@
 ## Working Style For Agents
 
 - Prefer small, reviewable edits over broad UI rewrites.
-- Preserve the backend contract enforced by `src/services/backendPhase1Client.ts` and `src/types.ts`.
+- Preserve the backend contract enforced by `src/services/analysisRunsClient.ts` (canonical), `src/services/backendPhase1Client.ts` (legacy wrappers), and `src/types.ts`.
 - Read `README.md` before changing scripts, env handling, smoke tests, or backend integration behavior.
 - Read `../../docs/ARCHITECTURE_STRATEGY.md` before proposing changes to the Session Musician panel, transcription display, or the Layer 1/2/3 UI structure. The strategy doc explains the two-path transcription design (local MIDI vs Gemini description) and what each layer is responsible for.
 - Keep bundle-size-sensitive patterns in place unless there is a clear reason to change them.
@@ -88,9 +88,10 @@ RUN_GEMINI_LIVE_SMOKE=true VITE_ENABLE_PHASE2_GEMINI=true GEMINI_API_KEY=your_ke
 ## File Map
 
 - `src/App.tsx`: upload flow, estimate flow, phase orchestration, diagnostic log state.
-- `src/services/backendPhase1Client.ts`: backend transport, parsing, timeout handling, error mapping.
-- `src/services/analyzer.ts`: phase orchestration and Gemini entry.
-- `src/types.ts`: shared frontend contract types.
+- `src/services/analysisRunsClient.ts`: canonical transport — creates runs against `/api/analysis-runs`, polls stage snapshots, fetches pitch/note translations and interpretations.
+- `src/services/backendPhase1Client.ts`: legacy multipart transport (typed errors, `AbortController` timeouts). Kept only for the compatibility wrappers; new flows go through `analysisRunsClient.ts`.
+- `src/services/analyzer.ts`: phase orchestration — sequences run creation, polling, and display payload projection.
+- `src/types.ts` + `src/types/`: shared frontend contract types. `types.ts` is a barrel re-export of `./types/{measurement,interpretation,backend,samples}.ts`.
 - `src/index.css`: Tailwind theme tokens and visual language.
 - `tests/services/*`: unit and service tests.
 - `tests/smoke/*`: smoke and live smoke coverage.

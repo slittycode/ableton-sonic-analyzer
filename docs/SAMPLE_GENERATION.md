@@ -1,6 +1,6 @@
 # Sample Generation (Phase 3 — Audition)
 
-> **Status:** Prototype on `claude/gemini-sample-generation-U753E`. Not yet promoted to a mandatory pipeline stage.
+> **Status:** Shipped on `main` as an on-demand feature (`POST/GET /api/analysis-runs/{run_id}/samples`). Not part of the staged-execution queue — the UI requests it explicitly after interpretation completes.
 > **Mission fit:** Improves the user's ability to *act on* Phase 2 results by producing audible reference clips they can A/B against the source track.
 
 ## Why This Exists
