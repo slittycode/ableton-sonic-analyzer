@@ -390,5 +390,76 @@ class OnsetEnhancementTests(unittest.TestCase):
         self.assertEqual(len(data["timePoints"]), len(data["onsetStrength"]))
 
 
+class ReassignedSpectrogramTests(unittest.TestCase):
+    """Tests for the opt-in librosa.reassigned_spectrogram enhancement.
+
+    The generator is gated behind the existing
+    POST /api/analysis-runs/{run_id}/spectral-enhancements/reassigned
+    route and produces a single PNG artifact. Tests assert it runs to
+    completion and writes a valid PNG of non-trivial size — the visual
+    quality of the sharpening is empirical and not test-asserted.
+    """
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory(prefix="reassigned_test_")
+        self.audio_path = os.path.join(self.temp_dir.name, "test.wav")
+        _create_test_wav(self.audio_path)
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def test_produces_single_reassigned_png(self) -> None:
+        from spectral_viz import generate_reassigned_spectrogram
+
+        out_dir = os.path.join(self.temp_dir.name, "out")
+        result = generate_reassigned_spectrogram(self.audio_path, out_dir)
+
+        self.assertEqual(list(result.keys()), ["spectrogram_reassigned"])
+        path = result["spectrogram_reassigned"]
+        self.assertTrue(os.path.isfile(path), f"reassigned PNG missing: {path}")
+        self.assertGreater(
+            os.path.getsize(path),
+            1000,
+            "reassigned PNG suspiciously small — likely empty plot.",
+        )
+
+    def test_output_is_valid_png(self) -> None:
+        from spectral_viz import generate_reassigned_spectrogram
+
+        out_dir = os.path.join(self.temp_dir.name, "out")
+        result = generate_reassigned_spectrogram(self.audio_path, out_dir)
+        with open(result["spectrogram_reassigned"], "rb") as f:
+            header = f.read(8)
+        self.assertEqual(header[:4], b"\x89PNG")
+
+    def test_handles_silent_input_without_raising(self) -> None:
+        """A nearly-silent input would produce all-NaN reassignment
+        coordinates without ``fill_nan=True``. Guard the generator
+        against that by running on a silent fixture and asserting it
+        doesn't raise.
+        """
+        from spectral_viz import generate_reassigned_spectrogram
+
+        silent_path = os.path.join(self.temp_dir.name, "silent.wav")
+        sr = 44100
+        # 2 seconds of "silence" with imperceptible dither so librosa's
+        # reassignment math is well-defined.
+        signal = np.random.default_rng(0).normal(0.0, 1e-6, sr * 2)
+        pcm = (signal * 32767).clip(-32767, 32767).astype(np.int16)
+        with wave.open(silent_path, "w") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(sr)
+            wf.writeframes(pcm.tobytes())
+
+        out_dir = os.path.join(self.temp_dir.name, "silent_out")
+        result = generate_reassigned_spectrogram(silent_path, out_dir)
+        # The PNG should exist even if the scatter is sparse/empty —
+        # axes + colorbar geometry is still rendered.
+        self.assertTrue(
+            os.path.isfile(result["spectrogram_reassigned"])
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -2456,6 +2456,7 @@ _ENHANCEMENT_GENERATORS = {
     "hpss": ("generate_hpss_spectrograms", ["spectrogram_harmonic", "spectrogram_percussive"], True),
     "onset": ("generate_onset_enhancement", ["spectrogram_onset", "onset_strength"], True),
     "chroma_interactive": ("generate_chroma_enhancement", ["spectrogram_chroma", "chroma_interactive"], True),
+    "reassigned": ("generate_reassigned_spectrogram", ["spectrogram_reassigned"], True),
 }
 
 
