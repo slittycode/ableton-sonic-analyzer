@@ -281,18 +281,27 @@ function stubRoutes(
   ]);
 }
 
-test('NO SIGNAL DETECTED placeholder is shown before any file is loaded', async ({ page }) => {
+// Audit Finding #5: the atmospheric `NO SIGNAL DETECTED` placeholder was
+// replaced by `IdleValuePropPanel` — a producer-readable explanation of what
+// ASA does and what to expect. The two tests below previously asserted the
+// placeholder text; they now assert the new panel's presence and that it
+// disappears once a file is selected (WaveformPlayer takes over the slot).
+
+test('IdleValuePropPanel is shown before any file is loaded', async ({ page }) => {
   await page.goto('/', { waitUntil: 'networkidle' });
-  await expect(page.getByText('NO SIGNAL DETECTED')).toBeVisible();
+  await expect(page.getByTestId('idle-value-prop')).toBeVisible();
+  // Spot-check the value-prop copy so a "panel renders, content broken"
+  // regression would still trip this assertion.
+  await expect(page.getByText('Upload a track. Get specific Ableton.')).toBeVisible();
 });
 
-test('NO SIGNAL DETECTED disappears when a file is selected', async ({ page }) => {
+test('IdleValuePropPanel disappears when a file is selected', async ({ page }) => {
   await stubRoutes(page);
   await page.goto('/', { waitUntil: 'networkidle' });
 
-  await expect(page.getByText('NO SIGNAL DETECTED')).toBeVisible();
+  await expect(page.getByTestId('idle-value-prop')).toBeVisible();
   await page.setInputFiles('#audio-upload', fixturePath());
-  await expect(page.getByText('NO SIGNAL DETECTED')).toHaveCount(0);
+  await expect(page.getByTestId('idle-value-prop')).toHaveCount(0);
 });
 
 // Audit #11: CPU meter removed from the header. The two CPU-related smoke
@@ -390,15 +399,18 @@ test('header shows SonicAnalyzer brand', async ({ page }) => {
   await expect(page.getByText(uiVersionLabel)).toHaveCount(0);
 });
 
-test('JSON_DATA and REPORT_MD buttons are visible after analysis', async ({ page }) => {
+// Audit vocab cleanup: `JSON_DATA` / `REPORT_MD` button labels were renamed to
+// the producer-readable `Download data` / `Download report`. The buttons
+// themselves (and their export plumbing) are unchanged.
+test('Download data and Download report buttons are visible after analysis', async ({ page }) => {
   await stubRoutes(page);
   await page.goto('/', { waitUntil: 'networkidle' });
   await page.setInputFiles('#audio-upload', fixturePath());
   await page.getByRole('button', { name: /Run Analysis/i }).click();
 
   await expect(page.getByText('Analysis Results')).toBeVisible();
-  await expect(page.getByRole('button', { name: /JSON_DATA/i })).toBeVisible();
-  await expect(page.getByRole('button', { name: /REPORT_MD/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Download data/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Download report/i })).toBeVisible();
 });
 
 test('audio observations panel appears when the interpretation includes perceptual notes', async ({ page }) => {
