@@ -390,5 +390,134 @@ class OnsetEnhancementTests(unittest.TestCase):
         self.assertEqual(len(data["timePoints"]), len(data["onsetStrength"]))
 
 
+class ReassignedSpectrogramTests(unittest.TestCase):
+    """Tests for the opt-in librosa.reassigned_spectrogram enhancement.
+
+    The generator is gated behind the existing
+    POST /api/analysis-runs/{run_id}/spectral-enhancements/reassigned
+    route and produces a single PNG artifact. Tests assert it runs to
+    completion and writes a valid PNG of non-trivial size — the visual
+    quality of the sharpening is empirical and not test-asserted.
+    """
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory(prefix="reassigned_test_")
+        self.audio_path = os.path.join(self.temp_dir.name, "test.wav")
+        _create_test_wav(self.audio_path)
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def test_produces_single_reassigned_png(self) -> None:
+        from spectral_viz import generate_reassigned_spectrogram
+
+        out_dir = os.path.join(self.temp_dir.name, "out")
+        result = generate_reassigned_spectrogram(self.audio_path, out_dir)
+
+        self.assertEqual(list(result.keys()), ["spectrogram_reassigned"])
+        path = result["spectrogram_reassigned"]
+        self.assertTrue(os.path.isfile(path), f"reassigned PNG missing: {path}")
+        self.assertGreater(
+            os.path.getsize(path),
+            1000,
+            "reassigned PNG suspiciously small — likely empty plot.",
+        )
+
+    def test_output_is_valid_png(self) -> None:
+        from spectral_viz import generate_reassigned_spectrogram
+
+        out_dir = os.path.join(self.temp_dir.name, "out")
+        result = generate_reassigned_spectrogram(self.audio_path, out_dir)
+        with open(result["spectrogram_reassigned"], "rb") as f:
+            header = f.read(8)
+        self.assertEqual(header[:4], b"\x89PNG")
+
+    def test_scatter_point_cap_is_enforced_for_long_inputs(self) -> None:
+        """Per-frame scatter rendering can produce 15M+ points on a
+        10-min track. The cap (REASSIGNED_MAX_SCATTER_POINTS) keeps
+        matplotlib render time bounded. This test asserts the cap is
+        actually applied — patches ax.scatter to count call args.
+        """
+        from unittest import mock as _mock
+
+        from spectral_viz import (
+            REASSIGNED_MAX_SCATTER_POINTS,
+            generate_reassigned_spectrogram,
+        )
+
+        # Generate a ~60 s audio fixture so the raw point count is well
+        # above the cap. At n_fft=2048 / hop=1024 / sr=44100 / 60 s
+        # → ~2585 frames × 1025 bins ≈ 2.6M raw points; with the floor
+        # mask, ~1M+ survivors — comfortably above 300K.
+        long_path = os.path.join(self.temp_dir.name, "long.wav")
+        sr = 44100
+        duration = 60.0
+        t = np.linspace(0, duration, int(sr * duration), endpoint=False)
+        # Multi-component signal so the floor mask doesn't gate too
+        # aggressively (a single sine would mask down to a thin line).
+        signal = (
+            0.4 * np.sin(2 * np.pi * 220 * t)
+            + 0.3 * np.sin(2 * np.pi * 660 * t)
+            + 0.2 * np.sin(2 * np.pi * 1320 * t)
+            + 0.1 * np.sin(2 * np.pi * 3000 * t)
+        )
+        pcm = (signal * 32767).clip(-32767, 32767).astype(np.int16)
+        with wave.open(long_path, "w") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(sr)
+            wf.writeframes(pcm.tobytes())
+
+        # Patch matplotlib's scatter to capture the call args without
+        # actually rendering — we only need to know how many points
+        # would have been drawn.
+        with _mock.patch(
+            "matplotlib.axes._axes.Axes.scatter", autospec=True
+        ) as mock_scatter:
+            out_dir = os.path.join(self.temp_dir.name, "long_out")
+            generate_reassigned_spectrogram(long_path, out_dir)
+
+        self.assertTrue(mock_scatter.called, "scatter must have been called")
+        # First positional arg after `self` is the x array; size is the
+        # number of points actually rendered.
+        call_args = mock_scatter.call_args
+        x_array = call_args.args[1] if len(call_args.args) >= 2 else call_args.kwargs.get("x")
+        self.assertIsNotNone(x_array)
+        self.assertLessEqual(
+            len(x_array),
+            REASSIGNED_MAX_SCATTER_POINTS,
+            f"Expected at most {REASSIGNED_MAX_SCATTER_POINTS} scatter "
+            f"points after cap, got {len(x_array)}.",
+        )
+
+    def test_handles_silent_input_without_raising(self) -> None:
+        """A nearly-silent input would produce all-NaN reassignment
+        coordinates without ``fill_nan=True``. Guard the generator
+        against that by running on a silent fixture and asserting it
+        doesn't raise.
+        """
+        from spectral_viz import generate_reassigned_spectrogram
+
+        silent_path = os.path.join(self.temp_dir.name, "silent.wav")
+        sr = 44100
+        # 2 seconds of "silence" with imperceptible dither so librosa's
+        # reassignment math is well-defined.
+        signal = np.random.default_rng(0).normal(0.0, 1e-6, sr * 2)
+        pcm = (signal * 32767).clip(-32767, 32767).astype(np.int16)
+        with wave.open(silent_path, "w") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(sr)
+            wf.writeframes(pcm.tobytes())
+
+        out_dir = os.path.join(self.temp_dir.name, "silent_out")
+        result = generate_reassigned_spectrogram(silent_path, out_dir)
+        # The PNG should exist even if the scatter is sparse/empty —
+        # axes + colorbar geometry is still rendered.
+        self.assertTrue(
+            os.path.isfile(result["spectrogram_reassigned"])
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

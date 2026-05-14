@@ -74,7 +74,7 @@ Custom routes:
 - `GET /api/analysis-runs/{run_id}/artifacts` and `…/artifacts/{artifact_id}`
 - `GET /api/analysis-runs/{run_id}/source-audio` — re-serves the original ingested audio for the run. Owner-only (no admin bypass). Saves a round-trip vs looking up the source artifact id first.
 - `GET /api/analysis-runs/{run_id}/export/csv/{field_path}` — CSV export of a Phase 1 time-series field. See [`docs/adr/0001-phase1-json-schema-v1.md`](../../docs/adr/0001-phase1-json-schema-v1.md) and the registry in [`csv_export.py`](csv_export.py).
-- `POST /api/analysis-runs/{run_id}/spectral-enhancements/{kind}`
+- `POST /api/analysis-runs/{run_id}/spectral-enhancements/{kind}` — on-demand spectral artifacts. `kind` is one of `cqt`, `hpss`, `onset`, `chroma_interactive`, or `reassigned` (sharper transient/frequency localization via `librosa.reassigned_spectrogram`).
 - `POST /api/analysis-runs/{run_id}/pitch-note-translations`
 - `POST /api/analysis-runs/{run_id}/interpretations`
 - `POST /api/analyze` (legacy compatibility)

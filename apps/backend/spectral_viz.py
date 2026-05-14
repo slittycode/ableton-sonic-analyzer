@@ -426,6 +426,130 @@ def generate_onset_enhancement(
     return results
 
 
+# Reassigned-spectrogram parameters. The magnitude floor controls how much
+# of the low-energy "noise" is dropped before rendering — too aggressive
+# and you lose detail; too lenient and the scatter plot turns into a wash.
+# -60 dBFS below peak is a generous starting point that preserves
+# attack transients and harmonic detail while hiding the floor.
+REASSIGNED_MAG_FLOOR_DB = -60.0
+
+# Render cap on scatter points. Each STFT cell becomes one scatter point,
+# so the raw count is ``(1 + n_fft/2) * n_frames``: ~8M points on a
+# 3-minute track and 15M+ on a 10-minute track at the defaults. Matplotlib's
+# scatter renderer takes seconds-to-tens-of-seconds at those sizes, well
+# above the librosa compute cost. 300K is a visual sweet spot — the PNG
+# still looks sharp at the default ~1200×400 px figure but renders in
+# well under a second.
+REASSIGNED_MAX_SCATTER_POINTS = 300_000
+
+
+def generate_reassigned_spectrogram(
+    audio_path: str,
+    output_dir: str,
+    *,
+    sr: int = DEFAULT_SR,
+    n_fft: int = DEFAULT_N_FFT,
+    hop_length: int = DEFAULT_HOP_LENGTH,
+) -> dict[str, str]:
+    """Generate a reassigned spectrogram PNG for sharper time/frequency localization.
+
+    Unlike :func:`generate_spectrograms` (mel STFT on a uniform grid),
+    reassignment relocates each STFT bin to the local centroid of energy
+    in the (time, frequency) plane. Transients land at their true onset
+    instead of being smeared across a window; stable partials collapse
+    to sharp horizontal lines instead of fuzzy ridges.
+
+    Algorithm: :func:`librosa.reassigned_spectrogram` returns three
+    arrays of shape ``(1 + n_fft/2, n_frames)`` — the per-bin reassigned
+    frequencies, per-bin reassigned times, and per-bin magnitudes.
+    Because the (time, freq) coordinates are no longer a uniform grid,
+    we render via scatter rather than :func:`librosa.display.specshow`
+    (which would re-rasterize to a grid and undo the sharpening).
+
+    Returns a dict mapping artifact kind to the output file path::
+
+        {"spectrogram_reassigned": "/path/to/reassigned.png"}
+    """
+    import matplotlib.figure as mpl_figure
+
+    y = _load_audio(audio_path, sr=sr)
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+
+    # librosa returns (freqs, times, mags). Shapes are (1 + n_fft//2,
+    # n_frames). `fill_nan=True` substitutes the original STFT grid
+    # coordinate when reassignment is unstable (e.g. silent regions);
+    # without it, NaNs would propagate into the scatter and the plot
+    # would silently lose those points.
+    freqs, times, mags = librosa.reassigned_spectrogram(
+        y=y,
+        sr=sr,
+        n_fft=n_fft,
+        hop_length=hop_length,
+        reassign_frequencies=True,
+        reassign_times=True,
+        fill_nan=True,
+    )
+    mags_db = librosa.amplitude_to_db(np.abs(mags), ref=np.max)
+
+    # Flatten and mask to finite values above the magnitude floor.
+    flat_times = times.ravel()
+    flat_freqs = freqs.ravel()
+    flat_mags_db = mags_db.ravel()
+    mask = (
+        np.isfinite(flat_times)
+        & np.isfinite(flat_freqs)
+        & np.isfinite(flat_mags_db)
+        & (flat_mags_db >= REASSIGNED_MAG_FLOOR_DB)
+    )
+    times_visible = flat_times[mask]
+    freqs_visible = flat_freqs[mask]
+    mags_visible = flat_mags_db[mask]
+
+    # Cap the number of scatter points to keep matplotlib's render time
+    # well under a second on long inputs. Subsampling is deterministic
+    # (seeded RNG) so re-running the enhancement on the same audio
+    # produces a byte-identical PNG — matters for idempotency tests and
+    # content-hash artifact caching.
+    if times_visible.size > REASSIGNED_MAX_SCATTER_POINTS:
+        rng = np.random.default_rng(0)
+        idx = rng.choice(
+            times_visible.size,
+            size=REASSIGNED_MAX_SCATTER_POINTS,
+            replace=False,
+        )
+        times_visible = times_visible[idx]
+        freqs_visible = freqs_visible[idx]
+        mags_visible = mags_visible[idx]
+
+    fig = mpl_figure.Figure(figsize=(FIG_WIDTH_INCHES, FIG_HEIGHT_INCHES), dpi=FIG_DPI)
+    ax = fig.add_axes((0, 0, 1, 1))
+    ax.set_axis_off()
+    if times_visible.size > 0:
+        ax.scatter(
+            times_visible,
+            freqs_visible,
+            c=mags_visible,
+            cmap="magma",
+            s=0.5,
+            marker=",",
+            alpha=0.6,
+            linewidths=0,
+            vmin=REASSIGNED_MAG_FLOOR_DB,
+            vmax=0.0,
+        )
+    # Axes limits: lock to the input duration and Nyquist so the PNG
+    # has consistent geometry regardless of how many points cleared
+    # the floor.
+    ax.set_xlim(0.0, max(1.0 / sr, len(y) / float(sr)))
+    ax.set_ylim(0.0, sr / 2.0)
+    out_path = out / "reassigned_spectrogram.png"
+    fig.savefig(str(out_path), dpi=FIG_DPI, bbox_inches="tight", pad_inches=0)
+    fig.clear()
+
+    return {"spectrogram_reassigned": str(out_path)}
+
+
 def generate_all_artifacts(
     audio_path: str,
     output_dir: str | None = None,
