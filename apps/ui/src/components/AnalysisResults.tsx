@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  AnalysisStageStatus,
   InterpretationSchemaVersion,
   InterpretationValidationWarning,
   MeasurementAvailabilityContext,
@@ -10,6 +11,8 @@ import {
 } from '../types';
 import {
   Activity,
+  AudioWaveform,
+  Check,
   ChevronDown,
   ChevronRight,
   Clock,
@@ -36,10 +39,13 @@ import {
 } from './MeasurementPrimitives';
 import { PhaseSourceBadge } from './PhaseSourceBadge';
 import { StickyNav, type StickyNavSection } from './StickyNav';
+import { CitationBlock } from './CitationBlock';
+import { loadAppliedIds, toggleAppliedId } from '../services/appliedRecommendations';
 import {
   buildArrangementViewModel,
   buildMixChainGroups,
   buildPatchCards,
+  buildPatchGroups,
   buildSonicElementCards,
   calculateStereoBandStyle,
   toConfidenceBadges,
@@ -66,15 +72,100 @@ export interface AnalysisResultsProps {
   runId?: string;
   pitchNoteMode?: 'stem_notes' | 'off' | null;
   /**
+   * Current status of the interpretation stage, used to label the results
+   * header honestly (e.g. "AI interpretation in progress…" vs "Recommendations
+   * ready" vs "AI interpretation failed"). Pass `null`/`undefined` to fall
+   * back to the neutral subtitle. Decouples the header text from a hardcoded
+   * "PHASE COMPLETE" string that previously rendered regardless of state.
+   */
+  interpretationStatus?: AnalysisStageStatus | null;
+  /**
    * Click handler for the "Re-analyze with stem-aware pipeline" button that
    * Block A renders in its legacy render state. App owns the run-creation
    * primitives; pass `undefined` to hide the button (e.g. while an analysis
    * is already in flight or no source File is loaded).
    */
   onReanalyzeWithStemAware?: () => void;
+  /**
+   * Audit Finding #14 + #15: SHA-256 of the source audio content. Used to key
+   * the per-file applied-recommendations tracker so producers can check off
+   * Mix Chain / Patches cards as they wire them into Live and have that
+   * progress survive both a page reload and a re-analysis of the same file
+   * (rename-resilient because hash is content-based, not name-based).
+   * Pass `null`/`undefined` to disable the tracker (no checkboxes shown).
+   */
+  audioContentHash?: string | null;
 }
 
 const LOW_CHORD_CONFIDENCE_THRESHOLD = 0.5;
+
+/**
+ * Maps the interpretation stage status to a subtitle string for the results
+ * header. Returns null for statuses that shouldn't surface in the header
+ * (e.g. unknown values). Centralised so the header never lies about
+ * Phase 2's actual state.
+ */
+export function getInterpretationSubtitle(
+  status: AnalysisStageStatus | null | undefined,
+): string | null {
+  if (!status) return null;
+  switch (status) {
+    case 'completed':
+      return 'Recommendations ready';
+    case 'running':
+      return 'AI interpretation in progress…';
+    case 'queued':
+    case 'ready':
+    case 'blocked':
+      return 'AI interpretation pending';
+    case 'failed':
+      return 'AI interpretation failed — retry from progress panel';
+    case 'interrupted':
+      return 'AI interpretation stopped';
+    case 'not_requested':
+      return 'Measurements only';
+    default:
+      return null;
+  }
+}
+
+/**
+ * Audit Finding #6 (streaming reveal): tooltip text for the disabled StickyNav
+ * pills that correspond to Phase 2 sections (Sonic / Mix Chain / Patches).
+ * Used to live as a hardcoded "Recommendations not produced this run" which
+ * lied during the 4–5 minute mid-run window where Phase 1 had streamed in
+ * but Phase 2 was still working.
+ *
+ * Mirrors `getInterpretationSubtitle` but phrased as a nav-pill tooltip
+ * ("AI interpretation in progress…" reads naturally in the header subtitle
+ * AND in a pill hover), so a future copy refactor can collapse the two
+ * helpers if desired.
+ */
+export function getPhase2NavDisabledReason(
+  status: AnalysisStageStatus | null | undefined,
+): string {
+  switch (status) {
+    case 'running':
+      return 'AI interpretation in progress…';
+    case 'queued':
+    case 'ready':
+    case 'blocked':
+      return 'AI interpretation pending — waiting to start';
+    case 'not_requested':
+      return 'AI interpretation off for this run';
+    case 'failed':
+      return 'AI interpretation failed — retry from progress panel';
+    case 'interrupted':
+      return 'AI interpretation stopped';
+    case 'completed':
+    case null:
+    case undefined:
+    default:
+      // `completed` with no cards = Phase 2 returned nothing actionable. Fall
+      // through to the legacy phrasing so an empty result still reads honest.
+      return 'Recommendations not produced this run';
+  }
+}
 
 export function toggleOpenKeySet(previous: ReadonlySet<string>, id: string): Set<string> {
   const next = new Set(previous);
@@ -84,6 +175,45 @@ export function toggleOpenKeySet(previous: ReadonlySet<string>, id: string): Set
     next.add(id);
   }
   return next;
+}
+
+/**
+ * Audit Finding #14: per-card "applied to my session" toggle. Looks like a
+ * checkbox to producers who scan top-down through Mix Chain / Patches lists.
+ * Renders nothing when no tracker is wired (e.g., file hash unavailable);
+ * stops click propagation so toggling doesn't also expand/collapse the card.
+ */
+function AppliedCheckbox({
+  isApplied,
+  onToggle,
+  ariaLabel,
+}: {
+  isApplied: boolean;
+  onToggle: () => void;
+  ariaLabel: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={isApplied}
+      aria-label={ariaLabel}
+      data-applied={isApplied || undefined}
+      data-testid="applied-checkbox"
+      onClick={(event) => {
+        event.stopPropagation();
+        onToggle();
+      }}
+      className={`flex-shrink-0 flex items-center justify-center w-4 h-4 rounded-sm border transition-colors ${
+        isApplied
+          ? 'border-success/60 bg-success/15 text-success hover:border-success'
+          : 'border-border bg-bg-card/40 text-text-secondary/40 hover:border-accent/40 hover:text-accent'
+      }`}
+      title={isApplied ? 'Applied — click to unmark' : 'Mark as applied'}
+    >
+      {isApplied ? <Check className="w-3 h-3" /> : null}
+    </button>
+  );
 }
 
 function Collapsible({ isOpen, children }: { isOpen: boolean; children: React.ReactNode }) {
@@ -146,9 +276,15 @@ function characteristicPillClass(confidence: string): string {
   return 'bg-error/20 text-error border-error/30';
 }
 
-function groupIcon(groupName: string): string {
+function groupIcon(groupName: string): React.ReactNode {
   if (groupName.includes('DRUM PROCESSING')) return '🥁';
-  if (groupName.includes('BASS PROCESSING')) return '🫧';
+  // Audit #13: 🫧 (bubbles) is not a bass signifier in any audio
+  // convention. Swapped to the monochrome Lucide waveform glyph, which
+  // matches the app's icon language. Other groups keep their emoji
+  // landmarks for now (smallest blast radius).
+  if (groupName.includes('BASS PROCESSING')) {
+    return <AudioWaveform className="w-3.5 h-3.5 inline -mt-0.5" aria-hidden="true" />;
+  }
   if (groupName.includes('SYNTH / MELODIC')) return '🎹';
   if (groupName.includes('MID PROCESSING')) return '🎚';
   if (groupName.includes('HIGH-END DETAIL')) return '✨';
@@ -246,49 +382,31 @@ function MetaBadgeList({ items }: { items: MetaBadgeItem[] }) {
   const visibleItems = items.filter((item) => typeof item.value === 'string' && item.value.trim().length > 0);
   if (visibleItems.length === 0) return null;
 
+  // Audit N8: previously each chip rendered as `Family: Native` /
+  // `Context: Acid bass` / `Stage: Sound design`. The `Label:` prefix read
+  // as a JSON-key column header — engineering-flavour. The chip content
+  // alone (`Acid bass`) is enough; we keep `item.label` only for the React
+  // key. Tooltip preserves the original label for users who want context.
   return (
     <div className="flex flex-wrap gap-1.5">
       {visibleItems.map((item) => (
         <span
           key={`${item.label}-${item.value}`}
+          title={item.label}
           className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-border text-text-secondary whitespace-nowrap"
         >
-          {item.label}: {item.value}
+          {item.value}
         </span>
       ))}
     </div>
   );
 }
 
-function GroundingBadgeList({
-  phase1Fields,
-  segmentIndexes,
-}: {
-  phase1Fields: string[];
-  segmentIndexes?: number[];
-}) {
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {phase1Fields.map((field) => (
-        <span
-          key={field}
-          className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-accent/30 bg-accent/5 text-accent"
-        >
-          {field}
-        </span>
-      ))}
-      {Array.isArray(segmentIndexes) &&
-        segmentIndexes.map((segmentIndex) => (
-          <span
-            key={`segment-${segmentIndex}`}
-            className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-border text-text-secondary"
-          >
-            Segment {segmentIndex}
-          </span>
-        ))}
-    </div>
-  );
-}
+// Audit Finding #2: `GroundingBadgeList` (9px monospace field-path pills) was
+// retired in favor of the structured `CitationBlock` primitive. The component
+// previously lived here and rendered raw field paths like `bpmConfidence` as
+// orange-accent pills. Track Layout — its only call site — now uses
+// CitationBlock with the segmentIndexes routed through the `extraRows` prop.
 
 function describeInterpretationWarning(
   warning: InterpretationValidationWarning,
@@ -403,7 +521,9 @@ export function AnalysisResults({
   apiBaseUrl,
   runId,
   pitchNoteMode = null,
+  interpretationStatus = null,
   onReanalyzeWithStemAware,
+  audioContentHash = null,
 }: AnalysisResultsProps) {
   const [openArrangement, setOpenArrangement] = useState<Record<string, boolean>>({});
   const [openSonic, setOpenSonic] = useState<Set<string>>(new Set());
@@ -411,7 +531,32 @@ export function AnalysisResults({
   const [openPatch, setOpenPatch] = useState<Record<string, boolean>>({});
   const [showSources, setShowSources] = useState<Record<string, boolean>>({});
 
-  const sessionId = useMemo(() => new Date().getTime().toString(36).toUpperCase(), []);
+  // Audit Finding #14 + #15: applied-recommendation set, lazy-initialized
+  // from localStorage on first render (keyed by the audio content hash).
+  // When the hash changes (new file uploaded), useEffect below re-hydrates
+  // the set from storage; we don't keep stale checks across files.
+  const [appliedIds, setAppliedIds] = useState<Set<string>>(() =>
+    loadAppliedIds(audioContentHash),
+  );
+  useEffect(() => {
+    setAppliedIds(loadAppliedIds(audioContentHash));
+  }, [audioContentHash]);
+
+  const toggleApplied = useCallback(
+    (cardId: string) => {
+      if (!audioContentHash) return;
+      const next = toggleAppliedId(audioContentHash, cardId, {
+        filename: sourceFileName ?? undefined,
+      });
+      setAppliedIds(next);
+    },
+    [audioContentHash, sourceFileName],
+  );
+
+  const interpretationSubtitle = getInterpretationSubtitle(interpretationStatus);
+  const headerSubtitle = [sourceFileName, interpretationSubtitle]
+    .filter((part): part is string => Boolean(part))
+    .join(' · ');
 
   if (!phase1) return null;
 
@@ -479,7 +624,21 @@ export function AnalysisResults({
   const arrangement = buildArrangementViewModel(phase1, phase2?.arrangementOverview);
   const sonicCards = buildSonicElementCards(phase1, phase2?.sonicElements);
   const mixGroups = buildMixChainGroups(phase1, phase2?.mixAndMasterChain, phase2?.sonicElements);
+  // Audit Finding #14: per-section applied counts, derived from the
+  // appliedIds Set + the rendered card lists. Keeps the progress chip in the
+  // section header in sync with the per-card checkboxes without a second
+  // source of truth.
+  const mixCardCount = mixGroups.reduce((sum, group) => sum + group.cards.length, 0);
+  const mixAppliedCount = mixGroups.reduce(
+    (sum, group) => sum + group.cards.filter((card) => appliedIds.has(card.id)).length,
+    0,
+  );
   const patchCards = buildPatchCards(phase1, phase2);
+  // Audit follow-up: patches render grouped by Mix Chain's processing-stage
+  // heuristic. `patchCards` (flat list) is retained for the length checks the
+  // StickyNav and gating already use.
+  const patchGroups = buildPatchGroups(phase1, phase2);
+  const patchAppliedCount = patchCards.filter((card) => appliedIds.has(card.id)).length;
   const projectSetup = isPhase2V2 ? phase2?.projectSetup ?? null : null;
   const trackLayout = isPhase2V2 && Array.isArray(phase2?.trackLayout) ? phase2.trackLayout : [];
   const routingBlueprint = isPhase2V2 ? phase2?.routingBlueprint ?? null : null;
@@ -527,16 +686,13 @@ export function AnalysisResults({
     mixGroups.length > 0 ||
     patchCards.length > 0 ||
     Boolean(phase2?.secretSauce);
-  const navSections: StickyNavSection[] = [
-    { id: 'section-meas-core', label: 'Core' },
-    { id: 'section-meas-loudness', label: 'Loudness' },
-    { id: 'section-meas-mixdoctor', label: 'MixDoctor' },
-    { id: 'section-meas-spectral', label: 'Spectral' },
-    { id: 'section-meas-stereo', label: 'Stereo' },
-    { id: 'section-meas-rhythm', label: 'Rhythm' },
-    { id: 'section-meas-harmony', label: 'Harmony' },
-    { id: 'section-meas-structure', label: 'Structure' },
-    { id: 'section-meas-synthesis', label: 'Synthesis' },
+  // Audit Finding #1: nav order inverted so the producer hits Style → Sonic →
+  // Mix Chain → Patches → Session before the 9 measurement panels. The 9
+  // `section-meas-*` pills are collapsed into a single `Measurements` entry
+  // that scrolls to the (now bottom-of-page) MeasurementDashboard wrapper;
+  // within the dashboard the 9 sub-sections still have their own ids and
+  // remain individually scrollable via direct hash links if needed.
+  const navEntries: Array<StickyNavSection | null> = [
     { id: 'section-style-profile', label: 'Style' },
     projectSetup ? { id: 'section-project-setup', label: 'Setup' } : null,
     trackLayout.length > 0 ? { id: 'section-track-layout', label: 'Layout' } : null,
@@ -546,10 +702,42 @@ export function AnalysisResults({
     arrangement ? { id: 'section-arrangement', label: 'Arrangement' } : null,
     { id: 'section-session', label: 'Session' },
     hasStemSummaryContent ? { id: 'section-stem-summary', label: 'Stem Notes' } : null,
-    sonicCards.length > 0 ? { id: 'section-sonic-elements', label: 'Sonic' } : null,
-    mixGroups.length > 0 ? { id: 'section-mix-chain', label: 'Mix Chain' } : null,
-    patchCards.length > 0 ? { id: 'section-patches', label: 'Patches' } : null,
-  ].filter((section): section is StickyNavSection => section !== null);
+    // Audit N1 sibling + Finding #6 (streaming reveal): keep Phase 2 nav
+    // entries visible even when their sections haven't populated yet.
+    // Previously the disabled reason was a hardcoded "not produced this run"
+    // that lied during the 4–5 minute mid-run window between Phase 1
+    // streaming in and Phase 2 completing. The reason now derives from
+    // `interpretationStatus` so a hover during mid-run reads "in progress…"
+    // and only a real failure / no-op reads "not produced this run".
+    {
+      id: 'section-sonic-elements',
+      label: 'Sonic',
+      disabled: sonicCards.length === 0,
+      disabledReason: sonicCards.length === 0
+        ? getPhase2NavDisabledReason(interpretationStatus)
+        : undefined,
+    },
+    {
+      id: 'section-mix-chain',
+      label: 'Mix Chain',
+      disabled: mixGroups.length === 0,
+      disabledReason: mixGroups.length === 0
+        ? getPhase2NavDisabledReason(interpretationStatus)
+        : undefined,
+    },
+    {
+      id: 'section-patches',
+      label: 'Patches',
+      disabled: patchCards.length === 0,
+      disabledReason: patchCards.length === 0
+        ? getPhase2NavDisabledReason(interpretationStatus)
+        : undefined,
+    },
+    { id: 'section-measurements', label: 'Measurements' },
+  ];
+  const navSections: StickyNavSection[] = navEntries.filter(
+    (section): section is StickyNavSection => section !== null,
+  );
 
   return (
     <motion.div
@@ -568,12 +756,15 @@ export function AnalysisResults({
             <Activity className="w-6 h-6 mr-3 text-accent" />
             {formatDisplayText('Analysis Results', 'title')}
           </h1>
-          <p
-            data-text-role="meta"
-            className={textRoleClassName('meta', 'mt-1 opacity-70')}
-          >
-            SESSION ID: {sessionId} // PHASE COMPLETE
-          </p>
+          {headerSubtitle && (
+            <p
+              data-text-role="meta"
+              className={textRoleClassName('meta', 'mt-1 opacity-70')}
+              data-testid="analysis-results-subtitle"
+            >
+              {headerSubtitle}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -582,7 +773,7 @@ export function AnalysisResults({
             className="flex items-center gap-2 px-4 py-2 bg-bg-panel border border-border rounded text-xs font-mono uppercase tracking-wider hover:bg-bg-card-hover hover:border-accent/50 transition-all group"
           >
             <FileJson className="w-3 h-3 text-text-secondary group-hover:text-accent" />
-            <span>JSON_DATA</span>
+            <span>Download data</span>
           </button>
           <button
             onClick={handleExportMD}
@@ -590,7 +781,7 @@ export function AnalysisResults({
             className="flex items-center gap-2 px-4 py-2 bg-accent/10 border border-accent/50 text-accent rounded text-xs font-mono uppercase tracking-wider hover:bg-accent/20 transition-all shadow-[0_0_10px_rgba(255,85,0,0.1)]"
           >
             <FileText className="w-3 h-3" />
-            <span>REPORT_MD</span>
+            <span>Download report</span>
           </button>
         </div>
       </div>
@@ -725,13 +916,13 @@ export function AnalysisResults({
         )}
       </div>
 
-      <MeasurementDashboard
-        phase1={phase1}
-        spectralArtifacts={spectralArtifacts}
-        measurementAvailability={measurementAvailability}
-        apiBaseUrl={apiBaseUrl}
-        runId={runId}
-      />
+      {/* Audit Finding #1: MeasurementDashboard was here at the top of the
+          results scroll, ahead of Style / Sonic Elements / Mix Chain / Patches.
+          That ordering serves a DSP engineer auditing the tool, not a producer
+          asking "how do I make something that sounds like this?". The dashboard
+          now renders at the bottom (search for `section-measurements` below
+          Patches/Secret Sauce) so the actionable Phase 2 content reads first
+          and the measurement evidence reads as drill-down. */}
 
       <section data-testid="interpretation-panel" className="space-y-3">
         <ResultsSectionHeader
@@ -1197,15 +1388,28 @@ export function AnalysisResults({
                 <p data-text-role="body" className={textRoleClassName('body')}>
                   {truncateAtSentenceBoundary(item.purpose, 220)}
                 </p>
-                <div className="space-y-2">
-                  <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">
-                    Grounding
-                  </p>
-                  <GroundingBadgeList
-                    phase1Fields={item.grounding.phase1Fields}
-                    segmentIndexes={item.grounding.segmentIndexes}
-                  />
-                </div>
+                {/* Audit Finding #2: replaced the legacy GroundingBadgeList
+                    (9px field-path pills) with the structured CitationBlock
+                    primitive, finishing the chain-of-custody visual treatment
+                    that already lands on Mix Chain / Patches / Sonic cards.
+                    Segment indexes (Track Layout-only) ride as a synthetic
+                    extra row at the bottom of the block. */}
+                <CitationBlock
+                  phase1={phase1}
+                  fields={item.grounding.phase1Fields}
+                  extraRows={
+                    Array.isArray(item.grounding.segmentIndexes) &&
+                    item.grounding.segmentIndexes.length > 0
+                      ? [
+                          {
+                            label: 'Active in segments',
+                            value: item.grounding.segmentIndexes.join(' · '),
+                          },
+                        ]
+                      : undefined
+                  }
+                  testId={`track-layout-citation-${item.order ?? 0}-${item.name}`}
+                />
               </div>
             ))}
           </div>
@@ -1620,7 +1824,18 @@ export function AnalysisResults({
                   </button>
 
                   <Collapsible isOpen={isOpen}>
-                    <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="p-4 space-y-3">
+                      {/* Audit Finding #2 + #3: chain-of-custody block at the
+                          TOP of the expanded card so the producer sees the
+                          measurements + worst-confidence band BEFORE reading
+                          the prose description. */}
+                      <CitationBlock
+                        phase1={phase1}
+                        fields={card.phase1Fields}
+                        testId={`sonic-citation-${card.id}`}
+                      />
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <p data-text-role="body" className={textRoleClassName('body')}>
                           {card.description}
@@ -1659,6 +1874,7 @@ export function AnalysisResults({
                           </div>
                         )}
                       </div>
+                      </div>
                     </div>
                   </Collapsible>
                 </div>
@@ -1674,7 +1890,21 @@ export function AnalysisResults({
             title={formatDisplayText('Mix & Master Chain', 'title')}
             titleRole="section-title"
             rightSlot={
-              <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">SIGNAL FLOW</span>
+              <div className="flex items-center gap-2">
+                {/* Audit Finding #14: section-level progress glance. Only
+                    surfaces when the tracker is wired (audioContentHash
+                    available) AND at least one card has been applied —
+                    avoids leading with a "0 of N" on first view. */}
+                {audioContentHash && mixAppliedCount > 0 && (
+                  <span
+                    data-testid="mix-chain-applied-progress"
+                    className="text-[10px] font-mono uppercase tracking-wide text-success border border-success/30 bg-success/10 px-2 py-1 rounded"
+                  >
+                    {mixAppliedCount} of {mixCardCount} applied
+                  </span>
+                )}
+                <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">SIGNAL FLOW</span>
+              </div>
             }
           />
 
@@ -1698,10 +1928,14 @@ export function AnalysisResults({
                 <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
                   {group.cards.map((card) => {
                     const isOpen = !!openMix[card.id];
+                    const isApplied = appliedIds.has(card.id);
                     return (
                       <div
                         key={card.id}
-                        className="bg-bg-card border border-border rounded-sm overflow-hidden self-start transition-colors hover:border-accent/40 hover:bg-bg-card-hover/70"
+                        data-applied={isApplied || undefined}
+                        className={`bg-bg-card border border-border rounded-sm overflow-hidden self-start transition-colors hover:border-accent/40 hover:bg-bg-card-hover/70 ${
+                          isApplied ? 'border-l-2 border-l-success' : ''
+                        }`}
                       >
                         <button
                           onClick={() => toggleMix(card.id)}
@@ -1729,21 +1963,42 @@ export function AnalysisResults({
                               <div className="mt-2">
                                 <MetaBadgeList
                                   items={[
-                                    { label: 'Family', value: card.deviceFamily },
+                                    // Audit N3/N8: drop `Family: Native` from
+                                    // the collapsed card. `deviceFamily` is
+                                    // almost always `NATIVE`; keeping it
+                                    // burns chip-row real estate without
+                                    // adding signal. Surfaces only the two
+                                    // chips that actually vary per card.
                                     { label: 'Context', value: card.trackContext },
                                     { label: 'Stage', value: card.workflowStage },
                                   ]}
                                 />
                               </div>
                             </div>
-                            <span className="text-text-secondary flex-shrink-0">
-                              {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                            </span>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              {audioContentHash && (
+                                <AppliedCheckbox
+                                  isApplied={isApplied}
+                                  onToggle={() => toggleApplied(card.id)}
+                                  ariaLabel={`Mark ${card.device} as applied`}
+                                />
+                              )}
+                              <span className="text-text-secondary">
+                                {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                              </span>
+                            </div>
                           </div>
                         </button>
 
                         <Collapsible isOpen={isOpen}>
                           <div className="p-4 space-y-3">
+                            {/* Audit Finding #2 + #3: structured chain-of-custody
+                                evidence at the top of the expanded card. */}
+                            <CitationBlock
+                              phase1={phase1}
+                              fields={card.phase1Fields}
+                              testId={`mix-chain-citation-${card.id}`}
+                            />
                             <p data-text-role="body" className={textRoleClassName('body')}>
                               {truncateAtSentenceBoundary(card.role, 320)}
                             </p>
@@ -1783,88 +2038,137 @@ export function AnalysisResults({
           <ResultsSectionHeader
             title={formatDisplayText('Patch Framework', 'title')}
             titleRole="section-title"
-            rightSlot={<Sliders className="w-4 h-4 text-accent opacity-70" />}
+            rightSlot={
+              <div className="flex items-center gap-2">
+                {audioContentHash && patchAppliedCount > 0 && (
+                  <span
+                    data-testid="patches-applied-progress"
+                    className="text-[10px] font-mono uppercase tracking-wide text-success border border-success/30 bg-success/10 px-2 py-1 rounded"
+                  >
+                    {patchAppliedCount} of {patchCards.length} applied
+                  </span>
+                )}
+                <Sliders className="w-4 h-4 text-accent opacity-70" />
+              </div>
+            }
           />
 
-          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
-            {patchCards.map((patch) => {
-              const isOpen = !!openPatch[patch.id];
-              return (
-                <div
-                  key={patch.id}
-                  className="bg-bg-card border border-border rounded-sm overflow-hidden self-start transition-colors hover:border-accent/40 hover:bg-bg-card-hover/70"
+          {/* Audit follow-up: cards grouped by processing stage (Drum / Bass /
+              Synth / Mid / High-end / Master) using the same heuristic and
+              emoji eyebrows as Mix Chain above. Producers can now jump to the
+              bass patch without scanning all 8 cards. */}
+          <div className="space-y-4">
+            {patchGroups.map((group) => (
+              <section key={group.name} className="space-y-3">
+                <h3
+                  data-text-role="meta"
+                  className={textRoleClassName('meta', 'border-b border-border/70 pb-1')}
                 >
-                  <button
-                    onClick={() => togglePatch(patch.id)}
-                    className="w-full text-left px-4 py-3 border-b border-border bg-bg-panel/60 hover:bg-bg-panel transition-colors"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <Settings2 className="w-4 h-4 text-accent" />
-                          <h4
-                            data-text-role="item-title"
-                            className={textRoleClassName('item-title', 'truncate')}
-                          >
-                            {patch.device}
-                          </h4>
-                          {patch.transcriptionDerived && (
-                            <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-accent/40 text-accent whitespace-nowrap">
-                              Transcription-derived
-                            </span>
-                          )}
-                          <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-border text-text-secondary whitespace-nowrap">
-                            {patch.category}
-                          </span>
-                        </div>
-                        <p data-text-role="body" className={textRoleClassName('body', 'mt-1 truncate')}>
-                          {patch.patchRole}
-                        </p>
-                        <div className="mt-2">
-                          <MetaBadgeList
-                            items={[
-                              { label: 'Family', value: patch.deviceFamily },
-                              { label: 'Context', value: patch.trackContext },
-                              { label: 'Stage', value: patch.workflowStage },
-                            ]}
-                          />
-                        </div>
-                      </div>
-                      <span className="text-text-secondary flex-shrink-0">
-                        {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                      </span>
-                    </div>
-                  </button>
+                  {groupIcon(group.name)} {group.name}
+                </h3>
 
-                  <Collapsible isOpen={isOpen}>
-                    <div className="p-4 space-y-3">
-                      <p data-text-role="body" className={textRoleClassName('body')}>
-                        {truncateAtSentenceBoundary(patch.whyThisWorks, 600)}
-                      </p>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {patch.parameters.map((parameter, idx) => (
-                          <div
-                            key={`${patch.id}-parameter-${idx}`}
-                            className="border border-border rounded-sm px-2 py-1 bg-bg-panel/40"
-                          >
-                            <p className="text-[10px] font-mono uppercase text-text-secondary">{parameter.label}</p>
-                            <p className="text-xs font-mono text-text-primary font-bold">{parameter.value}</p>
+                <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+                  {group.cards.map((patch) => {
+                    const isOpen = !!openPatch[patch.id];
+                    const isApplied = appliedIds.has(patch.id);
+                    return (
+                      <div
+                        key={patch.id}
+                        data-applied={isApplied || undefined}
+                        className={`bg-bg-card border border-border rounded-sm overflow-hidden self-start transition-colors hover:border-accent/40 hover:bg-bg-card-hover/70 ${
+                          isApplied ? 'border-l-2 border-l-success' : ''
+                        }`}
+                      >
+                        <button
+                          onClick={() => togglePatch(patch.id)}
+                          className="w-full text-left px-4 py-3 border-b border-border bg-bg-panel/60 hover:bg-bg-panel transition-colors"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <Settings2 className="w-4 h-4 text-accent" />
+                                <h4
+                                  data-text-role="item-title"
+                                  className={textRoleClassName('item-title', 'truncate')}
+                                >
+                                  {patch.device}
+                                </h4>
+                                {patch.transcriptionDerived && (
+                                  <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-accent/40 text-accent whitespace-nowrap">
+                                    Transcription-derived
+                                  </span>
+                                )}
+                                <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-border text-text-secondary whitespace-nowrap">
+                                  {patch.category}
+                                </span>
+                              </div>
+                              <p data-text-role="body" className={textRoleClassName('body', 'mt-1 truncate')}>
+                                {patch.patchRole}
+                              </p>
+                              <div className="mt-2">
+                                <MetaBadgeList
+                                  items={[
+                                    // Same Family-chip drop as Mix Chain cards (audit N3/N8).
+                                    { label: 'Context', value: patch.trackContext },
+                                    { label: 'Stage', value: patch.workflowStage },
+                                  ]}
+                                />
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              {audioContentHash && (
+                                <AppliedCheckbox
+                                  isApplied={isApplied}
+                                  onToggle={() => toggleApplied(patch.id)}
+                                  ariaLabel={`Mark ${patch.device} patch as applied`}
+                                />
+                              )}
+                              <span className="text-text-secondary">
+                                {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                              </span>
+                            </div>
                           </div>
-                        ))}
-                      </div>
+                        </button>
 
-                      <div className="border border-accent/20 bg-accent/5 rounded-sm px-2 py-2">
-                        <p className="text-[10px] font-mono text-accent uppercase tracking-wide">PRO TIP</p>
-                        <p className="text-xs font-mono text-text-secondary mt-1 leading-relaxed">
-                          {truncateAtSentenceBoundary(patch.proTip, 320)}
-                        </p>
+                        <Collapsible isOpen={isOpen}>
+                          <div className="p-4 space-y-3">
+                            {/* Audit Finding #2 + #3: chain-of-custody block
+                                at the top of the expanded patch card. */}
+                            <CitationBlock
+                              phase1={phase1}
+                              fields={patch.phase1Fields}
+                              testId={`patch-citation-${patch.id}`}
+                            />
+                            <p data-text-role="body" className={textRoleClassName('body')}>
+                              {truncateAtSentenceBoundary(patch.whyThisWorks, 600)}
+                            </p>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {patch.parameters.map((parameter, idx) => (
+                                <div
+                                  key={`${patch.id}-parameter-${idx}`}
+                                  className="border border-border rounded-sm px-2 py-1 bg-bg-panel/40"
+                                >
+                                  <p className="text-[10px] font-mono uppercase text-text-secondary">{parameter.label}</p>
+                                  <p className="text-xs font-mono text-text-primary font-bold">{parameter.value}</p>
+                                </div>
+                              ))}
+                            </div>
+
+                            <div className="border border-accent/20 bg-accent/5 rounded-sm px-2 py-2">
+                              <p className="text-[10px] font-mono text-accent uppercase tracking-wide">PRO TIP</p>
+                              <p className="text-xs font-mono text-text-secondary mt-1 leading-relaxed">
+                                {truncateAtSentenceBoundary(patch.proTip, 320)}
+                              </p>
+                            </div>
+                          </div>
+                        </Collapsible>
                       </div>
-                    </div>
-                  </Collapsible>
+                    );
+                  })}
                 </div>
-              );
-            })}
+              </section>
+            ))}
           </div>
         </section>
       )}
@@ -1967,6 +2271,25 @@ export function AnalysisResults({
           </div>
         </div>
       )}
+
+      {/* Audit Finding #1: measurements section moved to the end of the scroll.
+          Wrapped in a single anchorable <section> so the StickyNav can target
+          it with one pill ("Measurements") instead of nine pills. The internal
+          MeasurementDashboard still renders its 9 numbered sub-sections, each
+          with their own scroll anchor; only the top-level nav collapses. */}
+      <section
+        id="section-measurements"
+        data-testid="measurements-section"
+        className="space-y-6 scroll-mt-24"
+      >
+        <MeasurementDashboard
+          phase1={phase1}
+          spectralArtifacts={spectralArtifacts}
+          measurementAvailability={measurementAvailability}
+          apiBaseUrl={apiBaseUrl}
+          runId={runId}
+        />
+      </section>
     </motion.div>
   );
 }

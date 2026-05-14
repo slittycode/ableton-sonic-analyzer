@@ -25,7 +25,8 @@ test('local integration flow uses canonical analysis-runs routes without Gemini 
   expect(fixture.byteLength).toBeGreaterThan(0);
 
   await gotoUploadPage(page);
-  await expect(page.getByTestId('phase2-status-inline')).toHaveText('INTERPRETATION CONFIG OFF');
+  // Audit #12: was 'INTERPRETATION CONFIG OFF'. Renamed to drop developer-flavored copy.
+  await expect(page.getByTestId('phase2-status-inline')).toHaveText('NOT CONFIGURED');
 
   const estimateResponsePromise = page.waitForResponse(
     (response) =>

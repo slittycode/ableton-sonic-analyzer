@@ -439,7 +439,13 @@ describe('AnalysisResults UI wiring', () => {
 
     expect((html.match(/class=\"grid gap-4 grid-cols-1 sm:grid-cols-2\"/g) ?? []).length).toBeGreaterThanOrEqual(2);
     expect(html).toContain('🥁 DRUM PROCESSING');
-    expect(html).toContain('🫧 BASS PROCESSING');
+    // Audit #13: bass-processing eyebrow icon swapped from 🫧 (bubbles)
+    // to a monochrome Lucide AudioWaveform SVG. Verify the group heading
+    // is still present and the AudioWaveform SVG renders alongside it.
+    // (🫧 is still used elsewhere — on the Sonic Elements per-card Bass
+    // entry — so an absolute `.not.toContain('🫧')` would over-match.)
+    expect(html).toContain('BASS PROCESSING');
+    expect(html).toMatch(/lucide-audio-waveform[\s\S]{0,200}BASS PROCESSING/);
     expect(html).toContain('✨ HIGH-END DETAIL');
     expect(html).toContain('🧱 MASTER BUS');
     expect(html).not.toContain('class="flex flex-wrap gap-4"');
@@ -836,10 +842,14 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).toContain('Launch the intro scene with filtered drums only.');
     expect(html).toContain('Automation Focus');
     expect(html).toContain('Open the low-pass filter over the last 4 bars.');
-    expect(html).toContain('NATIVE');
+    // Audit N3/N8: the `Family: NATIVE` chip is now dropped from collapsed
+    // Mix Chain / Patch cards. The `workflowStage` enum is also prettified
+    // at the view-model layer so `SOUND_DESIGN` renders as `Sound design`.
+    expect(html).not.toContain('NATIVE');
     expect(html).toContain('Drum Group');
-    expect(html).toContain('MIX');
-    expect(html).toContain('SOUND_DESIGN');
+    expect(html).toContain('Mix');
+    expect(html).toContain('Sound design');
+    expect(html).not.toContain('SOUND_DESIGN');
     expect(html).toContain('Glue Compressor');
     expect(html).toContain('Attack');
     expect(html).toContain('3 ms');
@@ -1386,16 +1396,29 @@ describe('AnalysisResults UI wiring', () => {
       }),
     );
 
-    expect(html).toContain('Device Chain');
-    expect(html).toContain('href="#section-meas-mixdoctor"');
-    expect(html).toContain('href="#section-meas-spectral"');
+    expect(html).toContain('Sections');
+    // Audit N10: ensure the old "Device Chain" label (confused with Ableton
+    // effects routing) doesn't sneak back in as a nav prefix.
+    expect(html).not.toContain('Device Chain');
+
+    // Audit Finding #1: the 9 individual `section-meas-*` pills (Core, Loudness,
+    // MixDoctor, Spectral, Stereo, Rhythm, Harmony, Structure, Synthesis)
+    // collapsed into a single `Measurements` entry at the END of the nav.
+    expect(html).toContain('href="#section-measurements"');
+    expect(html).toContain('id="section-measurements"');
+    // The sub-section ids inside MeasurementDashboard still exist (so direct
+    // hash links keep working) but they're no longer surfaced as top-level
+    // nav pills:
+    expect(html).toContain('id="section-meas-mixdoctor"');
+    expect(html).toContain('id="section-meas-spectral"');
+    expect(html).not.toMatch(/href="#section-meas-(core|loudness|mixdoctor|spectral|stereo|rhythm|harmony|structure|synthesis)"/);
+
+    // Phase 2 / actionable nav entries remain — they're what producers came for.
     expect(html).toContain('href="#section-arrangement"');
     expect(html).toContain('href="#section-session"');
     expect(html).toContain('href="#section-sonic-elements"');
     expect(html).toContain('href="#section-mix-chain"');
     expect(html).toContain('href="#section-patches"');
-    expect(html).toContain('id="section-meas-mixdoctor"');
-    expect(html).toContain('id="section-meas-spectral"');
     expect(html).toContain('id="section-arrangement"');
     expect(html).toContain('id="section-session"');
     expect(html).toContain('id="section-sonic-elements"');
@@ -1441,7 +1464,8 @@ describe('AnalysisResults UI wiring', () => {
       }),
     );
 
-    expect(html).toContain('href="#section-meas-synthesis"');
+    // Audit Finding #1: nav pills collapsed; the sub-section id still exists
+    // for direct hash links, but no longer surfaces as a top-level nav pill.
     expect(html).toContain('id="section-meas-synthesis"');
     expect(html).toContain('Sidechain / Pumping');
     expect(html).toContain('PUMPING STRENGTH');
@@ -1538,7 +1562,8 @@ describe('AnalysisResults UI wiring', () => {
       }),
     );
 
-    expect(html).toContain('href="#section-meas-spectral"');
+    // Audit Finding #1: nav pills collapsed; the sub-section id still exists
+    // for direct hash links, but no longer surfaces as a top-level nav pill.
     expect(html).toContain('id="section-meas-spectral"');
     expect(html).toContain('Chroma (12 pitches)');
   });
@@ -1587,5 +1612,272 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).not.toContain('110 BARS');
     expect(html).toContain('C Major (Bridge)');
     expect(html).toContain('0.62');
+  });
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Audit Finding #2 + #3: chain-of-custody CitationBlock on every Mix
+  // Chain / Patches / Sonic Element card. The block renders above the card
+  // body inside the (always-mounted) Collapsible content, so renderToStaticMarkup
+  // sees it without needing to simulate a click.
+  // ─────────────────────────────────────────────────────────────────────
+  it('renders CitationBlock on Mix Chain cards with the cited measurement values', () => {
+    // Cite fields that exist on baseMeasurement (no kickDetail in the fixture
+    // — the CitationBlock filters out unresolved paths, so we cite paths whose
+    // values are populated to exercise the row-rendering pathway).
+    const phase2WithCitations: Phase2Result = {
+      ...basePhase2,
+      mixAndMasterChain: [
+        {
+          order: 1,
+          device: 'Drum Buss',
+          deviceFamily: 'NATIVE',
+          trackContext: 'Drum Group',
+          workflowStage: 'MIX',
+          parameter: 'Drive',
+          value: '25%',
+          reason: 'Adds punch to drums based on measured tempo and loudness.',
+          phase1Fields: ['bpm', 'lufsIntegrated', 'truePeak'],
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: baseMeasurement,
+        phase2: phase2WithCitations,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    // CitationBlock primitive mounted on the Mix Chain card.
+    expect(html).toContain('Grounded in');
+    expect(html).toMatch(/data-testid="mix-chain-citation-/);
+
+    // The cited paths resolve to producer-readable labels + formatted values.
+    expect(html).toContain('Tempo');
+    expect(html).toContain('Integrated loudness');
+    expect(html).toContain('True peak');
+    // Values surface formatted: integer BPM, LUFS suffix, dB suffix.
+    expect(html).toMatch(/\d+ BPM/);
+    expect(html).toMatch(/-?\d+(\.\d+)? LUFS/);
+    expect(html).toMatch(/-?\d+(\.\d+)? dB/);
+
+    // Worst-confidence pill renders for cited fields with confidence siblings
+    // (bpm → bpmConfidence). The pill text follows the ConfidenceBandBadge
+    // four-band vocabulary.
+    expect(html).toMatch(/Solid scaffold|Workable draft|Rough sketch|Unreliable/);
+  });
+
+  it('renders CitationBlock on Patches cards with merged phase1Fields', () => {
+    const phase2WithCitations: Phase2Result = {
+      ...basePhase2,
+      abletonRecommendations: [
+        {
+          device: 'Operator',
+          category: 'SYNTHESIS',
+          deviceFamily: 'NATIVE',
+          trackContext: 'Bass Group',
+          workflowStage: 'SOUND_DESIGN',
+          parameter: 'Coarse',
+          value: '1.00',
+          reason: 'Matches tonal center based on key detection.',
+          phase1Fields: ['key', 'spectralBalance.subBass'],
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: baseMeasurement,
+        phase2: phase2WithCitations,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    // CitationBlock mounted on the Patches card with the cited rows.
+    expect(html).toMatch(/data-testid="patch-citation-/);
+    expect(html).toContain('Key');
+    expect(html).toContain('Sub-bass balance');
+  });
+
+  it('renders CitationBlock on Sonic Element cards using SONIC_ELEMENT_FIELD_PATHS', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: baseMeasurement,
+        phase2: basePhase2,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    // Each Sonic Element card gets a citation block (kick, bass, etc.).
+    expect(html).toMatch(/data-testid="sonic-citation-/);
+    // Kick element cites Low-bass balance per SONIC_ELEMENT_FIELD_PATHS.
+    expect(html).toContain('Low-bass balance');
+  });
+
+  // Audit Finding #2 follow-through: GroundingBadgeList retired in favor of
+  // CitationBlock at the Track Layout site. `grounding.segmentIndexes` is no
+  // longer a separate badge group below the measurement pills; it rides
+  // through `extraRows` so it lands inside the same "GROUNDED IN" block as
+  // the phase1Fields citations.
+  it('renders Track Layout citations through CitationBlock with extraRows for segment indexes', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults as React.ComponentType<Record<string, unknown>>, {
+        phase1: baseMeasurement,
+        phase2: phase2V2,
+        phase2SchemaVersion: 'interpretation.v2',
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    // Track Layout entries each get a CitationBlock with a stable testid.
+    expect(html).toMatch(/data-testid="track-layout-citation-/);
+    // Entry 1's grounding cites spectralBalance.highs → "Highs balance".
+    expect(html).toContain('Highs balance');
+    // Entry 1's segmentIndexes ride through extraRows → "Active in segments".
+    expect(html).toContain('Active in segments');
+    expect(html).toContain('1 · 2');
+    // The legacy 9px field-path pill rendering for grounding badges must not
+    // survive — that was the audit-flagged "raw JSON key" footnote treatment.
+    expect(html).not.toMatch(
+      /class="text-\[9px\] font-mono px-1\.5 py-0\.5 rounded border border-accent\/30/,
+    );
+    // Entry 2 grounds without segmentIndexes — its block renders but the
+    // "Active in segments" row must NOT duplicate for it. (Both entries
+    // share the testid prefix so we count.)
+    const segmentRowCount = (html.match(/Active in segments/g) ?? []).length;
+    expect(segmentRowCount).toBe(1);
+  });
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Audit Finding #14 + #15: applied-recommendation checkbox affordance on
+  // Mix Chain / Patches cards. The checkbox renders only when a content hash
+  // is provided (no hash → no tracker → no checkbox); the section-level
+  // progress chip only surfaces when the applied count is non-zero so first
+  // views aren't littered with "0 of N applied" noise.
+  // ─────────────────────────────────────────────────────────────────────
+  it('renders applied checkboxes on Mix Chain + Patches cards when audioContentHash is provided', () => {
+    const phase2 = {
+      ...basePhase2,
+      mixAndMasterChain: [
+        {
+          order: 1,
+          device: 'Drum Buss',
+          parameter: 'Drive',
+          value: '25%',
+          reason: 'Punch.',
+        },
+      ],
+      abletonRecommendations: [
+        {
+          device: 'Operator',
+          category: 'SYNTHESIS',
+          parameter: 'Coarse',
+          value: '1.00',
+          reason: 'Bass tone generator.',
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: baseMeasurement,
+        phase2,
+        sourceFileName: 'example.wav',
+        audioContentHash: 'abc123',
+      }),
+    );
+
+    // Checkbox primitive renders on at least one card per section. Initial
+    // state is aria-checked=false (no applied ids in storage yet).
+    const checkboxes = html.match(/data-testid="applied-checkbox"/g) ?? [];
+    expect(checkboxes.length).toBeGreaterThanOrEqual(2);
+    expect(html).toMatch(/aria-checked="false"/);
+    expect(html).toContain('role="checkbox"');
+  });
+
+  it('does not render applied checkboxes when audioContentHash is null', () => {
+    // The tracker is opt-in on the content hash — no hash means the producer
+    // is looking at a result without a backend artifact reference, so we
+    // can't persist anything stable for them anyway.
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: baseMeasurement,
+        phase2: basePhase2,
+        sourceFileName: 'example.wav',
+        audioContentHash: null,
+      }),
+    );
+
+    expect(html).not.toMatch(/data-testid="applied-checkbox"/);
+    // Section progress chips also suppressed without a hash.
+    expect(html).not.toMatch(/data-testid="mix-chain-applied-progress"/);
+    expect(html).not.toMatch(/data-testid="patches-applied-progress"/);
+  });
+
+  it('does not render the section-level progress chip when applied count is zero', () => {
+    // Even with a hash present, fresh state means 0 applied. The chip should
+    // stay hidden so first views aren't littered with "0 of N applied".
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: baseMeasurement,
+        phase2: basePhase2,
+        sourceFileName: 'example.wav',
+        audioContentHash: 'abc-fresh-' + Date.now(),
+      }),
+    );
+
+    expect(html).not.toMatch(/data-testid="mix-chain-applied-progress"/);
+    expect(html).not.toMatch(/data-testid="patches-applied-progress"/);
+  });
+
+  it('omits the CitationBlock for a card whose cited fields do not resolve', () => {
+    // Provide phase1Fields that don't exist on the measurement — block should
+    // silently return null rather than render empty rows or a header alone.
+    // Include the limiter explicitly so the fallback (which DOES emit
+    // citations) doesn't get auto-appended and pollute the assertion.
+    const phase2NoCitations: Phase2Result = {
+      ...basePhase2,
+      mixAndMasterChain: [
+        {
+          order: 1,
+          device: 'Drum Buss',
+          deviceFamily: 'NATIVE',
+          trackContext: 'Drum Group',
+          workflowStage: 'MIX',
+          parameter: 'Drive',
+          value: '25%',
+          reason: 'Adds punch.',
+          phase1Fields: ['nonexistent.field', 'also.missing'],
+        },
+        {
+          order: 2,
+          device: 'Limiter',
+          deviceFamily: 'NATIVE',
+          trackContext: 'Master',
+          workflowStage: 'MASTER',
+          parameter: 'Ceiling',
+          value: '-0.3 dB',
+          reason: 'Tames final peaks.',
+          phase1Fields: ['definitely.missing'],
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: baseMeasurement,
+        phase2: phase2NoCitations,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    // No mix-chain-citation testid because every Mix Chain block returned null.
+    // (Sonic Element CitationBlocks still render because their fields resolve
+    // against the SONIC_ELEMENT_FIELD_PATHS table — but that's covered by the
+    // sonic-citation test above, not asserted here.)
+    expect(html).not.toMatch(/data-testid="mix-chain-citation-/);
+    // The card itself still renders.
+    expect(html).toContain('Drum Buss');
   });
 });

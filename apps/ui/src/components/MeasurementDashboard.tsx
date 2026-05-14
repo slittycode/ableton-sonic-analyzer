@@ -1314,9 +1314,14 @@ export function MeasurementDashboard({
         {/* Hero Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {/* BPM Tile */}
+          {/* Audit N2: reconciled with the executive-summary card above (which
+              uses Math.round(phase1.bpm) → integer). Showing the same value
+              twice at different precisions ("157" up top, "156.6" here) inside
+              one scroll region read as a measurement disagreement to producers.
+              Precision is preserved in the Percival sub-label below. */}
           <AccentMetricCard
             label="Tempo"
-            value={formatNumber(phase1.bpm, 1)}
+            value={Math.round(phase1.bpm)}
             unit="BPM"
             footer={
               <div className="space-y-2">

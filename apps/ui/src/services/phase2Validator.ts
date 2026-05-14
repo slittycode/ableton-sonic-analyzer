@@ -116,7 +116,12 @@ const PHASE1A_NEW_FIELD_PATHS = PHASE1_NEW_FIELD_PATHS;
  * sibling and where misuse would harm the user. Add detector confidences as
  * the audit surfaces patterns of over-confident recommendations.
  */
-const CONFIDENCE_PAIRS: Record<string, string> = {
+// Audit Finding #3: the CitationBlock + ConfidenceBandBadge on Mix Chain /
+// Patches / Sonic Element cards reads through this same map to compute the
+// worst-confidence band per card. Exported so the picker service and the
+// validator share a single source of truth — when a new pair is added here,
+// the citation block automatically gets confidence coverage for it.
+export const CONFIDENCE_PAIRS: Record<string, string> = {
   'bpm': 'bpmConfidence',
   'key': 'keyConfidence',
   'timeSignature': 'timeSignatureConfidence',

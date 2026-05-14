@@ -3,6 +3,7 @@ import {
   buildMelodyInsights,
   buildMixChainGroups,
   buildPatchCards,
+  buildPatchGroups,
   buildSonicElementCards,
   toConfidenceBadges,
   truncateAtSentenceBoundary,
@@ -228,14 +229,17 @@ describe('analysisResultsViewModel helpers', () => {
     expect(groups[2]?.annotation).toContain('Annotated high-end focus');
     expect(groups.some((group) => group.name.includes('DRUM PROCESSING /'))).toBe(false);
     expect(groups.some((group) => group.name.includes('HIGH-END DETAIL /'))).toBe(false);
+    // Audit N3/N8: workflowStage values are prettified at the view-model
+    // layer so producers see "Mix" / "Arrangement" instead of the raw
+    // Phase 2 enum `MIX` / `ARRANGEMENT`.
     expect(groups[0]?.cards[0]).toMatchObject({
       deviceFamily: 'NATIVE',
       trackContext: 'Drum Group',
-      workflowStage: 'MIX',
+      workflowStage: 'Mix',
     });
     expect(groups[2]?.cards[0]).toMatchObject({
       trackContext: 'Return:Return A',
-      workflowStage: 'ARRANGEMENT',
+      workflowStage: 'Arrangement',
     });
   });
 
@@ -329,11 +333,83 @@ describe('analysisResultsViewModel helpers', () => {
     expect(cards[0].whyThisWorks.length).toBeGreaterThan(10);
     expect(cards.some((card) => /stereo|width/i.test(card.device))).toBe(true);
     expect(cards.some((card) => card.transcriptionDerived)).toBe(true);
+    // Audit N3/N8: workflowStage prettified at the view-model layer.
     expect(cards[0]).toMatchObject({
       deviceFamily: 'NATIVE',
       trackContext: 'Bass Group',
-      workflowStage: 'SOUND_DESIGN',
+      workflowStage: 'Sound design',
     });
+  });
+
+  it('groups patch cards into Mix Chain processing-stage buckets', () => {
+    // Audit follow-up: buildPatchGroups buckets cards by Drum / Bass / Synth /
+    // Mid / High-end / Master so the Patches section reads with the same
+    // scannable structure as Mix Chain. Empty groups must be omitted; groups
+    // must render in canonical GROUP_ORDER.
+    const phase2 = {
+      trackCharacter: 'Character sentence.',
+      detectedCharacteristics: [{ name: 'Dynamics', confidence: 'HIGH', explanation: 'Strong profile' }],
+      arrangementOverview: {
+        summary: 'Summary',
+        segments: [{ index: 1, startTime: 0, endTime: 20, description: 'Intro segment' }],
+      },
+      sonicElements: {
+        kick: 'Kick',
+        bass: 'Bass',
+        melodicArp: 'Arp',
+        grooveAndTiming: 'Groove',
+        effectsAndTexture: 'FX',
+      },
+      mixAndMasterChain: [],
+      secretSauce: { title: 'Sauce', explanation: 'Explain', implementationSteps: ['Step'] },
+      confidenceNotes: [{ field: 'Key Signature', value: '0.7', reason: 'Reason' }],
+      abletonRecommendations: [
+        {
+          device: 'Operator',
+          deviceFamily: 'NATIVE',
+          trackContext: 'Bass Group',
+          workflowStage: 'SOUND_DESIGN',
+          category: 'Synth',
+          parameter: 'Coarse',
+          value: '1.00',
+          reason: 'Subby bass synth for the low end.',
+        },
+        {
+          device: 'Drum Buss',
+          deviceFamily: 'NATIVE',
+          trackContext: 'Drum Group',
+          workflowStage: 'MIX',
+          category: 'Dynamics',
+          parameter: 'Drive',
+          value: '25%',
+          reason: 'Adds punch to kick transients.',
+        },
+      ],
+    } as Phase2Result;
+
+    const groups = buildPatchGroups(
+      {
+        ...measurement,
+        transcriptionDetail: pitchNote,
+      },
+      phase2,
+    );
+
+    expect(groups.length).toBeGreaterThanOrEqual(1);
+    // Empty groups omitted.
+    expect(groups.every((group) => group.cards.length > 0)).toBe(true);
+    // Returns null phase2 → empty list (defensive — Phase 2 not produced this run).
+    expect(buildPatchGroups(measurement, null)).toEqual([]);
+    // Cross-check: flattening the groups yields the same cards as buildPatchCards.
+    const flatFromGroups = groups.flatMap((group) => group.cards);
+    const flatFromCards = buildPatchCards(
+      {
+        ...measurement,
+        transcriptionDetail: pitchNote,
+      },
+      phase2,
+    );
+    expect(flatFromGroups.length).toBe(flatFromCards.length);
   });
 
   it('builds melody insights from phase1 transcription payload', () => {

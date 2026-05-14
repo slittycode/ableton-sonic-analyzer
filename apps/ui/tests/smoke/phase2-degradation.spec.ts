@@ -202,7 +202,8 @@ test('Phase 2 controls show config-disabled state when the env kill-switch is of
   await page.goto('/', { waitUntil: 'networkidle' });
 
   await expect(page.getByLabel('AI INTERPRETATION')).toBeDisabled();
-  await expect(page.getByTestId('phase2-status-inline')).toHaveText('INTERPRETATION CONFIG OFF');
+  // Audit #12: was 'INTERPRETATION CONFIG OFF'. Renamed to drop developer-flavored copy.
+  await expect(page.getByTestId('phase2-status-inline')).toHaveText('NOT CONFIGURED');
   await expect(page.getByTestId('phase2-model-desktop')).toBeDisabled();
 
   await page.setInputFiles('#audio-upload', fixturePath());
@@ -228,7 +229,8 @@ test('turning Phase 2 off in the UI runs Phase 1 only and records the user-disab
   await page.setInputFiles('#audio-upload', fixturePath());
   await page.getByLabel('AI INTERPRETATION').uncheck();
 
-  await expect(page.getByTestId('phase2-status-inline')).toHaveText('INTERPRETATION USER OFF');
+  // Audit #12: was 'INTERPRETATION USER OFF'. Renamed to a producer-readable label.
+  await expect(page.getByTestId('phase2-status-inline')).toHaveText('OFF');
 
   await page.getByRole('button', { name: /Run Analysis/i }).click();
 
