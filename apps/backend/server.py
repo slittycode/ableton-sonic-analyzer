@@ -29,6 +29,7 @@ from fastapi import FastAPI, File, Form, Header, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 
+import auth_context
 from auth_context import AuthenticationRequiredError, UserContext, resolve_api_user_context
 from analysis_runtime import (
     AnalysisRuntime,
@@ -2157,13 +2158,38 @@ async def delete_analysis_run(
     run_id: str,
     x_asa_user_id: str | None = Header(None),
     x_asa_user_email: str | None = Header(None),
+    x_admin_key: str | None = Header(None),
 ) -> JSONResponse:
-    user_context = _resolve_route_user_context(x_asa_user_id, x_asa_user_email)
-    if isinstance(user_context, JSONResponse):
-        return user_context
+    """Delete a run, its artifacts, and interrupt any active stages.
+
+    Two paths grant access:
+
+    1. **Owner.** The user resolved from ``X-ASA-User-Id`` (or local-mode
+       default) is the run's owner — current behavior, unchanged.
+    2. **Operator.** ``X-Admin-Key`` matches the configured
+       :data:`auth_context.ADMIN_KEY_ENV_VAR` env var. When this matches,
+       the ownership check is skipped — operators can purge any run
+       regardless of who owns it. The env var is unset by default; if
+       unset, no admin path exists and ownership remains the only gate.
+
+    The admin path still returns ``RUN_NOT_FOUND`` for nonexistent runs,
+    so a privileged caller cannot use this endpoint to enumerate
+    run IDs (the response is identical whether the run doesn't exist
+    or the caller lacks ownership without the key).
+    """
+    is_admin = auth_context.admin_key_matches(x_admin_key)
+    if is_admin:
+        # Skip user-context resolution; the admin key is the auth.
+        owner_user_id: str | None = None
+    else:
+        user_context = _resolve_route_user_context(x_asa_user_id, x_asa_user_email)
+        if isinstance(user_context, JSONResponse):
+            return user_context
+        owner_user_id = user_context.user_id
+
     runtime = get_analysis_runtime()
     try:
-        runtime.get_run(run_id, owner_user_id=user_context.user_id)
+        runtime.get_run(run_id, owner_user_id=owner_user_id)
         terminated_stages = _interrupt_active_child_processes(run_id)
         runtime.delete_run(run_id)
     except (KeyError, PermissionError):
@@ -2173,6 +2199,7 @@ async def delete_analysis_run(
         content={
             "runId": run_id,
             "deleted": True,
+            "deletedBy": "admin" if is_admin else "owner",
             "interrupt": {
                 "stagesTerminated": terminated_stages,
             },

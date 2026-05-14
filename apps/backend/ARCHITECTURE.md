@@ -70,8 +70,7 @@ Custom routes:
 - `POST /api/analysis-runs/estimate`
 - `POST /api/analysis-runs` — multipart upload OR URL ingestion. Provide *exactly one* of `track` (multipart `UploadFile`) or `url` (form field with a public `http`/`https` URL). URL mode is SSRF-guarded against private/loopback/link-local addresses and enforces the same 100 MiB cap via streaming. See [`url_ingest.py`](url_ingest.py).
 - `GET /api/analysis-runs/{run_id}`
-- `POST /api/analysis-runs/{run_id}/interrupt` — request graceful interruption of a queued/running run.
-- `DELETE /api/analysis-runs/{run_id}`
+- `DELETE /api/analysis-runs/{run_id}` — owner can delete their own run; operators with `SONIC_ANALYZER_ADMIN_KEY` set can supply `X-Admin-Key` to delete any run. Admin path is closed when the env var is unset.
 - `GET /api/analysis-runs/{run_id}/artifacts` and `…/artifacts/{artifact_id}`
 - `GET /api/analysis-runs/{run_id}/export/csv/{field_path}` — CSV export of a Phase 1 time-series field. See [`docs/adr/0001-phase1-json-schema-v1.md`](../../docs/adr/0001-phase1-json-schema-v1.md) and the registry in [`csv_export.py`](csv_export.py).
 - `POST /api/analysis-runs/{run_id}/spectral-enhancements/{kind}`
