@@ -199,8 +199,10 @@ class MelodyAudioTests(unittest.TestCase):
             out = _generate(tmp, _phase1(key="C major"), pitch_note_hints=[1, 5])
             audio, sr = _load_wav(out / "melody_lead.wav")
 
-            # 2 notes over 4 bars at 120 BPM => note 0 spans ~0-3.4 s, note 1
-            # spans ~4-7.4 s. Sample comfortably inside each.
+            # 2 notes over 4 bars at 120 BPM => each note gets an 8-beat (4 s)
+            # slot. The 0.85 note-length gate means note 0 *sounds* ~0-3.4 s
+            # and note 1 ~4-7.4 s (each followed by a short gap). Sample
+            # comfortably inside each sounding span.
             first_note = audio[int(0.5 * sr) : int(3.0 * sr)]
             second_note = audio[int(4.5 * sr) : int(7.0 * sr)]
 
