@@ -387,6 +387,23 @@ class BatchedBandpassTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             dsp_bandbank.BatchedBandpass(self._SR, backend="torch")
 
+    def test_filter_one_default_dtype_is_float32(self):
+        """Locks the bit-identicality contract: ``filter_one`` with no dtype
+        kwarg must return float32 to match the pre-refactor _bandpass_signal."""
+        bb = dsp_bandbank.BatchedBandpass(self._SR)
+        out = bb.filter_one(self._signal, 100.0, 1000.0)
+        self.assertIsNotNone(out)
+        self.assertEqual(out.dtype, np.float32)
+
+    def test_filter_one_respects_dtype_override(self):
+        """Explicit ``dtype=np.float64`` must produce a float64 array — the
+        forward-looking override path for transient-density-style callers
+        that want to skip an upstream cast."""
+        bb = dsp_bandbank.BatchedBandpass(self._SR)
+        out = bb.filter_one(self._signal, 100.0, 1000.0, dtype=np.float64)
+        self.assertIsNotNone(out)
+        self.assertEqual(out.dtype, np.float64)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -64,13 +64,34 @@ class BatchedBandpass:
         self._sos_cache[key] = sos
         return sos
 
-    def filter_one(
-        self, mono: np.ndarray, lo_hz: float, hi_hz: float
-    ) -> np.ndarray | None:
-        """Bit-identical replacement for ``analyze_detection._bandpass_signal``.
+    # Note on asymmetric dtype defaults between filter_one and filter_many:
+    # filter_one defaults to float32 because it replaces the pre-refactor
+    # _bandpass_signal which hardcoded float32 — that default keeps the
+    # existing call site bit-identical with no code change. filter_many
+    # defaults to float64 because its primary future caller
+    # (analyze_per_band_transient_density) does the upstream mono → float64
+    # cast in the outer scope and feeds the result to librosa, which accepts
+    # either dtype. Both methods accept an explicit dtype keyword so callers
+    # can override either default at the call site.
 
-        Returns ``float32`` on success; ``None`` on empty input, missing
-        scipy, Nyquist-clamp failure, or sosfiltfilt error.
+    def filter_one(
+        self,
+        mono: np.ndarray,
+        lo_hz: float,
+        hi_hz: float,
+        *,
+        dtype=np.float32,
+    ) -> np.ndarray | None:
+        """Single-band filter; use ``filter_many`` for the multi-band path.
+
+        Default ``dtype=np.float32`` preserves bit-identicality with the
+        pre-refactor ``analyze_detection._bandpass_signal`` — callers that
+        pass no dtype get exactly the historical output. See the class-level
+        note above on why ``filter_one`` and ``filter_many`` differ in
+        default dtype.
+
+        Returns ``None`` on empty input, missing scipy, Nyquist-clamp
+        failure, or sosfiltfilt error.
         """
         if scipy_signal is None or mono is None or getattr(mono, "size", 0) == 0:
             return None
@@ -78,7 +99,7 @@ class BatchedBandpass:
         if sos is None:
             return None
         try:
-            return scipy_signal.sosfiltfilt(sos, mono).astype(np.float32, copy=False)
+            return scipy_signal.sosfiltfilt(sos, mono).astype(dtype, copy=False)
         except Exception:
             return None
 
@@ -99,7 +120,9 @@ class BatchedBandpass:
 
         Skipped bands (empty input, out-of-range, sosfiltfilt error) are
         absent from the returned dict — preserves the omit-on-skip behavior
-        of the per-band reverb loop today.
+        of the per-band reverb loop today. See the class-level note above
+        on why ``filter_many`` defaults to ``float64`` while ``filter_one``
+        defaults to ``float32``.
         """
         if scipy_signal is None or mono is None or getattr(mono, "size", 0) == 0:
             return {}
