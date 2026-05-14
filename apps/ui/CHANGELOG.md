@@ -53,7 +53,7 @@ All notable changes to `sonic-analyzer-UI` are documented here in reverse chrono
 
 ### UI/UX Improvements (Tiers 1–3)
 
-Implemented all 15 items from the UI/UX improvement plan (`UI_UX_IMPROVEMENTS.md`). `npm run verify` passes: typecheck clean, 73 unit tests, production build, 33 smoke tests.
+Implemented all 15 items from the UI/UX improvement plan (archived at [`docs/history/archive/ui-ux-improvements.md`](../../docs/history/archive/ui-ux-improvements.md)). `npm run verify` passes: typecheck clean, 73 unit tests, production build, 33 smoke tests.
 
 #### Tier 1 — High-impact, low-risk
 

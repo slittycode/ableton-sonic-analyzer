@@ -1,6 +1,6 @@
 # Plan: Phase 1 Hardening
 
-> **Status: partially shipped — historical reference.** Most items in this plan landed across Q1–Q2 2026; see [`CHANGELOG.md`](CHANGELOG.md) for ship status. The plan pre-dates the `analyze.py` module split (commit `5c40dd44`), so every Python line-number reference below is invalid — the functions now live in `analyze_core/_detection/_rhythm/_segments/_structure/_transcription.py`. The alt version of this plan ([`docs/archive/phase1-hardening-plan-alt.md`](docs/archive/phase1-hardening-plan-alt.md)) is fully archived. Use this file for the framing of original hardening targets, not for line numbers.
+> **Status: partially shipped — historical reference.** Most items in this plan landed across Q1–Q2 2026; see [`CHANGELOG.md`](../../CHANGELOG.md) for ship status. The plan pre-dates the `analyze.py` module split (commit `5c40dd44`), so every Python line-number reference below is invalid — the functions now live in `analyze_core/_detection/_rhythm/_segments/_structure/_transcription.py`. The alt version of this plan ([`archive/phase1-hardening-plan-alt.md`](archive/phase1-hardening-plan-alt.md)) is fully archived. Use this file for the framing of original hardening targets, not for line numbers.
 
 Pass all measurements through the pipeline, add DSP extensions, expose everything in the UI.
 

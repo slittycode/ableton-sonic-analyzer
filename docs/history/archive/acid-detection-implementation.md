@@ -1,5 +1,7 @@
 # Acid Detection — Implementation Record
 
+> **Archived 2026-05-13.** Completion record for the `acidDetail` backport from 2026-03-18. Several references here are no longer accurate: the implementation now lives in [`analyze_detection.py`](../../../apps/backend/analyze_detection.py) (not `analyze.py`) after the module split in commit `5c40dd44`; the test constant is `EXPECTED_TOP_LEVEL_KEYS` (not `EXPECTED_OUTPUT_KEYS`); and every item in the "What's Next" list at the bottom has since shipped — see [`BACKLOG.md`](../../../BACKLOG.md) under "Shipped — Detectors". Use this file only as a historical narrative for the original detector port.
+
 **Date:** 2026-03-18
 **Feature:** `acidDetail` — TB-303 acid bassline detection
 **Source:** Backported from `active/sonic-architect-app/services/acidDetection.ts`

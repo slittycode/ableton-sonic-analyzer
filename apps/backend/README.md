@@ -29,7 +29,7 @@ FastAPI also serves the usual generated endpoints at `/openapi.json`, `/docs`, a
 
 ## Tech Stack
 
-- Python 3.10+
+- Python `3.11.x` (required — Essentia 2.1b6 wheels are only published for 3.11 on macOS arm64)
 - Essentia
 - NumPy
 - Demucs
@@ -62,7 +62,7 @@ Bootstrap contract for this monorepo `v1.0.0` cut:
 ### Command
 
 ```bash
-./venv/bin/python analyze.py <audio_file> [--separate] [--transcribe] [--fast] [--yes] [--pitch-note-backend BACKEND]
+./venv/bin/python analyze.py <audio_file> [--separate] [--transcribe] [--fast] [--standard] [--yes] [--pitch-note-only] [--stem-dir DIR] [--stem-output-dir DIR] [--pitch-note-backend BACKEND]
 ```
 
 ### Flags
@@ -72,8 +72,12 @@ Bootstrap contract for this monorepo `v1.0.0` cut:
 | `<audio_file>` | Required input path. |
 | `--separate` | Runs Demucs before melody analysis. If `--transcribe` is also enabled, the selected pitch backend uses the `bass` and `other` stems when they exist. |
 | `--transcribe` | Runs the selected pitch backend and returns `transcriptionDetail`. Without Demucs it transcribes the full mix; with Demucs it transcribes `bass` and `other` separately and merges the notes. |
-| `--pitch-note-backend BACKEND` | Selects the Layer 2 backend for `--pitch-note-only`. Supported values are `auto`, `torchcrepe-viterbi`, and alias `torchcrepe`. |
 | `--fast` | Runs the reduced fast-analysis preset. Core fields such as BPM, key, duration, LUFS, true peak, and crest factor are populated; most detail-heavy fields remain `null`. |
+| `--standard` | Runs the standard analysis preset (mid-tier between `--fast` and the full pipeline). |
+| `--pitch-note-only` | Runs only the Layer 2 pitch/note translation stage, prints its JSON, and exits. Used by the staged-runs runtime so it can call the pitch-note worker separately from full measurement. |
+| `--stem-dir DIR` | When combined with `--pitch-note-only`, reads previously-separated Demucs stems from `DIR` instead of re-running Demucs. |
+| `--stem-output-dir DIR` | When combined with `--pitch-note-only`, writes any newly separated stems into `DIR` so the runtime can persist them as artifacts. |
+| `--pitch-note-backend BACKEND` | Selects the Layer 2 backend for `--transcribe` and `--pitch-note-only`. Supported values are `auto`, `torchcrepe-viterbi`, and alias `torchcrepe`. |
 | `--yes` | Skips the interactive confirmation prompt after the CLI prints its runtime estimate. |
 
 ### Runtime Behavior
@@ -306,23 +310,18 @@ Compatibility note:
 
 - `backendDurationMs` remains the subprocess wall time for backward compatibility and matches `diagnostics.timings.analysisMs`.
 
-`phase1` currently contains these normalized scalar fields:
+`phase1` currently contains these normalized scalar fields (see [`server_phase1.py`](server_phase1.py) `_build_phase1`):
 
-- `bpm`
-- `bpmConfidence`
-- `key`
-- `keyConfidence`
-- `timeSignature`
-- `durationSeconds`
-- `lufsIntegrated`
-- `lufsRange`
-- `truePeak`
-- `crestFactor`
-- `stereoWidth`
-- `stereoCorrelation`
-- `spectralBalance`
+- `bpm`, `bpmConfidence`, `bpmPercival`, `bpmAgreement`, `bpmDoubletime`, `bpmSource`, `bpmRawOriginal`
+- `key`, `keyConfidence`, `keyProfile`, `tuningFrequency`, `tuningCents`
+- `timeSignature`, `timeSignatureSource`, `timeSignatureConfidence`
+- `durationSeconds`, `sampleRate`
+- `lufsIntegrated`, `lufsRange`, `lufsMomentaryMax`, `lufsShortTermMax`, `lufsCurve`
+- `truePeak`, `plr`, `crestFactor`, `dynamicSpread`, `dynamicCharacter`, `textureCharacter`
+- `stereoWidth`, `stereoCorrelation`, `monoCompatible`
+- `spectralBalance` (seven-band scalar object)
 
-All raw `analyze.py` fields are now forwarded through the server `phase1` wrapper. See `JSON_SCHEMA.md` for the complete list of forwarded sections and scalar fields.
+All raw `analyze.py` fields are now forwarded through the server `phase1` wrapper, including the previously-omitted `bpmPercival`, `bpmAgreement`, `dynamicCharacter`, `textureCharacter`, `segmentStereo`, and `essentiaFeatures`. See `JSON_SCHEMA.md` for the complete list of forwarded sections and scalar fields.
 
 Example:
 

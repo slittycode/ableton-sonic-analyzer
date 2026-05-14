@@ -214,15 +214,32 @@ Core measurement fields the app depends on after projection:
 - `stereoCorrelation`
 - `spectralBalance`
 
-Expanded `phase1` sections the current app can consume:
+Expanded `phase1` sections the current app can consume (see [`src/types/measurement.ts`](src/types/measurement.ts) `Phase1Result` for the full contract):
 
 - `stereoDetail`
 - `spectralDetail`
+- `spectralBalanceTimeSeries`
+- `lufsCurve`
+- `stemAnalysis`
+- `transientDensityDetail`
+- `saturationDetail`
+- `snareDetail`
+- `hihatDetail`
 - `rhythmDetail`
+- `rhythmTimeline`
 - `melodyDetail`
 - `transcriptionDetail`
+- `pitchDetail`
 - `grooveDetail`
+- `beatsLoudness`
 - `sidechainDetail`
+- `acidDetail`
+- `reverbDetail`
+- `vocalDetail`
+- `supersawDetail`
+- `bassDetail`
+- `kickDetail`
+- `genreDetail`
 - `effectsDetail`
 - `synthesisCharacter`
 - `danceability`
@@ -230,9 +247,11 @@ Expanded `phase1` sections the current app can consume:
 - `arrangementDetail`
 - `segmentLoudness`
 - `segmentSpectral`
+- `segmentStereo`
 - `segmentKey`
 - `chordDetail`
 - `perceptual`
+- `essentiaFeatures`
 
 Diagnostics fields the UI uses or preserves:
 
@@ -249,9 +268,9 @@ Diagnostics fields the UI uses or preserves:
 - `stdoutSnippet`
 - `stderrSnippet`
 
-Important current limitations:
+Current contract notes:
 
-- the backend omits raw analyzer fields such as `bpmPercival`, `bpmAgreement`, `dynamicCharacter`, `segmentStereo`, and `essentiaFeatures`, so the UI never receives them from `server.py`
+- all raw `analyze.py` fields are now forwarded through the server `phase1` wrapper. Fields that were previously dropped (`bpmPercival`, `bpmAgreement`, `dynamicCharacter`, `segmentStereo`, `essentiaFeatures`, …) are now part of the HTTP envelope.
 
 ### Error Response
 

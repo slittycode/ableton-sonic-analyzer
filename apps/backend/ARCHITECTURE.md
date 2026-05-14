@@ -190,42 +190,42 @@ Query parameters accepted by both routes:
 - `phase1`
 - `diagnostics`
 
-`phase1` contains normalized scalars:
+`phase1` contains normalized scalars (see [`server_phase1.py`](server_phase1.py) `_build_phase1` for the authoritative list):
 
-- `bpm`
-- `bpmConfidence`
-- `bpmPercival`
-- `bpmAgreement`
-- `key`
-- `keyConfidence`
-- `keyProfile`
-- `tuningFrequency`
-- `tuningCents`
-- `timeSignature`
-- `durationSeconds`
-- `sampleRate`
-- `lufsIntegrated`
-- `lufsRange`
-- `lufsMomentaryMax`
-- `lufsShortTermMax`
-- `truePeak`
-- `crestFactor`
-- `dynamicSpread`
-- `stereoWidth`
-- `stereoCorrelation`
-- `spectralBalance`
+- BPM family: `bpm`, `bpmConfidence`, `bpmPercival`, `bpmAgreement`, `bpmDoubletime`, `bpmSource`, `bpmRawOriginal`
+- Key family: `key`, `keyConfidence`, `keyProfile`, `tuningFrequency`, `tuningCents`
+- Time signature: `timeSignature`, `timeSignatureSource`, `timeSignatureConfidence`
+- Duration / sample rate: `durationSeconds`, `sampleRate`
+- Loudness: `lufsIntegrated`, `lufsRange`, `lufsMomentaryMax`, `lufsShortTermMax`, `lufsCurve`, `truePeak`, `plr`, `crestFactor`, `dynamicSpread`
+- Dynamics character: `dynamicCharacter`, `textureCharacter`
+- Stereo: `stereoWidth`, `stereoCorrelation`, `monoCompatible`
+- Spectral balance: `spectralBalance` (seven-band scalar object)
 
-`phase1` forwards these raw analyzer sections unchanged:
+`phase1` forwards these raw analyzer sections (re-normalized where noted):
 
-- `dynamicCharacter`
 - `stereoDetail`
-- `spectralDetail`
-- `rhythmDetail` (includes `tempoStability`, `phraseGrid`)
+- `spectralDetail` (per-stem keys are renamed to the top-level `Mean`-suffix shape by `_normalize_spectral_detail`)
+- `spectralBalanceTimeSeries`
+- `stemAnalysis` (per-stem spectralDetail renamed to match the top-level contract by `_normalize_stem_analysis`)
+- `transientDensityDetail`
+- `saturationDetail`
+- `snareDetail`
+- `hihatDetail`
+- `rhythmDetail` (includes `tempoStability`, `phraseGrid`, `tempoCurve`)
+- `rhythmTimeline`
 - `melodyDetail`
 - `transcriptionDetail`
+- `pitchDetail`
 - `grooveDetail`
 - `beatsLoudness`
 - `sidechainDetail` (includes `envelopeShape`)
+- `acidDetail`
+- `reverbDetail`
+- `vocalDetail`
+- `supersawDetail`
+- `bassDetail`
+- `kickDetail`
+- `genreDetail`
 - `effectsDetail`
 - `synthesisCharacter`
 - `danceability`
