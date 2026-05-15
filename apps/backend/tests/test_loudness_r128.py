@@ -1,6 +1,6 @@
 """EBU R128 verification + regression gate for ASA's loudness path.
 
-Track 1 of the external-repo incorporation plan (docs/external-repo-review-2026-05-13.md)
+Track 1 of the external-repo incorporation plan (docs/history/external-repo-review-2026-05-13.md)
 asked: is ASA's integrated-LUFS implementation correct, or does it lag the BS.1770-5
 revision? This module answers that with the EBU Tech 3341 compliance signals — the
 canonical loudness conformance test set — and now also gates the sample-rate
@@ -160,7 +160,7 @@ class TestLoudnessR128AtNon441kHz(unittest.TestCase):
     bug* (sample rate not threaded), not an algorithm bug.
 
     Originally the open finding from the verification spike documented
-    in docs/external-repo-review-2026-05-13.md (Track 1 follow-up). The
+    in docs/history/external-repo-review-2026-05-13.md (Track 1 follow-up). The
     follow-up fix lives in this branch's companion edits to
     ``analyze_core.analyze_loudness`` (now takes ``sample_rate``) and
     its call sites in ``analyze.py``; the regression test below

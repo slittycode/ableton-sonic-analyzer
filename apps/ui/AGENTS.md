@@ -4,8 +4,8 @@
 
 - This file applies to `apps/ui` inside the `asa` monorepo.
 - Stack: React 19, TypeScript, Vite 6, Tailwind CSS v4, Vitest, Playwright.
-- The app talks to the local `sonic-analyzer` backend.
-- No repo-local `.cursorrules`, `.cursor/rules/`, or `.github/copilot-instructions.md` exist here as of 2026-03-10.
+- The app talks to the local `sonic-analyzer` backend. Gemini is backend-mediated; the UI does **not** import an AI SDK.
+- No repo-local `.cursorrules`, `.cursor/rules/`, or `.github/copilot-instructions.md` exist here as of 2026-05-15.
 
 ## Working Style For Agents
 
@@ -88,12 +88,21 @@ RUN_GEMINI_LIVE_SMOKE=true VITE_ENABLE_PHASE2_GEMINI=true GEMINI_API_KEY=your_ke
 ## File Map
 
 - `src/App.tsx`: upload flow, estimate flow, phase orchestration, diagnostic log state.
-- `src/services/backendPhase1Client.ts`: backend transport, parsing, timeout handling, error mapping.
-- `src/services/analyzer.ts`: phase orchestration and Gemini entry.
-- `src/types.ts`: shared frontend contract types.
+- `src/services/analysisRunsClient.ts`: **canonical transport.** Creates runs against `/api/analysis-runs`, polls snapshots, fetches pitch/note translations and interpretations.
+- `src/services/analyzer.ts`: phase orchestration entry point — sequences run creation, polling, and display payload projection.
+- `src/services/backendPhase1Client.ts`: **legacy multipart transport.** Typed error classes, `AbortController` timeouts, identity probe via `/openapi.json`. Kept for the compatibility wrappers; new flows go through `analysisRunsClient.ts`.
+- `src/services/spectralArtifactsClient.ts`: fetches spectrogram/spectral-evolution artifacts via `/api/analysis-runs/{run_id}/artifacts/…`.
+- `src/services/sampleGenerationClient.ts`: typed client for the Phase 3 audition-sample manifest (`POST/GET /api/analysis-runs/{run_id}/samples`).
+- `src/services/mixDoctor.ts`: client-side mix advisory scoring against measured spectral balance.
+- `src/services/phase2Validator.ts`: runtime guardrail. Validates Phase 2 consistency against Phase 1 (BPM/key/LUFS/genre/numeric bounds).
+- `src/services/fieldAnalytics.ts`: tracks which Phase 1 fields drive Phase 2 recommendations per run.
+- `src/services/midi/`: MIDI export, preview, and quantization utilities.
+- `src/services/sessionMusician/`: Session Musician note pipeline (filtering, source switching).
+- `src/types.ts` + `src/types/`: `types.ts` is a barrel re-export of `./types/{measurement,interpretation,backend,samples}.ts`. `Phase1Result` lives in `types/measurement.ts`; `AnalysisRunSnapshot` in `types/backend.ts`; `Phase2Result` in `types/interpretation.ts`; the audition-sample manifest in `types/samples.ts`.
 - `src/index.css`: Tailwind theme tokens and visual language.
 - `tests/services/*`: unit and service tests.
 - `tests/smoke/*`: smoke and live smoke coverage.
+- `tests/e2e/*`: canonical no-Gemini integration spec plus live full-stack Gemini specs (Playwright).
 
 ## Code Style
 

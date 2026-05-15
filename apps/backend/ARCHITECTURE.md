@@ -5,18 +5,28 @@
 | Component | Role |
 | --- | --- |
 | `analyze.py` | Raw CLI analyzer entry point. Loads audio, coordinates the `analyze_*.py` feature modules (see [Analyzer Submodules](#analyzer-submodules) below), optionally separates stems and transcribes notes through torchcrepe, then prints JSON to `stdout`. |
-| `server.py` + `server_phase1.py` / `server_phase2.py` / `server_upload.py` | FastAPI app and router composition. Accepts uploads, computes estimates, manages the canonical staged run API, normalizes measurement results, and serves artifact access. |
+| `server.py` + `server_phase1.py` / `server_phase2.py` / `server_upload.py` / `server_samples.py` | FastAPI app and router composition. Accepts uploads, computes estimates, manages the canonical staged run API, normalizes measurement results, and serves artifact access. `server_samples.py` owns the Phase 3 audition-sample routes. |
 | `analysis_runtime.py` | Run-state persistence and staged-analysis orchestration. Owns run snapshots, stage status, artifact metadata, and ownership checks. |
+| `stage_status.py` | Helpers for normalizing stage execution status across the runtime and HTTP surfaces (e.g. `publicStatus` projection). |
 | `artifact_storage.py` | Artifact storage boundary. The current implementation uses the local filesystem, but the runtime now talks to a storage service interface instead of assuming every artifact is a local disk path forever. |
 | `runtime_profile.py` | Runtime/profile switchboard for `local` vs `hosted` behavior and `all` vs `api` vs `worker` process roles. |
 | `auth_context.py` | Hosted-mode user-context resolution. Establishes the current run owner in the canonical API path. |
 | `worker.py` | Dedicated worker-process entry point for hosted-style background stage execution. |
+| `url_ingest.py` | URL-mode ingestion for `POST /api/analysis-runs`. SSRF-guarded against private/loopback/link-local addresses; streams to enforce the shared 100 MiB cap. |
 | `upload_limits.py` | Canonical raw-audio (100 MiB) and request-envelope (101 MiB) limits, plus the protected-route list. Operator contract is generated, not hand-edited — see `scripts/render_upload_limit_contract.py`. |
-| `spectral_viz.py` | Librosa-based spectrogram generation and spectral time-series extraction. Produces mel/chroma PNG spectrograms and per-frame spectral evolution JSON. Called after successful measurement; failures are non-critical. |
+| `csv_export.py` | Registry + serializers for the `GET /api/analysis-runs/{run_id}/export/csv/{field_path}` time-series CSV exports. See [`docs/adr/0001-phase1-json-schema-v1.md`](../../docs/adr/0001-phase1-json-schema-v1.md). |
+| `spectral_viz.py` | Librosa-based spectrogram generation and spectral time-series extraction. Produces mel/chroma PNG spectrograms and per-frame spectral evolution JSON. Called after successful measurement; failures are non-critical. Also hosts the on-demand spectral-enhancement generators (CQT/HPSS/onset/chroma/reassigned). |
+| `dsp_utils.py` + `dsp_bandbank.py` | Shared DSP helpers (downsampling, normalization, batched per-band Butterworth filtering) reused across `analyze_*.py` modules. |
+| `symbolic_extract.py` | Helpers for extracting symbolic (MIDI/note) features from analyzer payloads. |
+| `sample_theory.py` / `sample_drums.py` / `sample_synthesis.py` / `sample_generation.py` | Phase 3 audition samples. `sample_theory.py` plans chord/melody MIDI from Phase 1 (PyTheory with pure-Python fallback). `sample_drums.py` synthesizes kick/snare/hat one-shots from `kickDetail`. `sample_synthesis.py` renders MIDI via FluidSynth with a sine-additive fallback. `sample_generation.py` orchestrates the manifest. See [`docs/SAMPLE_GENERATION.md`](../../docs/SAMPLE_GENERATION.md). |
 | `polyphonic_evaluation.py` + `scripts/evaluate_polyphonic.py` | Research-only offline polyphonic-transcription evaluation harness. Not on the product path. |
+| `phase1_evaluation.py` + `phase1_report_html.py` | Offline evaluation harness for Phase 1 measurement quality. Research-only. |
+| `utils/cleanup.py` | Periodic artifact cleanup helpers used by the server background-task loop. |
 | `tests/test_server.py` | Contract tests for estimate, timeout, and success envelopes. |
 | `tests/test_analyze.py` | Structural snapshot tests for the raw analyzer JSON output. Owns `EXPECTED_TOP_LEVEL_KEYS` — update it whenever you add a root field. |
 | `tests/test_spectral_viz.py` | Unit tests for spectrogram generation, time-series computation, and artifact orchestration. |
+| `tests/test_csv_export.py` | Round-trip CSV-exporter tests against the registry in `csv_export.py`. |
+| `tests/test_sample_*.py` + `tests/test_server_samples.py` | Phase 3 audition-sample synthesis and HTTP contract tests. |
 
 ### Analyzer Submodules
 
@@ -70,6 +80,7 @@ Custom routes:
 - `POST /api/analysis-runs/estimate`
 - `POST /api/analysis-runs` — multipart upload OR URL ingestion. Provide *exactly one* of `track` (multipart `UploadFile`) or `url` (form field with a public `http`/`https` URL). URL mode is SSRF-guarded against private/loopback/link-local addresses and enforces the same 100 MiB cap via streaming. See [`url_ingest.py`](url_ingest.py).
 - `GET /api/analysis-runs/{run_id}`
+- `POST /api/analysis-runs/{run_id}/interrupt` — terminate any active child processes for the run and mark stages interrupted.
 - `DELETE /api/analysis-runs/{run_id}` — owner can delete their own run; operators with `SONIC_ANALYZER_ADMIN_KEY` set can supply `X-Admin-Key` to delete any run. Admin path is closed when the env var is unset.
 - `GET /api/analysis-runs/{run_id}/artifacts` and `…/artifacts/{artifact_id}`
 - `GET /api/analysis-runs/{run_id}/source-audio` — re-serves the original ingested audio for the run. Owner-only (no admin bypass). Saves a round-trip vs looking up the source artifact id first.
@@ -77,6 +88,7 @@ Custom routes:
 - `POST /api/analysis-runs/{run_id}/spectral-enhancements/{kind}` — on-demand spectral artifacts. `kind` is one of `cqt`, `hpss`, `onset`, `chroma_interactive`, or `reassigned` (sharper transient/frequency localization via `librosa.reassigned_spectrogram`).
 - `POST /api/analysis-runs/{run_id}/pitch-note-translations`
 - `POST /api/analysis-runs/{run_id}/interpretations`
+- `POST /api/analysis-runs/{run_id}/samples` and `GET …/samples` — Phase 3 audition-sample manifest (opt-in per run). See [`server_samples.py`](server_samples.py) and [`docs/SAMPLE_GENERATION.md`](../../docs/SAMPLE_GENERATION.md).
 - `POST /api/analyze` (legacy compatibility)
 - `POST /api/analyze/estimate` (legacy compatibility)
 - `POST /api/phase2` (legacy compatibility)

@@ -16,13 +16,22 @@ This repo contains two entry points:
 Canonical live-analysis routes:
 
 - `POST /api/analysis-runs/estimate`
-- `POST /api/analysis-runs`
+- `POST /api/analysis-runs` — multipart upload OR URL ingestion (see [`url_ingest.py`](url_ingest.py))
 - `GET /api/analysis-runs/{run_id}`
-- `GET /api/analysis-runs/{run_id}/artifacts...`
+- `POST /api/analysis-runs/{run_id}/interrupt`
+- `DELETE /api/analysis-runs/{run_id}` — owner delete; `X-Admin-Key` bypasses ownership when `SONIC_ANALYZER_ADMIN_KEY` is set
+- `GET /api/analysis-runs/{run_id}/artifacts` and `…/artifacts/{artifact_id}`
+- `GET /api/analysis-runs/{run_id}/source-audio` — re-serve the originally ingested audio
+- `GET /api/analysis-runs/{run_id}/export/csv/{field_path}` — CSV export of a Phase 1 time-series field (see [`csv_export.py`](csv_export.py))
+- `POST /api/analysis-runs/{run_id}/spectral-enhancements/{kind}` — on-demand spectral artifacts (`cqt`, `hpss`, `onset`, `chroma_interactive`, `reassigned`)
+- `POST /api/analysis-runs/{run_id}/pitch-note-translations`
+- `POST /api/analysis-runs/{run_id}/interpretations`
+- `POST /api/analysis-runs/{run_id}/samples` and `GET …/samples` — Phase 3 audition samples (see [`server_samples.py`](server_samples.py) and [`docs/SAMPLE_GENERATION.md`](../../docs/SAMPLE_GENERATION.md))
 
 Legacy compatibility routes:
 
 - `POST /api/analyze` (legacy compatibility wrapper)
+- `POST /api/analyze/estimate` (legacy compatibility wrapper)
 - `POST /api/phase2` (legacy compatibility wrapper)
 
 FastAPI also serves the usual generated endpoints at `/openapi.json`, `/docs`, and `/redoc`.

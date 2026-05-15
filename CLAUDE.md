@@ -129,14 +129,19 @@ Artifact access goes through `artifact_storage.py` rather than direct disk paths
 
 1. **`analyze.py`**: Pure DSP pipeline entry point. Runs as a subprocess invoked by `server.py`. Coordinates the split feature modules below. **Writes JSON to stdout, diagnostics to stderr** — this contract is load-bearing.
 2. **`analyze_core.py`, `analyze_audio_io.py`, `analyze_detection.py`, `analyze_estimate.py`, `analyze_rhythm.py`, `analyze_segments.py`, `analyze_structure.py`, `analyze_transcription.py`, `analyze_fast.py`**: Feature modules. Loadouts: BPM/key/LUFS/stereo/spectral balance, rhythm/melody detail, segment boundaries, transcription. `analyze_fast.py` is the streamlined pipeline used by `--fast`.
-3. **`server.py`**: FastAPI app and router composition. Routes are organized into `server_phase1.py`, `server_phase2.py`, `server_upload.py`. Handles multipart uploads, invokes `analyze.py` (or worker), normalizes raw output into the `phase1` HTTP contract.
-4. **`analysis_runtime.py`**: SQLite-backed run state and stage queue management. Run state in `.runtime/analysis_runs.sqlite3`; artifacts in `.runtime/artifacts/`.
+3. **`server.py`**: FastAPI app and router composition. Routes are organized into `server_phase1.py`, `server_phase2.py`, `server_upload.py`, `server_samples.py`. Handles multipart uploads, invokes `analyze.py` (or worker), normalizes raw output into the `phase1` HTTP contract.
+4. **`analysis_runtime.py`** + **`stage_status.py`**: SQLite-backed run state and stage queue management. Run state in `.runtime/analysis_runs.sqlite3`; artifacts in `.runtime/artifacts/`. `stage_status.py` owns the `publicStatus` projection surfaced on snapshots.
 5. **`worker.py`**: Dedicated worker-process entry point for hosted-style background stage execution. In `local` profile, work runs in-process; in `hosted` profile, this is the worker role.
 6. **`runtime_profile.py`**: Switchboard for `local` vs `hosted` profile and `all` vs `api` vs `worker` process roles (env: `SONIC_ANALYZER_RUNTIME_PROFILE`, `SONIC_ANALYZER_PROCESS_ROLE`).
 7. **`artifact_storage.py`**: Storage-service boundary. Today writes to local disk; the interface is designed so callers do not assume disk paths forever.
 8. **`auth_context.py`**: Hosted-mode user-context resolution and ownership checks on canonical run routes.
-9. **`upload_limits.py`**: Canonical 100 MiB raw-audio / 101 MiB request-envelope limits. Regenerate the operator contract via `scripts/render_upload_limit_contract.py` if numbers change.
-10. **`spectral_viz.py`**: Librosa-based spectrogram/time-series artifacts. Called after measurement; failures are non-critical.
+9. **`url_ingest.py`**: SSRF-guarded URL-mode ingestion path for `POST /api/analysis-runs`. Streaming download with the shared 100 MiB cap.
+10. **`upload_limits.py`**: Canonical 100 MiB raw-audio / 101 MiB request-envelope limits. Regenerate the operator contract via `scripts/render_upload_limit_contract.py` if numbers change.
+11. **`csv_export.py`**: Registry + serializers for the `GET /api/analysis-runs/{run_id}/export/csv/{field_path}` time-series CSV exports. See [`docs/adr/0001-phase1-json-schema-v1.md`](docs/adr/0001-phase1-json-schema-v1.md).
+12. **`spectral_viz.py`**: Librosa-based spectrogram/time-series artifacts, plus on-demand spectral enhancements (CQT, HPSS, onset, chroma_interactive, reassigned). Called after measurement; failures are non-critical.
+13. **`dsp_utils.py` + `dsp_bandbank.py`**: Shared DSP helpers (downsampling, batched per-band Butterworth filtering) reused across analyzer modules.
+14. **`sample_theory.py`, `sample_drums.py`, `sample_synthesis.py`, `sample_generation.py`, `server_samples.py`**: Phase 3 audition samples. Heuristic WAV/MIDI clips derived from Phase 1 measurements so producers can ear-check the chain of custody. PyTheory + FluidSynth (with sine-additive and pure-Python fallbacks). Endpoints: `POST/GET /api/analysis-runs/{run_id}/samples`. Design: [`docs/SAMPLE_GENERATION.md`](docs/SAMPLE_GENERATION.md).
+15. **`polyphonic_evaluation.py`, `phase1_evaluation.py`, `phase1_report_html.py`**: Research-only offline evaluation harnesses. **Not** on the product path.
 
 The subprocess isolation means `analyze.py` works as a standalone CLI. Check `apps/backend/JSON_SCHEMA.md` before adding new analyzer output fields. Check `apps/backend/ARCHITECTURE.md` for the full HTTP flow and contract details.
 

@@ -1,11 +1,18 @@
 # External Repo Incorporation Review — 2026-05-13
 
+> **Archived 2026-05-15.** Completed review. Outcomes:
+> - **Track 1 (loudness)** — verification spike confirmed Essentia's `LoudnessEBUR128` is correct on stereo program material; sample-rate threading fix shipped in [PR #34](https://github.com/slittycode/ableton-sonic-analyzer/pull/34). Reassigned spectrogram landed as an opt-in spectral enhancement in [PR #43](https://github.com/slittycode/ableton-sonic-analyzer/pull/43).
+> - **Track 2 (schema + CSV export)** — ADR ratified at [`docs/adr/0001-phase1-json-schema-v1.md`](../adr/0001-phase1-json-schema-v1.md); CSV exporter shipped in [PR #35](https://github.com/slittycode/ableton-sonic-analyzer/pull/35).
+> - **Track 3 (REST adopt list)** — URL-mode ingestion ([PR #36](https://github.com/slittycode/ableton-sonic-analyzer/pull/36)), `X-Admin-Key` ([PR #37](https://github.com/slittycode/ableton-sonic-analyzer/pull/37)), source-audio re-serve ([PR #40](https://github.com/slittycode/ableton-sonic-analyzer/pull/40)), and additive `publicStatus` ([PR #42](https://github.com/slittycode/ableton-sonic-analyzer/pull/42)) all landed. SDIF deferred.
+>
+> Kept here for the rationale trail; the action items are no longer live.
+
 **Subject:** Evaluating openmeters, soundscope, Partiels, and forever-jukebox against ASA's mission and current implementation.
 
 **Authored by:** Claude (review-only branch `claude/review-asa-repos-5XA5r`).
 No code changes; this is an evaluation document.
 
-**Anchor:** [PURPOSE.md](../PURPOSE.md) — the user-value test and the
+**Anchor:** [PURPOSE.md](../../PURPOSE.md) — the user-value test and the
 decision framework. Every recommendation below traces back to one of
 its three "build it" criteria or its "stop and reconsider" branch.
 
@@ -27,13 +34,13 @@ its three "build it" criteria or its "stop and reconsider" branch.
 
 | Repo | License | Implication for ASA |
 | --- | --- | --- |
-| **ASA** (this repo) | MIT ([LICENSE](../LICENSE)) | Permissive; can adopt MIT/BSD/Apache code with attribution. **Cannot vendor GPL code.** |
+| **ASA** (this repo) | MIT ([LICENSE](../../LICENSE)) | Permissive; can adopt MIT/BSD/Apache code with attribution. **Cannot vendor GPL code.** |
 | **openmeters** | GPL-3.0 | Algorithms are not copyrightable, but copied/translated *code* is. Read the **ITU-R BS.1770-5 standard PDF** for the algorithm; do not read openmeters' source if you intend to write a clean-room port. Treat as inspiration-only. |
 | **soundscope** | MIT | Code-compatible. But it's TUI-only with no JSON/CLI numeric output, so it can only serve as a *manual* cross-check, not an automated oracle. |
 | **Partiels** | GPL-3.0 | File-format schemas are facts, not copyrightable expression; mirroring its CSV column shape is safe. Do not vendor Partiels code. |
 | **forever-jukebox** | MIT | Code-compatible; safe to read and selectively port. |
 
-**The plan's framing of "port algorithms (NOT fork — Rust → Essentia.js / JS)" misses one thing:** Rust → JS is not the boundary that matters here. ASA's measurement layer is **Python (Essentia)**, not JS/WASM. There is no Essentia.js in this codebase ([analyze_core.py:8](../apps/backend/analyze_core.py)). Re-implementing in JS/WASM would be a second port to the wrong runtime — see Track 1 below.
+**The plan's framing of "port algorithms (NOT fork — Rust → Essentia.js / JS)" misses one thing:** Rust → JS is not the boundary that matters here. ASA's measurement layer is **Python (Essentia)**, not JS/WASM. There is no Essentia.js in this codebase ([analyze_core.py:8](../../apps/backend/analyze_core.py)). Re-implementing in JS/WASM would be a second port to the wrong runtime — see Track 1 below.
 
 ---
 
@@ -41,9 +48,9 @@ its three "build it" criteria or its "stop and reconsider" branch.
 
 ### Where ASA's loudness lives today
 
-- Implementation: [`analyze_core.py:186-230`](../apps/backend/analyze_core.py) — calls `essentia.standard.LoudnessEBUR128()`.
-- True-peak: separate path via `essentia.standard.TruePeakDetector()` at [`analyze_core.py:233-`](../apps/backend/analyze_core.py).
-- Fields emitted: `lufsIntegrated`, `lufsRange`, `lufsMomentaryMax`, `lufsShortTermMax`, `lufsCurve.{shortTerm,momentary}[]`, `truePeak`, `crestFactor`, `plr`. All gated by `EXPECTED_TOP_LEVEL_KEYS` in [`tests/test_analyze.py:26-43`](../apps/backend/tests/test_analyze.py).
+- Implementation: [`analyze_core.py:186-230`](../../apps/backend/analyze_core.py) — calls `essentia.standard.LoudnessEBUR128()`.
+- True-peak: separate path via `essentia.standard.TruePeakDetector()` at [`analyze_core.py:233-`](../../apps/backend/analyze_core.py).
+- Fields emitted: `lufsIntegrated`, `lufsRange`, `lufsMomentaryMax`, `lufsShortTermMax`, `lufsCurve.{shortTerm,momentary}[]`, `truePeak`, `crestFactor`, `plr`. All gated by `EXPECTED_TOP_LEVEL_KEYS` in [`tests/test_analyze.py:26-43`](../../apps/backend/tests/test_analyze.py).
 - Curves are downsampled via `_downsample_lufs_array` in `dsp_utils.py` for payload size.
 
 ### What openmeters offers
@@ -68,7 +75,7 @@ The plan asserts ASA "likely tracks an older BS.1770 rev." Two facts make this l
    - `-4` (2015): multichannel weighting extended to NHK 22.2.
    - `-5` (2023): primarily editorial clarifications + true-peak measurement refinements.
 
-ASA processes stereo audio. The functional delta between Essentia's `LoudnessEBUR128` and an ITU-R BS.1770-5 reference implementation, *on stereo material*, is likely below the precision ASA reports (`round(integrated, 1)` — one decimal place of a LU, per [`analyze_core.py:216`](../apps/backend/analyze_core.py)).
+ASA processes stereo audio. The functional delta between Essentia's `LoudnessEBUR128` and an ITU-R BS.1770-5 reference implementation, *on stereo material*, is likely below the precision ASA reports (`round(integrated, 1)` — one decimal place of a LU, per [`analyze_core.py:216`](../../apps/backend/analyze_core.py)).
 
 This does not mean "do nothing." It means **measure before rewriting**:
 
@@ -111,9 +118,9 @@ But:
 
 ### Where ASA's schema lives today
 
-- Spec: [`apps/backend/JSON_SCHEMA.md`](../apps/backend/JSON_SCHEMA.md) — 60+ top-level keys, deeply nested per-domain detail objects.
-- Test snapshot: `EXPECTED_TOP_LEVEL_KEYS` at [`tests/test_analyze.py:26-43`](../apps/backend/tests/test_analyze.py).
-- Frontend mirror: [`apps/ui/src/types/measurement.ts`](../apps/ui/src/types/measurement.ts) — `Phase1Result` and its detail interfaces.
+- Spec: [`apps/backend/JSON_SCHEMA.md`](../../apps/backend/JSON_SCHEMA.md) — 60+ top-level keys, deeply nested per-domain detail objects.
+- Test snapshot: `EXPECTED_TOP_LEVEL_KEYS` at [`tests/test_analyze.py:26-43`](../../apps/backend/tests/test_analyze.py).
+- Frontend mirror: [`apps/ui/src/types/measurement.ts`](../../apps/ui/src/types/measurement.ts) — `Phase1Result` and its detail interfaces.
 - Time-tagged fields today: `lufsCurve.{shortTerm,momentary}[]` (`{t, lufs}`), `spectralBalanceTimeSeries[]` (`{t, subBass, lowBass, …}`), `rhythmDetail.tempoCurve[]` (`{t, bpm}`), `segmentLoudness`/`segmentSpectral`/`segmentStereo`/`segmentKey` (per-section summary objects, not per-frame).
 - Export formats: JSON (over HTTP); MIDI for melody/transcription via `apps/ui/src/services/midi/midiExport.ts`. **No CSV, SDIF, LAB, or REAPER export today.**
 
@@ -182,7 +189,7 @@ SDIF is IRCAM's binary frame format. The full SDIF spec involves frame/matrix si
 
 ### Where ASA's API lives today
 
-From the survey of [`server.py`](../apps/backend/server.py), [`server_phase1.py`](../apps/backend/server_phase1.py), [`server_phase2.py`](../apps/backend/server_phase2.py), [`server_upload.py`](../apps/backend/server_upload.py), and [`analysis_runtime.py`](../apps/backend/analysis_runtime.py):
+From the survey of [`server.py`](../../apps/backend/server.py), [`server_phase1.py`](../../apps/backend/server_phase1.py), [`server_phase2.py`](../../apps/backend/server_phase2.py), [`server_upload.py`](../../apps/backend/server_upload.py), and [`analysis_runtime.py`](../../apps/backend/analysis_runtime.py):
 
 **Canonical (run-oriented):**
 - `POST /api/analysis-runs` — create run (multipart upload).
@@ -195,11 +202,11 @@ From the survey of [`server.py`](../apps/backend/server.py), [`server_phase1.py`
 - `POST /api/analysis-runs/{run_id}/pitch-note-translations`.
 - `POST /api/analysis-runs/{run_id}/interpretations`.
 
-**Legacy:** `POST /api/analyze`, `POST /api/analyze/estimate`, `POST /api/phase2` — wrappers kept for compatibility only ([CLAUDE.md](../CLAUDE.md), "Staged Analysis Runs").
+**Legacy:** `POST /api/analyze`, `POST /api/analyze/estimate`, `POST /api/phase2` — wrappers kept for compatibility only ([CLAUDE.md](../../CLAUDE.md), "Staged Analysis Runs").
 
 **Error envelope:** Always includes `requestId`, `error.code`, `error.message`, `error.retryable`, `diagnostics`. Stage states: `queued`, `running`, `blocked`, `ready`, `completed`, `failed`, `interrupted`, `not_requested`.
 
-**Upload limit:** 100 MiB raw / 101 MiB request envelope ([`upload_limits.py:7-16`](../apps/backend/upload_limits.py) — `MAX_UPLOAD_SIZE_BYTES` 104,857,600 + `UPLOAD_REQUEST_SIZE_SLACK_BYTES` 1,048,576 = 105,906,176 bytes = 101 MiB).
+**Upload limit:** 100 MiB raw / 101 MiB request envelope ([`upload_limits.py:7-16`](../../apps/backend/upload_limits.py) — `MAX_UPLOAD_SIZE_BYTES` 104,857,600 + `UPLOAD_REQUEST_SIZE_SLACK_BYTES` 1,048,576 = 105,906,176 bytes = 101 MiB).
 
 ### What forever-jukebox exposes
 
@@ -230,7 +237,7 @@ From [`api/README.md`](https://github.com/creightonlinza/forever-jukebox/blob/ma
 | Job retry | Auto-creates a new job on resubmission of a retryable failure | Client must explicitly recreate the run; `error.retryable` is advisory | **forever-jukebox slightly leads.** ASA's `retryable` flag is informative; turning it into automatic retry on resubmit would close the loop. |
 | Discovery (top/trending/recent) | Yes | No | **Out of scope** for ASA's target user — they have a specific reference track, not a feed. |
 | Search (Spotify/YouTube) | Yes | No | **Out of scope** for ASA — pulling rights-restricted audio is a separate product question. |
-| Admin auth | `X-Admin-Key` header | None at the canonical-API layer ([`auth_context.py`](../apps/backend/auth_context.py) handles hosted-mode user context but not admin) | **forever-jukebox leads operationally**; ASA has a forward design for hosted auth but no admin-key surface for operator tasks (purge a run, audit a job). Worth filing. |
+| Admin auth | `X-Admin-Key` header | None at the canonical-API layer ([`auth_context.py`](../../apps/backend/auth_context.py) handles hosted-mode user context but not admin) | **forever-jukebox leads operationally**; ASA has a forward design for hosted auth but no admin-key surface for operator tasks (purge a run, audit a job). Worth filing. |
 | Audio re-serve | `GET /api/audio/<id>` | No | **Worth considering** — ASA already persists artifacts; re-serving the original audio at the staged endpoint avoids re-uploading on Phase 2 reruns. |
 
 ### Adopt / Adapt / Reject per endpoint
@@ -244,13 +251,13 @@ From [`api/README.md`](https://github.com/creightonlinza/forever-jukebox/blob/ma
 | Collapsed public state machine | **Adapt** | Keep the 8 internal states; expose 5 in the public snapshot. Map `blocked` and `not_requested` to `pending`; map `ready` to `queued`. Document the collapse in JSON_SCHEMA.md. |
 | `X-Admin-Key` for admin ops | **Adopt** | Apply to `DELETE /api/analysis-runs/{run_id}` and a forthcoming `GET /api/admin/runs` listing. Gate via existing `auth_context.py`. |
 | Search / discovery / favorites / play tracking | **Reject** | Out of scope for the recreation-blueprint mission. PURPOSE.md decision-framework branch 5: "stop and reconsider." |
-| Echo Nest-style beats/segments/sections output | **Reject** | ASA emits richer, named domain measurements ([`JSON_SCHEMA.md`](../apps/backend/JSON_SCHEMA.md)). Adopting Echo Nest's flat segment schema would collapse the citation chain (Quality Invariant #2). |
+| Echo Nest-style beats/segments/sections output | **Reject** | ASA emits richer, named domain measurements ([`JSON_SCHEMA.md`](../../apps/backend/JSON_SCHEMA.md)). Adopting Echo Nest's flat segment schema would collapse the citation chain (Quality Invariant #2). |
 
 ### Definition of done (revised)
 
 - [ ] Side-by-side endpoint comparison committed (this section is the seed; expand into `docs/api-comparison-2026-05-13.md` if it gets longer).
 - [ ] ADR per "adopt" decision: URL input, admin key, audio re-serve, collapsed public state machine.
-- [ ] API doc updated (currently lives in [`apps/backend/ARCHITECTURE.md`](../apps/backend/ARCHITECTURE.md)) — specifically the public state-machine collapse, since it's the only contract-shape change.
+- [ ] API doc updated (currently lives in [`apps/backend/ARCHITECTURE.md`](../../apps/backend/ARCHITECTURE.md)) — specifically the public state-machine collapse, since it's the only contract-shape change.
 
 ---
 
@@ -286,7 +293,7 @@ The plan's "Out of scope" list is correct:
 - **spleeter-web** — revisit when ASA adds stems beyond Demucs.
 - **Olaf** — revisit if cross-take alignment becomes a feature.
 - **nightingale** — desktop shell; not relevant until/unless ASA grows a desktop app.
-- **ChordMiniApp / chordonomicon / rawl** — harmonic-domain tools; flagged separately in [`BACKLOG.md`](../BACKLOG.md) as a Harmonia track.
+- **ChordMiniApp / chordonomicon / rawl** — harmonic-domain tools; flagged separately in [`BACKLOG.md`](../../BACKLOG.md) as a Harmonia track.
 
 No change to the deferral logic.
 
@@ -294,7 +301,7 @@ No change to the deferral logic.
 
 ## Sources
 
-- Anchoring docs in this repo: [PURPOSE.md](../PURPOSE.md), [CLAUDE.md](../CLAUDE.md), [apps/backend/JSON_SCHEMA.md](../apps/backend/JSON_SCHEMA.md), [apps/backend/analyze_core.py](../apps/backend/analyze_core.py), [apps/backend/upload_limits.py](../apps/backend/upload_limits.py).
+- Anchoring docs in this repo: [PURPOSE.md](../../PURPOSE.md), [CLAUDE.md](../../CLAUDE.md), [apps/backend/JSON_SCHEMA.md](../../apps/backend/JSON_SCHEMA.md), [apps/backend/analyze_core.py](../../apps/backend/analyze_core.py), [apps/backend/upload_limits.py](../../apps/backend/upload_limits.py).
 - [openmeters on GitHub](https://github.com/httpsworldview/openmeters) (GPL-3.0).
 - [bananaofhappiness/soundscope on GitHub](https://github.com/bananaofhappiness/soundscope) (MIT).
 - [Ircam-Partiels/Partiels on GitHub](https://github.com/Ircam-Partiels/Partiels) (GPL-3.0).

@@ -1,6 +1,6 @@
 # Sample Generation (Phase 3 — Audition)
 
-> **Status:** Prototype on `claude/gemini-sample-generation-U753E`. Not yet promoted to a mandatory pipeline stage.
+> **Status:** Shipped (PRs [#45](https://github.com/slittycode/ableton-sonic-analyzer/pull/45), [#46](https://github.com/slittycode/ableton-sonic-analyzer/pull/46)). Opt-in per run; not auto-enqueued.
 > **Mission fit:** Improves the user's ability to *act on* Phase 2 results by producing audible reference clips they can A/B against the source track.
 
 ## Why This Exists
