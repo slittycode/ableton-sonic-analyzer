@@ -24,6 +24,7 @@ The app uploads a track to the local DSP backend, shows the estimate and executi
   - quantize grid and swing controls
   - browser preview and `.mid` download
 - JSON export and markdown report export
+- Phase 3 audition-sample playback panel — on-demand heuristic WAV/MIDI clips with citation metadata, requested after interpretation completes
 - collapsible diagnostic log with request IDs, durations, estimate ranges, and backend or Gemini status
 - semantic theme token system for status colors and surface backgrounds
 - mobile-responsive layouts across header, results grid, and upload flow
@@ -142,7 +143,10 @@ Legacy note:
 
 ## Backend Contract Used by the UI
 
-The app talks to two backend routes.
+The two routes below drive the core upload-and-analyze flow. The app also calls
+the canonical run sub-resources — artifacts, source audio, CSV export, spectral
+enhancements, pitch/note translations, interpretations, and on-demand audition
+samples — through `src/services/analysisRunsClient.ts` and its sibling clients.
 
 ### `POST /api/analysis-runs/estimate`
 

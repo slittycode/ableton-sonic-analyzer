@@ -88,7 +88,8 @@ export interface SpectralArtifactRef {
     | 'spectrogram_cqt'
     | 'spectrogram_harmonic'
     | 'spectrogram_percussive'
-    | 'spectrogram_onset';
+    | 'spectrogram_onset'
+    | 'spectrogram_reassigned';
   filename: string;
   mimeType: string;
   sizeBytes: number;

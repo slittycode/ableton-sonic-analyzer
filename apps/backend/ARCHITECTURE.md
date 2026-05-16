@@ -5,7 +5,7 @@
 | Component | Role |
 | --- | --- |
 | `analyze.py` | Raw CLI analyzer entry point. Loads audio, coordinates the `analyze_*.py` feature modules (see [Analyzer Submodules](#analyzer-submodules) below), optionally separates stems and transcribes notes through torchcrepe, then prints JSON to `stdout`. |
-| `server.py` + `server_phase1.py` / `server_phase2.py` / `server_upload.py` / `server_samples.py` | FastAPI app and router composition. Accepts uploads, computes estimates, manages the canonical staged run API, normalizes measurement results, and serves artifact access. `server_samples.py` owns the Phase 3 audition-sample routes. |
+| `server.py` + `server_phase1.py` / `server_phase2.py` / `server_upload.py` / `server_samples.py` | FastAPI app and router composition. Accepts uploads, computes estimates, manages the canonical staged run API, normalizes measurement results, serves artifact access, and exposes the on-demand Phase 3 audition-sample routes. |
 | `analysis_runtime.py` | Run-state persistence and staged-analysis orchestration. Owns run snapshots, stage status, artifact metadata, and ownership checks. |
 | `stage_status.py` | Helpers for normalizing stage execution status across the runtime and HTTP surfaces (e.g. `publicStatus` projection). |
 | `artifact_storage.py` | Artifact storage boundary. The current implementation uses the local filesystem, but the runtime now talks to a storage service interface instead of assuming every artifact is a local disk path forever. |
@@ -14,11 +14,13 @@
 | `worker.py` | Dedicated worker-process entry point for hosted-style background stage execution. |
 | `url_ingest.py` | URL-mode ingestion for `POST /api/analysis-runs`. SSRF-guarded against private/loopback/link-local addresses; streams to enforce the shared 100 MiB cap. |
 | `upload_limits.py` | Canonical raw-audio (100 MiB) and request-envelope (101 MiB) limits, plus the protected-route list. Operator contract is generated, not hand-edited — see `scripts/render_upload_limit_contract.py`. |
-| `csv_export.py` | Registry + serializers for the `GET /api/analysis-runs/{run_id}/export/csv/{field_path}` time-series CSV exports. See [`docs/adr/0001-phase1-json-schema-v1.md`](../../docs/adr/0001-phase1-json-schema-v1.md). |
-| `spectral_viz.py` | Librosa-based spectrogram generation and spectral time-series extraction. Produces mel/chroma PNG spectrograms and per-frame spectral evolution JSON. Called after successful measurement; failures are non-critical. Also hosts the on-demand spectral-enhancement generators (CQT/HPSS/onset/chroma/reassigned). |
-| `dsp_utils.py` + `dsp_bandbank.py` | Shared DSP helpers (downsampling, normalization, batched per-band Butterworth filtering) reused across `analyze_*.py` modules. |
-| `symbolic_extract.py` | Helpers for extracting symbolic (MIDI/note) features from analyzer payloads. |
-| `sample_theory.py` / `sample_drums.py` / `sample_synthesis.py` / `sample_generation.py` | Phase 3 audition samples. `sample_theory.py` plans chord/melody MIDI from Phase 1 (PyTheory with pure-Python fallback). `sample_drums.py` synthesizes kick/snare/hat one-shots from `kickDetail`. `sample_synthesis.py` renders MIDI via FluidSynth with a sine-additive fallback. `sample_generation.py` orchestrates the manifest. See [`docs/SAMPLE_GENERATION.md`](../../docs/SAMPLE_GENERATION.md). |
+| `spectral_viz.py` | Librosa-based spectrogram generation and spectral time-series extraction. Produces mel/chroma PNG spectrograms and per-frame spectral evolution JSON. Called after successful measurement; failures are non-critical. |
+| `url_ingest.py` | SSRF-guarded URL-mode ingestion for `POST /api/analysis-runs`. Fetches a public `http`/`https` audio file and feeds the bytes through the same downstream pipeline as a multipart upload. |
+| `csv_export.py` | CSV exporters for Phase 1 time-series fields, keyed by dotted JSON path. Backs `GET /api/analysis-runs/{run_id}/export/csv/{field_path}` and keeps the route handler a thin lookup-and-serve. |
+| `stage_status.py` | Collapses the eight internal stage statuses into the additive client-facing `publicStatus` field carried on every stage in the run snapshot. |
+| `server_samples.py` + `sample_generation.py` / `sample_theory.py` / `sample_synthesis.py` / `sample_drums.py` | Phase 3 audition-sample generation. PyTheory musical plan, FluidSynth (sine-additive fallback) audio render, NumPy drum one-shots, and a citation manifest tying every clip back to a Phase 1 field. On-demand only — not part of the staged-execution queue. See [`docs/SAMPLE_GENERATION.md`](../../docs/SAMPLE_GENERATION.md). |
+| `dsp_bandbank.py` + `dsp_utils.py` | Shared DSP primitives: `BatchedBandpass` (4th-order Butterworth bandpass bank with zero-phase `filtfilt`) and cross-module utility functions. |
+| `phase1_evaluation.py` + `phase1_report_html.py` | Offline Phase 1 evaluation harness — deterministic-metric and detector-stability reporting, with a standalone HTML render. Not on the product path; driven by `scripts/evaluate_phase1.py`. |
 | `polyphonic_evaluation.py` + `scripts/evaluate_polyphonic.py` | Research-only offline polyphonic-transcription evaluation harness. Not on the product path. |
 | `phase1_evaluation.py` + `phase1_report_html.py` | Offline evaluation harness for Phase 1 measurement quality. Research-only. |
 | `utils/cleanup.py` | Periodic artifact cleanup helpers used by the server background-task loop. |
@@ -88,7 +90,7 @@ Custom routes:
 - `POST /api/analysis-runs/{run_id}/spectral-enhancements/{kind}` — on-demand spectral artifacts. `kind` is one of `cqt`, `hpss`, `onset`, `chroma_interactive`, or `reassigned` (sharper transient/frequency localization via `librosa.reassigned_spectrogram`).
 - `POST /api/analysis-runs/{run_id}/pitch-note-translations`
 - `POST /api/analysis-runs/{run_id}/interpretations`
-- `POST /api/analysis-runs/{run_id}/samples` and `GET …/samples` — Phase 3 audition-sample manifest (opt-in per run). See [`server_samples.py`](server_samples.py) and [`docs/SAMPLE_GENERATION.md`](../../docs/SAMPLE_GENERATION.md).
+- `POST /api/analysis-runs/{run_id}/samples` and `GET /api/analysis-runs/{run_id}/samples` — on-demand Phase 3 audition-sample generation and retrieval. Nothing in the staged-execution loop runs these automatically; the UI POSTs after interpretation completes. See [`server_samples.py`](server_samples.py) and [`docs/SAMPLE_GENERATION.md`](../../docs/SAMPLE_GENERATION.md).
 - `POST /api/analyze` (legacy compatibility)
 - `POST /api/analyze/estimate` (legacy compatibility)
 - `POST /api/phase2` (legacy compatibility)

@@ -16,17 +16,16 @@ This repo contains two entry points:
 Canonical live-analysis routes:
 
 - `POST /api/analysis-runs/estimate`
-- `POST /api/analysis-runs` — multipart upload OR URL ingestion (see [`url_ingest.py`](url_ingest.py))
+- `POST /api/analysis-runs` — multipart upload or SSRF-guarded URL ingestion
 - `GET /api/analysis-runs/{run_id}`
-- `POST /api/analysis-runs/{run_id}/interrupt`
-- `DELETE /api/analysis-runs/{run_id}` — owner delete; `X-Admin-Key` bypasses ownership when `SONIC_ANALYZER_ADMIN_KEY` is set
-- `GET /api/analysis-runs/{run_id}/artifacts` and `…/artifacts/{artifact_id}`
-- `GET /api/analysis-runs/{run_id}/source-audio` — re-serve the originally ingested audio
-- `GET /api/analysis-runs/{run_id}/export/csv/{field_path}` — CSV export of a Phase 1 time-series field (see [`csv_export.py`](csv_export.py))
-- `POST /api/analysis-runs/{run_id}/spectral-enhancements/{kind}` — on-demand spectral artifacts (`cqt`, `hpss`, `onset`, `chroma_interactive`, `reassigned`)
+- `DELETE /api/analysis-runs/{run_id}` — owner delete; operator `X-Admin-Key` bypass when `SONIC_ANALYZER_ADMIN_KEY` is set
+- `GET /api/analysis-runs/{run_id}/artifacts...`
+- `GET /api/analysis-runs/{run_id}/source-audio`
+- `GET /api/analysis-runs/{run_id}/export/csv/{field_path}`
+- `POST /api/analysis-runs/{run_id}/spectral-enhancements/{kind}`
 - `POST /api/analysis-runs/{run_id}/pitch-note-translations`
 - `POST /api/analysis-runs/{run_id}/interpretations`
-- `POST /api/analysis-runs/{run_id}/samples` and `GET …/samples` — Phase 3 audition samples (see [`server_samples.py`](server_samples.py) and [`docs/SAMPLE_GENERATION.md`](../../docs/SAMPLE_GENERATION.md))
+- `POST /api/analysis-runs/{run_id}/samples` and `GET /api/analysis-runs/{run_id}/samples` — on-demand Phase 3 audition samples
 
 Legacy compatibility routes:
 
@@ -43,7 +42,9 @@ FastAPI also serves the usual generated endpoints at `/openapi.json`, `/docs`, a
 - NumPy
 - Demucs
 - torchcrepe (pitch/note translation)
-- mido
+- librosa (spectrogram / spectral time-series artifacts)
+- mido / pretty_midi
+- pytheory + pyfluidsynth (Phase 3 audition-sample generation)
 - FastAPI
 - Uvicorn
 

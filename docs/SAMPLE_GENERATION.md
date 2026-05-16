@@ -1,6 +1,6 @@
 # Sample Generation (Phase 3 — Audition)
 
-> **Status:** Shipped (PRs [#45](https://github.com/slittycode/ableton-sonic-analyzer/pull/45), [#46](https://github.com/slittycode/ableton-sonic-analyzer/pull/46)). Opt-in per run; not auto-enqueued.
+> **Status:** Shipped on `main` as an on-demand feature (`POST/GET /api/analysis-runs/{run_id}/samples`). Not part of the staged-execution queue — the UI requests it explicitly after interpretation completes.
 > **Mission fit:** Improves the user's ability to *act on* Phase 2 results by producing audible reference clips they can A/B against the source track.
 
 ## Why This Exists

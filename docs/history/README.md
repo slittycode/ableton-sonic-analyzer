@@ -14,6 +14,7 @@ Everything in this directory is past-tense. Treat it as a paper trail, not a sou
 
 - `optimization-plan.md` — completed optimization workstream.
 - `phase1-hardening-plan.md` — completed Phase 1 hardening plan.
+- `library-review-torchfx-2026-05-13.md` — one-shot library evaluation of torchfx against ASA's DSP path.
 - `phase1-audit/` — one-shot advisory deliverable: audit, decks, evidence index, visual story pack.
 - `library-review-torchfx-2026-05-13.md` — completed library review.
 - `external-repo-review-2026-05-13.md` — completed external-repo incorporation review (openmeters / soundscope / Partiels / forever-jukebox). All three tracks resolved.
