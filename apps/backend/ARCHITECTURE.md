@@ -7,22 +7,19 @@
 | `analyze.py` | Raw CLI analyzer entry point. Loads audio, coordinates the `analyze_*.py` feature modules (see [Analyzer Submodules](#analyzer-submodules) below), optionally separates stems and transcribes notes through torchcrepe, then prints JSON to `stdout`. |
 | `server.py` + `server_phase1.py` / `server_phase2.py` / `server_upload.py` / `server_samples.py` | FastAPI app and router composition. Accepts uploads, computes estimates, manages the canonical staged run API, normalizes measurement results, serves artifact access, and exposes the on-demand Phase 3 audition-sample routes. |
 | `analysis_runtime.py` | Run-state persistence and staged-analysis orchestration. Owns run snapshots, stage status, artifact metadata, and ownership checks. |
-| `stage_status.py` | Helpers for normalizing stage execution status across the runtime and HTTP surfaces (e.g. `publicStatus` projection). |
 | `artifact_storage.py` | Artifact storage boundary. The current implementation uses the local filesystem, but the runtime now talks to a storage service interface instead of assuming every artifact is a local disk path forever. |
 | `runtime_profile.py` | Runtime/profile switchboard for `local` vs `hosted` behavior and `all` vs `api` vs `worker` process roles. |
 | `auth_context.py` | Hosted-mode user-context resolution. Establishes the current run owner in the canonical API path. |
 | `worker.py` | Dedicated worker-process entry point for hosted-style background stage execution. |
-| `url_ingest.py` | URL-mode ingestion for `POST /api/analysis-runs`. SSRF-guarded against private/loopback/link-local addresses; streams to enforce the shared 100 MiB cap. |
 | `upload_limits.py` | Canonical raw-audio (100 MiB) and request-envelope (101 MiB) limits, plus the protected-route list. Operator contract is generated, not hand-edited — see `scripts/render_upload_limit_contract.py`. |
 | `spectral_viz.py` | Librosa-based spectrogram generation and spectral time-series extraction. Produces mel/chroma PNG spectrograms and per-frame spectral evolution JSON. Called after successful measurement; failures are non-critical. |
-| `url_ingest.py` | SSRF-guarded URL-mode ingestion for `POST /api/analysis-runs`. Fetches a public `http`/`https` audio file and feeds the bytes through the same downstream pipeline as a multipart upload. |
+| `url_ingest.py` | SSRF-guarded URL-mode ingestion for `POST /api/analysis-runs`. Fetches a public `http`/`https` audio file and streams the bytes through the same downstream pipeline as a multipart upload, enforcing the shared 100 MiB cap. |
 | `csv_export.py` | CSV exporters for Phase 1 time-series fields, keyed by dotted JSON path. Backs `GET /api/analysis-runs/{run_id}/export/csv/{field_path}` and keeps the route handler a thin lookup-and-serve. |
 | `stage_status.py` | Collapses the eight internal stage statuses into the additive client-facing `publicStatus` field carried on every stage in the run snapshot. |
 | `server_samples.py` + `sample_generation.py` / `sample_theory.py` / `sample_synthesis.py` / `sample_drums.py` | Phase 3 audition-sample generation. PyTheory musical plan, FluidSynth (sine-additive fallback) audio render, NumPy drum one-shots, and a citation manifest tying every clip back to a Phase 1 field. On-demand only — not part of the staged-execution queue. See [`docs/SAMPLE_GENERATION.md`](../../docs/SAMPLE_GENERATION.md). |
 | `dsp_bandbank.py` + `dsp_utils.py` | Shared DSP primitives: `BatchedBandpass` (4th-order Butterworth bandpass bank with zero-phase `filtfilt`) and cross-module utility functions. |
 | `phase1_evaluation.py` + `phase1_report_html.py` | Offline Phase 1 evaluation harness — deterministic-metric and detector-stability reporting, with a standalone HTML render. Not on the product path; driven by `scripts/evaluate_phase1.py`. |
 | `polyphonic_evaluation.py` + `scripts/evaluate_polyphonic.py` | Research-only offline polyphonic-transcription evaluation harness. Not on the product path. |
-| `phase1_evaluation.py` + `phase1_report_html.py` | Offline evaluation harness for Phase 1 measurement quality. Research-only. |
 | `utils/cleanup.py` | Periodic artifact cleanup helpers used by the server background-task loop. |
 | `tests/test_server.py` | Contract tests for estimate, timeout, and success envelopes. |
 | `tests/test_analyze.py` | Structural snapshot tests for the raw analyzer JSON output. Owns `EXPECTED_TOP_LEVEL_KEYS` — update it whenever you add a root field. |
