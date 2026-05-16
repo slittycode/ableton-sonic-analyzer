@@ -112,7 +112,7 @@ python3.11 -m venv venv
 - `analysis_runtime.py`: SQLite-backed run state, stage queue, artifact metadata.
 - `worker.py`, `runtime_profile.py`, `auth_context.py`, `artifact_storage.py`: Hosted-mode foundation. Local mode shouldn't branch through these unless it has to.
 - `upload_limits.py`: Canonical 100 MiB raw-audio / 101 MiB request-envelope limits. Operator contract is generated, not hand-edited.
-- `url_ingest.py`: SSRF-guarded URL-mode ingestion for `POST /api/analysis-runs`. Fetches a public `http`/`https` audio file and streams the bytes through the same downstream pipeline as a multipart upload.
+- `url_ingest.py`: SSRF-guarded URL-mode ingestion for `POST /api/analysis-runs`. Fetches a public `http`/`https` audio file and streams the bytes through the same downstream pipeline as a multipart upload, enforcing the shared 100 MiB cap.
 - `csv_export.py`: CSV exporters for Phase 1 time-series fields; backs `GET /api/analysis-runs/{run_id}/export/csv/{field_path}`.
 - `stage_status.py`: Collapses the eight internal stage statuses into the additive client-facing `publicStatus` field carried on every stage in the run snapshot.
 - `sample_generation.py`, `sample_theory.py`, `sample_synthesis.py`, `sample_drums.py`: Phase 3 audition-sample generation — PyTheory plan, FluidSynth/sine-additive render, NumPy drum one-shots, citation manifest. On-demand only.
