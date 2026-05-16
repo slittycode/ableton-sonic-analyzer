@@ -7,7 +7,7 @@
 - The repo is a local Python audio-analysis service with two entry points:
   - `analyze.py`: raw CLI analyzer
   - `server.py`: FastAPI wrapper around the CLI
-- There are no repo-local Cursor rules, `.cursorrules`, or Copilot instruction files in this repo as of 2026-03-10.
+- There are no repo-local Cursor rules, `.cursorrules`, or Copilot instruction files in this repo as of 2026-05-15.
 
 ## Working Style For Agents
 
@@ -110,7 +110,9 @@ python3.11 -m venv venv
 - `analyze_core.py`, `analyze_audio_io.py`, `analyze_detection.py`, `analyze_estimate.py`, `analyze_rhythm.py`, `analyze_segments.py`, `analyze_structure.py`, `analyze_transcription.py`, `analyze_fast.py`: Feature modules (BPM/key/LUFS/stereo, rhythm/melody/groove, segments, structure, transcription, the `--fast` pipeline). Split from the original monolith in commit `5c40dd44` — keep the split when adding features.
 - `server.py` + `server_phase1.py`, `server_phase2.py`, `server_upload.py`, `server_samples.py`: FastAPI app + route modules. Multipart/URL upload handling, subprocess execution, envelope normalization, and the on-demand Phase 3 audition-sample routes.
 - `analysis_runtime.py`: SQLite-backed run state, stage queue, artifact metadata.
+- `stage_status.py`: Stage-status helpers, including the `publicStatus` projection used by the snapshot API.
 - `worker.py`, `runtime_profile.py`, `auth_context.py`, `artifact_storage.py`: Hosted-mode foundation. Local mode shouldn't branch through these unless it has to.
+- `url_ingest.py`: SSRF-guarded URL ingestion for `POST /api/analysis-runs`.
 - `upload_limits.py`: Canonical 100 MiB raw-audio / 101 MiB request-envelope limits. Operator contract is generated, not hand-edited.
 - `url_ingest.py`: SSRF-guarded URL-mode ingestion for `POST /api/analysis-runs`.
 - `csv_export.py`: CSV exporters for Phase 1 time-series fields; backs `GET /api/analysis-runs/{run_id}/export/csv/{field_path}`.
@@ -120,10 +122,22 @@ python3.11 -m venv venv
 - `spectral_viz.py`: Librosa spectrogram and spectral time-series artifacts. Non-critical — failures don't break a run.
 - `phase1_evaluation.py` + `phase1_report_html.py`: Offline Phase 1 evaluation harness and HTML render. Not on the product path; driven by `scripts/evaluate_phase1.py`.
 - `polyphonic_evaluation.py` + `scripts/evaluate_polyphonic.py`: **Research-only.** Offline polyphonic-transcription evaluation harness, not part of the shipped product path.
+- `phase1_evaluation.py`, `phase1_report_html.py`: Offline evaluation harness for Phase 1 measurement quality. Research-only.
+- `utils/cleanup.py`: Periodic artifact cleanup helpers used by the server background-task loop.
 - `tests/test_server.py`: OpenAPI and envelope contract tests.
 - `tests/test_analyze.py`: generated WAV fixture, `EXPECTED_TOP_LEVEL_KEYS` snapshot, raw payload assertions.
+- `tests/test_csv_export.py`, `tests/test_sample_*.py`, `tests/test_server_samples.py`: Coverage for CSV export and Phase 3 audition samples.
 - `ARCHITECTURE.md`: backend responsibilities and request flow.
 - `JSON_SCHEMA.md`: raw CLI schema plus HTTP mapping notes.
+
+## Operator and Research Scripts
+
+Under `apps/backend/scripts/` (not on the product path):
+
+- `bootstrap.sh`: create/recreate the venv with the pinned Python 3.11 dependencies.
+- `dev.sh`: backend-only dev launcher used by the monorepo `./scripts/dev.sh`.
+- `render_upload_limit_contract.py`: re-renders the operator-facing upload-limit contract whenever `upload_limits.py` numbers change.
+- `evaluate_phase1.py`, `evaluate_structure_sweep.py`, `evaluate_polyphonic.py`, `genre_check.py`, `audit_pass1.py`, `replay_catalog_validation.py`: research and audit harnesses for measurement quality and prompt-output review. Outputs land under `.runtime/reports/` and are intentionally not wired into the live API.
 
 ## Code Style
 

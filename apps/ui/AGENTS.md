@@ -4,8 +4,8 @@
 
 - This file applies to `apps/ui` inside the `asa` monorepo.
 - Stack: React 19, TypeScript, Vite 6, Tailwind CSS v4, Vitest, Playwright.
-- The app talks to the local `sonic-analyzer` backend.
-- No repo-local `.cursorrules`, `.cursor/rules/`, or `.github/copilot-instructions.md` exist here as of 2026-03-10.
+- The app talks to the local `sonic-analyzer` backend. Gemini is backend-mediated; the UI does **not** import an AI SDK.
+- No repo-local `.cursorrules`, `.cursor/rules/`, or `.github/copilot-instructions.md` exist here as of 2026-05-15.
 
 ## Working Style For Agents
 
@@ -95,6 +95,7 @@ RUN_GEMINI_LIVE_SMOKE=true VITE_ENABLE_PHASE2_GEMINI=true GEMINI_API_KEY=your_ke
 - `src/index.css`: Tailwind theme tokens and visual language.
 - `tests/services/*`: unit and service tests.
 - `tests/smoke/*`: smoke and live smoke coverage.
+- `tests/e2e/*`: canonical no-Gemini integration spec plus live full-stack Gemini specs (Playwright).
 
 ## Code Style
 
