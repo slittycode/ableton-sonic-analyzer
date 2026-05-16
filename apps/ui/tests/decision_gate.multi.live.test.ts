@@ -141,6 +141,12 @@ function gateFor(model: string): ModelGate {
 }
 
 describe('decision-gate (multi-model)', () => {
+  const anySnapshot = MODELS.some((m) => existsSync(`/tmp/decision_gate_${m}.json`));
+  if (!anySnapshot) {
+    it.skip('skipped — no /tmp/decision_gate_<model>.json snapshots present', () => { /* noop */ });
+    return;
+  }
+
   it('compares validator output across Gemini variants and writes a markdown table', () => {
     const gates = MODELS.map(gateFor);
     const ok = gates.filter((g) => g.ok);

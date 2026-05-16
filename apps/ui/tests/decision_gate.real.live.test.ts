@@ -77,6 +77,12 @@ function isPathPresentShallow(payload: any, p: string): boolean {
 }
 
 describe('decision-gate (multi-model, real track)', () => {
+  const anySnapshot = MODELS.some((m) => existsSync(`${SNAPSHOT_PREFIX}${m}.json`));
+  if (!anySnapshot) {
+    it.skip(`skipped — no ${SNAPSHOT_PREFIX}<model>.json snapshots present`, () => { /* noop */ });
+    return;
+  }
+
   it('compares validator output across Gemini variants on Vtss-CantCatchMe.mp3', () => {
     const gates = MODELS.map((model) => {
       const snapshotPath = `${SNAPSHOT_PREFIX}${model}.json`;
