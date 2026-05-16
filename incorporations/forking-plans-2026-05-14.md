@@ -282,10 +282,13 @@ needs that resonators directly addresses:
    give the user a real-time spectral readout of what they uploaded —
    "this is roughly the spectral shape you're sending in." Sub-budget
    AudioWorklet operation is exactly the latency profile this needs.
-2. **Phase 3 audition feedback** (after [`PR #45`](../README.md), Phase
-   3 already audits heuristic WAV/MIDI). A pre-render
-   spectral preview before the user commits to a Phase 3 audition would
-   close a loop currently served only by the rendered file.
+2. **Phase 3 audition feedback.** Phase 3 *audition* shipped in
+   PR #45 (heuristic WAV/MIDI rendering — see
+   [`docs/SAMPLE_GENERATION.md`](../docs/SAMPLE_GENERATION.md); this is
+   distinct from Phase 3 *synth-patch generation* in `patchSmith.ts`,
+   which remains open per [`BACKLOG.md`](../BACKLOG.md)). A pre-render
+   spectral preview before the user commits to an audition would close
+   a loop currently served only by the rendered file.
 
 Neither use case asks ASA to re-do its *measurement* in the browser
 (which would violate the prior review's discipline). Both are new
@@ -359,6 +362,11 @@ on the same audio.
 - [ ] One Playwright smoke test loads the upload surface, mocks an
       audio stream, and asserts the preview component renders bin
       counts > 0.
+- [ ] The preview UI is labeled as an approximate live preview, not
+      the cited Phase 1 measurement; a Vitest unit test asserts the
+      "approximate" / "preview" copy is present in the rendered output
+      and that no Phase 1 field name (e.g. `spectralBalance.subBass`)
+      appears as the cited source.
 - [ ] A Vitest unit test asserts the wrapper transforms interleaved
       Float32Array → named-field output correctly on a synthetic input.
 - [ ] Cross-check spike: on one fixture, compare worklet output to
@@ -528,9 +536,14 @@ quantity. Two partial validations:
 - [ ] Confirm the upstream's first-commit date for the Source line.
 - [ ] Add two small Phase 1 measurements: noise-floor estimate
       (low-percentile RMS of silent frames) and spectral flux. Update
-      [`apps/backend/JSON_SCHEMA.md`](../apps/backend/JSON_SCHEMA.md) and
+      [`apps/backend/JSON_SCHEMA.md`](../apps/backend/JSON_SCHEMA.md),
       `EXPECTED_TOP_LEVEL_KEYS` in
-      [`apps/backend/tests/test_analyze.py`](../apps/backend/tests/test_analyze.py).
+      [`apps/backend/tests/test_analyze.py`](../apps/backend/tests/test_analyze.py),
+      and the matching `Phase1Result` fields in
+      [`apps/ui/src/types/measurement.ts`](../apps/ui/src/types/measurement.ts)
+      (CLAUDE.md tripwire #3 — Python emits camelCase JSON directly with
+      no conversion layer, so a Python-side addition without the TS
+      counterpart disappears silently from the UI).
 - [ ] Add `parameterHeuristics` block to
       [`apps/backend/prompts/live12_device_catalog.json`](../apps/backend/prompts/live12_device_catalog.json),
       keyed by (measurement, device, parameter), with one row per
