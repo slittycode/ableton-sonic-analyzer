@@ -8,10 +8,7 @@ import { FileUpload } from './components/FileUpload';
 import { WaveformPlayer } from './components/WaveformPlayer';
 // Audit Finding #5: IdleValuePropPanel now occupies the Signal Monitor area
 // when no file is selected. It tells the producer what ASA does and what to
-// expect in 30s / 5min. The legacy IdleSignalMonitor (atmospheric
-// breathing-line canvas) is kept in the codebase for a potential future
-// "waiting between file-selected and analysis-started" state but is not
-// imported here.
+// expect in 30s / 5min.
 import { IdleValuePropPanel } from './components/IdleValuePropPanel';
 import { useGlobalDrag } from './hooks/useGlobalDrag';
 import {
@@ -99,8 +96,11 @@ function formatEstimateRange(estimate: BackendAnalysisEstimate): string {
 // conditionals around a placeholder string.
 export function formatTrackDuration(seconds: number | null | undefined): string | null {
   if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return null;
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.round(seconds % 60);
+  // Round to whole seconds first so 59.5s never produces "0:60" — the modulo
+  // would carry past the seconds boundary without bumping the minutes.
+  const total = Math.round(seconds);
+  const mins = Math.floor(total / 60);
+  const secs = total % 60;
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
