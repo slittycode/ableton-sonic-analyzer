@@ -27,13 +27,17 @@ class ToGerundTests(unittest.TestCase):
         self.assertEqual(_to_gerund("absorbs"), "absorbing")
         self.assertEqual(_to_gerund("restricts"), "restricting")
         self.assertEqual(_to_gerund("adds"), "adding")
-        # NOTE: verbs requiring consonant-doubling (control → controlling,
-        # submit → submitting, run → running) are NOT handled algorithmically.
-        # The English doubling rule needs stress detection. If Gemini emits
-        # these in "by <verb>s" form, the gerund will read "controling" /
-        # "submiting" — still better than the "by controls" original. If this
-        # bites the producer-facing output, add a small exception map at the
-        # top of this module rather than try to implement orthographic rules.
+
+    def test_consonant_doubling_exceptions(self):
+        # English consonant-doubling at the gerund is stress-conditional and
+        # not implemented algorithmically — covered by _GERUND_IRREGULARS in
+        # server_phase2.py. Extend that map (not the regex) when a new verb
+        # surfaces in Phase 2 output.
+        self.assertEqual(_to_gerund("controls"), "controlling")
+        self.assertEqual(_to_gerund("submits"), "submitting")
+        self.assertEqual(_to_gerund("runs"), "running")
+        self.assertEqual(_to_gerund("commits"), "committing")
+        self.assertEqual(_to_gerund("begins"), "beginning")
 
     def test_silent_e_dropped(self):
         # shapes → shape → shap + ing → shaping

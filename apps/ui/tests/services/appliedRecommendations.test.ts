@@ -8,6 +8,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   APPLIED_RECOMMENDATIONS_STORAGE_KEY,
+  MAX_TRACKED_FILES,
   clearAppliedForFile,
   loadAppliedIds,
   saveAppliedIds,
@@ -147,6 +148,57 @@ describe('toggleAppliedId', () => {
       storage.getItem(APPLIED_RECOMMENDATIONS_STORAGE_KEY) || '{}',
     );
     expect(parsed.abc123).toBeUndefined();
+  });
+});
+
+describe('saveAppliedIds (max-entries pruning)', () => {
+  // Seeds N records directly into the underlying store, each with a distinct
+  // updatedAt so prune order is deterministic. Bypasses saveAppliedIds for
+  // setup so we can preload an over-capacity store and observe the next save
+  // triggering eviction.
+  function seedStoreWithAges(count: number) {
+    const records: Record<string, { appliedIds: string[]; updatedAt: number }> = {};
+    for (let i = 0; i < count; i++) {
+      records[`hash-${i.toString().padStart(3, '0')}`] = {
+        appliedIds: [`card-${i}`],
+        updatedAt: 1_000_000 + i,
+      };
+    }
+    storage.setItem(APPLIED_RECOMMENDATIONS_STORAGE_KEY, JSON.stringify(records));
+  }
+
+  it('keeps store at or below MAX_TRACKED_FILES after a save that pushes it over', () => {
+    seedStoreWithAges(MAX_TRACKED_FILES);
+    saveAppliedIds('hash-new', new Set(['card-new']), { storage });
+    const parsed = JSON.parse(storage.getItem(APPLIED_RECOMMENDATIONS_STORAGE_KEY)!);
+    expect(Object.keys(parsed).length).toBe(MAX_TRACKED_FILES);
+    // The new entry survived.
+    expect(parsed['hash-new']).toBeTruthy();
+    // The oldest seeded entry (hash-000, lowest updatedAt) was evicted.
+    expect(parsed['hash-000']).toBeUndefined();
+  });
+
+  it('evicts records by ascending updatedAt, not insertion order', () => {
+    // Seed 51 entries — the boundary case where MAX_TRACKED_FILES+1 must
+    // shed exactly one record.
+    seedStoreWithAges(MAX_TRACKED_FILES);
+    // Re-save the oldest record with a fresh timestamp so it bubbles up the
+    // recency order; the next-oldest (hash-001) should be evicted instead.
+    saveAppliedIds('hash-000', new Set(['card-0-touched']), { storage });
+    saveAppliedIds('hash-new', new Set(['card-new']), { storage });
+    const parsed = JSON.parse(storage.getItem(APPLIED_RECOMMENDATIONS_STORAGE_KEY)!);
+    expect(parsed['hash-000']).toBeTruthy();
+    expect(parsed['hash-001']).toBeUndefined();
+    expect(parsed['hash-new']).toBeTruthy();
+  });
+
+  it('does not prune when store is at or below MAX_TRACKED_FILES', () => {
+    seedStoreWithAges(MAX_TRACKED_FILES - 1);
+    saveAppliedIds('hash-new', new Set(['card-new']), { storage });
+    const parsed = JSON.parse(storage.getItem(APPLIED_RECOMMENDATIONS_STORAGE_KEY)!);
+    expect(Object.keys(parsed).length).toBe(MAX_TRACKED_FILES);
+    // Nothing should have been evicted — every seeded hash is still there.
+    expect(parsed['hash-000']).toBeTruthy();
   });
 });
 

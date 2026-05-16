@@ -7,9 +7,7 @@
  *
  * Visible only when `!audioFile` (the user hasn't picked a track yet). Once
  * a file lands, `WaveformPlayer` takes over the Signal Monitor area and this
- * panel disappears. We keep `IdleSignalMonitor` in the codebase for the
- * future "waiting between file-selected and analysis-started" state if we
- * decide to use it there; right now nothing renders it.
+ * panel disappears.
  *
  * Asset placeholder: the visual slot below the body copy is intentionally a
  * styled trio of Lucide icons rather than a GIF, so the panel ships without

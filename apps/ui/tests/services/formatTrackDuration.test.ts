@@ -27,6 +27,14 @@ describe('formatTrackDuration', () => {
     expect(formatTrackDuration(126.6)).toBe('2:07');
   });
 
+  it('carries the seconds boundary into minutes when rounding up', () => {
+    // Regression: Math.round(seconds % 60) could yield 60, producing "0:60".
+    expect(formatTrackDuration(59.5)).toBe('1:00');
+    expect(formatTrackDuration(59.9)).toBe('1:00');
+    expect(formatTrackDuration(119.5)).toBe('2:00');
+    expect(formatTrackDuration(3599.7)).toBe('60:00');
+  });
+
   it('returns null for missing / invalid values', () => {
     expect(formatTrackDuration(null)).toBeNull();
     expect(formatTrackDuration(undefined)).toBeNull();
