@@ -974,6 +974,24 @@ _PHASE2_BY_NOUN_DENYLIST = frozenset(
 )
 
 
+# Verbs requiring consonant doubling at the gerund (control → controlling,
+# submit → submitting). English doubling is stress-conditional and not worth
+# implementing algorithmically — this map covers the music-production verbs
+# Gemini actually emits after "by".
+_GERUND_IRREGULARS: dict[str, str] = {
+    "controls": "controlling",
+    "submits": "submitting",
+    "commits": "committing",
+    "transmits": "transmitting",
+    "permits": "permitting",
+    "omits": "omitting",
+    "emits": "emitting",
+    "runs": "running",
+    "begins": "beginning",
+    "compels": "compelling",
+}
+
+
 def _to_gerund(verb_3sg: str) -> str:
     """3rd-person singular → gerund (best effort, no dictionary lookup).
 
@@ -981,7 +999,10 @@ def _to_gerund(verb_3sg: str) -> str:
     "shapes"    → "shaping"    (strip -s, drop terminal -e, +ing)
     "recreates" → "recreating" (same)
     "absorbs"   → "absorbing"  (strip -s, +ing)
+    "controls"  → "controlling" (via _GERUND_IRREGULARS)
     """
+    if verb_3sg in _GERUND_IRREGULARS:
+        return _GERUND_IRREGULARS[verb_3sg]
     if verb_3sg.endswith(("ches", "shes", "sses", "tches", "xes", "zzes")):
         stem = verb_3sg[:-2]
     else:
@@ -1016,15 +1037,13 @@ def _fix_grammar_in_record(record: Any, fields: tuple[str, ...]) -> Any:
     """
     if not isinstance(record, dict):
         return record
-    updated = False
     for field in fields:
         original = record.get(field)
         if isinstance(original, str):
             fixed = _fix_by_gerund_in_text(original)
             if fixed != original:
                 record[field] = fixed
-                updated = True
-    return record if updated or True else record  # always return; updated flag unused
+    return record
 
 
 def _apply_phase2_grammar_fixes(normalized: dict[str, Any]) -> None:

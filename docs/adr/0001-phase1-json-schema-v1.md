@@ -14,7 +14,7 @@ ASA's HTTP contract has two layers that matter to external consumers:
 
 These two layers share the same field shape — Python emits camelCase JSON directly; there is no rename layer between them ([CLAUDE.md tripwire #3](../../CLAUDE.md)). That coupling has served ASA well, but it carries no explicit version or compatibility promise. Until this ADR, "Phase 1 schema v1" was implicit in `EXPECTED_TOP_LEVEL_KEYS` and `Phase1Result` — provable from code but not stated as a contract.
 
-The external-repo review at [`docs/external-repo-review-2026-05-13.md`](../external-repo-review-2026-05-13.md) flagged this gap as Track 2 work. Partiels exports a documented schema (CSV/JSON/SDIF), and consumers of ASA's output (REAPER scripts, Max patches, downstream pipelines) need a stable shape to write against.
+The external-repo review at [`docs/history/external-repo-review-2026-05-13.md`](../history/external-repo-review-2026-05-13.md) flagged this gap as Track 2 work. Partiels exports a documented schema (CSV/JSON/SDIF), and consumers of ASA's output (REAPER scripts, Max patches, downstream pipelines) need a stable shape to write against.
 
 ## Decision
 
@@ -95,6 +95,6 @@ There is no single "phase1.v1.json" file. The schema is the four-test-suite inte
 
 ## Alternatives considered
 
-- **Mirror Partiels' export schema verbatim.** Rejected in [external-repo-review-2026-05-13.md](../external-repo-review-2026-05-13.md). Partiels' CSV is `time, duration, label/value` per Vamp track — too flat for ASA's domain-named measurements. Would have collapsed the citation chain (Quality Invariant #2).
+- **Mirror Partiels' export schema verbatim.** Rejected in [external-repo-review-2026-05-13.md](../history/external-repo-review-2026-05-13.md). Partiels' CSV is `time, duration, label/value` per Vamp track — too flat for ASA's domain-named measurements. Would have collapsed the citation chain (Quality Invariant #2).
 - **Generate a JSON Schema artifact.** Deferred. No current consumer needs it; the test-snapshot enforcement already prevents drift.
 - **Version the schema via HTTP `Accept` header.** Overkill for one runtime. Re-evaluate at v2.

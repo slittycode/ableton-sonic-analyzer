@@ -1,10 +1,26 @@
 import { AbletonRecommendation, Phase1Result, Phase2Result } from "../types";
+import {
+  type ConfidenceBand,
+  toConfidenceBand,
+} from "../services/sessionMusician/confidenceBand";
 
+// Audit Finding #4: the three-level `ConfidenceLevel` vocabulary stays alive
+// for the melody-insights key/value detail rows in Sonic Element cards
+// (rendered as plain text like "High (78%)", not as a colored pill). The
+// confidence-badge pill path migrated to the canonical four-band ladder
+// via `ConfidenceBand` below. Follow-up: migrate the melody rows too once
+// producers see the new bands in context.
 export type ConfidenceLevel = "High" | "Moderate" | "Low";
 
 export interface ConfidenceBadgeViewModel {
   label: string;
-  level: ConfidenceLevel;
+  /**
+   * Audit Finding #4: replaces the old three-level `level` field with the
+   * canonical four-band ladder (Solid / Workable / Rough / Unreliable).
+   * `null` when the source value couldn't be parsed — render sites must
+   * skip those entries rather than show a misleading default band.
+   */
+  band: ConfidenceBand | null;
 }
 
 const SENTENCE_BREAK_REGEX = /(?<=[.!?])\s+/;
@@ -297,36 +313,12 @@ function normalizeConfidenceFieldLabel(field: string): string {
   return compact.length > 14 ? `${compact.slice(0, 14)}...` : compact;
 }
 
-function parseConfidenceScalar(raw: string): number | null {
-  const normalized = raw.trim().toLowerCase();
-  if (!normalized) return null;
-
-  if (normalized.includes("%")) {
-    const value = Number.parseFloat(normalized.replace("%", ""));
-    return Number.isFinite(value) ? value / 100 : null;
-  }
-
-  const value = Number.parseFloat(normalized);
-  if (!Number.isFinite(value)) return null;
-  if (value > 1) return value / 100;
-  return value;
-}
-
-function normalizeConfidenceLevel(raw: string): ConfidenceLevel {
-  const normalized = raw.trim().toLowerCase();
-
-  if (normalized.includes("high")) return "High";
-  if (normalized.includes("moderate") || normalized.includes("medium") || normalized === "med") {
-    return "Moderate";
-  }
-  if (normalized.includes("low")) return "Low";
-
-  const scalar = parseConfidenceScalar(raw);
-  if (scalar === null) return "Moderate";
-  if (scalar >= 0.8) return "High";
-  if (scalar >= 0.5) return "Moderate";
-  return "Low";
-}
+// Audit Finding #4: `parseConfidenceScalar` and `normalizeConfidenceLevel`
+// were retired in favor of `toConfidenceBand` in
+// `services/sessionMusician/confidenceBand.ts`, which subsumes both: it
+// parses numeric and string inputs (including the percent strings
+// parseConfidenceScalar handled) and lands on the canonical four-band
+// ladder instead of the legacy three-level High/Moderate/Low enum.
 
 export function toConfidenceBadges(
   notes: Phase2Result["confidenceNotes"] | undefined | null,
@@ -335,7 +327,7 @@ export function toConfidenceBadges(
 
   return notes.map((note) => ({
     label: normalizeConfidenceFieldLabel(note.field),
-    level: normalizeConfidenceLevel(note.value),
+    band: toConfidenceBand(note.value),
   }));
 }
 

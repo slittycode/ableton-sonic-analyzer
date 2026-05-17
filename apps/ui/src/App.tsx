@@ -8,10 +8,7 @@ import { FileUpload } from './components/FileUpload';
 import { WaveformPlayer } from './components/WaveformPlayer';
 // Audit Finding #5: IdleValuePropPanel now occupies the Signal Monitor area
 // when no file is selected. It tells the producer what ASA does and what to
-// expect in 30s / 5min. The legacy IdleSignalMonitor (atmospheric
-// breathing-line canvas) is kept in the codebase for a potential future
-// "waiting between file-selected and analysis-started" state but is not
-// imported here.
+// expect in 30s / 5min.
 import { IdleValuePropPanel } from './components/IdleValuePropPanel';
 import { useGlobalDrag } from './hooks/useGlobalDrag';
 import {
@@ -50,7 +47,10 @@ import {
   loadPhase2RequestedPreference,
   savePhase2RequestedPreference,
 } from './utils/phase2Preference';
-import { getAppViewHref } from './utils/appView';
+// Audit quick-hit: `getAppViewHref` import retired — its only consumer
+// was the Dense DAW Lab header link, which was removed in this PR. The
+// helper is still exported for any future re-introduction (e.g. behind a
+// settings menu) and from `main.tsx` for the active-view router.
 import { startRenderBenchmarkCycle } from './utils/renderBenchmark';
 
 // Note: gemini-3.1-flash-preview is intentionally omitted — three live test runs
@@ -99,8 +99,11 @@ function formatEstimateRange(estimate: BackendAnalysisEstimate): string {
 // conditionals around a placeholder string.
 export function formatTrackDuration(seconds: number | null | undefined): string | null {
   if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return null;
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.round(seconds % 60);
+  // Round to whole seconds first so 59.5s never produces "0:60" — the modulo
+  // would carry past the seconds boundary without bumping the minutes.
+  const total = Math.round(seconds);
+  const mins = Math.floor(total / 60);
+  const secs = total % 60;
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
@@ -963,32 +966,36 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-4">
-            {/* Audit #7: de-emphasized the Dense DAW Lab link. The accent-orange
-                chip competed with the brand mark and the model selector for the
-                user's eye on every page. It's still discoverable, just quieter. */}
-            <a
-              href={getAppViewHref('daw-concept')}
-              className="hidden sm:inline-flex items-center text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary transition-colors hover:text-accent"
-            >
-              Dense DAW Lab →
-            </a>
+            {/* Audit quick-hit: removed the Dense DAW Lab link from the
+              header. A prior pass had already demoted it to muted text, but
+              the audit re-flagged it for sitting in the primary flow's
+              header without context for what it is. The route stays
+              accessible via direct URL (?view=daw-concept) — see
+              `getAppViewHref('daw-concept')` and `main.tsx`. */}
             <div className="hidden sm:flex items-center space-x-4">
-              <div className="flex items-center space-x-2">
-                <label className="text-[10px] font-mono text-text-secondary uppercase">Interpretation Model</label>
-                <select
-                  data-testid="phase2-model-desktop"
-                  value={selectedModel}
-                  onChange={(e) => setSelectedModel(e.target.value)}
-                  disabled={phase2ModelSelectorDisabled}
-                  className="appearance-none bg-bg-card border border-border text-text-primary text-[10px] font-mono py-1 pl-2 pr-6 rounded-sm focus:outline-none focus:border-accent cursor-pointer disabled:opacity-50"
-                >
-                  {MODELS.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {/* Audit quick-hit: dropped the "Interpretation Model" label
+                and shrank the select to a discreet text-secondary dropdown.
+                The audit flagged the prior styling as foregrounding an
+                AI-model choice an intermediate producer has no basis to
+                make. Selector stays accessible (smoke spec requires it
+                visible at desktop viewport) but now reads as background
+                metadata, not a primary control. Title attribute carries
+                the long-form context. */}
+              <select
+                data-testid="phase2-model-desktop"
+                aria-label="Interpretation model"
+                title="AI model used for Phase 2 interpretation (advanced)"
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+                disabled={phase2ModelSelectorDisabled}
+                className="appearance-none bg-transparent border-none text-text-secondary/70 hover:text-text-primary text-[10px] font-mono py-0 pl-0 pr-4 rounded-sm focus:outline-none focus:text-text-primary cursor-pointer disabled:opacity-50 transition-colors"
+              >
+                {MODELS.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.name}
+                  </option>
+                ))}
+              </select>
               {phase2StatusBadge && (
                 <span
                   data-testid="phase2-status-badge"

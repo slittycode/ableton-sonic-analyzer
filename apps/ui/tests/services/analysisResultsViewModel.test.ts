@@ -104,18 +104,38 @@ describe('analysisResultsViewModel helpers', () => {
     expect(output).toBe('One sentence. Two sentence. Three sentence....');
   });
 
-  it('normalizes confidence badges to friendly labels and levels', () => {
+  // Audit Finding #4: confidence badges now return a canonical ConfidenceBand
+  // (Solid / Workable / Rough / Unreliable) instead of the legacy three-level
+  // enum. The 3-level → 4-band mismatch surfaces here: scalar 0.5-0.79 maps
+  // to "workable" (used to be "Moderate"), scalar 0.25-0.49 maps to "rough"
+  // (used to be "Low") — an intentional refinement.
+  it('normalizes confidence badges to friendly labels and canonical bands', () => {
     const badges = toConfidenceBadges([
       { field: 'Key Signature', value: '0.62', reason: 'Measured confidence' },
       { field: 'Melody Transcription', value: 'LOW', reason: 'Weak melodic signal' },
       { field: 'True Peak', value: 'HIGH', reason: 'Stable result' },
     ]);
 
-    expect(badges).toEqual([
-      { label: 'Key', level: 'Moderate' },
-      { label: 'Melody', level: 'Low' },
-      { label: 'Peak', level: 'High' },
+    expect(badges).toHaveLength(3);
+    expect(badges[0].label).toBe('Key');
+    expect(badges[0].band?.id).toBe('workable');
+    expect(badges[1].label).toBe('Melody');
+    expect(badges[1].band?.id).toBe('rough');
+    expect(badges[2].label).toBe('Peak');
+    expect(badges[2].band?.id).toBe('solid');
+  });
+
+  // Audit Finding #4: unparseable values produce `band: null` so the render
+  // site can filter them rather than show a misleading default band.
+  it('returns band: null entries for unparseable confidence values', () => {
+    const badges = toConfidenceBadges([
+      { field: 'Key Signature', value: 'completely unparseable', reason: 'whatever' },
+      { field: 'True Peak', value: '0.95', reason: 'real value' },
     ]);
+
+    expect(badges).toHaveLength(2);
+    expect(badges[0].band).toBeNull();
+    expect(badges[1].band?.id).toBe('solid');
   });
 
   it('builds arrangement timeline segments and novelty markers', () => {

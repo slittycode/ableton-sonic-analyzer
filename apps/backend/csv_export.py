@@ -1,10 +1,11 @@
 """CSV exporters for Phase 1 time-series fields.
 
 Patterned on the ``(time, duration, value)`` tabular shape used by Partiels
-and similar Vamp-output tools (see ``docs/external-repo-review-2026-05-13.md``
-Track 2 for the rationale and the rejected-alternatives discussion). Each
-exporter maps one dotted JSON path inside the Phase 1 measurement payload to
-a small CSV with documented columns.
+and similar Vamp-output tools (see
+``docs/history/external-repo-review-2026-05-13.md`` Track 2 for the rationale
+and the rejected-alternatives discussion). Each exporter maps one dotted
+JSON path inside the Phase 1 measurement payload to a small CSV with
+documented columns.
 
 The exporters are kept here, outside ``server.py``, so the route handler can
 stay a thin lookup-and-serve.
