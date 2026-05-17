@@ -17,6 +17,16 @@ export interface ValidationViolation {
   phase2Value?: any;
   severity: 'ERROR' | 'WARNING';
   message: string;
+  /**
+   * Audit Finding #1E: 'dev' marks an engine-coverage signal (e.g.
+   * NEW_FIELD_UNCITED) that helps research/tests confirm citation coverage
+   * but does NOT carry actionable meaning for producers. The
+   * `Phase2ConsistencyReport` renderer suppresses these from the user-facing
+   * System Diagnostics panel while keeping them in the underlying
+   * `ValidationReport` for tests, offline analysis, and future tooling.
+   * Omit the field (or set 'user') for violations that should surface.
+   */
+  audience?: 'dev' | 'user';
 }
 
 export interface ValidationReport {
@@ -968,6 +978,11 @@ function validateNewFieldCoverage(
       type: 'NEW_FIELD_UNCITED',
       field: path,
       severity: 'WARNING',
+      // Audit Finding #1E: this is a coverage signal for the engine team,
+      // not actionable advice for the producer ("warning is benign"). Tag
+      // it dev-audience so the user-facing Phase2ConsistencyReport skips it
+      // while tests/research still see the violation in the report.
+      audience: 'dev',
       message:
         `Phase 1 field "${path}" is present in the measurement payload but no Phase 2 ` +
         `recommendation cites it. If the field is relevant to this track, Gemini should ` +

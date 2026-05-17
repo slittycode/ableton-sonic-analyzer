@@ -150,11 +150,20 @@ export function MixDoctorPanel({ report }: MixDoctorPanelProps) {
                 render: (row) => formatNumber(row.normalizedDb, 1),
               },
               {
+                // Audit quick-hit: previously rendered just the optimal dB
+                // (e.g. "-22.0"). Without the per-band range, producers
+                // couldn't tell why a +5.6 dB Delta on Sub Bass reads
+                // "too-loud" while a +5.5 dB Delta on Low Mids reads
+                // "optimal" — the Issue is determined by absolute thresholds
+                // (target.minDb / maxDb), not by the diff-from-optimal. Show
+                // the range alongside the optimal so the verdict is legible
+                // at a glance.
                 key: 'targetOptimalDb',
-                label: 'Target dB',
+                label: 'Target (range)',
                 align: 'right',
                 monospace: true,
-                render: (row) => formatNumber(row.targetOptimalDb, 1),
+                render: (row) =>
+                  `${formatNumber(row.targetOptimalDb, 1)} (${formatNumber(row.targetMinDb, 0)} to ${formatNumber(row.targetMaxDb, 0)})`,
               },
               {
                 key: 'diffDb',

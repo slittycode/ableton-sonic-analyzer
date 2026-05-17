@@ -104,18 +104,38 @@ describe('analysisResultsViewModel helpers', () => {
     expect(output).toBe('One sentence. Two sentence. Three sentence....');
   });
 
-  it('normalizes confidence badges to friendly labels and levels', () => {
+  // Audit Finding #4: confidence badges now return a canonical ConfidenceBand
+  // (Solid / Workable / Rough / Unreliable) instead of the legacy three-level
+  // enum. The 3-level → 4-band mismatch surfaces here: scalar 0.5-0.79 maps
+  // to "workable" (used to be "Moderate"), scalar 0.25-0.49 maps to "rough"
+  // (used to be "Low") — an intentional refinement.
+  it('normalizes confidence badges to friendly labels and canonical bands', () => {
     const badges = toConfidenceBadges([
       { field: 'Key Signature', value: '0.62', reason: 'Measured confidence' },
       { field: 'Melody Transcription', value: 'LOW', reason: 'Weak melodic signal' },
       { field: 'True Peak', value: 'HIGH', reason: 'Stable result' },
     ]);
 
-    expect(badges).toEqual([
-      { label: 'Key', level: 'Moderate' },
-      { label: 'Melody', level: 'Low' },
-      { label: 'Peak', level: 'High' },
+    expect(badges).toHaveLength(3);
+    expect(badges[0].label).toBe('Key');
+    expect(badges[0].band?.id).toBe('workable');
+    expect(badges[1].label).toBe('Melody');
+    expect(badges[1].band?.id).toBe('rough');
+    expect(badges[2].label).toBe('Peak');
+    expect(badges[2].band?.id).toBe('solid');
+  });
+
+  // Audit Finding #4: unparseable values produce `band: null` so the render
+  // site can filter them rather than show a misleading default band.
+  it('returns band: null entries for unparseable confidence values', () => {
+    const badges = toConfidenceBadges([
+      { field: 'Key Signature', value: 'completely unparseable', reason: 'whatever' },
+      { field: 'True Peak', value: '0.95', reason: 'real value' },
     ]);
+
+    expect(badges).toHaveLength(2);
+    expect(badges[0].band).toBeNull();
+    expect(badges[1].band?.id).toBe('solid');
   });
 
   it('builds arrangement timeline segments and novelty markers', () => {
@@ -287,6 +307,99 @@ describe('analysisResultsViewModel helpers', () => {
     expect(groups.every((group) => group.name.split(' / ').length <= 3)).toBe(true);
   });
 
+  // Audit Finding #1A: buildRoleSentence used to fabricate "{stage phrase} by
+  // {verb}" by lowercasing the first letter of Gemini's reason and prepending a
+  // category label. Because Gemini's `reason` is a present-tense clause, this
+  // produced ungrammatical splices ("Controls bass energy by ensures..."). The
+  // current behavior renders the reason verbatim with a capitalized first letter
+  // and trailing period; only the HIGH-END cue suffix survives.
+  it('capitalizes Gemini reason without prepending a category label', () => {
+    const groups = buildMixChainGroups(
+      measurement,
+      [
+        {
+          order: 1,
+          device: 'EQ Eight',
+          trackContext: 'Bass Group',
+          workflowStage: 'MIX',
+          parameter: 'Low Cut',
+          value: '30 Hz',
+          reason: 'ensures the extreme low-end mono envelope stays tight under the kick.',
+        },
+      ],
+      {
+        kick: 'Kick.',
+        bass: 'Bass.',
+        melodicArp: 'Arp.',
+        grooveAndTiming: 'Groove.',
+        effectsAndTexture: 'FX.',
+      },
+    );
+
+    const card = groups.flatMap((g) => g.cards).find((c) => c.device === 'EQ Eight');
+    expect(card).toBeDefined();
+    expect(card?.role).toBe('Ensures the extreme low-end mono envelope stays tight under the kick.');
+    expect(card?.role).not.toContain(' by ');
+    // The old prefix labels — none of them should appear inside the role text now.
+    expect(card?.role).not.toContain('Controls bass energy');
+    expect(card?.role).not.toContain('Shapes drum impact');
+    expect(card?.role).not.toContain('Supports melodic clarity');
+  });
+
+  it('appends high-end cue suffix when group is HIGH-END DETAIL and cues are present', () => {
+    const groups = buildMixChainGroups(
+      measurement,
+      [
+        {
+          order: 1,
+          device: 'Auto Filter',
+          parameter: 'High Shelf',
+          value: '+2.0 dB @ 10 kHz',
+          reason: 'Adds sparkle to the hi-hats and synth sweeps in the top end.',
+        },
+      ],
+      {
+        kick: 'Kick.',
+        bass: 'Bass.',
+        melodicArp: 'Arp.',
+        grooveAndTiming: 'Groove.',
+        effectsAndTexture: 'Top-end details from hi-hats and synth sweeps.',
+      },
+    );
+
+    const card = groups.find((g) => g.name === 'HIGH-END DETAIL')?.cards[0];
+    expect(card).toBeDefined();
+    expect(card?.role).toMatch(/^Adds sparkle to the hi-hats and synth sweeps in the top end \(for .+\)\.$/);
+    expect(card?.role).not.toContain(' by ');
+  });
+
+  it('omits high-end cue suffix when no cues are present', () => {
+    const groups = buildMixChainGroups(
+      measurement,
+      [
+        {
+          order: 1,
+          device: 'Drum Buss',
+          parameter: 'Drive',
+          value: '6 dB',
+          reason: 'Adds bite and transient character to the drum bus.',
+        },
+      ],
+      {
+        kick: 'Kick.',
+        bass: 'Bass.',
+        melodicArp: 'Arp.',
+        grooveAndTiming: 'Groove.',
+        effectsAndTexture: 'FX.',
+      },
+    );
+
+    const card = groups.find((g) => g.name === 'DRUM PROCESSING')?.cards[0];
+    expect(card).toBeDefined();
+    expect(card?.role).toBe('Adds bite and transient character to the drum bus.');
+    expect(card?.role).not.toMatch(/\(for /);
+  });
+
   it('builds expanded patch cards with at least three parameters', () => {
     const phase2 = {
       trackCharacter: 'Character sentence.',
@@ -410,6 +523,218 @@ describe('analysisResultsViewModel helpers', () => {
       phase2,
     );
     expect(flatFromGroups.length).toBe(flatFromCards.length);
+  });
+
+  // Audit Finding #1B: PatchCardViewModel.patchRole was deleted in favor of
+  // letting the category chip + per-card whyThisWorks carry the bucket label
+  // and the actionable explanation. The category chip lives in the rendered
+  // card; whyThisWorks now provides the per-card uniqueness that mapPatchRole
+  // (a 7-key fallback) couldn't.
+  it('PatchCardViewModel no longer carries a patchRole field', () => {
+    const phase2: Phase2Result = {
+      trackCharacter: 'Character.',
+      detectedCharacteristics: [],
+      arrangementOverview: { summary: 'Summary', segments: [] },
+      sonicElements: {
+        kick: 'Kick.',
+        bass: 'Bass.',
+        melodicArp: 'Arp.',
+        grooveAndTiming: 'Groove.',
+        effectsAndTexture: 'FX.',
+      },
+      mixAndMasterChain: [],
+      secretSauce: { title: 'Sauce', explanation: 'Explain', implementationSteps: ['Step'] },
+      confidenceNotes: [],
+      abletonRecommendations: [
+        {
+          device: 'Wavetable',
+          deviceFamily: 'NATIVE',
+          trackContext: 'Synth Group',
+          workflowStage: 'SOUND_DESIGN',
+          category: 'SYNTHESIS',
+          parameter: 'Position',
+          value: '0.42',
+          reason: 'Dialed for the supersaw character with high-pass at 120 Hz.',
+        },
+      ],
+    } as Phase2Result;
+
+    const cards = buildPatchCards(measurement, phase2);
+    expect(cards.length).toBeGreaterThan(0);
+    for (const card of cards) {
+      expect('patchRole' in card).toBe(false);
+    }
+  });
+
+  // Audit Finding #1B: removing card.patchRole from the buildPatchGroups
+  // text-concat shrinks the keyword surface for inferProcessingGroup. This
+  // test guards the SYNTH / MELODIC routing for a representative synth card.
+  it('buildPatchGroups still routes a synth card into SYNTH / MELODIC after dropping patchRole', () => {
+    const phase2: Phase2Result = {
+      trackCharacter: 'Character.',
+      detectedCharacteristics: [],
+      arrangementOverview: { summary: 'Summary', segments: [] },
+      sonicElements: {
+        kick: 'Kick.',
+        bass: 'Bass.',
+        melodicArp: 'Arp.',
+        grooveAndTiming: 'Groove.',
+        effectsAndTexture: 'FX.',
+      },
+      mixAndMasterChain: [],
+      secretSauce: { title: 'Sauce', explanation: 'Explain', implementationSteps: ['Step'] },
+      confidenceNotes: [],
+      abletonRecommendations: [
+        {
+          device: 'Wavetable',
+          deviceFamily: 'NATIVE',
+          trackContext: 'Synth Group',
+          workflowStage: 'SOUND_DESIGN',
+          category: 'SYNTHESIS',
+          parameter: 'Position',
+          value: '0.42',
+          reason: 'Builds the supersaw lead character with detune across voices.',
+        },
+      ],
+    } as Phase2Result;
+
+    const groups = buildPatchGroups(measurement, phase2);
+    const synthGroup = groups.find((g) => g.name === 'SYNTH / MELODIC');
+    expect(synthGroup).toBeDefined();
+    expect(synthGroup?.cards.some((c) => c.device === 'Wavetable')).toBe(true);
+  });
+
+  // Audit Finding #1B (overlap): when Gemini emits the same device in both
+  // mixAndMasterChain and abletonRecommendations, the Patches section used to
+  // re-list Mix Chain devices verbatim. buildPatchCards now filters case-
+  // insensitively against the chain. Synthetic fallbacks (stereo width, MIDI
+  // Clip Guide) are built from Phase 1 only and bypass the filter.
+  it('buildPatchCards drops recommendations whose device also appears in mixAndMasterChain', () => {
+    const phase2: Phase2Result = {
+      trackCharacter: 'Character.',
+      detectedCharacteristics: [],
+      arrangementOverview: { summary: 'Summary', segments: [] },
+      sonicElements: {
+        kick: 'Kick.',
+        bass: 'Bass.',
+        melodicArp: 'Arp.',
+        grooveAndTiming: 'Groove.',
+        effectsAndTexture: 'FX.',
+      },
+      mixAndMasterChain: [
+        {
+          order: 1,
+          device: 'Glue Compressor',
+          deviceFamily: 'NATIVE',
+          trackContext: 'Master',
+          workflowStage: 'MASTER',
+          parameter: 'Threshold',
+          value: '-2 dB',
+          reason: 'Cohesive master bus glue.',
+        },
+      ],
+      secretSauce: { title: 'Sauce', explanation: 'Explain', implementationSteps: ['Step'] },
+      confidenceNotes: [],
+      abletonRecommendations: [
+        {
+          device: 'Glue Compressor',
+          deviceFamily: 'NATIVE',
+          trackContext: 'Master',
+          workflowStage: 'MASTER',
+          category: 'DYNAMICS',
+          parameter: 'Ratio',
+          value: '2:1',
+          reason: 'Redundant with the chain — should not surface as a patch.',
+        },
+        {
+          device: 'Wavetable',
+          deviceFamily: 'NATIVE',
+          trackContext: 'Synth Group',
+          workflowStage: 'SOUND_DESIGN',
+          category: 'SYNTHESIS',
+          parameter: 'Position',
+          value: '0.5',
+          reason: 'Builds the lead supersaw character.',
+        },
+      ],
+    } as Phase2Result;
+
+    const cards = buildPatchCards(measurement, phase2);
+    expect(cards.some((c) => c.device === 'Glue Compressor')).toBe(false);
+    expect(cards.some((c) => c.device === 'Wavetable')).toBe(true);
+  });
+
+  it('buildPatchCards is case-insensitive against chain device names', () => {
+    const phase2: Phase2Result = {
+      trackCharacter: 'Character.',
+      detectedCharacteristics: [],
+      arrangementOverview: { summary: 'Summary', segments: [] },
+      sonicElements: {
+        kick: 'Kick.',
+        bass: 'Bass.',
+        melodicArp: 'Arp.',
+        grooveAndTiming: 'Groove.',
+        effectsAndTexture: 'FX.',
+      },
+      mixAndMasterChain: [
+        {
+          order: 1,
+          device: 'AUTO FILTER',
+          parameter: 'Cutoff',
+          value: '2 kHz',
+          reason: 'Mixchain filter sweep.',
+        },
+      ],
+      secretSauce: { title: 'Sauce', explanation: 'Explain', implementationSteps: ['Step'] },
+      confidenceNotes: [],
+      abletonRecommendations: [
+        {
+          device: 'auto filter',
+          category: 'EFFECTS',
+          parameter: 'Resonance',
+          value: '0.4',
+          reason: 'Lowercased device name — still a duplicate.',
+        },
+      ],
+    } as Phase2Result;
+
+    const cards = buildPatchCards(measurement, phase2);
+    expect(cards.some((c) => /auto filter/i.test(c.device))).toBe(false);
+  });
+
+  it('synthetic stereo-width fallback card still appears even if Utility is in the chain', () => {
+    const phase2: Phase2Result = {
+      trackCharacter: 'Character.',
+      detectedCharacteristics: [],
+      arrangementOverview: { summary: 'Summary', segments: [] },
+      sonicElements: {
+        kick: 'Kick.',
+        bass: 'Bass.',
+        melodicArp: 'Arp.',
+        grooveAndTiming: 'Groove.',
+        effectsAndTexture: 'FX.',
+        widthAndStereo: 'Tight low end, controlled high-end width on hi-hats.',
+      },
+      mixAndMasterChain: [
+        {
+          order: 1,
+          device: 'Utility',
+          parameter: 'Bass mono',
+          value: '120 Hz',
+          reason: 'Stereo discipline on the low end.',
+        },
+      ],
+      secretSauce: { title: 'Sauce', explanation: 'Explain', implementationSteps: ['Step'] },
+      confidenceNotes: [],
+      abletonRecommendations: [],
+    } as Phase2Result;
+
+    const cards = buildPatchCards(measurement, phase2);
+    // The synthetic Utility / Stereo Imager card is built from Phase 1 only
+    // and must survive the chain dedup. Its device label intentionally
+    // includes both names so a strict equality with chain "Utility" doesn't
+    // match — that's the point of bypassing the filter.
+    expect(cards.some((c) => c.id.endsWith('stereo-width'))).toBe(true);
   });
 
   it('builds melody insights from phase1 transcription payload', () => {
