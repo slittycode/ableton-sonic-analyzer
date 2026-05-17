@@ -51,7 +51,7 @@ npm run test:smoke -- tests/smoke/upload-phase1.spec.ts
 ```bash
 ./apps/backend/scripts/bootstrap.sh         # Create/recreate venv (Python 3.11.x required)
 ./apps/backend/venv/bin/python apps/backend/server.py  # FastAPI server on 8100
-./apps/backend/venv/bin/python apps/backend/analyze.py <file> [--separate] [--transcribe] [--fast] [--yes]
+./apps/backend/venv/bin/python apps/backend/analyze.py <file> [--separate] [--transcribe] [--fast] [--standard] [--yes] [--pitch-note-only] [--stem-dir DIR] [--stem-output-dir DIR] [--pitch-note-backend BACKEND]
 
 # All backend tests (run from apps/backend/)
 ./venv/bin/python -m unittest discover -s tests
@@ -156,17 +156,24 @@ The subprocess isolation means `analyze.py` works as a standalone CLI. Check `ap
 
 Single-page React 19 + Vite + TypeScript + Tailwind CSS v4 app with no router. View states managed via React conditionals (upload → estimate → analysis → results). Vitest for unit tests, Playwright for smoke tests.
 
-**Key service files:**
+**Key service files** (canonical transport + chain-of-custody contracts):
 
 1. **`src/services/analysisRunsClient.ts`**: Canonical transport. Creates runs against `/api/analysis-runs`, polls snapshots, fetches pitch/note translations and interpretations.
 2. **`src/services/analyzer.ts`**: Phase orchestration entry point — sequences run creation, polling, and display payload projection.
 3. **`src/services/backendPhase1Client.ts`**: Legacy multipart transport (typed error classes, `AbortController` timeouts, identity probe via `/openapi.json`). Kept for the compatibility wrappers; new flows should go through `analysisRunsClient.ts`.
-4. **`src/services/spectralArtifactsClient.ts`**: Fetches spectrogram/spectral-evolution artifacts via `/api/analysis-runs/{run_id}/artifacts/…`.
-5. **`src/services/mixDoctor.ts`**: Mix advisory logic — client-side scoring and suggestions against measured spectral balance.
-6. **`src/services/phase2Validator.ts`**: Runtime guardrail. Validates Phase 2 consistency against Phase 1 (`validateBPMConsistency`, `validateKeyConsistency`, `validateLUFSConsistency`, `validateGenreDSPConsistency`, `validateNumericBounds`).
-7. **`src/services/midi/`**: MIDI export, preview, and quantization utilities (`midiExport.ts`, `midiPreview.ts`, `quantization.ts`).
-8. **`src/types.ts`** + **`src/types/`**: `types.ts` is a barrel re-export of `./types/{measurement,interpretation,backend}.ts`. `Phase1Result` lives in `types/measurement.ts`; `AnalysisRunSnapshot` in `types/backend.ts`; `Phase2Result` in `types/interpretation.ts`.
-9. **`src/config.ts`**: Runtime resolution of `VITE_API_BASE_URL` and feature flags; falls back to `http://127.0.0.1:8100`. Supports window-level overrides (`window.__VITE_API_BASE_URL_OVERRIDE__`, `window.__VITE_ENABLE_PHASE2_GEMINI_OVERRIDE__`) for hosted deployments that inject config at runtime without a rebuild.
+4. **`src/services/httpClient.ts`**: Shared fetch helpers and request-header injection used by the run/artifact/sample clients.
+5. **`src/services/spectralArtifactsClient.ts`**: Fetches spectrogram/spectral-evolution artifacts via `/api/analysis-runs/{run_id}/artifacts/…`.
+6. **`src/services/sampleGenerationClient.ts`**: Phase 3 audition-sample POST/GET against `/api/analysis-runs/{run_id}/samples`, plus per-clip artifact streaming.
+7. **`src/services/mixDoctor.ts`**: Mix advisory logic — client-side scoring and suggestions against measured spectral balance.
+8. **`src/services/phase2Validator.ts`**: Runtime guardrail. Validates Phase 2 consistency against Phase 1 (`validateBPMConsistency`, `validateKeyConsistency`, `validateLUFSConsistency`, `validateGenreDSPConsistency`, `validateNumericBounds`).
+9. **`src/services/appliedRecommendations.ts`** + **`userLabels.ts`**: Applied-recommendations tracker and persisted-label state used by the audit overhaul.
+10. **`src/services/phase1Picker.ts`** + **`phaseLabels.ts`**: Phase-snapshot projection helpers consumed by the results surface.
+11. **`src/services/audioFile.ts`**: Client-side audio validation, blank-MIME extension fallback, preview-URL lifecycle.
+12. **`src/services/fieldAnalytics.ts`** + **`diagnosticLogs.ts`**: Instrumentation hooks and diagnostic-log capture for the request panel.
+13. **`src/services/midi/`**: MIDI export, preview, and quantization utilities (`midiExport.ts`, `midiPreview.ts`, `quantization.ts`).
+14. **`src/services/sessionMusician/`**: Session Musician helpers — `confidenceBand.ts`, `noteConversion.ts`, `renderState.ts`, `stemListeningNotes.ts`.
+15. **`src/types.ts`** + **`src/types/`**: `types.ts` is a barrel re-export of `./types/{measurement,interpretation,backend}.ts`. `Phase1Result` lives in `types/measurement.ts`; `AnalysisRunSnapshot` in `types/backend.ts`; `Phase2Result` in `types/interpretation.ts`; `./types/samples.ts` is imported directly, not through the barrel.
+16. **`src/config.ts`**: Runtime resolution of `VITE_API_BASE_URL` and feature flags; falls back to `http://127.0.0.1:8100`. Supports window-level overrides (`window.__VITE_API_BASE_URL_OVERRIDE__`, `window.__VITE_ENABLE_PHASE2_GEMINI_OVERRIDE__`) for hosted deployments that inject config at runtime without a rebuild.
 
 `AnalysisResults.tsx` is the large results surface, lazy-loaded via Suspense. Manual vendor chunks in `vite.config.ts` control bundle splitting.
 

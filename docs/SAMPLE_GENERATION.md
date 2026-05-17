@@ -182,18 +182,9 @@ This keeps audition WAV/MIDI access on the same code path as every other run-sco
 
 ### Snapshot integration
 
-`AnalysisRunSnapshot.stages.sampleGeneration` becomes:
+Sample generation is **not** a stage on `AnalysisRunSnapshot.stages` — the snapshot still tracks the three queued stages only (`measurement`, `pitchNoteTranslation`, `interpretation`). Audition samples ride on the existing `run_artifacts` table with `kind` values `sample_audio`, `sample_midi`, and `sample_manifest`, and the manifest itself is fetched directly via `GET /api/analysis-runs/{run_id}/samples` (404 when not yet generated).
 
-```ts
-{
-  status: "not_requested" | "completed" | "failed",
-  manifestSampleCount?: number,
-  generatedAt?: string,
-  synthesisBackend?: "fluidsynth" | "sine_fallback"
-}
-```
-
-`not_requested` is the default — the stage is opt-in, not auto-enqueued. This is intentional: until audition value is validated, we don't want to pay the synthesis cost on every run.
+The synthesis backend used and the generated-at timestamp are recorded on the manifest body, not on the snapshot. Promotion to a first-class stage with `publicStatus` tracking is a follow-up if audition value pans out.
 
 ## Dependencies
 
