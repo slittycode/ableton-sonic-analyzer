@@ -10,6 +10,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import { ConfidenceBandBadge } from '../../src/components/sessionMusician/ConfidenceBandBadge';
+import {
+  getConfidenceBand,
+  toConfidenceBand,
+} from '../../src/services/sessionMusician/confidenceBand';
 
 // Confidence values that fall squarely inside each band per the thresholds
 // in services/sessionMusician/confidenceBand.ts (≥0.80 solid, ≥0.50 workable,
@@ -135,5 +139,68 @@ describe('ConfidenceBandBadge — override path used by full-mix-fallback / lega
     expect(html).toContain('Custom guidance for the producer.');
     // Default band copy must NOT appear when overrideCopy is set.
     expect(html).not.toContain("Notes look reliable. Expect light cleanup in Ableton's piano roll.");
+  });
+});
+
+// Audit Finding #4: compact variant omits the copy paragraph so the badge
+// can sit inline in card corners and metric-card footers without breaking
+// the surrounding layout. The pill itself stays identical to the full
+// variant — same tone, same label, same percent.
+describe('ConfidenceBandBadge — compact variant', () => {
+  it('compact variant omits the copy paragraph', () => {
+    const html = render(BAND_CONFIDENCE.solid, { variant: 'compact' });
+    expect(html).toContain('Solid scaffold');
+    expect(html).toContain('90%');
+    // The full variant's hedging copy must NOT render in compact mode.
+    expect(html).not.toContain("Notes look reliable. Expect light cleanup in Ableton's piano roll.");
+    // The full variant wraps in `<div class="space-y-2">`; compact wraps in
+    // an inline-flex span so it composes cleanly inline.
+    expect(html).not.toMatch(/<div[^>]*space-y-2/);
+  });
+
+  it('compact variant with explicit band prop and no confidence renders label-only (no percent)', () => {
+    const band = getConfidenceBand(0.9); // solid
+    const html = renderToStaticMarkup(
+      React.createElement(ConfidenceBandBadge, { band, variant: 'compact' }),
+    );
+    expect(html).toContain('Solid scaffold');
+    // No percent rendered because no confidence was passed.
+    expect(html).not.toContain('%');
+  });
+
+  it('band override prop wins over confidence-derived band for tone', () => {
+    // confidence=0.95 alone would yield solid (success tone). Override the
+    // band to the unreliable (error tone) variant via the `band` prop.
+    const unreliableBand = getConfidenceBand(0.1);
+    const html = renderToStaticMarkup(
+      React.createElement(ConfidenceBandBadge, {
+        confidence: 0.95,
+        band: unreliableBand,
+        variant: 'compact',
+      }),
+    );
+    const tokens = extractColorTokens(html);
+    expect(tokens.text).toBe('text-error');
+    // Label uses the override band; percent still comes from the
+    // confidence prop ("Unreliable · 95%") — exotic combination but the
+    // primitive needs to handle it without crashing.
+    expect(html).toContain('Unreliable');
+    expect(html).toContain('95%');
+  });
+
+  it('routes Gemini HIGH/MED/LOW strings through toConfidenceBand into the badge', () => {
+    // The real-world wiring at the Detected Characteristics site: caller
+    // converts the string enum, passes the resulting band.
+    const band = toConfidenceBand('MED');
+    expect(band).not.toBeNull();
+    const html = renderToStaticMarkup(
+      React.createElement(ConfidenceBandBadge, {
+        band: band ?? undefined,
+        variant: 'compact',
+      }),
+    );
+    expect(html).toContain('Workable draft');
+    const tokens = extractColorTokens(html);
+    expect(tokens.text).toBe('text-accent');
   });
 });

@@ -7,7 +7,7 @@
 - The repo is a local Python audio-analysis service with two entry points:
   - `analyze.py`: raw CLI analyzer
   - `server.py`: FastAPI wrapper around the CLI
-- There are no repo-local Cursor rules, `.cursorrules`, or Copilot instruction files in this repo as of 2026-05-15.
+- There are no repo-local Cursor rules, `.cursorrules`, or Copilot instruction files in this repo as of 2026-05-17.
 
 ## Working Style For Agents
 
@@ -121,6 +121,7 @@ python3.11 -m venv venv
 - `phase1_evaluation.py` + `phase1_report_html.py`: Offline Phase 1 evaluation harness — deterministic-metric and detector-stability reporting, with a standalone HTML render. Not on the product path; driven by `scripts/evaluate_phase1.py`.
 - `polyphonic_evaluation.py` + `scripts/evaluate_polyphonic.py`: **Research-only.** Offline polyphonic-transcription evaluation harness, not part of the shipped product path.
 - `utils/cleanup.py`: Periodic artifact cleanup helpers used by the server background-task loop.
+- `symbolic_extract.py`: **Orphaned and broken.** Earlier worker-process entry point for pitch/note translation; superseded by `analyze.py --pitch-note-only`. Still imports a removed `BasicPitchBackend` symbol from `analyze.py`, so loading the module would raise `ImportError`. Not referenced from any other module. Slated for removal — do not extend it.
 - `tests/test_server.py`: OpenAPI and envelope contract tests.
 - `tests/test_analyze.py`: generated WAV fixture, `EXPECTED_TOP_LEVEL_KEYS` snapshot, raw payload assertions.
 - `tests/test_csv_export.py`, `tests/test_sample_*.py`, `tests/test_server_samples.py`: Coverage for CSV export and Phase 3 audition samples.

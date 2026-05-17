@@ -40,7 +40,9 @@ import {
 } from './MeasurementPrimitives';
 import { PhaseSourceBadge } from './PhaseSourceBadge';
 import { StickyNav, type StickyNavSection } from './StickyNav';
-import { CitationBlock } from './CitationBlock';
+import { CitationBlock, CitationHeadline } from './CitationBlock';
+import { ConfidenceBandBadge } from './sessionMusician/ConfidenceBandBadge';
+import { toConfidenceBand } from '../services/sessionMusician/confidenceBand';
 import { loadAppliedIds, toggleAppliedId } from '../services/appliedRecommendations';
 import {
   buildArrangementViewModel,
@@ -256,11 +258,9 @@ function SourcesToggle({ sources, showSources, onToggle }: { sources?: string[];
   );
 }
 
-function confidenceClass(level: string): string {
-  if (level === 'High') return 'text-success bg-success/10 border-success/20';
-  if (level === 'Moderate') return 'text-warning bg-warning/10 border-warning/20';
-  return 'text-error bg-error/10 border-error/20';
-}
+// Audit Finding #4: `confidenceClass` was the tone mapper for the legacy
+// three-level Confidence Notes chips. Retired — chips now route through
+// `ConfidenceBandBadge` with the canonical four-band ladder.
 
 function shortenCharacteristicName(name: string): string {
   return name.trim().split(/\s+/).slice(0, 2).join(' ');
@@ -409,6 +409,98 @@ function MetaBadgeList({ items }: { items: MetaBadgeItem[] }) {
 // orange-accent pills. Track Layout — its only call site — now uses
 // CitationBlock with the segmentIndexes routed through the `extraRows` prop.
 
+// Audit Finding #1C: the Interpretation Caution panel used to render the
+// backend's `originalValue` / `coercedValue` strings verbatim inside small
+// badges. For dropped Phase 2 recommendations, the backend JSON-dumps the
+// whole AbletonRecommendation object into `originalValue` (see
+// `_stringify_warning_value` / `_build_phase2_validation_warning` in
+// `apps/backend/server_phase2.py`). The producer would see a literal
+// `{"advancedTip":"…","device":"$Saturator","phase1Fields":[...],…}` string
+// inside the panel — engine output leaking through.
+//
+// `formatDroppedValue` keeps the backend contract intact and renders a
+// compact human summary for JSON-shaped values: parse, pick a few headline
+// keys (device, parameter, value, …), join as "k: v · k: v". Non-JSON
+// strings pass through. Invalid JSON falls back to a truncated raw string.
+const FORMAT_DROPPED_VALUE_HEADLINE_KEYS = [
+  'device',
+  'parameter',
+  'value',
+  'category',
+  'name',
+  'field',
+] as const;
+const FORMAT_DROPPED_VALUE_MAX_CHARS = 80;
+
+function formatDroppedValue(raw: unknown): string {
+  if (raw === null || raw === undefined) return '—';
+  const str = String(raw).trim();
+  if (str.length === 0) return '—';
+  const looksLikeJson = str.startsWith('{') || str.startsWith('[');
+  if (!looksLikeJson) {
+    return str.length > FORMAT_DROPPED_VALUE_MAX_CHARS
+      ? `${str.slice(0, FORMAT_DROPPED_VALUE_MAX_CHARS - 1)}…`
+      : str;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(str);
+  } catch {
+    return str.length > FORMAT_DROPPED_VALUE_MAX_CHARS
+      ? `${str.slice(0, FORMAT_DROPPED_VALUE_MAX_CHARS - 1)}…`
+      : str;
+  }
+
+  if (Array.isArray(parsed)) {
+    const n = parsed.length;
+    const noun = `${n} item${n === 1 ? '' : 's'}`;
+    const first = parsed[0];
+    if (first && typeof first === 'object' && !Array.isArray(first)) {
+      const firstRec = first as Record<string, unknown>;
+      const label =
+        (typeof firstRec.device === 'string' && firstRec.device) ||
+        (typeof firstRec.name === 'string' && firstRec.name) ||
+        null;
+      if (label) return `${noun} (${label}${n > 1 ? ', …' : ''})`;
+    }
+    return noun;
+  }
+
+  if (parsed && typeof parsed === 'object') {
+    const record = parsed as Record<string, unknown>;
+    const parts: string[] = [];
+    for (const key of FORMAT_DROPPED_VALUE_HEADLINE_KEYS) {
+      if (parts.length >= 3) break;
+      const value = record[key];
+      if (value === null || value === undefined || value === '') continue;
+      const valueStr = typeof value === 'string' ? value : JSON.stringify(value);
+      if (!valueStr) continue;
+      parts.push(`${key}: ${valueStr}`);
+    }
+    if (parts.length === 0) {
+      const entries = Object.entries(record).filter(
+        ([, v]) => v !== null && v !== undefined && v !== '',
+      );
+      for (const [k, v] of entries.slice(0, 2)) {
+        const valueStr = typeof v === 'string' ? v : JSON.stringify(v);
+        parts.push(`${k}: ${valueStr}`);
+      }
+    }
+    if (parts.length === 0) return '—';
+    const joined = parts.join(' · ');
+    return joined.length > FORMAT_DROPPED_VALUE_MAX_CHARS
+      ? `${joined.slice(0, FORMAT_DROPPED_VALUE_MAX_CHARS - 1)}…`
+      : joined;
+  }
+
+  // Primitive that happened to start with `{` / `[` (very unlikely after the
+  // JSON.parse succeeded into an object, but defensive).
+  return str.length > FORMAT_DROPPED_VALUE_MAX_CHARS
+    ? `${str.slice(0, FORMAT_DROPPED_VALUE_MAX_CHARS - 1)}…`
+    : str;
+}
+
 function describeInterpretationWarning(
   warning: InterpretationValidationWarning,
 ): Pick<GroupedInterpretationWarning, 'tone' | 'title' | 'message'> {
@@ -505,9 +597,9 @@ function meterStatusLabel(phase1: Phase1Result): string {
   return isAssumedMeter(phase1) ? 'ASSUMED' : 'DETECTED';
 }
 
-function formatBpmScore(value: number): string {
-  return `SCORE ${value.toFixed(2).replace(/\.?0+$/, '')}`;
-}
+// Audit Finding #4: `formatBpmScore` retired — the BPM card now renders
+// the canonical band pill via ConfidenceBandBadge, same vocabulary as
+// every other confidence surface.
 
 export function AnalysisResults({
   phase1,
@@ -803,11 +895,10 @@ export function AnalysisResults({
           headerRight={<PhaseSourceBadge source="measured" />}
           footer={
             <div className="space-y-2">
-              <StatusBadge
-                label={formatBpmScore(phase1.bpmConfidence)}
-                tone="accent"
-                compact
-              />
+              {/* Audit Finding #4: `SCORE 0.86` badge retired in favor of the
+                  canonical band pill — same vocabulary as Key, Character, and
+                  every other confidence surface. */}
+              <ConfidenceBandBadge variant="compact" confidence={phase1.bpmConfidence} />
               {phase1.bpmSource && (
                 <span className="block text-[8px] font-mono uppercase tracking-wide text-text-secondary/50">
                   {phase1.bpmSource.replace(/_/g, ' ')}
@@ -839,9 +930,9 @@ export function AnalysisResults({
                 color="var(--color-accent)"
                 glow
               />
-              <span className="block text-[8px] font-mono uppercase tracking-wide text-text-secondary/60 tabular-nums">
-                CONF {(phase1.keyConfidence * 100).toFixed(0)}%
-              </span>
+              {/* Audit Finding #4: `CONF 62%` text replaced with the canonical
+                  band pill so every confidence reads in the same vocabulary. */}
+              <ConfidenceBandBadge variant="compact" confidence={phase1.keyConfidence} />
             </div>
           }
         />
@@ -884,9 +975,12 @@ export function AnalysisResults({
                   color="var(--color-accent)"
                   glow
                 />
-                <span className="block text-[8px] font-mono uppercase tracking-wide text-text-secondary/60 tabular-nums">
-                  CONF {Math.round(phase1.genreDetail.confidence * 100)}%
-                </span>
+                {/* Audit Finding #4: `CONF X%` replaced with the canonical
+                    band pill — same vocabulary across every confidence. */}
+                <ConfidenceBandBadge
+                  variant="compact"
+                  confidence={phase1.genreDetail.confidence}
+                />
               </div>
             }
           />
@@ -1058,12 +1152,16 @@ export function AnalysisResults({
                       >
                         {(m.originalValue || m.coercedValue) && (
                           <>
+                            {/* Audit Finding #1C: render compact human summary
+                              for JSON-shaped values (dropped recommendations)
+                              instead of dumping the raw object. See
+                              `formatDroppedValue` near the top of the file. */}
                             <span className="px-1.5 py-0.5 rounded border border-border">
-                              {m.originalValue ?? '—'}
+                              {formatDroppedValue(m.originalValue)}
                             </span>
                             <span className="opacity-50">→</span>
                             <span className="px-1.5 py-0.5 rounded border border-border">
-                              {m.coercedValue ?? '—'}
+                              {formatDroppedValue(m.coercedValue)}
                             </span>
                           </>
                         )}
@@ -1090,14 +1188,22 @@ export function AnalysisResults({
 
       {confidenceBadges.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 px-1">
-          {confidenceBadges.map((badge, idx) => (
-            <span
-              key={`${badge.label}-${idx}`}
-              className={`px-2 py-1 rounded-sm border text-[10px] font-mono uppercase tracking-wide ${confidenceClass(badge.level)}`}
-            >
-              {badge.label}: {badge.level}
-            </span>
-          ))}
+          {/* Audit Finding #4: chips used to render "{label}: High|Moderate|Low"
+            with bespoke success/warning/error tones. Now route through the
+            canonical band ladder so the same vocabulary (Solid / Workable /
+            Rough / Unreliable) appears across every confidence surface.
+            Filter null bands (unparseable values) rather than render a
+            misleading default. */}
+          {confidenceBadges.map((badge, idx) =>
+            badge.band ? (
+              <span key={`${badge.label}-${idx}`} className="inline-flex items-center gap-2">
+                <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary/80">
+                  {badge.label}:
+                </span>
+                <ConfidenceBandBadge variant="compact" band={badge.band} />
+              </span>
+            ) : null,
+          )}
         </div>
       )}
 
@@ -1552,17 +1658,21 @@ export function AnalysisResults({
                   >
                     {item.name}
                   </h3>
-                  <span
-                    className={`flex items-center text-[10px] font-mono font-bold px-2 py-1 rounded-sm border ${
-                      item.confidence === 'HIGH'
-                        ? 'text-success bg-success/10 border-success/20'
-                        : item.confidence === 'MED'
-                          ? 'text-warning bg-warning/10 border-warning/20'
-                          : 'text-error bg-error/10 border-error/20'
-                    }`}
-                  >
-                    {item.confidence}
-                  </span>
+                  {/* Audit Finding #4: Detected Characteristics cards used
+                    to render a HIGH/MED/LOW string pill with bespoke
+                    success/warning/error tones. Replaced with the canonical
+                    ConfidenceBandBadge so the same vocabulary (Solid /
+                    Workable / Rough / Unreliable) reads across every
+                    confidence surface in the UI. toConfidenceBand maps
+                    Gemini's HIGH→solid (0.9), MED→workable (0.6),
+                    LOW→rough (0.3) — middle of each band so the percent
+                    label reads as an honest hedge. */}
+                  {(() => {
+                    const band = toConfidenceBand(item.confidence);
+                    return band ? (
+                      <ConfidenceBandBadge variant="compact" band={band} />
+                    ) : null;
+                  })()}
                 </div>
                 <p className="text-xs text-text-secondary leading-relaxed font-mono opacity-80 border-t border-border/50 pt-2 mt-2 pl-2">
                   {truncateAtSentenceBoundary(item.explanation, 600)}
@@ -1814,6 +1924,18 @@ export function AnalysisResults({
                             </span>
                           )}
                         </div>
+                        {/* Audit Finding #3: primary citation visible in the
+                          collapsed header. Mirrors the Mix Chain / Patch
+                          placement so all three card types feel parallel. */}
+                        {card.phase1Fields.length > 0 && (
+                          <div className="mt-1 flex min-w-0">
+                            <CitationHeadline
+                              phase1={phase1}
+                              field={card.phase1Fields[0]}
+                              testId={`sonic-headline-${card.id}`}
+                            />
+                          </div>
+                        )}
                         <p data-text-role="body" className={textRoleClassName('body', 'mt-1 truncate')}>
                           {card.summary}
                         </p>
@@ -1944,10 +2066,16 @@ export function AnalysisResults({
                         >
                           <div className="flex items-center justify-between gap-3">
                             <div className="min-w-0">
+                              {/* Audit quick-hit: order badges (`{card.order}`)
+                                used to render as small numbered chips next to
+                                each device. Because the cards are grouped by
+                                processing stage AFTER ordering, the numbers
+                                appeared out-of-order within each group ("1, 6,
+                                8, 9 / 2, 4 / 5, 7 / 3 / 10"), which read as
+                                a presentation bug. The visual sequence within
+                                each group is already meaningful — the badge
+                                added confusion without information. Dropped. */}
                               <div className="flex items-center gap-2">
-                                <span className="w-6 h-6 rounded-sm bg-bg-app border border-border text-accent font-mono text-[10px] flex items-center justify-center">
-                                  {card.order}
-                                </span>
                                 <h4
                                   data-text-role="item-title"
                                   className={textRoleClassName('item-title', 'truncate')}
@@ -1958,6 +2086,20 @@ export function AnalysisResults({
                                   {card.category}
                                 </span>
                               </div>
+                              {/* Audit Finding #3: primary citation visible in
+                                the collapsed header so the chain-of-custody
+                                evidence isn't gated behind expansion. The
+                                expanded CitationBlock below still carries the
+                                full multi-row list. */}
+                              {card.phase1Fields.length > 0 && (
+                                <div className="mt-1 flex min-w-0">
+                                  <CitationHeadline
+                                    phase1={phase1}
+                                    field={card.phase1Fields[0]}
+                                    testId={`mix-chain-headline-${card.id}`}
+                                  />
+                                </div>
+                              )}
                               <p data-text-role="body" className={textRoleClassName('body', 'mt-1 truncate')}>
                                 {card.role}
                               </p>
@@ -2103,9 +2245,25 @@ export function AnalysisResults({
                                   {patch.category}
                                 </span>
                               </div>
-                              <p data-text-role="body" className={textRoleClassName('body', 'mt-1 truncate')}>
-                                {patch.patchRole}
-                              </p>
+                              {/* Audit Finding #3: primary citation in the
+                                collapsed header so the chain-of-custody
+                                evidence is visible without expanding. */}
+                              {patch.phase1Fields.length > 0 && (
+                                <div className="mt-1 flex min-w-0">
+                                  <CitationHeadline
+                                    phase1={phase1}
+                                    field={patch.phase1Fields[0]}
+                                    testId={`patch-headline-${patch.id}`}
+                                  />
+                                </div>
+                              )}
+                              {/* Audit Finding #1B: the per-card patchRole
+                                paragraph used to render a duplicated
+                                category-keyed placeholder ("Primary tone
+                                generator" on every SYNTHESIS card). It has been
+                                removed; the category chip above carries the
+                                bucket and `whyThisWorks` (inside the expanded
+                                card body) carries the actionable explanation. */}
                               <div className="mt-2">
                                 <MetaBadgeList
                                   items={[
