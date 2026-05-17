@@ -1846,6 +1846,163 @@ describe('AnalysisResults UI wiring', () => {
   });
 
   // ─────────────────────────────────────────────────────────────────────
+  // Audit Finding #3: chain-of-custody citation also surfaces in the
+  // collapsed card header via CitationHeadline so producers see the
+  // measurement evidence without expanding the card. The CitationBlock
+  // above stays in the expanded body unchanged.
+  // ─────────────────────────────────────────────────────────────────────
+  it('renders CitationHeadline in collapsed Mix Chain card header with the primary cited field', () => {
+    const phase2WithCitations: Phase2Result = {
+      ...basePhase2,
+      mixAndMasterChain: [
+        {
+          order: 1,
+          device: 'Drum Buss',
+          deviceFamily: 'NATIVE',
+          trackContext: 'Drum Group',
+          workflowStage: 'MIX',
+          parameter: 'Drive',
+          value: '25%',
+          reason: 'Adds punch to drums.',
+          phase1Fields: ['bpm', 'lufsIntegrated'],
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: baseMeasurement,
+        phase2: phase2WithCitations,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    // Headline mount appears in the collapsed header (the button is part of
+    // renderToStaticMarkup output regardless of isOpen).
+    expect(html).toMatch(/data-testid="mix-chain-headline-/);
+    // Primary cited field is phase1Fields[0] → bpm → "Tempo" label + BPM value.
+    expect(html).toContain('Tempo');
+    expect(html).toMatch(/\d+ BPM/);
+    // Arrow leads into the device h4 that follows in the title row.
+    expect(html).toContain('→');
+  });
+
+  it('renders CitationHeadline in collapsed Patch card header with the primary cited field', () => {
+    const phase2WithCitations: Phase2Result = {
+      ...basePhase2,
+      abletonRecommendations: [
+        {
+          device: 'Drift',
+          category: 'SYNTHESIS',
+          deviceFamily: 'NATIVE',
+          trackContext: 'Synth Group',
+          workflowStage: 'SOUND_DESIGN',
+          parameter: 'Position',
+          value: '0.42',
+          reason: 'Builds the supersaw lead character.',
+          phase1Fields: ['key', 'spectralBalance.subBass'],
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: baseMeasurement,
+        phase2: phase2WithCitations,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).toMatch(/data-testid="patch-headline-/);
+    expect(html).toContain('Key');
+  });
+
+  it('renders CitationHeadline in collapsed Sonic Element card header above the summary', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: baseMeasurement,
+        phase2: basePhase2,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    // At least one Sonic Element card surfaces a headline (the SONIC_ELEMENT_FIELD_PATHS
+    // map populates phase1Fields[] for cards whose fixture fields resolve).
+    expect(html).toMatch(/data-testid="sonic-headline-/);
+  });
+
+  it('does not render CitationHeadline when phase1Fields is empty on a Mix Chain card', () => {
+    const phase2WithEmpty: Phase2Result = {
+      ...basePhase2,
+      mixAndMasterChain: [
+        {
+          order: 1,
+          device: 'Drum Buss',
+          deviceFamily: 'NATIVE',
+          trackContext: 'Drum Group',
+          workflowStage: 'MIX',
+          parameter: 'Drive',
+          value: '25%',
+          reason: 'Adds punch to drums.',
+          // phase1Fields intentionally omitted — view-model defaults to [].
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: baseMeasurement,
+        phase2: phase2WithEmpty,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    // No headline rendered for the Drum Buss card; the title row + role
+    // paragraph + meta badges layout stays intact.
+    expect(html).not.toMatch(/data-testid="mix-chain-headline-1-Drum Buss-/);
+    // Sanity: the card itself still renders (device name visible).
+    expect(html).toContain('Drum Buss');
+  });
+
+  it('renders the confidence pill in the headline when the primary cited field has a low-confidence sibling (Rough or Unreliable)', () => {
+    // bpm has confidence sibling bpmConfidence; baseMeasurement sets it to
+    // 0.62 (Workable). To exercise the hedging path, use a fixture override.
+    const lowConfidencePhase1 = {
+      ...baseMeasurement,
+      bpmConfidence: 0.18, // < 0.25 → Unreliable
+    };
+    const phase2WithCitations: Phase2Result = {
+      ...basePhase2,
+      mixAndMasterChain: [
+        {
+          order: 1,
+          device: 'Drum Buss',
+          deviceFamily: 'NATIVE',
+          trackContext: 'Drum Group',
+          workflowStage: 'MIX',
+          parameter: 'Drive',
+          value: '25%',
+          reason: 'Adds punch.',
+          phase1Fields: ['bpm'],
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: lowConfidencePhase1,
+        phase2: phase2WithCitations,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    // Headline carries the Unreliable band pill so producers see the hedge
+    // without expanding the card — preserves the chain-of-custody invariant.
+    expect(html).toMatch(/data-testid="mix-chain-headline-.+-pill"/);
+    expect(html).toContain('Unreliable');
+  });
+
+  // ─────────────────────────────────────────────────────────────────────
   // Audit Finding #14 + #15: applied-recommendation checkbox affordance on
   // Mix Chain / Patches cards. The checkbox renders only when a content hash
   // is provided (no hash → no tracker → no checkbox); the section-level

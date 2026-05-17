@@ -40,7 +40,7 @@ import {
 } from './MeasurementPrimitives';
 import { PhaseSourceBadge } from './PhaseSourceBadge';
 import { StickyNav, type StickyNavSection } from './StickyNav';
-import { CitationBlock } from './CitationBlock';
+import { CitationBlock, CitationHeadline } from './CitationBlock';
 import { loadAppliedIds, toggleAppliedId } from '../services/appliedRecommendations';
 import {
   buildArrangementViewModel,
@@ -1910,6 +1910,18 @@ export function AnalysisResults({
                             </span>
                           )}
                         </div>
+                        {/* Audit Finding #3: primary citation visible in the
+                          collapsed header. Mirrors the Mix Chain / Patch
+                          placement so all three card types feel parallel. */}
+                        {card.phase1Fields.length > 0 && (
+                          <div className="mt-1 flex min-w-0">
+                            <CitationHeadline
+                              phase1={phase1}
+                              field={card.phase1Fields[0]}
+                              testId={`sonic-headline-${card.id}`}
+                            />
+                          </div>
+                        )}
                         <p data-text-role="body" className={textRoleClassName('body', 'mt-1 truncate')}>
                           {card.summary}
                         </p>
@@ -2054,6 +2066,20 @@ export function AnalysisResults({
                                   {card.category}
                                 </span>
                               </div>
+                              {/* Audit Finding #3: primary citation visible in
+                                the collapsed header so the chain-of-custody
+                                evidence isn't gated behind expansion. The
+                                expanded CitationBlock below still carries the
+                                full multi-row list. */}
+                              {card.phase1Fields.length > 0 && (
+                                <div className="mt-1 flex min-w-0">
+                                  <CitationHeadline
+                                    phase1={phase1}
+                                    field={card.phase1Fields[0]}
+                                    testId={`mix-chain-headline-${card.id}`}
+                                  />
+                                </div>
+                              )}
                               <p data-text-role="body" className={textRoleClassName('body', 'mt-1 truncate')}>
                                 {card.role}
                               </p>
@@ -2199,6 +2225,18 @@ export function AnalysisResults({
                                   {patch.category}
                                 </span>
                               </div>
+                              {/* Audit Finding #3: primary citation in the
+                                collapsed header so the chain-of-custody
+                                evidence is visible without expanding. */}
+                              {patch.phase1Fields.length > 0 && (
+                                <div className="mt-1 flex min-w-0">
+                                  <CitationHeadline
+                                    phase1={phase1}
+                                    field={patch.phase1Fields[0]}
+                                    testId={`patch-headline-${patch.id}`}
+                                  />
+                                </div>
+                              )}
                               {/* Audit Finding #1B: the per-card patchRole
                                 paragraph used to render a duplicated
                                 category-keyed placeholder ("Primary tone
