@@ -2066,10 +2066,16 @@ export function AnalysisResults({
                         >
                           <div className="flex items-center justify-between gap-3">
                             <div className="min-w-0">
+                              {/* Audit quick-hit: order badges (`{card.order}`)
+                                used to render as small numbered chips next to
+                                each device. Because the cards are grouped by
+                                processing stage AFTER ordering, the numbers
+                                appeared out-of-order within each group ("1, 6,
+                                8, 9 / 2, 4 / 5, 7 / 3 / 10"), which read as
+                                a presentation bug. The visual sequence within
+                                each group is already meaningful — the badge
+                                added confusion without information. Dropped. */}
                               <div className="flex items-center gap-2">
-                                <span className="w-6 h-6 rounded-sm bg-bg-app border border-border text-accent font-mono text-[10px] flex items-center justify-center">
-                                  {card.order}
-                                </span>
                                 <h4
                                   data-text-role="item-title"
                                   className={textRoleClassName('item-title', 'truncate')}

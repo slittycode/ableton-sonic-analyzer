@@ -1884,8 +1884,13 @@ export function MeasurementDashboard({
         </div>
       </Section>
 
-      {/* 3. MixDoctor */}
-      <Section id="section-meas-mixdoctor" number={3} title="MixDoctor">
+      {/* 3. Mix Doctor (audit quick-hit: was "MixDoctor" — formatWord in
+        `utils/displayText.ts` case-normalizes single-token CamelCase to
+        sentence case, so "MixDoctor" was rendering as "Mixdoctor" with
+        a lowercase 'd'. Renaming to two words ("Mix Doctor") matches
+        every other section name's pattern and renders cleanly through
+        the existing pipeline.) */}
+      <Section id="section-meas-mixdoctor" number={3} title="Mix Doctor">
         <MixDoctorPanel report={mixDoctorReport} />
       </Section>
 

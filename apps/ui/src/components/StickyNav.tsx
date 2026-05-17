@@ -75,9 +75,14 @@ export function StickyNav({ sections }: StickyNavProps) {
         {/* Audit N10: was "Device Chain" — confusing because "device chain" in
             Ableton means a track's effects routing, not section navigation. */}
         <p className="text-[10px] font-mono uppercase tracking-[0.28em] text-text-secondary">Sections</p>
-        <div className="overflow-x-auto">
-          <div className="flex min-w-max items-center gap-2 pr-2">
-            {sections.map((section) => {
+        {/* Audit quick-hit: previously `overflow-x-auto` + `min-w-max` so the
+          pill row scrolled horizontally. macOS hides scrollbars by default so
+          the last pill (e.g. "MEASUREMENTS") looked clipped — no affordance
+          to indicate scrollable content. Switched to flex-wrap so pills flow
+          onto multiple rows at narrow widths; `whitespace-nowrap` on each
+          pill prevents intra-label wrap. */}
+        <div className="flex flex-wrap items-center gap-2">
+          {sections.map((section) => {
               const isDisabled = section.disabled === true;
               const isActive = !isDisabled && section.id === activeId;
               return (
@@ -101,7 +106,7 @@ export function StickyNav({ sections }: StickyNavProps) {
                   title={isDisabled ? section.disabledReason : undefined}
                   aria-disabled={isDisabled || undefined}
                   data-disabled={isDisabled || undefined}
-                  className={`rounded-sm border px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.16em] transition-colors ${
+                  className={`rounded-sm border px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.16em] whitespace-nowrap transition-colors ${
                     isDisabled
                       ? 'border-border/60 bg-bg-card/40 text-text-secondary/40 cursor-not-allowed'
                       : isActive
@@ -113,7 +118,6 @@ export function StickyNav({ sections }: StickyNavProps) {
                 </a>
               );
             })}
-          </div>
         </div>
       </div>
     </div>
