@@ -21,6 +21,7 @@
 | `phase1_evaluation.py` + `phase1_report_html.py` | Offline Phase 1 evaluation harness — deterministic-metric and detector-stability reporting, with a standalone HTML render. Not on the product path; driven by `scripts/evaluate_phase1.py`. |
 | `polyphonic_evaluation.py` + `scripts/evaluate_polyphonic.py` | Research-only offline polyphonic-transcription evaluation harness. Not on the product path. |
 | `utils/cleanup.py` | Periodic artifact cleanup helpers used by the server background-task loop. |
+| `symbolic_extract.py` | **Orphaned.** Earlier worker-process entry point for pitch/note translation; superseded by `analyze.py --pitch-note-only`. Currently imports a removed `BasicPitchBackend` and would fail at module load. Not invoked from anywhere else in the tree; slated for removal. |
 | `tests/test_server.py` | Contract tests for estimate, timeout, and success envelopes. |
 | `tests/test_analyze.py` | Structural snapshot tests for the raw analyzer JSON output. Owns `EXPECTED_TOP_LEVEL_KEYS` — update it whenever you add a root field. |
 | `tests/test_spectral_viz.py` | Unit tests for spectrogram generation, time-series computation, and artifact orchestration. |
