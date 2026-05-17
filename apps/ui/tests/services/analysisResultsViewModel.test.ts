@@ -9,6 +9,7 @@ import {
   truncateAtSentenceBoundary,
   truncateBySentenceCount,
 } from '../../src/components/analysisResultsViewModel';
+import { getConfidenceBand } from '../../src/services/sessionMusician/confidenceBand';
 import { MeasurementResult, Phase2Result, TranscriptionDetail } from '../../src/types';
 
 const measurement: MeasurementResult = {
@@ -747,7 +748,43 @@ describe('analysisResultsViewModel helpers', () => {
     expect(insights?.noteCount).toBe(6);
     expect(insights?.rangeLabel).toBe('C3 - G5');
     expect(insights?.dominantNotes).toEqual(['C3', 'G3']);
-    expect(insights?.confidenceLabel).toBe('High');
     expect(insights?.isDraft).toBe(false);
+    expect(insights?.confidence).toBeCloseTo(0.83);
+    expect(getConfidenceBand(insights!.confidence).label).toBe('Solid scaffold');
+  });
+
+  // PR #60: cover the two render sites that interpolate the canonical band
+  // label, not just the upstream getConfidenceBand mapping. A regression in
+  // either string-interpolation site would otherwise hide until manual QA.
+  it('renders the canonical band label inside the Sonic Element melody row (transcription path)', () => {
+    const sonicCards = buildSonicElementCards(
+      { ...measurement, transcriptionDetail: pitchNote },
+      {
+        kick: 'Kick.',
+        bass: 'Bass.',
+        melodicArp: 'Arp.',
+        grooveAndTiming: 'Groove.',
+        effectsAndTexture: 'Fx.',
+        widthAndStereo: 'Width.',
+        harmonicContent: 'Harmony.',
+      },
+    );
+    const melodic = sonicCards.find((card) => card.id === 'melodicArp');
+    const confidenceRow = melodic?.measurements.find((m) => m.label === 'Transcription');
+    expect(confidenceRow?.value).toBe('Solid scaffold (83%)');
+  });
+
+  it('renders the canonical band label inside the MIDI Clip Guide patch parameters (melody fallback path)', () => {
+    // Phase 2 with no MIDI-focused recommendations forces the synthetic
+    // "MIDI Clip Guide" card, which calls buildMelodyPatchParameters with
+    // the melodyDetail-derived insights (pitchConfidence: 0.72 → workable).
+    const phase2 = {
+      mixAndMasterChain: [],
+      synthAndDrumPatches: [],
+    } as unknown as Phase2Result;
+    const cards = buildPatchCards(measurement, phase2);
+    const guide = cards.find((c) => c.device === 'MIDI Clip Guide');
+    const confidenceRow = guide?.parameters.find((p) => p.label === 'Melody Confidence');
+    expect(confidenceRow?.value).toBe('72% (Workable draft)');
   });
 });
