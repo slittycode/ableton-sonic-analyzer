@@ -1,11 +1,13 @@
 # Track 1 verification spike outcome — 2026-05-13
 
+> **Archived 2026-05-15.** Completed verification spike. The sample-rate threading follow-up shipped in [PR #34](https://github.com/slittycode/ableton-sonic-analyzer/pull/34); the loudness regression test now lives at `apps/backend/tests/test_loudness_r128.py`. Kept here for the rationale trail.
+
 **Scope:** verify the review's premise (in [`external-repo-review-2026-05-13.md`](external-repo-review-2026-05-13.md))
 that ASA's existing loudness path is already correct on its operating
 sample rate, so no port of openmeters' BS.1770-5 implementation is needed.
 
 **Result (pending CI):** The added test
-[`apps/backend/tests/test_loudness_r128.py`](../apps/backend/tests/test_loudness_r128.py)
+[`apps/backend/tests/test_loudness_r128.py`](../../apps/backend/tests/test_loudness_r128.py)
 exercises EBU Tech 3341 Cases 1 and 2 — the canonical sine-tone
 conformance signals — through ASA's `analyze_loudness` at 44.1 kHz.
 If those assert green, the premise check is positive and Track 1's
@@ -47,8 +49,8 @@ The original finding is preserved below for context.
 While tracing the loudness path, the spike surfaced an asymmetry between
 ASA's two call sites for `LoudnessEBUR128`:
 
-- [`analyze_core.py:197`](../apps/backend/analyze_core.py) — `analyze_loudness(stereo)` instantiates `es.LoudnessEBUR128()` with **no** `sampleRate` argument (Essentia's default is 44100).
-- [`analyze_fast.py:100`](../apps/backend/analyze_fast.py) — `analyze_fast` instantiates `es.LoudnessEBUR128(sampleRate=sample_rate)` with the actual sample rate.
+- [`analyze_core.py:197`](../../apps/backend/analyze_core.py) — `analyze_loudness(stereo)` instantiates `es.LoudnessEBUR128()` with **no** `sampleRate` argument (Essentia's default is 44100).
+- [`analyze_fast.py:100`](../../apps/backend/analyze_fast.py) — `analyze_fast` instantiates `es.LoudnessEBUR128(sampleRate=sample_rate)` with the actual sample rate.
 
 The full pipeline (`analyze.py:1448`) loads stereo via `load_stereo`, which
 preserves the **source file's native sample rate** (no upstream resample).

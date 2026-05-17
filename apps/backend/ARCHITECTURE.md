@@ -13,16 +13,20 @@
 | `worker.py` | Dedicated worker-process entry point for hosted-style background stage execution. |
 | `upload_limits.py` | Canonical raw-audio (100 MiB) and request-envelope (101 MiB) limits, plus the protected-route list. Operator contract is generated, not hand-edited — see `scripts/render_upload_limit_contract.py`. |
 | `spectral_viz.py` | Librosa-based spectrogram generation and spectral time-series extraction. Produces mel/chroma PNG spectrograms and per-frame spectral evolution JSON. Called after successful measurement; failures are non-critical. |
-| `url_ingest.py` | SSRF-guarded URL-mode ingestion for `POST /api/analysis-runs`. Fetches a public `http`/`https` audio file and feeds the bytes through the same downstream pipeline as a multipart upload. |
+| `url_ingest.py` | SSRF-guarded URL-mode ingestion for `POST /api/analysis-runs`. Fetches a public `http`/`https` audio file and streams the bytes through the same downstream pipeline as a multipart upload, enforcing the shared 100 MiB cap. |
 | `csv_export.py` | CSV exporters for Phase 1 time-series fields, keyed by dotted JSON path. Backs `GET /api/analysis-runs/{run_id}/export/csv/{field_path}` and keeps the route handler a thin lookup-and-serve. |
 | `stage_status.py` | Collapses the eight internal stage statuses into the additive client-facing `publicStatus` field carried on every stage in the run snapshot. |
 | `server_samples.py` + `sample_generation.py` / `sample_theory.py` / `sample_synthesis.py` / `sample_drums.py` | Phase 3 audition-sample generation. PyTheory musical plan, FluidSynth (sine-additive fallback) audio render, NumPy drum one-shots, and a citation manifest tying every clip back to a Phase 1 field. On-demand only — not part of the staged-execution queue. See [`docs/SAMPLE_GENERATION.md`](../../docs/SAMPLE_GENERATION.md). |
 | `dsp_bandbank.py` + `dsp_utils.py` | Shared DSP primitives: `BatchedBandpass` (4th-order Butterworth bandpass bank with zero-phase `filtfilt`) and cross-module utility functions. |
 | `phase1_evaluation.py` + `phase1_report_html.py` | Offline Phase 1 evaluation harness — deterministic-metric and detector-stability reporting, with a standalone HTML render. Not on the product path; driven by `scripts/evaluate_phase1.py`. |
 | `polyphonic_evaluation.py` + `scripts/evaluate_polyphonic.py` | Research-only offline polyphonic-transcription evaluation harness. Not on the product path. |
+| `utils/cleanup.py` | Periodic artifact cleanup helpers used by the server background-task loop. |
+| `symbolic_extract.py` | **Orphaned.** Earlier worker-process entry point for pitch/note translation; superseded by `analyze.py --pitch-note-only`. Currently imports a removed `BasicPitchBackend` and would fail at module load. Not invoked from anywhere else in the tree; slated for removal. |
 | `tests/test_server.py` | Contract tests for estimate, timeout, and success envelopes. |
 | `tests/test_analyze.py` | Structural snapshot tests for the raw analyzer JSON output. Owns `EXPECTED_TOP_LEVEL_KEYS` — update it whenever you add a root field. |
 | `tests/test_spectral_viz.py` | Unit tests for spectrogram generation, time-series computation, and artifact orchestration. |
+| `tests/test_csv_export.py` | Round-trip CSV-exporter tests against the registry in `csv_export.py`. |
+| `tests/test_sample_*.py` + `tests/test_server_samples.py` | Phase 3 audition-sample synthesis and HTTP contract tests. |
 
 ### Analyzer Submodules
 
@@ -76,6 +80,7 @@ Custom routes:
 - `POST /api/analysis-runs/estimate`
 - `POST /api/analysis-runs` — multipart upload OR URL ingestion. Provide *exactly one* of `track` (multipart `UploadFile`) or `url` (form field with a public `http`/`https` URL). URL mode is SSRF-guarded against private/loopback/link-local addresses and enforces the same 100 MiB cap via streaming. See [`url_ingest.py`](url_ingest.py).
 - `GET /api/analysis-runs/{run_id}`
+- `POST /api/analysis-runs/{run_id}/interrupt` — terminate any active child processes for the run and mark stages interrupted.
 - `DELETE /api/analysis-runs/{run_id}` — owner can delete their own run; operators with `SONIC_ANALYZER_ADMIN_KEY` set can supply `X-Admin-Key` to delete any run. Admin path is closed when the env var is unset.
 - `GET /api/analysis-runs/{run_id}/artifacts` and `…/artifacts/{artifact_id}`
 - `GET /api/analysis-runs/{run_id}/source-audio` — re-serves the original ingested audio for the run. Owner-only (no admin bypass). Saves a round-trip vs looking up the source artifact id first.

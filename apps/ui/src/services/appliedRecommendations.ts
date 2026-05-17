@@ -22,8 +22,11 @@
  * already exposes `contentSha256` on every analysis run's source audio
  * artifact (`AnalysisRunArtifact.contentSha256`), so the frontend just reads
  * it through. If Phase 2 emits different card ids on re-analysis, the
- * applied state from the previous run becomes orphaned — that's acceptable
- * for V1 per the audit's "lowest priority finding" rank on persistence.
+ * applied state from the previous run becomes orphaned.
+ *
+ * The store is bounded to `MAX_TRACKED_FILES` records (least-recently-updated
+ * wins eviction). 50 is enough to cover a heavy producer's working set across
+ * several sessions without letting the key grow unbounded.
  */
 
 interface StorageLike {
@@ -33,6 +36,8 @@ interface StorageLike {
 }
 
 export const APPLIED_RECOMMENDATIONS_STORAGE_KEY = 'asa:applied-recommendations:v1';
+
+export const MAX_TRACKED_FILES = 50;
 
 interface AppliedRecord {
   appliedIds: string[];
@@ -121,6 +126,16 @@ export function saveAppliedIds(
     updatedAt: Date.now(),
     ...(options.filename ? { filename: options.filename } : {}),
   };
+
+  const hashes = Object.keys(store);
+  if (hashes.length > MAX_TRACKED_FILES) {
+    const sorted = hashes
+      .map((h) => [h, store[h]?.updatedAt ?? 0] as const)
+      .sort((a, b) => b[1] - a[1]);
+    for (const [h] of sorted.slice(MAX_TRACKED_FILES)) {
+      delete store[h];
+    }
+  }
   writeStore(storage, store);
 }
 

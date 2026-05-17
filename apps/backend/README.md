@@ -30,6 +30,7 @@ Canonical live-analysis routes:
 Legacy compatibility routes:
 
 - `POST /api/analyze` (legacy compatibility wrapper)
+- `POST /api/analyze/estimate` (legacy compatibility wrapper)
 - `POST /api/phase2` (legacy compatibility wrapper)
 
 FastAPI also serves the usual generated endpoints at `/openapi.json`, `/docs`, and `/redoc`.

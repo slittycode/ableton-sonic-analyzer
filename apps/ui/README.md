@@ -37,10 +37,13 @@ The app uploads a track to the local DSP backend, shows the estimate and executi
 - Vite 6
 - Tailwind CSS v4
 - WaveSurfer.js
-- Google Gen AI SDK
 - MIDI Writer JS
 - Vitest
 - Playwright
+
+Gemini is backend-mediated: the UI never imports an AI SDK. The backend reads
+`GEMINI_API_KEY` at runtime and the UI posts to
+`POST /api/analysis-runs/{run_id}/interpretations`.
 
 ## Prerequisites
 

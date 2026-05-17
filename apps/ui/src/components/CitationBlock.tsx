@@ -19,6 +19,7 @@ import type { Phase1Result } from '../types';
 import { humanizeFieldPath } from '../services/userLabels';
 import {
   formatCitedValue,
+  pickPhase1Confidence,
   pickPhase1Value,
   pickWorstConfidence,
 } from '../services/phase1Picker';
@@ -145,5 +146,77 @@ export function CitationBlock({
         ))}
       </dl>
     </div>
+  );
+}
+
+/**
+ * Audit Finding #3: surfaces a one-line primary citation inside the collapsed
+ * card header so the chain-of-custody evidence is visible without expanding
+ * the card. The audit's literal example:
+ *
+ *     Crest factor 8.2 dB → Glue Compressor
+ *
+ * Reads as `{humanized label} {formatted value} → {device h4 to the right}`.
+ * The arrow at the end of the headline points into the device name that
+ * follows in the card title row, making the implicit "measurement justified
+ * device" statement visible at scan-time.
+ *
+ * Returns `null` when the cited field doesn't resolve in Phase 1 — the caller
+ * is expected to guard with `phase1Fields.length > 0`, but the component is
+ * defensive against unmapped paths and empty Phase 1 payloads. The expanded
+ * card body still renders the full CitationBlock with up to 4 rows; this
+ * primitive is the collapsed-state companion, not a replacement.
+ */
+interface CitationHeadlineProps {
+  phase1: Phase1Result;
+  /** Single primary path (typically `card.phase1Fields[0]`). */
+  field: string;
+  /** When false, the confidence pill is hidden even if a value is available. */
+  showConfidenceBadge?: boolean;
+  className?: string;
+  testId?: string;
+}
+
+export function CitationHeadline({
+  phase1,
+  field,
+  showConfidenceBadge = true,
+  className,
+  testId = 'citation-headline',
+}: CitationHeadlineProps) {
+  const raw = pickPhase1Value(phase1, field);
+  const value = formatCitedValue(field, raw);
+  if (value === '') return null;
+
+  const label = humanizeFieldPath(field);
+  const confidence = pickPhase1Confidence(phase1, field);
+  const band =
+    showConfidenceBadge && confidence !== null
+      ? getConfidenceBand(confidence)
+      : null;
+  const pillClass = band ? CONFIDENCE_PILL_CLASSES[band.id] : null;
+
+  return (
+    <span
+      data-testid={testId}
+      className={`inline-flex items-baseline gap-1.5 min-w-0 ${className ?? ''}`}
+    >
+      <span className="text-text-secondary text-[9px] font-mono uppercase tracking-[0.15em] whitespace-nowrap">
+        {label}
+      </span>
+      <span className="text-text-primary text-xs font-mono tabular-nums font-semibold whitespace-nowrap">
+        {value}
+      </span>
+      {band && pillClass && confidence !== null && (
+        <span
+          data-testid={`${testId}-pill`}
+          className={`inline-flex items-center px-1 py-0 rounded border text-[9px] font-mono uppercase tracking-wide whitespace-nowrap ${pillClass}`}
+          title={band.copy}
+        >
+          {formatBandPillLabel(band, confidence)}
+        </span>
+      )}
+      <span className="text-text-secondary/60 text-xs leading-none" aria-hidden="true">→</span>
+    </span>
   );
 }

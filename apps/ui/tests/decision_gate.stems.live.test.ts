@@ -88,6 +88,12 @@ function isPathPresentShallow(payload: any, p: string): boolean {
 }
 
 describe('decision-gate (multi-model, stem-aware, real track)', () => {
+  const anySnapshot = MODELS.some((m) => existsSync(`${PREFIX}${m}.json`));
+  if (!anySnapshot) {
+    it.skip(`skipped — no ${PREFIX}<model>.json snapshots present`, () => { /* noop */ });
+    return;
+  }
+
   it('compares per-model validator output with stemAnalysis populated', () => {
     const gates = MODELS.map((model) => {
       const p = `${PREFIX}${model}.json`;

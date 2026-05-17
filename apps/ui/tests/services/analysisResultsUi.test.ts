@@ -1701,9 +1701,14 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).toContain('Track Character');
     expect(html).toContain('Measured summary with explicit genre and dynamic language.');
     expect(html).toContain('ASSUMED');
-    expect(html).toContain('SCORE 1.88');
-    expect(html).toContain('rhythm extractor confirmed');
+    // Audit Finding #4: `SCORE 1.88` retired in favor of the canonical band
+    // pill. bpmConfidence=1.88 (> 1) clamps to 100% in formatBandPillLabel
+    // so the pill reads "Solid scaffold · 100%" — no CONF/SCORE leakage.
+    expect(html).toContain('Solid scaffold');
+    expect(html).not.toContain('SCORE 1.88');
     expect(html).not.toContain('CONF 188%');
+    expect(html).not.toContain('188%');
+    expect(html).toContain('rhythm extractor confirmed');
     expect(html).toContain('257 BARS');
     expect(html).not.toContain('110 BARS');
     expect(html).toContain('C Major (Bridge)');
@@ -1846,6 +1851,163 @@ describe('AnalysisResults UI wiring', () => {
   });
 
   // ─────────────────────────────────────────────────────────────────────
+  // Audit Finding #3: chain-of-custody citation also surfaces in the
+  // collapsed card header via CitationHeadline so producers see the
+  // measurement evidence without expanding the card. The CitationBlock
+  // above stays in the expanded body unchanged.
+  // ─────────────────────────────────────────────────────────────────────
+  it('renders CitationHeadline in collapsed Mix Chain card header with the primary cited field', () => {
+    const phase2WithCitations: Phase2Result = {
+      ...basePhase2,
+      mixAndMasterChain: [
+        {
+          order: 1,
+          device: 'Drum Buss',
+          deviceFamily: 'NATIVE',
+          trackContext: 'Drum Group',
+          workflowStage: 'MIX',
+          parameter: 'Drive',
+          value: '25%',
+          reason: 'Adds punch to drums.',
+          phase1Fields: ['bpm', 'lufsIntegrated'],
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: baseMeasurement,
+        phase2: phase2WithCitations,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    // Headline mount appears in the collapsed header (the button is part of
+    // renderToStaticMarkup output regardless of isOpen).
+    expect(html).toMatch(/data-testid="mix-chain-headline-/);
+    // Primary cited field is phase1Fields[0] → bpm → "Tempo" label + BPM value.
+    expect(html).toContain('Tempo');
+    expect(html).toMatch(/\d+ BPM/);
+    // Arrow leads into the device h4 that follows in the title row.
+    expect(html).toContain('→');
+  });
+
+  it('renders CitationHeadline in collapsed Patch card header with the primary cited field', () => {
+    const phase2WithCitations: Phase2Result = {
+      ...basePhase2,
+      abletonRecommendations: [
+        {
+          device: 'Drift',
+          category: 'SYNTHESIS',
+          deviceFamily: 'NATIVE',
+          trackContext: 'Synth Group',
+          workflowStage: 'SOUND_DESIGN',
+          parameter: 'Position',
+          value: '0.42',
+          reason: 'Builds the supersaw lead character.',
+          phase1Fields: ['key', 'spectralBalance.subBass'],
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: baseMeasurement,
+        phase2: phase2WithCitations,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).toMatch(/data-testid="patch-headline-/);
+    expect(html).toContain('Key');
+  });
+
+  it('renders CitationHeadline in collapsed Sonic Element card header above the summary', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: baseMeasurement,
+        phase2: basePhase2,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    // At least one Sonic Element card surfaces a headline (the SONIC_ELEMENT_FIELD_PATHS
+    // map populates phase1Fields[] for cards whose fixture fields resolve).
+    expect(html).toMatch(/data-testid="sonic-headline-/);
+  });
+
+  it('does not render CitationHeadline when phase1Fields is empty on a Mix Chain card', () => {
+    const phase2WithEmpty: Phase2Result = {
+      ...basePhase2,
+      mixAndMasterChain: [
+        {
+          order: 1,
+          device: 'Drum Buss',
+          deviceFamily: 'NATIVE',
+          trackContext: 'Drum Group',
+          workflowStage: 'MIX',
+          parameter: 'Drive',
+          value: '25%',
+          reason: 'Adds punch to drums.',
+          // phase1Fields intentionally omitted — view-model defaults to [].
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: baseMeasurement,
+        phase2: phase2WithEmpty,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    // No headline rendered for the Drum Buss card; the title row + role
+    // paragraph + meta badges layout stays intact.
+    expect(html).not.toMatch(/data-testid="mix-chain-headline-1-Drum Buss-/);
+    // Sanity: the card itself still renders (device name visible).
+    expect(html).toContain('Drum Buss');
+  });
+
+  it('renders the confidence pill in the headline when the primary cited field has a low-confidence sibling (Rough or Unreliable)', () => {
+    // bpm has confidence sibling bpmConfidence; baseMeasurement sets it to
+    // 0.62 (Workable). To exercise the hedging path, use a fixture override.
+    const lowConfidencePhase1 = {
+      ...baseMeasurement,
+      bpmConfidence: 0.18, // < 0.25 → Unreliable
+    };
+    const phase2WithCitations: Phase2Result = {
+      ...basePhase2,
+      mixAndMasterChain: [
+        {
+          order: 1,
+          device: 'Drum Buss',
+          deviceFamily: 'NATIVE',
+          trackContext: 'Drum Group',
+          workflowStage: 'MIX',
+          parameter: 'Drive',
+          value: '25%',
+          reason: 'Adds punch.',
+          phase1Fields: ['bpm'],
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: lowConfidencePhase1,
+        phase2: phase2WithCitations,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    // Headline carries the Unreliable band pill so producers see the hedge
+    // without expanding the card — preserves the chain-of-custody invariant.
+    expect(html).toMatch(/data-testid="mix-chain-headline-.+-pill"/);
+    expect(html).toContain('Unreliable');
+  });
+
+  // ─────────────────────────────────────────────────────────────────────
   // Audit Finding #14 + #15: applied-recommendation checkbox affordance on
   // Mix Chain / Patches cards. The checkbox renders only when a content hash
   // is provided (no hash → no tracker → no checkbox); the section-level
@@ -1975,5 +2137,125 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).not.toMatch(/data-testid="mix-chain-citation-/);
     // The card itself still renders.
     expect(html).toContain('Drum Buss');
+  });
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Audit Finding #4: every confidence surface now reads in the canonical
+  // four-band vocabulary (Solid scaffold / Workable draft / Rough sketch /
+  // Unreliable). The legacy vocabularies (HIGH/MED/LOW pills, High/
+  // Moderate/Low chips, CONF X% text, SCORE X.XX badges) are retired.
+  // ─────────────────────────────────────────────────────────────────────
+  it('Detected Characteristics cards render band pills instead of HIGH/MED/LOW chips', () => {
+    const phase2WithChars: Phase2Result = {
+      ...basePhase2,
+      detectedCharacteristics: [
+        { name: 'Wide Stereo Discipline', confidence: 'HIGH', explanation: 'Controlled width.' },
+        { name: 'Bass Weight', confidence: 'MED', explanation: 'Sub support moderate.' },
+        { name: 'Top End Texture', confidence: 'LOW', explanation: 'Light sparkle only.' },
+      ],
+    };
+
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: baseMeasurement,
+        phase2: phase2WithChars,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    // Band labels surface in the rendered pill.
+    expect(html).toContain('Solid scaffold');
+    expect(html).toContain('Workable draft');
+    expect(html).toContain('Rough sketch');
+    // The bespoke HIGH/MED/LOW chip styling is no longer at this site.
+    // (The string "HIGH" may still appear elsewhere — e.g., in
+    // characteristic-name chips on the Character metric card, which is a
+    // separate site out of scope for this PR.)
+    expect(html).not.toMatch(/text-success bg-success\/10 border-success\/20[^"]*"[\s>]*HIGH[<\s]/);
+  });
+
+  it('Confidence Notes chips render band pills instead of High/Moderate/Low text', () => {
+    const phase2WithNotes: Phase2Result = {
+      ...basePhase2,
+      confidenceNotes: [
+        { field: 'Key Signature', value: '0.62', reason: 'Workable confidence' },
+        { field: 'True Peak', value: 'HIGH', reason: 'Stable result' },
+      ],
+    };
+
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: baseMeasurement,
+        phase2: phase2WithNotes,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    // Field labels still render alongside their bands.
+    expect(html).toContain('Key:');
+    expect(html).toContain('Peak:');
+    // Band pill text replaces the legacy "High"/"Moderate"/"Low" chip text.
+    expect(html).toContain('Workable draft');
+    expect(html).toContain('Solid scaffold');
+    // The "label: Level" composed string from the legacy renderer should
+    // no longer appear.
+    expect(html).not.toMatch(/Key: Moderate</);
+    expect(html).not.toMatch(/Peak: High</);
+  });
+
+  it('Key card footer renders band pill instead of CONF X% text', () => {
+    const phase1WithKeyConf = { ...baseMeasurement, keyConfidence: 0.62 };
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: phase1WithKeyConf,
+        phase2: basePhase2,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).toContain('Workable draft');
+    expect(html).not.toMatch(/CONF\s+\d+%/);
+  });
+
+  it('Character card footer renders band pill instead of CONF X% text', () => {
+    const phase1WithGenre = {
+      ...baseMeasurement,
+      genreDetail: {
+        genre: 'Techno',
+        genreFamily: 'Electronic',
+        confidence: 0.4, // rough band
+        secondaryGenre: undefined,
+      },
+    } as typeof baseMeasurement;
+
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: phase1WithGenre,
+        phase2: basePhase2,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).toContain('Rough sketch');
+    // Inline `CONF X%` text under the Character card metric bar must be gone.
+    // (The Character card characteristicPills chips are a different vocabulary
+    // out of scope for this PR; they don't render `CONF` text.)
+    expect(html).not.toMatch(/CONF\s+\d+%/);
+  });
+
+  it('BPM (Tempo) card footer renders band pill instead of SCORE X.XX badge', () => {
+    const phase1WithBpmConf = { ...baseMeasurement, bpmConfidence: 0.94 };
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: phase1WithBpmConf,
+        phase2: basePhase2,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    // 0.94 → solid band ("Solid scaffold · 94%").
+    expect(html).toContain('Solid scaffold');
+    expect(html).toContain('94%');
+    expect(html).not.toMatch(/SCORE\s+0?\.\d+/);
   });
 });

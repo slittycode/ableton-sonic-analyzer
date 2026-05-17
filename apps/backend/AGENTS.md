@@ -7,7 +7,7 @@
 - The repo is a local Python audio-analysis service with two entry points:
   - `analyze.py`: raw CLI analyzer
   - `server.py`: FastAPI wrapper around the CLI
-- There are no repo-local Cursor rules, `.cursorrules`, or Copilot instruction files in this repo as of 2026-03-10.
+- There are no repo-local Cursor rules, `.cursorrules`, or Copilot instruction files in this repo as of 2026-05-17.
 
 ## Working Style For Agents
 
@@ -112,18 +112,30 @@ python3.11 -m venv venv
 - `analysis_runtime.py`: SQLite-backed run state, stage queue, artifact metadata.
 - `worker.py`, `runtime_profile.py`, `auth_context.py`, `artifact_storage.py`: Hosted-mode foundation. Local mode shouldn't branch through these unless it has to.
 - `upload_limits.py`: Canonical 100 MiB raw-audio / 101 MiB request-envelope limits. Operator contract is generated, not hand-edited.
-- `url_ingest.py`: SSRF-guarded URL-mode ingestion for `POST /api/analysis-runs`.
+- `url_ingest.py`: SSRF-guarded URL-mode ingestion for `POST /api/analysis-runs`. Fetches a public `http`/`https` audio file and streams the bytes through the same downstream pipeline as a multipart upload, enforcing the shared 100 MiB cap.
 - `csv_export.py`: CSV exporters for Phase 1 time-series fields; backs `GET /api/analysis-runs/{run_id}/export/csv/{field_path}`.
-- `stage_status.py`: Collapses the eight internal stage statuses into the additive client-facing `publicStatus` field.
+- `stage_status.py`: Collapses the eight internal stage statuses into the additive client-facing `publicStatus` field carried on every stage in the run snapshot.
 - `sample_generation.py`, `sample_theory.py`, `sample_synthesis.py`, `sample_drums.py`: Phase 3 audition-sample generation — PyTheory plan, FluidSynth/sine-additive render, NumPy drum one-shots, citation manifest. On-demand only.
 - `dsp_bandbank.py`, `dsp_utils.py`: Shared DSP primitives — `BatchedBandpass` Butterworth bank and cross-module utilities.
 - `spectral_viz.py`: Librosa spectrogram and spectral time-series artifacts. Non-critical — failures don't break a run.
-- `phase1_evaluation.py` + `phase1_report_html.py`: Offline Phase 1 evaluation harness and HTML render. Not on the product path; driven by `scripts/evaluate_phase1.py`.
+- `phase1_evaluation.py` + `phase1_report_html.py`: Offline Phase 1 evaluation harness — deterministic-metric and detector-stability reporting, with a standalone HTML render. Not on the product path; driven by `scripts/evaluate_phase1.py`.
 - `polyphonic_evaluation.py` + `scripts/evaluate_polyphonic.py`: **Research-only.** Offline polyphonic-transcription evaluation harness, not part of the shipped product path.
+- `utils/cleanup.py`: Periodic artifact cleanup helpers used by the server background-task loop.
+- `symbolic_extract.py`: **Orphaned and broken.** Earlier worker-process entry point for pitch/note translation; superseded by `analyze.py --pitch-note-only`. Still imports a removed `BasicPitchBackend` symbol from `analyze.py`, so loading the module would raise `ImportError`. Not referenced from any other module. Slated for removal — do not extend it.
 - `tests/test_server.py`: OpenAPI and envelope contract tests.
 - `tests/test_analyze.py`: generated WAV fixture, `EXPECTED_TOP_LEVEL_KEYS` snapshot, raw payload assertions.
+- `tests/test_csv_export.py`, `tests/test_sample_*.py`, `tests/test_server_samples.py`: Coverage for CSV export and Phase 3 audition samples.
 - `ARCHITECTURE.md`: backend responsibilities and request flow.
 - `JSON_SCHEMA.md`: raw CLI schema plus HTTP mapping notes.
+
+## Operator and Research Scripts
+
+Under `apps/backend/scripts/` (not on the product path):
+
+- `bootstrap.sh`: create/recreate the venv with the pinned Python 3.11 dependencies.
+- `dev.sh`: backend-only dev launcher used by the monorepo `./scripts/dev.sh`.
+- `render_upload_limit_contract.py`: re-renders the operator-facing upload-limit contract whenever `upload_limits.py` numbers change.
+- `evaluate_phase1.py`, `evaluate_structure_sweep.py`, `evaluate_polyphonic.py`, `genre_check.py`, `audit_pass1.py`, `replay_catalog_validation.py`: research and audit harnesses for measurement quality and prompt-output review. Outputs land under `.runtime/reports/` and are intentionally not wired into the live API.
 
 ## Code Style
 
