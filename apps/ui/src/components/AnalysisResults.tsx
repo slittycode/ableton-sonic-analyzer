@@ -41,6 +41,8 @@ import {
 import { PhaseSourceBadge } from './PhaseSourceBadge';
 import { StickyNav, type StickyNavSection } from './StickyNav';
 import { CitationBlock, CitationHeadline } from './CitationBlock';
+import { ConfidenceBandBadge } from './sessionMusician/ConfidenceBandBadge';
+import { toConfidenceBand } from '../services/sessionMusician/confidenceBand';
 import { loadAppliedIds, toggleAppliedId } from '../services/appliedRecommendations';
 import {
   buildArrangementViewModel,
@@ -256,11 +258,9 @@ function SourcesToggle({ sources, showSources, onToggle }: { sources?: string[];
   );
 }
 
-function confidenceClass(level: string): string {
-  if (level === 'High') return 'text-success bg-success/10 border-success/20';
-  if (level === 'Moderate') return 'text-warning bg-warning/10 border-warning/20';
-  return 'text-error bg-error/10 border-error/20';
-}
+// Audit Finding #4: `confidenceClass` was the tone mapper for the legacy
+// three-level Confidence Notes chips. Retired — chips now route through
+// `ConfidenceBandBadge` with the canonical four-band ladder.
 
 function shortenCharacteristicName(name: string): string {
   return name.trim().split(/\s+/).slice(0, 2).join(' ');
@@ -597,9 +597,9 @@ function meterStatusLabel(phase1: Phase1Result): string {
   return isAssumedMeter(phase1) ? 'ASSUMED' : 'DETECTED';
 }
 
-function formatBpmScore(value: number): string {
-  return `SCORE ${value.toFixed(2).replace(/\.?0+$/, '')}`;
-}
+// Audit Finding #4: `formatBpmScore` retired — the BPM card now renders
+// the canonical band pill via ConfidenceBandBadge, same vocabulary as
+// every other confidence surface.
 
 export function AnalysisResults({
   phase1,
@@ -895,11 +895,10 @@ export function AnalysisResults({
           headerRight={<PhaseSourceBadge source="measured" />}
           footer={
             <div className="space-y-2">
-              <StatusBadge
-                label={formatBpmScore(phase1.bpmConfidence)}
-                tone="accent"
-                compact
-              />
+              {/* Audit Finding #4: `SCORE 0.86` badge retired in favor of the
+                  canonical band pill — same vocabulary as Key, Character, and
+                  every other confidence surface. */}
+              <ConfidenceBandBadge variant="compact" confidence={phase1.bpmConfidence} />
               {phase1.bpmSource && (
                 <span className="block text-[8px] font-mono uppercase tracking-wide text-text-secondary/50">
                   {phase1.bpmSource.replace(/_/g, ' ')}
@@ -931,9 +930,9 @@ export function AnalysisResults({
                 color="var(--color-accent)"
                 glow
               />
-              <span className="block text-[8px] font-mono uppercase tracking-wide text-text-secondary/60 tabular-nums">
-                CONF {(phase1.keyConfidence * 100).toFixed(0)}%
-              </span>
+              {/* Audit Finding #4: `CONF 62%` text replaced with the canonical
+                  band pill so every confidence reads in the same vocabulary. */}
+              <ConfidenceBandBadge variant="compact" confidence={phase1.keyConfidence} />
             </div>
           }
         />
@@ -976,9 +975,12 @@ export function AnalysisResults({
                   color="var(--color-accent)"
                   glow
                 />
-                <span className="block text-[8px] font-mono uppercase tracking-wide text-text-secondary/60 tabular-nums">
-                  CONF {Math.round(phase1.genreDetail.confidence * 100)}%
-                </span>
+                {/* Audit Finding #4: `CONF X%` replaced with the canonical
+                    band pill — same vocabulary across every confidence. */}
+                <ConfidenceBandBadge
+                  variant="compact"
+                  confidence={phase1.genreDetail.confidence}
+                />
               </div>
             }
           />
@@ -1186,14 +1188,22 @@ export function AnalysisResults({
 
       {confidenceBadges.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 px-1">
-          {confidenceBadges.map((badge, idx) => (
-            <span
-              key={`${badge.label}-${idx}`}
-              className={`px-2 py-1 rounded-sm border text-[10px] font-mono uppercase tracking-wide ${confidenceClass(badge.level)}`}
-            >
-              {badge.label}: {badge.level}
-            </span>
-          ))}
+          {/* Audit Finding #4: chips used to render "{label}: High|Moderate|Low"
+            with bespoke success/warning/error tones. Now route through the
+            canonical band ladder so the same vocabulary (Solid / Workable /
+            Rough / Unreliable) appears across every confidence surface.
+            Filter null bands (unparseable values) rather than render a
+            misleading default. */}
+          {confidenceBadges.map((badge, idx) =>
+            badge.band ? (
+              <span key={`${badge.label}-${idx}`} className="inline-flex items-center gap-2">
+                <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary/80">
+                  {badge.label}:
+                </span>
+                <ConfidenceBandBadge variant="compact" band={badge.band} />
+              </span>
+            ) : null,
+          )}
         </div>
       )}
 
@@ -1648,17 +1658,21 @@ export function AnalysisResults({
                   >
                     {item.name}
                   </h3>
-                  <span
-                    className={`flex items-center text-[10px] font-mono font-bold px-2 py-1 rounded-sm border ${
-                      item.confidence === 'HIGH'
-                        ? 'text-success bg-success/10 border-success/20'
-                        : item.confidence === 'MED'
-                          ? 'text-warning bg-warning/10 border-warning/20'
-                          : 'text-error bg-error/10 border-error/20'
-                    }`}
-                  >
-                    {item.confidence}
-                  </span>
+                  {/* Audit Finding #4: Detected Characteristics cards used
+                    to render a HIGH/MED/LOW string pill with bespoke
+                    success/warning/error tones. Replaced with the canonical
+                    ConfidenceBandBadge so the same vocabulary (Solid /
+                    Workable / Rough / Unreliable) reads across every
+                    confidence surface in the UI. toConfidenceBand maps
+                    Gemini's HIGH→solid (0.9), MED→workable (0.6),
+                    LOW→rough (0.3) — middle of each band so the percent
+                    label reads as an honest hedge. */}
+                  {(() => {
+                    const band = toConfidenceBand(item.confidence);
+                    return band ? (
+                      <ConfidenceBandBadge variant="compact" band={band} />
+                    ) : null;
+                  })()}
                 </div>
                 <p className="text-xs text-text-secondary leading-relaxed font-mono opacity-80 border-t border-border/50 pt-2 mt-2 pl-2">
                   {truncateAtSentenceBoundary(item.explanation, 600)}

@@ -22,6 +22,7 @@ import { SpectrogramViewer } from './SpectrogramViewer';
 import { SpectralEvolutionChart } from './SpectralEvolutionChart';
 import { ChromaHeatmap } from './ChromaHeatmap';
 import { MiniHeatmap } from './MiniHeatmap';
+import { ConfidenceBandBadge } from './sessionMusician/ConfidenceBandBadge';
 import { MixDoctorPanel } from './MixDoctorPanel';
 import {
   AccentMetricCard,
@@ -58,7 +59,8 @@ const formatDuration = (seconds: number): string => {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 };
 
-const formatBpmScore = (value: number): string => `SCORE ${formatNumber(value, 2)}`;
+// Audit Finding #4: `formatBpmScore` retired — Tempo card renders the
+// canonical band pill, same vocabulary as every other confidence surface.
 
 const isAssumedMeter = (phase1: Phase1Result): boolean =>
   phase1.timeSignatureSource === 'assumed_four_four' || (phase1.timeSignatureConfidence ?? 1) <= 0;
@@ -1326,7 +1328,11 @@ export function MeasurementDashboard({
             footer={
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                  <StatusBadge label={formatBpmScore(phase1.bpmConfidence)} tone="accent" compact />
+                  {/* Audit Finding #4: `SCORE 0.86` badge retired — band pill
+                      shows the same hedge in the canonical vocabulary.
+                      Cross-Check is an agreement signal (do multiple BPM
+                      detectors agree?), orthogonal to confidence — left as-is. */}
+                  <ConfidenceBandBadge variant="compact" confidence={phase1.bpmConfidence} />
                   {phase1.bpmAgreement !== undefined && phase1.bpmAgreement !== null && (
                     <StatusBadge
                       label={phase1.bpmAgreement ? 'Cross-Check ✓' : 'Cross-Check ✗'}
@@ -1366,9 +1372,9 @@ export function MeasurementDashboard({
                   </span>
                 )}
                 <MetricBar value={phase1.keyConfidence} color="var(--color-accent)" glow />
-                <span className="block text-[8px] font-mono uppercase tracking-wide text-text-secondary/60 tabular-nums">
-                  CONF {Math.round(phase1.keyConfidence * 100)}%
-                </span>
+                {/* Audit Finding #4: `CONF X%` retired in favor of the canonical
+                    band pill. Same vocabulary as the AnalysisResults Key card. */}
+                <ConfidenceBandBadge variant="compact" confidence={phase1.keyConfidence} />
               </div>
             }
           />

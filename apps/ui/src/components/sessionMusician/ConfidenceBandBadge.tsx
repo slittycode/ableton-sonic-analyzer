@@ -26,7 +26,26 @@ const PILL_CLASSES: Record<ConfidenceBand['id'], string> = {
 };
 
 interface ConfidenceBandBadgeProps {
-  confidence: number;
+  /**
+   * Numeric 0-1 confidence. Optional when `band` is supplied (some callers
+   * have a pre-converted band from a string enum and no original scalar).
+   * When provided, drives the pill percent via `formatBandPillLabel`.
+   */
+  confidence?: number;
+  /**
+   * Pre-converted band. When supplied, skips the `getConfidenceBand` round-
+   * trip and uses this for tone + copy. Required when `confidence` is absent.
+   * Useful when the source vocabulary is a string enum (HIGH/MED/LOW) that's
+   * been normalized via `toConfidenceBand`.
+   */
+  band?: ConfidenceBand;
+  /**
+   * Audit Finding #4: 'compact' renders just the pill (no copy paragraph)
+   * for use in card corners, metric-card footers, and chip rows where the
+   * full variant's paragraph would blow up the layout. 'full' is the
+   * Session Musician panel default — pill plus hedging copy beneath.
+   */
+  variant?: 'full' | 'compact';
   /** When set, replaces the pill text entirely (used for fallback / legacy states). */
   overrideLabel?: string | null;
   /** When set, replaces the band copy entirely. */
@@ -39,24 +58,55 @@ interface ConfidenceBandBadgeProps {
 
 export function ConfidenceBandBadge({
   confidence,
+  band,
+  variant = 'full',
   overrideLabel,
   overrideCopy,
   overrideTone,
   testId,
 }: ConfidenceBandBadgeProps) {
-  const band = getConfidenceBand(confidence);
-  const pillText = overrideLabel ?? formatBandPillLabel(band, confidence);
-  const copyText = overrideCopy ?? band.copy;
-  const toneId = overrideTone ?? band.id;
+  // Dev-time guard against the both-missing case. In production we still
+  // default to the unreliable band on undefined confidence so we never crash
+  // a results render — but the guard surfaces the misuse during development.
+  if (confidence === undefined && band === undefined) {
+    if (process.env.NODE_ENV !== 'production') {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[ConfidenceBandBadge] Pass `confidence` (0-1 number), `band` (pre-converted), or both.',
+      );
+    }
+  }
+
+  const bandToUse = band ?? getConfidenceBand(confidence ?? 0);
+  const pillText =
+    overrideLabel
+    ?? (confidence !== undefined ? formatBandPillLabel(bandToUse, confidence) : bandToUse.label);
+  const copyText = overrideCopy ?? bandToUse.copy;
+  const toneId = overrideTone ?? bandToUse.id;
   const pillClass = PILL_CLASSES[toneId];
+
+  const pill = (
+    <span
+      className={`inline-flex items-center px-2 py-1 rounded border text-[10px] font-mono uppercase tracking-wide ${pillClass}`}
+    >
+      {pillText}
+    </span>
+  );
+
+  if (variant === 'compact') {
+    // Wrap in a span so the testid hook still has a stable anchor; consumers
+    // place the badge inline in card headers / footers and don't want the
+    // full variant's block-level div breaking their layout.
+    return (
+      <span data-testid={testId} className="inline-flex">
+        {pill}
+      </span>
+    );
+  }
 
   return (
     <div className="space-y-2" data-testid={testId}>
-      <span
-        className={`inline-flex items-center px-2 py-1 rounded border text-[10px] font-mono uppercase tracking-wide ${pillClass}`}
-      >
-        {pillText}
-      </span>
+      {pill}
       <p className="text-[11px] font-mono text-text-secondary/90 leading-relaxed">
         {copyText}
       </p>
