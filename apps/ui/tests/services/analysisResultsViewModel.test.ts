@@ -9,6 +9,7 @@ import {
   truncateAtSentenceBoundary,
   truncateBySentenceCount,
 } from '../../src/components/analysisResultsViewModel';
+import { getConfidenceBand } from '../../src/services/sessionMusician/confidenceBand';
 import { MeasurementResult, Phase2Result, TranscriptionDetail } from '../../src/types';
 
 const measurement: MeasurementResult = {
@@ -747,7 +748,8 @@ describe('analysisResultsViewModel helpers', () => {
     expect(insights?.noteCount).toBe(6);
     expect(insights?.rangeLabel).toBe('C3 - G5');
     expect(insights?.dominantNotes).toEqual(['C3', 'G3']);
-    expect(insights?.confidenceLabel).toBe('High');
     expect(insights?.isDraft).toBe(false);
+    expect(insights?.confidence).toBeCloseTo(0.83);
+    expect(getConfidenceBand(insights!.confidence).label).toBe('Solid scaffold');
   });
 });

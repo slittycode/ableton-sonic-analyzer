@@ -1,16 +1,9 @@
 import { AbletonRecommendation, Phase1Result, Phase2Result } from "../types";
 import {
   type ConfidenceBand,
+  getConfidenceBand,
   toConfidenceBand,
 } from "../services/sessionMusician/confidenceBand";
-
-// Audit Finding #4: the three-level `ConfidenceLevel` vocabulary stays alive
-// for the melody-insights key/value detail rows in Sonic Element cards
-// (rendered as plain text like "High (78%)", not as a colored pill). The
-// confidence-badge pill path migrated to the canonical four-band ladder
-// via `ConfidenceBand` below. Follow-up: migrate the melody rows too once
-// producers see the new bands in context.
-export type ConfidenceLevel = "High" | "Moderate" | "Low";
 
 export interface ConfidenceBadgeViewModel {
   label: string;
@@ -213,7 +206,6 @@ export interface MelodyInsightsViewModel {
   dominantNotes: string[];
   rangeLabel: string;
   confidence: number;
-  confidenceLabel: ConfidenceLevel;
   isDraft: boolean;
   source: MelodyInsightsSource;
 }
@@ -473,14 +465,12 @@ export function buildMelodyInsights(phase1: Phase1Result): MelodyInsightsViewMod
       ? `${transcriptionDetail.pitchRange.minName as string} - ${transcriptionDetail.pitchRange.maxName as string}`
       : "n/a";
     const confidence = Math.max(0, Math.min(1, transcriptionDetail.averageConfidence ?? 0));
-    const confidenceLabel: ConfidenceLevel = confidence >= 0.8 ? "High" : confidence >= 0.5 ? "Moderate" : "Low";
 
     return {
       noteCount,
       dominantNotes,
       rangeLabel,
       confidence,
-      confidenceLabel,
       isDraft: confidence < LOW_TRANSCRIPTION_CONFIDENCE_THRESHOLD,
       source: "transcription",
     };
@@ -496,14 +486,12 @@ export function buildMelodyInsights(phase1: Phase1Result): MelodyInsightsViewMod
     ? `${midiToNoteName(detail.pitchRange.min as number)} - ${midiToNoteName(detail.pitchRange.max as number)}`
     : "n/a";
   const confidence = Math.max(0, Math.min(1, detail.pitchConfidence ?? 0));
-  const confidenceLabel: ConfidenceLevel = confidence >= 0.8 ? "High" : confidence >= 0.5 ? "Moderate" : "Low";
 
   return {
     noteCount,
     dominantNotes,
     rangeLabel,
     confidence,
-    confidenceLabel,
     isDraft: confidence < LOW_MELODY_CONFIDENCE_THRESHOLD,
     source: "melody",
   };
@@ -581,7 +569,7 @@ function getSonicMeasurements(
                 melodyInsights.source === "transcription"
                   ? "Transcription"
                   : "Melody Confidence",
-              value: `${melodyInsights.confidenceLabel} (${Math.round(melodyInsights.confidence * 100)}%)`,
+              value: `${getConfidenceBand(melodyInsights.confidence).label} (${Math.round(melodyInsights.confidence * 100)}%)`,
             },
           ]
         : []),
@@ -1109,7 +1097,7 @@ function buildMelodyPatchParameters(insights: MelodyInsightsViewModel): ChainPar
     { label: noteLabel, value: `${insights.noteCount}` },
     { label: "Note Range", value: insights.rangeLabel },
     { label: "Dominant Notes", value: insights.dominantNotes.slice(0, 3).join(", ") || "n/a" },
-    { label: confidenceLabel, value: `${Math.round(insights.confidence * 100)}% (${insights.confidenceLabel})` },
+    { label: confidenceLabel, value: `${Math.round(insights.confidence * 100)}% (${getConfidenceBand(insights.confidence).label})` },
   ];
 }
 

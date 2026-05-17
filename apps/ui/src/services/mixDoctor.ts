@@ -99,6 +99,16 @@ export function resolveMixDoctorGenreId(phase1: Phase1Result): string {
   return DEFAULT_GENRE_ID;
 }
 
+// Audit 2026-05-16 §4 (boundary review): the truePeak − lufsIntegrated branch
+// below is *not* a competing source of truth with Phase 1. The backend's
+// analyze_plr (apps/backend/analyze_core.py) computes
+// `round(true_peak − lufs_integrated, 2)` — byte-identical to the fallback
+// here — and emits `plr` in both --fast (analyze.py:1385) and full
+// (analyze.py:1775) paths. The fallback only fires when `phase1.plr` is
+// null/undefined, which today means: a legacy snapshot replayed from runtime
+// SQLite that predates the field. When it fires it lands on the same number
+// the backend would have. Result is consumed locally for advisory scoring;
+// never written back into the Phase 1 snapshot.
 function estimatePlr(phase1: Phase1Result): number | null {
   const explicit = asFiniteNumber(phase1.plr);
   if (explicit !== null) return roundTo(explicit, 2);
