@@ -88,6 +88,94 @@ describe('Phase2ConsistencyReport', () => {
     expect(html).toContain('text-warning');
   });
 
+  // Audit Finding #1E: dev-audience violations (currently
+  // NEW_FIELD_UNCITED coverage signals) stay in the underlying
+  // ValidationReport for tests/research, but the user-facing System
+  // Diagnostics panel suppresses them from both the rendered table and the
+  // header counts to prevent "5 warnings shown" above an empty table.
+  it('suppresses dev-audience violations from the rendered table and header counts', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(Phase2ConsistencyReport, {
+        report: buildReport({
+          passed: true,
+          violations: [
+            {
+              type: 'BOUNDS_VIOLATION',
+              field: 'segmentLufs',
+              severity: 'WARNING',
+              message: 'User-visible bounds violation worth surfacing.',
+            },
+            {
+              type: 'NEW_FIELD_UNCITED',
+              field: 'lufsCurve.shortTerm',
+              severity: 'WARNING',
+              audience: 'dev',
+              message: 'Phase 1 field present but not cited — engine coverage signal.',
+            },
+            {
+              type: 'NEW_FIELD_UNCITED',
+              field: 'rhythmDetail.tempoCurve',
+              severity: 'WARNING',
+              audience: 'dev',
+              message: 'Phase 1 field present but not cited — engine coverage signal.',
+            },
+            {
+              type: 'NEW_FIELD_UNCITED',
+              field: 'chordDetail.chordTimeline',
+              severity: 'WARNING',
+              audience: 'dev',
+              message: 'Phase 1 field present but not cited — engine coverage signal.',
+            },
+          ],
+          summary: {
+            errorCount: 0,
+            warningCount: 4,
+            checkedFields: 12,
+          },
+        }),
+      }),
+    );
+
+    // Header counts derive from userVisible, not the summary object.
+    expect(html).toContain('0 error(s), 1 warning(s) across 12 checked fields');
+    // Only the user-visible row renders.
+    expect(html).toContain('User-visible bounds violation worth surfacing.');
+    // None of the dev-audience NEW_FIELD_UNCITED messages leak into the
+    // user-facing surface.
+    expect(html).not.toContain('engine coverage signal');
+    expect(html).not.toContain('lufsCurve.shortTerm');
+    expect(html).not.toContain('rhythmDetail.tempoCurve');
+    expect(html).not.toContain('chordDetail.chordTimeline');
+  });
+
+  it('hides the report entirely when every violation is dev-audience', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(Phase2ConsistencyReport, {
+        report: buildReport({
+          passed: true,
+          violations: [
+            {
+              type: 'NEW_FIELD_UNCITED',
+              field: 'lufsCurve.shortTerm',
+              severity: 'WARNING',
+              audience: 'dev',
+              message: 'Engine coverage signal.',
+            },
+          ],
+          summary: {
+            errorCount: 0,
+            warningCount: 1,
+            checkedFields: 5,
+          },
+        }),
+      }),
+    );
+
+    // Falls through to the success rail because no user-visible violations exist.
+    expect(html).toContain('CONSISTENCY OK');
+    expect(html).not.toContain('<table');
+  });
+
   it('truncates long detail messages to 120 characters with an ellipsis', () => {
     const longMessage =
       'This detail message is intentionally much longer than one hundred and twenty characters so the table cell must truncate it cleanly.';

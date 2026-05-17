@@ -409,6 +409,98 @@ function MetaBadgeList({ items }: { items: MetaBadgeItem[] }) {
 // orange-accent pills. Track Layout — its only call site — now uses
 // CitationBlock with the segmentIndexes routed through the `extraRows` prop.
 
+// Audit Finding #1C: the Interpretation Caution panel used to render the
+// backend's `originalValue` / `coercedValue` strings verbatim inside small
+// badges. For dropped Phase 2 recommendations, the backend JSON-dumps the
+// whole AbletonRecommendation object into `originalValue` (see
+// `_stringify_warning_value` / `_build_phase2_validation_warning` in
+// `apps/backend/server_phase2.py`). The producer would see a literal
+// `{"advancedTip":"…","device":"$Saturator","phase1Fields":[...],…}` string
+// inside the panel — engine output leaking through.
+//
+// `formatDroppedValue` keeps the backend contract intact and renders a
+// compact human summary for JSON-shaped values: parse, pick a few headline
+// keys (device, parameter, value, …), join as "k: v · k: v". Non-JSON
+// strings pass through. Invalid JSON falls back to a truncated raw string.
+const FORMAT_DROPPED_VALUE_HEADLINE_KEYS = [
+  'device',
+  'parameter',
+  'value',
+  'category',
+  'name',
+  'field',
+] as const;
+const FORMAT_DROPPED_VALUE_MAX_CHARS = 80;
+
+function formatDroppedValue(raw: unknown): string {
+  if (raw === null || raw === undefined) return '—';
+  const str = String(raw).trim();
+  if (str.length === 0) return '—';
+  const looksLikeJson = str.startsWith('{') || str.startsWith('[');
+  if (!looksLikeJson) {
+    return str.length > FORMAT_DROPPED_VALUE_MAX_CHARS
+      ? `${str.slice(0, FORMAT_DROPPED_VALUE_MAX_CHARS - 1)}…`
+      : str;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(str);
+  } catch {
+    return str.length > FORMAT_DROPPED_VALUE_MAX_CHARS
+      ? `${str.slice(0, FORMAT_DROPPED_VALUE_MAX_CHARS - 1)}…`
+      : str;
+  }
+
+  if (Array.isArray(parsed)) {
+    const n = parsed.length;
+    const noun = `${n} item${n === 1 ? '' : 's'}`;
+    const first = parsed[0];
+    if (first && typeof first === 'object' && !Array.isArray(first)) {
+      const firstRec = first as Record<string, unknown>;
+      const label =
+        (typeof firstRec.device === 'string' && firstRec.device) ||
+        (typeof firstRec.name === 'string' && firstRec.name) ||
+        null;
+      if (label) return `${noun} (${label}${n > 1 ? ', …' : ''})`;
+    }
+    return noun;
+  }
+
+  if (parsed && typeof parsed === 'object') {
+    const record = parsed as Record<string, unknown>;
+    const parts: string[] = [];
+    for (const key of FORMAT_DROPPED_VALUE_HEADLINE_KEYS) {
+      if (parts.length >= 3) break;
+      const value = record[key];
+      if (value === null || value === undefined || value === '') continue;
+      const valueStr = typeof value === 'string' ? value : JSON.stringify(value);
+      if (!valueStr) continue;
+      parts.push(`${key}: ${valueStr}`);
+    }
+    if (parts.length === 0) {
+      const entries = Object.entries(record).filter(
+        ([, v]) => v !== null && v !== undefined && v !== '',
+      );
+      for (const [k, v] of entries.slice(0, 2)) {
+        const valueStr = typeof v === 'string' ? v : JSON.stringify(v);
+        parts.push(`${k}: ${valueStr}`);
+      }
+    }
+    if (parts.length === 0) return '—';
+    const joined = parts.join(' · ');
+    return joined.length > FORMAT_DROPPED_VALUE_MAX_CHARS
+      ? `${joined.slice(0, FORMAT_DROPPED_VALUE_MAX_CHARS - 1)}…`
+      : joined;
+  }
+
+  // Primitive that happened to start with `{` / `[` (very unlikely after the
+  // JSON.parse succeeded into an object, but defensive).
+  return str.length > FORMAT_DROPPED_VALUE_MAX_CHARS
+    ? `${str.slice(0, FORMAT_DROPPED_VALUE_MAX_CHARS - 1)}…`
+    : str;
+}
+
 function describeInterpretationWarning(
   warning: InterpretationValidationWarning,
 ): Pick<GroupedInterpretationWarning, 'tone' | 'title' | 'message'> {
@@ -1058,12 +1150,16 @@ export function AnalysisResults({
                       >
                         {(m.originalValue || m.coercedValue) && (
                           <>
+                            {/* Audit Finding #1C: render compact human summary
+                              for JSON-shaped values (dropped recommendations)
+                              instead of dumping the raw object. See
+                              `formatDroppedValue` near the top of the file. */}
                             <span className="px-1.5 py-0.5 rounded border border-border">
-                              {m.originalValue ?? '—'}
+                              {formatDroppedValue(m.originalValue)}
                             </span>
                             <span className="opacity-50">→</span>
                             <span className="px-1.5 py-0.5 rounded border border-border">
-                              {m.coercedValue ?? '—'}
+                              {formatDroppedValue(m.coercedValue)}
                             </span>
                           </>
                         )}
@@ -2103,9 +2199,13 @@ export function AnalysisResults({
                                   {patch.category}
                                 </span>
                               </div>
-                              <p data-text-role="body" className={textRoleClassName('body', 'mt-1 truncate')}>
-                                {patch.patchRole}
-                              </p>
+                              {/* Audit Finding #1B: the per-card patchRole
+                                paragraph used to render a duplicated
+                                category-keyed placeholder ("Primary tone
+                                generator" on every SYNTHESIS card). It has been
+                                removed; the category chip above carries the
+                                bucket and `whyThisWorks` (inside the expanded
+                                card body) carries the actionable explanation. */}
                               <div className="mt-2">
                                 <MetaBadgeList
                                   items={[

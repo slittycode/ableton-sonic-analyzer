@@ -21,7 +21,16 @@ function severityClass(severity: ValidationViolation['severity']): string {
 }
 
 export function Phase2ConsistencyReport({ report }: Phase2ConsistencyReportProps) {
-  if (report.passed && report.violations.length === 0) {
+  // Audit Finding #1E: dev-audience violations (currently NEW_FIELD_UNCITED
+  // coverage signals) stay in `report.violations` and `report.summary` so
+  // tests and offline analysis see them, but they are suppressed from the
+  // user-facing System Diagnostics surface. Header counts are computed from
+  // `userVisible` to prevent a "5 warnings shown" header above 0 rows.
+  const userVisible = report.violations.filter((v) => v.audience !== 'dev');
+  const userErrorCount = userVisible.filter((v) => v.severity === 'ERROR').length;
+  const userWarningCount = userVisible.filter((v) => v.severity === 'WARNING').length;
+
+  if (report.passed && userVisible.length === 0) {
     return (
       <div className="text-[10px] font-mono uppercase tracking-wide text-success/70">
         CONSISTENCY OK
@@ -29,14 +38,14 @@ export function Phase2ConsistencyReport({ report }: Phase2ConsistencyReportProps
     );
   }
 
-  if (report.violations.length === 0) {
+  if (userVisible.length === 0) {
     return null;
   }
 
   return (
     <div className="space-y-3">
       <div className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
-        {report.summary.errorCount} error(s), {report.summary.warningCount} warning(s) across{' '}
+        {userErrorCount} error(s), {userWarningCount} warning(s) across{' '}
         {report.summary.checkedFields} checked fields
       </div>
 
@@ -55,7 +64,7 @@ export function Phase2ConsistencyReport({ report }: Phase2ConsistencyReportProps
             </tr>
           </thead>
           <tbody>
-            {report.violations.map((violation, rowIndex) => (
+            {userVisible.map((violation, rowIndex) => (
               <tr
                 key={`${violation.field}-${violation.type}-${rowIndex}`}
                 className={`border-b border-border ${

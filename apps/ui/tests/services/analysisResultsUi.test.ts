@@ -472,7 +472,11 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).toContain('data-text-role="eyebrow"');
     expect(html).toContain('>SUB BASS</span>');
     expect(html).toContain('data-text-role="body"');
-    expect(html).toContain('Shapes drum impact by adds punch to drums.');
+    // Audit Finding #1A: Mix Chain role text now renders Gemini's reason verbatim
+    // (capitalized + period) instead of fabricating a "{stage phrase} by {verb}"
+    // splice. The section header carries the group label.
+    expect(html).toContain('Adds punch to drums.');
+    expect(html).not.toContain('Shapes drum impact by');
   });
 
   it('renders character pills from the first four detected characteristics with shortened names', () => {
@@ -712,6 +716,98 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).toContain('UNKNOWN PARAMETER');
     // data-testid hook preserved for smoke tests
     expect(html).toContain('data-testid="interpretation-warnings"');
+  });
+
+  // Audit Finding #1C: dropped recommendations land in `originalValue` as
+  // JSON-stringified AbletonRecommendation objects (see
+  // `_stringify_warning_value` in `server_phase2.py`). Before this fix the
+  // panel rendered `{"advancedTip":"…","device":"$Saturator",…}` literally.
+  // `formatDroppedValue` (in AnalysisResults.tsx) now parses these and shows
+  // a compact `device: X · parameter: Y · value: Z` summary.
+  it('formats dropped AbletonRecommendation JSON as device + parameter summary', () => {
+    const droppedRec = {
+      advancedTip: 'Modulate the drive macro slowly across phrases.',
+      category: 'EFFECTS',
+      device: '$Saturator',
+      parameter: 'drive',
+      phase1Fields: ['lufsIntegrated', 'truePeak'],
+      reason: 'Adds harmonic warmth to the master bus.',
+      value: '8.0',
+    };
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults as React.ComponentType<Record<string, unknown>>, {
+        phase1: baseMeasurement,
+        phase2: phase2V2,
+        phase2SchemaVersion: 'interpretation.v2',
+        phase2ValidationWarnings: [
+          {
+            code: 'DROPPED_UNKNOWN_DEVICE',
+            path: 'abletonRecommendations[3]',
+            message: 'Dropped recommendation because the device is not in the Live 12 catalog.',
+            originalValue: JSON.stringify(droppedRec),
+          },
+        ],
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    // Human summary surfaces device, parameter, value (in headline-key order).
+    expect(html).toContain('device: $Saturator');
+    expect(html).toContain('parameter: drive');
+    expect(html).toContain('value: 8.0');
+    // Noisy keys from the raw JSON do NOT leak into the rendered badge.
+    expect(html).not.toContain('advancedTip');
+    expect(html).not.toContain('phase1Fields');
+    // The original `{"…":"…"}` outline must not be visible to producers.
+    expect(html).not.toContain('"$Saturator"');
+  });
+
+  it('leaves non-JSON originalValue strings untouched', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults as React.ComponentType<Record<string, unknown>>, {
+        phase1: baseMeasurement,
+        phase2: phase2V2,
+        phase2SchemaVersion: 'interpretation.v2',
+        phase2ValidationWarnings: [
+          {
+            code: 'COERCED_TRACK_CONTEXT',
+            path: 'abletonRecommendations[0].trackContext',
+            message: "Coerced trackContext 'Slap Back' to 'Return:Slap Back' to match the required Return:<name> format.",
+            originalValue: 'Slap Back',
+            coercedValue: 'Return:Slap Back',
+          },
+        ],
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).toContain('Slap Back');
+    expect(html).toContain('Return:Slap Back');
+  });
+
+  it('falls back to truncated raw string when JSON parse fails', () => {
+    const truncated = '{not valid json but starts with a brace and has more text';
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults as React.ComponentType<Record<string, unknown>>, {
+        phase1: baseMeasurement,
+        phase2: phase2V2,
+        phase2SchemaVersion: 'interpretation.v2',
+        phase2ValidationWarnings: [
+          {
+            code: 'DROPPED_UNKNOWN_DEVICE',
+            path: 'abletonRecommendations[2]',
+            message: 'Dropped recommendation due to malformed payload.',
+            originalValue: truncated,
+          },
+        ],
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    // The function must not throw on invalid JSON; the raw input renders
+    // (truncated to <=80 chars) inside the small badge. This input is 56
+    // characters long so it renders verbatim.
+    expect(html).toContain('{not valid json but starts with a brace');
   });
 
   it('keeps the interpretation intro flat so it matches the surrounding AI sections', () => {

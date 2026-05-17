@@ -147,7 +147,11 @@ export interface PatchCardViewModel {
   id: string;
   device: string;
   category: string;
-  patchRole: string;
+  // Audit Finding #1B: `patchRole` was a category-keyed fallback string
+  // (`mapPatchRole`) that produced duplicated placeholders ("Primary tone
+  // generator" stamped on every SYNTHESIS card). It has been removed; the
+  // category chip in the UI carries the bucket and `whyThisWorks` carries
+  // the actionable per-card explanation.
   whyThisWorks: string;
   deviceFamily?: string;
   trackContext?: string;
@@ -870,21 +874,24 @@ function buildDerivedChainParameters(
   }
 }
 
+// Audit Finding #1A: render Gemini's per-card `reason` verbatim (capitalized,
+// punctuated) instead of fabricating a "{stage phrase} by {verb}" splice. The
+// section header already labels each card's processing group; the old prefix
+// concatenation produced ungrammatical output like "Controls bass energy by
+// ensures the extreme low-end mono…" because `item.reason` is a present-tense
+// clause, not a gerund. The HIGH-END "(for …)" suffix survives as an optional
+// trailing parenthetical when cues are present.
 function buildRoleSentence(reason: string, group: ProcessingGroup, highEndCues: string[] = []): string {
   const base = sanitizeText(reason, 220);
-  const sentence = base.split(SENTENCE_BREAK_REGEX)[0] || base;
-  const prefixMap: Record<ProcessingGroup, string> = {
-    "DRUM PROCESSING": "Shapes drum impact",
-    "BASS PROCESSING": "Controls bass energy",
-    "SYNTH / MELODIC": "Supports melodic clarity",
-    "MID PROCESSING": "Balances the center band",
-    "HIGH-END DETAIL": "Refines high-end articulation",
-    "MASTER BUS": "Finalizes the master bus",
-  };
-  const cueSuffix = group === "HIGH-END DETAIL" && highEndCues.length > 0
-    ? ` for ${summarizeHighEndFocus(highEndCues)}`
+  const firstSentence = base.split(SENTENCE_BREAK_REGEX)[0] || base;
+  const trimmed = firstSentence.replace(/[.\s]+$/, "");
+  const capitalized = trimmed.length > 0
+    ? trimmed.charAt(0).toUpperCase() + trimmed.slice(1)
     : "";
-  return `${prefixMap[group]}${cueSuffix} by ${sentence.charAt(0).toLowerCase()}${sentence.slice(1)}`;
+  const suffix = group === "HIGH-END DETAIL" && highEndCues.length > 0
+    ? ` (for ${summarizeHighEndFocus(highEndCues)})`
+    : "";
+  return capitalized.length > 0 ? `${capitalized}${suffix}.` : "";
 }
 
 function buildProTip(group: ProcessingGroup): string {
@@ -1065,16 +1072,10 @@ export function buildMixChainGroups(
   return compactMixChainGroups(displayGroups);
 }
 
-function mapPatchRole(category: string): string {
-  const key = category.toLowerCase();
-  if (key.includes("synth")) return "Primary tone generator";
-  if (key.includes("eq")) return "Tone shaper";
-  if (key.includes("dynamic")) return "Dynamic control stage";
-  if (key.includes("stereo")) return "Stereo placement stage";
-  if (key.includes("midi")) return "Pattern driver";
-  if (key.includes("routing")) return "Signal routing stage";
-  return "Texture and movement stage";
-}
+// Audit Finding #1B: `mapPatchRole` was deleted. It was a 7-key category-keyed
+// fallback that produced duplicated placeholder strings ("Primary tone
+// generator" stamped on every SYNTHESIS card). The per-device `reason` already
+// renders in `whyThisWorks`, and the category chip carries the bucket label.
 
 function groupRecommendationsByDevice(recommendations: AbletonRecommendation[]): Array<{
   device: string;
@@ -1140,7 +1141,6 @@ function buildStereoWidthPatchCard(
     id: `patch-${order}-stereo-width`,
     device: "Utility / Stereo Imager",
     category: "UTILITY",
-    patchRole: "Stereo image management",
     whyThisWorks: truncateAtSentenceBoundary(
       `${widthNarrative} This maps directly to measured width ${phase1.stereoWidth.toFixed(2)} and correlation ${phase1.stereoCorrelation.toFixed(2)}.`,
       320,
@@ -1174,11 +1174,29 @@ export function buildPatchCards(
   const melodyInsights = buildMelodyInsights(phase1);
   const recommendations = Array.isArray(phase2.abletonRecommendations) ? phase2.abletonRecommendations : [];
   const grouped = groupRecommendationsByDevice(recommendations);
+
+  // Audit Finding #1B (overlap): Gemini sometimes emits the same device in
+  // both `mixAndMasterChain` (processing) and `abletonRecommendations`
+  // (patches). When that happens the Patches section visibly re-lists Mix
+  // Chain devices (Glue Compressor, Auto Filter, Wavetable, Utility,
+  // Limiter), which makes the two sections feel redundant. Filter
+  // case-insensitively against the chain so Patches stays distinct.
+  // Synthetic fallbacks (stereo width, MIDI Clip Guide) are built from
+  // Phase 1 only and bypass this filter intentionally.
+  const chainDeviceNames = new Set(
+    (Array.isArray(phase2.mixAndMasterChain) ? phase2.mixAndMasterChain : [])
+      .map((item) => item?.device?.trim?.().toLowerCase())
+      .filter((name): name is string => typeof name === "string" && name.length > 0),
+  );
+  const filteredGroups = grouped.filter(
+    (group) => !chainDeviceNames.has(group.device.trim().toLowerCase()),
+  );
+
   const characteristicContext = Array.isArray(phase2.detectedCharacteristics)
     ? phase2.detectedCharacteristics.slice(0, 2).map((item) => item.name).join(" + ")
     : "the detected track profile";
 
-  const cards: PatchCardViewModel[] = grouped.map((group, index) => {
+  const cards: PatchCardViewModel[] = filteredGroups.map((group, index) => {
     const normalizedCategory = String(group.category || "EFFECTS").toUpperCase();
     const midiFocused = !!melodyInsights && isMidiFocusedGroup(group.device, normalizedCategory);
     const primaryItem = group.items[0];
@@ -1228,7 +1246,6 @@ export function buildPatchCards(
       id: `patch-${index}-${group.device}`,
       device: group.device,
       category: normalizedCategory,
-      patchRole: midiFocused ? `${mapPatchRole(normalizedCategory)} • Transcription-driven` : mapPatchRole(normalizedCategory),
       whyThisWorks,
       deviceFamily: primaryItem?.deviceFamily,
       trackContext: primaryItem?.trackContext,
@@ -1249,7 +1266,6 @@ export function buildPatchCards(
       id: `patch-${cards.length}-midi-clip-guide`,
       device: "MIDI Clip Guide",
       category: "MIDI",
-      patchRole: "Transcription-derived melodic scaffold",
       whyThisWorks: truncateAtSentenceBoundary(
         `Transcription-derived: ${melodyInsights.noteCount} notes covering ${melodyInsights.rangeLabel} with dominant notes ${melodyInsights.dominantNotes.slice(0, 3).join(", ") || "n/a"}. ${
           melodyInsights.isDraft
@@ -1315,8 +1331,12 @@ export function buildPatchGroups(
     // when no keyword matches; cards are already roughly ordered by intent
     // (drum/bass first → master last) so the position-based fallback lands
     // in a sensible bucket.
+    // Audit Finding #1B: previously included `card.patchRole`, which was a
+    // category-keyed fallback string that has been removed. `whyThisWorks` is
+    // already a per-card sentence built from Gemini's `reason`, so the
+    // keyword surface for `inferProcessingGroup` stays rich.
     const text =
-      `${card.device} ${card.category} ${card.patchRole} ${card.whyThisWorks}`.toLowerCase();
+      `${card.device} ${card.category} ${card.whyThisWorks}`.toLowerCase();
     const positionRatio = cards.length <= 1 ? 1 : index / (cards.length - 1);
     const group = inferProcessingGroup(text, positionRatio);
     grouped.get(group)?.push(card);

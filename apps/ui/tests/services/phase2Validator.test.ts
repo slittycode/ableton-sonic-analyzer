@@ -872,6 +872,66 @@ describe('validatePhase2Consistency', () => {
       );
       expect(uncited).toHaveLength(0);
     });
+
+    // Audit Finding #1E: NEW_FIELD_UNCITED is a coverage signal for the
+    // engine team ("warning is benign" copy in the message). Tag it
+    // dev-audience so the user-facing System Diagnostics panel can filter
+    // it out while tests/research keep seeing the violations.
+    it('NEW_FIELD_UNCITED violations are marked audience=dev', () => {
+      const phase1 = createBasePhase1({
+        lufsCurve: {
+          shortTerm: [
+            { t: 0.0, lufs: -16.2 },
+            { t: 3.0, lufs: -15.8 },
+            { t: 6.0, lufs: -14.9 },
+            { t: 9.0, lufs: -13.5 },
+            { t: 12.0, lufs: -11.2 },
+            { t: 15.0, lufs: -9.4 },
+          ],
+          momentary: [{ t: 0.0, lufs: -15.8 }],
+        },
+      } as Partial<Phase1Result>);
+      const phase2 = createBasePhase2({
+        abletonRecommendations: [
+          {
+            device: 'EQ Eight',
+            category: 'EQ',
+            parameter: 'Low Cut',
+            value: '30 Hz',
+            reason: 'Removes rumble.',
+            phase1Fields: ['spectralBalance.subBass'],
+          },
+        ],
+      });
+
+      const result = validatePhase2Consistency(phase1, phase2);
+      const uncited = result.violations.filter(v => v.type === 'NEW_FIELD_UNCITED');
+      expect(uncited.length).toBeGreaterThan(0);
+      expect(uncited.every(v => v.audience === 'dev')).toBe(true);
+    });
+
+    it('non-NEW_FIELD_UNCITED violations default to user audience (audience undefined)', () => {
+      // Mirror the existing "EQ cutoff above spectral centroid"
+      // BOUNDS_VIOLATION fixture from the Numeric bounds suite so we have a
+      // reliable non-coverage violation to assert against.
+      const phase1 = createBasePhase1({ spectralDetail: { spectralCentroidMean: 2000 } });
+      const phase2 = createBasePhase2({
+        abletonRecommendations: [
+          {
+            device: 'EQ Eight',
+            category: 'EQ',
+            parameter: 'High Cut',
+            value: '8000 Hz',
+            reason: 'Roll off highs',
+          },
+        ],
+      });
+
+      const result = validatePhase2Consistency(phase1, phase2);
+      const nonCoverage = result.violations.filter(v => v.type !== 'NEW_FIELD_UNCITED');
+      expect(nonCoverage.length).toBeGreaterThan(0);
+      expect(nonCoverage.every(v => v.audience === undefined)).toBe(true);
+    });
   });
 
   describe('pathCoversTracked helper', () => {
