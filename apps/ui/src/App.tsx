@@ -1278,18 +1278,20 @@ export default function App() {
               </div>
 
               <div className="lg:col-span-8 flex flex-col">
+                {/* data-testid="signal-panel" lifted onto the DeviceRack so
+                    the testid wraps the title strip (containing the
+                    visible "Signal Monitor" text the
+                    tests/smoke/error-states.spec.ts:524 selector
+                    `signalPanel.getByText('Signal Monitor')` looks for).
+                    The inner bg-bg-card div preserves the palette
+                    contract the theme-shell smoke locks. */}
                 <DeviceRack
+                  data-testid="signal-panel"
                   name="Signal Monitor"
                   status={isAnalyzing ? 'active' : audioUrl ? 'success' : 'idle'}
                   className="flex-grow flex flex-col"
                 >
-                  {/* bg-bg-card on the inner div mirrors the input-panel
-                      pattern from D.4 — the DeviceRack body is transparent
-                      by default; flatten it here so theme-shell smoke specs
-                      (if they observe signal-panel bg) keep matching the
-                      palette contract. */}
                   <div
-                    data-testid="signal-panel"
                     className="flex-grow bg-bg-card p-4 relative flex flex-col"
                   >
                   {audioUrl && audioFile ? (
