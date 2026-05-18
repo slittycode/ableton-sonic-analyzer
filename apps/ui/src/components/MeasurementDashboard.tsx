@@ -25,7 +25,6 @@ import { MiniHeatmap } from './MiniHeatmap';
 import { ConfidenceBandBadge } from './sessionMusician/ConfidenceBandBadge';
 import { MixDoctorPanel } from './MixDoctorPanel';
 import {
-  AccentMetricCard,
   DeltaBadge,
   MetricBar,
   MetricBarRow,
@@ -34,6 +33,7 @@ import {
   StyledDataTable,
   TokenBadgeList,
 } from './MeasurementPrimitives';
+import { DeviceRack, MetricTile } from './ui';
 import { Sparkline } from './Sparkline';
 import { SpectralCursorProvider } from '../hooks/useSpectralCursorBus';
 import { formatDisplayText, getTextRoleClassName } from '../utils/displayText';
@@ -1310,7 +1310,8 @@ export function MeasurementDashboard({
   }, [apiBaseUrl, runId, generating]);
 
   return (
-    <div data-testid="measurement-dashboard" className="space-y-4">
+    <DeviceRack name="Measurements" density="dense" status="success">
+      <div data-testid="measurement-dashboard" className="space-y-4">
       {/* 1. Core Metrics */}
       <Section id="section-meas-core" number={1} title="Core Metrics">
         {/* Hero Grid */}
@@ -1321,7 +1322,7 @@ export function MeasurementDashboard({
               twice at different precisions ("157" up top, "156.6" here) inside
               one scroll region read as a measurement disagreement to producers.
               Precision is preserved in the Percival sub-label below. */}
-          <AccentMetricCard
+          <MetricTile size="xl"
             label="Tempo"
             value={Math.round(phase1.bpm)}
             unit="BPM"
@@ -1361,7 +1362,7 @@ export function MeasurementDashboard({
           />
 
           {/* Key Tile */}
-          <AccentMetricCard
+          <MetricTile size="xl"
             label="Key Signature"
             value={<span className="truncate block">{phase1.key || '—'}</span>}
             footer={
@@ -1380,7 +1381,7 @@ export function MeasurementDashboard({
           />
 
           {/* Duration / Format Tile */}
-          <AccentMetricCard
+          <MetricTile size="xl"
             label="Duration"
             value={formatDuration(phase1.durationSeconds)}
             unit={phase1.timeSignature}
@@ -1658,7 +1659,7 @@ export function MeasurementDashboard({
                 { label: 'True Peak', value: phase1.truePeak, suffix: 'dBTP', decimals: 2 },
               ].filter((tile) => tile.value !== undefined && tile.value !== null).map((tile) => (
                 <div key={tile.label}>
-                  <AccentMetricCard
+                  <MetricTile size="xl"
                     label={tile.label}
                     value={formatNumber(tile.value!, tile.decimals)}
                     unit={tile.suffix ? <span className="text-[8px] font-mono text-text-secondary/45">{tile.suffix}</span> : undefined}
@@ -1862,7 +1863,7 @@ export function MeasurementDashboard({
               )}
             </div>
           ) : (
-            <AccentMetricCard
+            <MetricTile size="xl"
               label="Dynamics & Texture"
               value={dynamicsTextureFallback.title}
               unit={<span className="text-[8px] font-mono uppercase tracking-wide text-text-secondary/45">Unavailable</span>}
@@ -2809,6 +2810,7 @@ export function MeasurementDashboard({
           )}
         </div>
       </Section>
-    </div>
+      </div>
+    </DeviceRack>
   );
 }
