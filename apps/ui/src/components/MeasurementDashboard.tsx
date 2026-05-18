@@ -33,7 +33,7 @@ import {
   StyledDataTable,
   TokenBadgeList,
 } from './MeasurementPrimitives';
-import { DeviceRack, MetricTile } from './ui';
+import { DeviceRack, EmptyState, MetricTile } from './ui';
 import { Sparkline } from './Sparkline';
 import { SpectralCursorProvider } from '../hooks/useSpectralCursorBus';
 import { formatDisplayText, getTextRoleClassName } from '../utils/displayText';
@@ -202,20 +202,25 @@ function UnavailableMeasurementCard({
   description: string;
   detail?: string;
 }) {
+  // Delegates to the EmptyState primitive — preserves the (title,
+  // description, detail) API that the dashboard's two call sites at
+  // :1805 and :1858 depend on, while folding the visual chrome into
+  // the canonical primitive. The optional `detail` line renders as a
+  // children slot since EmptyState's prop surface stops at description.
   return (
-    <div className="space-y-3 rounded-sm border border-dashed border-border-light/60 bg-bg-surface-dark/40 p-4">
-      <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-text-secondary block">
-        {title}
-      </span>
-      <p className="text-[11px] font-mono uppercase tracking-[0.14em] text-text-secondary/80">
-        {description}
-      </p>
+    <EmptyState
+      tone="neutral"
+      padding="md"
+      title={title}
+      description={description}
+      className="border-dashed border-border-light/60 bg-bg-surface-dark/40"
+    >
       {detail ? (
         <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-text-secondary/60">
           {detail}
         </p>
       ) : null}
-    </div>
+    </EmptyState>
   );
 }
 
