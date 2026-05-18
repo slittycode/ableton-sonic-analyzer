@@ -32,7 +32,19 @@ jobs:
           cache: "npm"
           cache-dependency-path: apps/ui/package-lock.json
       - run: npm ci
+      - name: Check Chromatic project token
+        id: chromatic_check
+        env:
+          CHROMATIC_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+        run: |
+          if [ -z "$CHROMATIC_TOKEN" ]; then
+            echo "::notice::CHROMATIC_PROJECT_TOKEN secret is not configured — skipping Chromatic publish. Set the secret in repository settings to enable visual regression."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Publish to Chromatic
+        if: steps.chromatic_check.outputs.skip != 'true'
         uses: chromaui/action@latest
         with:
           projectToken: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
