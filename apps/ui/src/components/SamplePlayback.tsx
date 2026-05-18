@@ -7,6 +7,14 @@ import {
   generateSamples,
 } from '../services/sampleGenerationClient';
 import { BackendClientError } from '../services/backendPhase1Client';
+import {
+  Button,
+  DeviceRack,
+  Panel,
+  Pill,
+  SectionHeader,
+} from './ui';
+import type { Tone } from './ui';
 
 interface SamplePlaybackProps {
   runId: string | null | undefined;
@@ -30,6 +38,18 @@ const CATEGORY_LABELS: Record<SampleRecord['category'], string> = {
   drums: 'Drum kit',
   melody: 'Melody / lead phrase',
 };
+
+type RackStatus = 'idle' | 'active' | 'success' | 'warning' | 'error';
+
+function rackStatusFor(
+  panelStatus: PanelStatus,
+  hasManifest: boolean,
+): RackStatus {
+  if (panelStatus.kind === 'error') return 'error';
+  if (panelStatus.kind === 'generating') return 'active';
+  if (hasManifest) return 'success';
+  return 'idle';
+}
 
 /**
  * Audition panel that renders generated audio clips for the current run.
@@ -98,79 +118,84 @@ export function SamplePlayback({
 
   if (!runId) return null;
 
+  const rackStatus = rackStatusFor(status, Boolean(manifest));
+
   return (
-    <section
-      className="rounded-lg border border-zinc-700 bg-zinc-900/40 p-4 mt-6"
-      aria-labelledby="audition-heading"
-    >
-      <header className="flex items-baseline justify-between gap-3 mb-3">
-        <div>
-          <h3 id="audition-heading" className="text-base font-semibold text-zinc-100">
-            Audition samples (Phase 3 — heuristic)
-          </h3>
-          <p className="text-xs text-zinc-400 mt-1 max-w-xl">
-            Short clips derived from Phase 1 measurements (and Phase 2 context when
-            available) so you can ear-check the measurement chain. These are not
-            Ableton-accurate reconstructions — follow Phase 2 in Live for the
-            production character.
-          </p>
-        </div>
-        {manifest && (
-          <button
-            type="button"
+    <DeviceRack
+      name="AUDITION SAMPLES"
+      subtitle="· Phase 3 heuristic"
+      status={rackStatus}
+      aria-label="Audition samples"
+      className="mt-6"
+      action={
+        manifest && (
+          <Button
+            variant="link"
+            size="sm"
             onClick={() => handleGenerate(true)}
             disabled={status.kind === 'generating'}
-            className="text-xs underline text-zinc-400 hover:text-zinc-200 disabled:opacity-40"
           >
             Regenerate
-          </button>
+          </Button>
+        )
+      }
+    >
+      <div className="space-y-3">
+        <p className="font-mono text-[11px] leading-snug text-text-secondary max-w-xl">
+          Short clips derived from Phase 1 measurements (and Phase 2 context when
+          available) so you can ear-check the measurement chain. These are not
+          Ableton-accurate reconstructions — follow Phase 2 in Live for the
+          production character.
+        </p>
+
+        {!measurementCompleted && (
+          <p className="font-mono text-[11px] text-text-secondary">
+            Measurements still running — audition samples become available once
+            Phase 1 completes.
+          </p>
         )}
-      </header>
 
-      {!measurementCompleted && (
-        <p className="text-sm text-zinc-400">
-          Measurements still running — audition samples become available once Phase 1
-          completes.
-        </p>
-      )}
+        {measurementCompleted && !manifest && status.kind !== 'generating' && (
+          <Button
+            variant="primary"
+            size="md"
+            ledIndicator
+            onClick={() => handleGenerate(false)}
+            disabled={status.kind === 'loading'}
+          >
+            {status.kind === 'loading' ? 'Checking…' : 'Generate audition samples'}
+          </Button>
+        )}
 
-      {measurementCompleted && !manifest && status.kind !== 'generating' && (
-        <button
-          type="button"
-          onClick={() => handleGenerate(false)}
-          disabled={status.kind === 'loading'}
-          className="px-3 py-2 rounded bg-amber-600 text-zinc-50 text-sm font-medium hover:bg-amber-500 disabled:opacity-40"
-        >
-          {status.kind === 'loading' ? 'Checking…' : 'Generate audition samples'}
-        </button>
-      )}
+        {status.kind === 'generating' && (
+          <p className="font-mono text-[11px] text-text-secondary">
+            Rendering audition clips…
+          </p>
+        )}
 
-      {status.kind === 'generating' && (
-        <p className="text-sm text-zinc-300">Rendering audition clips…</p>
-      )}
+        {status.kind === 'error' && (
+          <p className="font-mono text-[11px] text-error" role="alert">
+            {status.message}
+          </p>
+        )}
 
-      {status.kind === 'error' && (
-        <p className="text-sm text-red-400" role="alert">
-          {status.message}
-        </p>
-      )}
-
-      {manifest && groupedSamples.length > 0 && (
-        <div className="space-y-5">
-          <ManifestMeta manifest={manifest} />
-          {groupedSamples.map(([category, samples]) => (
-            <React.Fragment key={category}>
-              <SampleGroup
-                category={category}
-                samples={samples}
-                runId={runId}
-                apiBaseUrl={apiBaseUrl}
-              />
-            </React.Fragment>
-          ))}
-        </div>
-      )}
-    </section>
+        {manifest && groupedSamples.length > 0 && (
+          <div className="space-y-5">
+            <ManifestMeta manifest={manifest} />
+            {groupedSamples.map(([category, samples]) => (
+              <React.Fragment key={category}>
+                <SampleGroup
+                  category={category}
+                  samples={samples}
+                  runId={runId}
+                  apiBaseUrl={apiBaseUrl}
+                />
+              </React.Fragment>
+            ))}
+          </div>
+        )}
+      </div>
+    </DeviceRack>
   );
 }
 
@@ -184,13 +209,9 @@ function ManifestMeta({ manifest }: { manifest: SamplesManifest }) {
       ? 'PyTheory'
       : 'Pure-Python theory fallback';
   return (
-    <div className="flex flex-wrap gap-2 text-xs">
-      <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-zinc-300">
-        Music theory: {theoryLabel}
-      </span>
-      <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-zinc-300">
-        Synthesis: {synthesisLabel}
-      </span>
+    <div className="flex flex-wrap gap-1.5">
+      <Pill tone="neutral" leadingDot>Music theory: {theoryLabel}</Pill>
+      <Pill tone="neutral" leadingDot>Synthesis: {synthesisLabel}</Pill>
     </div>
   );
 }
@@ -204,15 +225,18 @@ interface SampleGroupProps {
 
 function SampleGroup({ category, samples, runId, apiBaseUrl }: SampleGroupProps) {
   return (
-    <div>
-      <h4 className="text-sm font-medium text-zinc-200 mb-2">
-        {CATEGORY_LABELS[category]}
-      </h4>
-      <ul className="space-y-3">
+    <div className="space-y-2">
+      <SectionHeader
+        size="sm"
+        eyebrow="Group"
+        title={CATEGORY_LABELS[category]}
+        ledTone="accent"
+      />
+      <ul className="space-y-2 list-none p-0">
         {samples.map((sample) => (
-          <React.Fragment key={sample.id}>
+          <li key={sample.id}>
             <SampleCard sample={sample} runId={runId} apiBaseUrl={apiBaseUrl} />
-          </React.Fragment>
+          </li>
         ))}
       </ul>
     </div>
@@ -233,15 +257,16 @@ function SampleCard({ sample, runId, apiBaseUrl }: SampleCardProps) {
     ? artifactStreamUrl(runId, sample.midiArtifactId, apiBaseUrl)
     : null;
 
+  const tone = confidenceTone(sample.confidence, sample.lowConfidence);
+  const label = sample.lowConfidence
+    ? 'Low confidence'
+    : `${sample.confidence} confidence`;
+
   return (
-    <li className="rounded-md border border-zinc-800 bg-zinc-900/60 p-3">
+    <Panel variant="surface" padding="md">
       <div className="flex items-baseline justify-between gap-3 mb-2">
-        <span className="text-sm text-zinc-100">{sample.label}</span>
-        <span
-          className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded ${confidenceClassFor(sample.confidence, sample.lowConfidence)}`}
-        >
-          {sample.lowConfidence ? 'Low confidence' : `${sample.confidence} confidence`}
-        </span>
+        <span className="font-mono text-[12px] text-text-primary">{sample.label}</span>
+        <Pill tone={tone} size="xs">{label}</Pill>
       </div>
       {audioUrl ? (
         <audio
@@ -252,16 +277,18 @@ function SampleCard({ sample, runId, apiBaseUrl }: SampleCardProps) {
           aria-label={`Audition sample: ${sample.label}`}
         />
       ) : (
-        <p className="text-xs text-zinc-500">Audio stream unavailable.</p>
+        <p className="font-mono text-[11px] text-text-muted">Audio stream unavailable.</p>
       )}
-      <p className="text-xs text-zinc-400 mt-2">{sample.cites.rationale}</p>
+      <p className="font-mono text-[11px] text-text-secondary mt-2">
+        {sample.cites.rationale}
+      </p>
       {sample.cites.phase1Fields.length > 0 && (
-        <p className="text-xs text-zinc-500 mt-1">
+        <p className="font-mono text-[11px] text-text-muted mt-1">
           Cites:{' '}
           {sample.cites.phase1Fields.map((field, idx) => (
             <React.Fragment key={field}>
               {idx > 0 && ', '}
-              <code className="text-zinc-300 bg-zinc-800/60 rounded px-1">
+              <code className="text-text-primary bg-bg-app/60 rounded px-1 py-0.5 border border-border/40">
                 {field}
               </code>
             </React.Fragment>
@@ -269,10 +296,10 @@ function SampleCard({ sample, runId, apiBaseUrl }: SampleCardProps) {
         </p>
       )}
       {midiUrl && (
-        <p className="text-xs text-zinc-500 mt-1">
+        <p className="font-mono text-[11px] text-text-muted mt-1">
           <a
             href={midiUrl}
-            className="underline hover:text-zinc-300"
+            className="text-accent underline underline-offset-2 hover:text-accent/80"
             download={sample.midiFilename ?? `${sample.id}.mid`}
           >
             Download MIDI
@@ -280,17 +307,17 @@ function SampleCard({ sample, runId, apiBaseUrl }: SampleCardProps) {
           to audition with your own instruments in Ableton.
         </p>
       )}
-    </li>
+    </Panel>
   );
 }
 
-function confidenceClassFor(
+function confidenceTone(
   confidence: SampleRecord['confidence'],
   lowConfidence: boolean,
-): string {
-  if (lowConfidence || confidence === 'LOW') return 'bg-amber-900/40 text-amber-300';
-  if (confidence === 'MED') return 'bg-zinc-700 text-zinc-200';
-  return 'bg-emerald-900/40 text-emerald-300';
+): Tone {
+  if (lowConfidence || confidence === 'LOW') return 'warning';
+  if (confidence === 'MED') return 'neutral';
+  return 'success';
 }
 
 function friendlyError(err: unknown): string {
