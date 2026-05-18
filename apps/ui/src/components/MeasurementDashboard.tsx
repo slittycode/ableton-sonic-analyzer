@@ -290,7 +290,20 @@ const MetricRow = ({
   </div>
 );
 
-const SectionHeader = ({
+/**
+ * Numbered, collapsible section toggle used by every Measurement Dashboard
+ * sub-section. Structurally distinct from the ui/SectionHeader primitive —
+ * this whole component IS the click target (the entire row toggles the
+ * section open/closed) whereas the primitive renders a static h2 with an
+ * optional action slot. Wrapping the primitive in a <button> would either
+ * nest interactive elements or swallow the primitive's accessibility
+ * affordances, so the local toggle stays.
+ *
+ * The two data-text-role attributes (`meta` on the number badge,
+ * `section-title` on the title span) are emitted directly here for the
+ * same vocabulary as the primitive renders elsewhere.
+ */
+const NumberedSectionToggle = ({
   number,
   title,
   isOpen,
@@ -303,6 +316,7 @@ const SectionHeader = ({
 }) => (
   <button
     onClick={onToggle}
+    aria-expanded={isOpen}
     className="w-full text-left flex items-center gap-2 hover:opacity-80 transition-opacity"
   >
     <span data-text-role="meta" className={getTextRoleClassName('meta')}>
@@ -314,7 +328,7 @@ const SectionHeader = ({
     >
       {formatDisplayText(title, 'title')}
     </span>
-    <span className="text-text-secondary text-sm">{isOpen ? '−' : '+'}</span>
+    <span aria-hidden className="text-text-secondary text-sm">{isOpen ? '−' : '+'}</span>
   </button>
 );
 
@@ -339,7 +353,7 @@ const Section = ({
       data-testid={testId}
       className="bg-bg-card border border-border rounded-sm p-4 space-y-4 scroll-mt-24"
     >
-      <SectionHeader
+      <NumberedSectionToggle
         number={number}
         title={title}
         isOpen={isOpen}
