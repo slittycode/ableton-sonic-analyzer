@@ -34,6 +34,14 @@ export interface SectionHeaderProps
 
 type SizeKey = 'sm' | 'md' | 'lg';
 
+function toneToLedStatus(
+  tone: Tone,
+): 'idle' | 'active' | 'success' | 'warning' | 'error' {
+  if (tone === 'neutral') return 'idle';
+  if (tone === 'accent') return 'active';
+  return tone;
+}
+
 const fallbackTitleClass: Record<SizeKey, string> = {
   sm: 'text-xs font-mono uppercase tracking-wider text-text-secondary',
   md: 'text-sm font-mono uppercase tracking-wider text-text-secondary',
@@ -57,6 +65,7 @@ export const SectionHeader = React.forwardRef<HTMLDivElement, SectionHeaderProps
     ref,
   ) {
     const resolvedSize: SizeKey = (size ?? 'md') as SizeKey;
+    const resolvedTone: Tone = (ledTone ?? 'accent') as Tone;
     const titleBase = titleRole
       ? getTextRoleClassName(titleRole)
       : fallbackTitleClass[resolvedSize];
@@ -80,7 +89,7 @@ export const SectionHeader = React.forwardRef<HTMLDivElement, SectionHeaderProps
             data-text-role={titleRole}
             className={cn(titleBase, 'flex items-center gap-2', titleClassName)}
           >
-            <LedIndicator status={ledTone === 'neutral' ? 'idle' : (ledTone as 'active')} />
+            <LedIndicator status={toneToLedStatus(resolvedTone)} />
             {title}
           </h2>
         </div>

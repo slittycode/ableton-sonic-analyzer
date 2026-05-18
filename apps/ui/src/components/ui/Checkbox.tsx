@@ -46,7 +46,11 @@ export const Checkbox = React.forwardRef<
   // Resolve a stable id so the label can be associated correctly.
   const reactId = React.useId();
   const fieldId = id ?? reactId;
-  const isChecked = checked ?? defaultChecked ?? false;
+  // `checked` is Radix's CheckedState (`true | false | 'indeterminate'`).
+  // Only the strict `true` state should drive the checked visual style; the
+  // indeterminate state needs its own dimmed border, not the lit accent ring.
+  const resolved = checked ?? defaultChecked ?? false;
+  const isStrictlyChecked = resolved === true;
 
   const box = (
     <RadixCheckbox.Root
@@ -55,13 +59,18 @@ export const Checkbox = React.forwardRef<
       checked={checked}
       defaultChecked={defaultChecked}
       className={cn(
-        checkboxVariants({ size, checked: Boolean(isChecked) }),
+        checkboxVariants({ size, checked: isStrictlyChecked }),
+        resolved === 'indeterminate' && 'border-accent/40 text-accent/70',
         className,
       )}
       {...rest}
     >
       <RadixCheckbox.Indicator>
-        <Check className="w-3 h-3" strokeWidth={3} />
+        {resolved === 'indeterminate' ? (
+          <span className="block w-1.5 h-0.5 bg-current" aria-hidden />
+        ) : (
+          <Check className="w-3 h-3" strokeWidth={3} />
+        )}
       </RadixCheckbox.Indicator>
     </RadixCheckbox.Root>
   );

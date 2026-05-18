@@ -19,12 +19,33 @@ const panelVariants = cva('', {
     },
     tone: {
       neutral: '',
-      active: 'device-rack--active',
-      success: 'device-rack--success',
-      warning: 'device-rack--warning',
-      error: 'device-rack--error',
+      active: '',
+      success: '',
+      warning: '',
+      error: '',
     },
   },
+  // Tone styling is variant-aware. The `device-rack--*` modifiers only have
+  // effect under a `.device-rack` parent, so non-rack variants get
+  // border-tint emphasis instead of the rack glow shadow.
+  compoundVariants: [
+    { variant: 'rack', tone: 'active', class: 'device-rack--active' },
+    { variant: 'rack', tone: 'success', class: 'device-rack--success' },
+    { variant: 'rack', tone: 'warning', class: 'device-rack--warning' },
+    { variant: 'rack', tone: 'error', class: 'device-rack--error' },
+    { variant: 'surface', tone: 'active', class: 'border-accent/50' },
+    { variant: 'surface', tone: 'success', class: 'border-success/40' },
+    { variant: 'surface', tone: 'warning', class: 'border-warning/40' },
+    { variant: 'surface', tone: 'error', class: 'border-error/40' },
+    { variant: 'ghost', tone: 'active', class: 'border-accent/40' },
+    { variant: 'ghost', tone: 'success', class: 'border-success/30' },
+    { variant: 'ghost', tone: 'warning', class: 'border-warning/30' },
+    { variant: 'ghost', tone: 'error', class: 'border-error/30' },
+    { variant: 'inset', tone: 'active', class: 'border-accent/40' },
+    { variant: 'inset', tone: 'success', class: 'border-success/30' },
+    { variant: 'inset', tone: 'warning', class: 'border-warning/30' },
+    { variant: 'inset', tone: 'error', class: 'border-error/30' },
+  ],
   defaultVariants: { variant: 'surface', padding: 'none', tone: 'neutral' },
 });
 

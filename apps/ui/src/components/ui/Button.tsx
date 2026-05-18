@@ -91,8 +91,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function 
         <LedIndicator status={rest.disabled ? 'idle' : 'pulsing'} />
       )}
       {leadingIcon}
-      {!iconOnly && children}
-      {iconOnly && children}
+      {children}
       {trailingIcon}
     </button>
   );
