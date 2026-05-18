@@ -10,11 +10,11 @@ const tileVariants = cva(
     variants: {
       accent: {
         none: '',
-        accent: 'border-l-2 border-l-accent',
-        success: 'border-l-2 border-l-success',
-        warning: 'border-l-2 border-l-warning',
-        error: 'border-l-2 border-l-error',
-        neutral: 'border-l-2 border-l-border-light',
+        accent: 'border-l-2 border-accent',
+        success: 'border-l-2 border-success',
+        warning: 'border-l-2 border-warning',
+        error: 'border-l-2 border-error',
+        neutral: 'border-l-2 border-border-light',
       },
     },
     defaultVariants: { accent: 'none' },
