@@ -213,22 +213,11 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.ableton-panel {
-  background-color: var(--color-bg-panel);
-  border: 1px solid var(--color-border);
-  border-radius: 2px;
-}
-
-.ableton-device {
-  background-color: var(--color-bg-card);
-  border: 1px solid var(--color-border);
-  border-radius: 2px;
-}
-
-.ableton-header {
-  background-color: var(--color-bg-surface-dark);
-  border-bottom: 1px solid var(--color-border);
-}
+/* `.ableton-panel`, `.ableton-device`, and `.ableton-header` were retired
+   by the D.* migration — every consumer now uses the canonical primitives
+   from components/ui/ (Panel, DeviceRack, SectionHeader). `.ableton-shell`
+   and `.ableton-toolbar` stay because App.tsx:952,956 still consumes them
+   for the outer app chrome. */
 
 .ableton-shell {
   background-color: var(--color-bg-panel);
