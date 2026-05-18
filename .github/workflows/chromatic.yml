@@ -1,0 +1,53 @@
+name: Chromatic
+
+# Runs Chromatic visual regression on the apps/ui Storybook build.
+# Requires the CHROMATIC_PROJECT_TOKEN repository secret to be set.
+# Non-blocking — uses --exit-zero-on-changes so visual diffs do not fail CI.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    paths:
+      - "apps/ui/**"
+      - ".github/workflows/chromatic.yml"
+
+jobs:
+  chromatic:
+    name: Chromatic
+    runs-on: ubuntu-latest
+    if: ${{ github.event.pull_request.draft == false }}
+    defaults:
+      run:
+        working-directory: apps/ui
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Chromatic needs full history to detect baselines.
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: apps/ui/package-lock.json
+      - run: npm ci
+      - name: Check Chromatic project token
+        id: chromatic_check
+        env:
+          CHROMATIC_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+        run: |
+          if [ -z "$CHROMATIC_TOKEN" ]; then
+            echo "::notice::CHROMATIC_PROJECT_TOKEN secret is not configured — skipping Chromatic publish. Set the secret in repository settings to enable visual regression."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Publish to Chromatic
+        if: steps.chromatic_check.outputs.skip != 'true'
+        uses: chromaui/action@latest
+        with:
+          projectToken: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+          workingDir: apps/ui
+          exitZeroOnChanges: true
+          onlyChanged: true

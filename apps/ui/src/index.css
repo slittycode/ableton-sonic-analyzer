@@ -26,6 +26,60 @@
   --color-success: #00ff9d;
   --color-warning: #ffb800;
   --color-error: #ff3333;
+
+  /* --- Device chrome (Live 12 mimicry) --- */
+  --shadow-device-face: inset 0 1px 0 rgba(255, 255, 255, 0.04),
+                        inset 0 -1px 0 rgba(0, 0, 0, 0.35);
+  --shadow-device-rack: 0 2px 6px rgba(0, 0, 0, 0.35),
+                        0 1px 0 rgba(255, 255, 255, 0.02) inset;
+  --shadow-device-active: 0 0 0 1px rgba(255, 136, 0, 0.35),
+                          0 0 12px rgba(255, 136, 0, 0.22);
+  --shadow-device-success: 0 0 0 1px rgba(0, 255, 157, 0.25);
+  --shadow-device-error: 0 0 0 1px rgba(255, 51, 51, 0.32),
+                         0 0 10px rgba(255, 51, 51, 0.18);
+
+  /* --- Gradients (Live 12 device header band, face) --- */
+  --gradient-title-strip: linear-gradient(180deg, #353535 0%, #2c2c2c 100%);
+  --gradient-title-strip-active: linear-gradient(180deg,
+                                  rgba(255, 136, 0, 0.12) 0%,
+                                  rgba(255, 136, 0, 0.04) 100%);
+  --gradient-device-face: linear-gradient(180deg, #424242 0%, #3a3a3a 100%);
+  --gradient-rail-bg: linear-gradient(180deg, #1f1f1f 0%, #181818 100%);
+
+  /* --- LED palette --- */
+  --color-led-idle: #4a4a4a;
+  --color-led-active: var(--color-accent);
+  --color-led-success: var(--color-success);
+  --color-led-warning: var(--color-warning);
+  --color-led-error: var(--color-error);
+  --color-led-glow-active: rgba(255, 136, 0, 0.55);
+  --color-led-glow-success: rgba(0, 255, 157, 0.45);
+
+  /* --- Focus rings --- */
+  --ring-focus: 0 0 0 2px rgba(255, 136, 0, 0.55);
+  --ring-focus-error: 0 0 0 2px rgba(255, 51, 51, 0.55);
+
+  /* --- Spacing scale lock (semantic 4px-grid aliases) --- */
+  --space-device-pad-x: 0.75rem;
+  --space-device-pad-y: 0.625rem;
+  --space-rack-gap: 0.5rem;
+  --space-section-gap: 1.25rem;
+  --space-title-strip-h: 1.5rem;
+  --space-rail-h: 0.875rem;
+
+  /* --- Type-scale lock (bans arbitrary text-[Npx] in components/ui/) --- */
+  --text-meta: 0.625rem;
+  --text-eyebrow: 0.6875rem;
+  --text-body-sm: 0.75rem;
+  --text-body: 0.8125rem;
+  --text-value: 0.875rem;
+  --text-value-lg: 1.5rem;
+  --text-value-xl: 2rem;
+
+  /* --- Signal-chain cables --- */
+  --color-signal-cable: rgba(255, 136, 0, 0.55);
+  --color-signal-cable-idle: rgba(170, 170, 170, 0.18);
+  --color-signal-cable-success: rgba(0, 255, 157, 0.45);
 }
 
 :root {
@@ -189,4 +243,190 @@ body {
 @keyframes eq-bounce {
   0% { height: 20%; }
   100% { height: 100%; }
+}
+
+/* === Live 12 Device Rack primitives === */
+
+@layer components {
+  .device-rack {
+    background: var(--gradient-device-face);
+    border: 1px solid var(--color-border);
+    border-radius: 2px;
+    box-shadow: var(--shadow-device-rack), var(--shadow-device-face);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .device-rack--active {
+    box-shadow: var(--shadow-device-rack), var(--shadow-device-face), var(--shadow-device-active);
+  }
+  .device-rack--success {
+    box-shadow: var(--shadow-device-rack), var(--shadow-device-face), var(--shadow-device-success);
+  }
+  .device-rack--warning {
+    box-shadow: var(--shadow-device-rack), var(--shadow-device-face),
+                0 0 0 1px rgba(255, 184, 0, 0.32);
+  }
+  .device-rack--error {
+    box-shadow: var(--shadow-device-rack), var(--shadow-device-face), var(--shadow-device-error);
+  }
+
+  .device-rack__title-strip {
+    background: var(--gradient-title-strip);
+    border-bottom: 1px solid var(--color-border);
+    min-height: var(--space-title-strip-h);
+    padding: 0 var(--space-device-pad-x);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: var(--font-mono);
+    font-size: var(--text-eyebrow);
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--color-text-primary);
+  }
+  .device-rack--active .device-rack__title-strip {
+    background: var(--gradient-title-strip-active);
+  }
+
+  .device-rack__body {
+    padding: var(--space-device-pad-y) var(--space-device-pad-x);
+  }
+  .device-rack__body--dense {
+    padding: 0.5rem var(--space-device-pad-x);
+  }
+
+  .device-rack__rail {
+    background: var(--gradient-rail-bg);
+    border-top: 1px solid var(--color-border);
+    height: var(--space-rail-h);
+    padding: 0 var(--space-device-pad-x);
+    display: flex;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: var(--text-meta);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+  }
+
+  /* --- LED indicator (the colored status dot) --- */
+  .led-indicator {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 9999px;
+    background: var(--color-led-idle);
+    flex-shrink: 0;
+    transition: background-color 150ms ease, box-shadow 150ms ease;
+    display: inline-block;
+  }
+  .led-indicator--active {
+    background: var(--color-led-active);
+    box-shadow: 0 0 6px var(--color-led-glow-active);
+    animation: led-pulse 1.4s ease-in-out infinite;
+  }
+  .led-indicator--success {
+    background: var(--color-led-success);
+    box-shadow: 0 0 4px var(--color-led-glow-success);
+  }
+  .led-indicator--warning {
+    background: var(--color-led-warning);
+    box-shadow: 0 0 4px rgba(255, 184, 0, 0.45);
+  }
+  .led-indicator--error {
+    background: var(--color-led-error);
+    box-shadow: 0 0 6px rgba(255, 51, 51, 0.55);
+    animation: led-pulse 0.8s ease-in-out infinite;
+  }
+  .led-indicator--pulsing {
+    animation: led-pulse 1.4s ease-in-out infinite;
+  }
+  .led-indicator--md {
+    width: 0.625rem;
+    height: 0.625rem;
+  }
+
+  @keyframes led-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  /* --- Signal chain cables (between racked devices) --- */
+  .signal-cable {
+    height: 2px;
+    background: var(--color-signal-cable-idle);
+    flex: 1;
+    align-self: center;
+    position: relative;
+    min-width: 1.25rem;
+  }
+  .signal-cable[data-tone="active"] {
+    background: var(--color-signal-cable);
+  }
+  .signal-cable[data-tone="success"] {
+    background: var(--color-signal-cable-success);
+  }
+  .signal-cable--animated[data-tone="active"]::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 136, 0, 0.85), transparent);
+    background-size: 30% 100%;
+    background-repeat: no-repeat;
+    animation: signal-flow 1.2s linear infinite;
+  }
+  @keyframes signal-flow {
+    0% { background-position: -30% 0; }
+    100% { background-position: 130% 0; }
+  }
+
+  .signal-arrow {
+    width: 0;
+    height: 0;
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+    border-left: 6px solid var(--color-signal-cable-idle);
+    align-self: center;
+    flex-shrink: 0;
+  }
+  .signal-arrow[data-tone="active"] {
+    border-left-color: var(--color-signal-cable);
+  }
+  .signal-arrow[data-tone="success"] {
+    border-left-color: var(--color-signal-cable-success);
+  }
+
+  /* --- Parameter display (Live compressor/EQ-style numeric readout) --- */
+  .parameter-display {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    font-family: var(--font-mono);
+  }
+  .parameter-display__label {
+    font-size: var(--text-eyebrow);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+  }
+  .parameter-display__value {
+    font-size: var(--text-value-lg);
+    font-weight: 500;
+    line-height: 1.1;
+    color: var(--color-text-primary);
+    font-variant-numeric: tabular-nums;
+  }
+  .parameter-display__unit {
+    font-size: var(--text-meta);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+
+  /* --- Tabular mono (composable) --- */
+  .tabular-mono {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
 }
