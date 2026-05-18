@@ -44,5 +44,6 @@
     { "field": "supersawDetail.isSupersaw", "mode": "exact" },
     { "field": "kickDetail.kickCount", "maxDelta": 0.0 }
   ],
-  "realTracks": []
+  "realTracks": [],
+  "transcriptionTracks": []
 }

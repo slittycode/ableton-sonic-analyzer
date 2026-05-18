@@ -1,4 +1,6 @@
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,6 +15,9 @@ from polyphonic_evaluation import (
     summarize_candidate_gate,
     summarize_midi_file,
 )
+
+REPO_DIR = Path(__file__).resolve().parent.parent
+SCORECARD_SCRIPT = REPO_DIR / "scripts" / "score_polyphonic_clip.py"
 
 
 def _write_wav(path: Path, duration_seconds: float = 1.0, sample_rate: int = 22050) -> None:
@@ -156,6 +161,175 @@ class PolyphonicEvaluationTests(unittest.TestCase):
             candidate_report = report["clips"][0]["candidates"]["basic-pitch"]
             self.assertEqual(candidate_report["scorecard"]["notes"], "Usable after light cleanup.")
             self.assertEqual(candidate_report["metrics"]["maxPolyphony"], 2)
+
+
+class PolyphonicFlagRuleTests(unittest.TestCase):
+    def _summarize(self, note_specs: list[tuple[int, float, float]], duration_s: float) -> dict:
+        with tempfile.TemporaryDirectory(prefix="asa_polyphonic_flags_") as temp_dir:
+            midi_path = Path(temp_dir) / "candidate.mid"
+            _write_midi(midi_path, note_specs)
+            return summarize_midi_file(midi_path, audio_duration_seconds=duration_s)
+
+    def test_note_clutter_flag_when_density_exceeds_fifteen(self) -> None:
+        # 32 notes across 2.0s = 16 notes/sec — clears > 15 threshold but
+        # uses spaced onsets so it does not also trigger dense_chords_unusable.
+        note_specs = [(60 + (i % 4), i * 0.0625, i * 0.0625 + 0.05) for i in range(32)]
+        summary = self._summarize(note_specs, duration_s=2.0)
+        self.assertIn("note_clutter", summary["flags"])
+        self.assertNotIn("dense_chords_unusable", summary["flags"])
+        self.assertNotIn("octave_junk", summary["flags"])
+        self.assertNotIn("sparse_likely_undertranscribed", summary["flags"])
+
+    def test_octave_junk_flag_when_many_distinct_pitches_low_polyphony(self) -> None:
+        # 32 distinct pitches strung end-to-end; max polyphony = 1 < 3.
+        note_specs = [(40 + i, i * 0.1, i * 0.1 + 0.08) for i in range(32)]
+        summary = self._summarize(note_specs, duration_s=10.0)
+        self.assertIn("octave_junk", summary["flags"])
+        self.assertNotIn("dense_chords_unusable", summary["flags"])
+        self.assertNotIn("note_clutter", summary["flags"])
+        self.assertNotIn("sparse_likely_undertranscribed", summary["flags"])
+
+    def test_dense_chords_unusable_flag_when_max_polyphony_above_eight(self) -> None:
+        # 10 simultaneous notes within first half-second; nothing else fires
+        # the other new flags (density is 10 notes / 2.0s = 5).
+        note_specs = [(48 + i, 0.0, 0.5) for i in range(10)]
+        summary = self._summarize(note_specs, duration_s=2.0)
+        self.assertIn("dense_chords_unusable", summary["flags"])
+        self.assertNotIn("note_clutter", summary["flags"])
+        self.assertNotIn("octave_junk", summary["flags"])
+        self.assertNotIn("sparse_likely_undertranscribed", summary["flags"])
+
+    def test_sparse_likely_undertranscribed_flag_when_density_low_over_long_clip(self) -> None:
+        # 5 notes across 15.0s = 0.33 notes/sec, well below 1.0; clip long enough.
+        note_specs = [(60, i * 3.0, i * 3.0 + 0.2) for i in range(5)]
+        summary = self._summarize(note_specs, duration_s=15.0)
+        self.assertIn("sparse_likely_undertranscribed", summary["flags"])
+        self.assertNotIn("note_clutter", summary["flags"])
+        self.assertNotIn("dense_chords_unusable", summary["flags"])
+
+    def test_existing_monophonic_and_high_density_flags_still_emit(self) -> None:
+        # Regression guard for the pre-existing flags untouched by the new rules.
+        note_specs = [(60, i * 0.08, i * 0.08 + 0.05) for i in range(20)]
+        summary = self._summarize(note_specs, duration_s=1.5)
+        self.assertIn("monophonic_output", summary["flags"])
+        self.assertIn("high_note_density", summary["flags"])
+
+
+class ScorePolyphonicClipScriptTests(unittest.TestCase):
+    def test_no_play_with_piped_input_writes_scorecard_back(self) -> None:
+        """Drive score_polyphonic_clip.py via subprocess + stdin.
+
+        Builds a tempdir report JSON with one unscored clip / one candidate,
+        pipes the prompt answers in, asserts the scorecard fields land in the
+        written report.
+        """
+        with tempfile.TemporaryDirectory(prefix="asa_scorecard_cli_") as temp_dir:
+            report_path = Path(temp_dir) / "report.json"
+            audio_path = Path(temp_dir) / "missing.wav"  # ok — playback skipped
+            report = {
+                "clips": [
+                    {
+                        "id": "clip_one",
+                        "audioPath": str(audio_path),
+                        "candidates": {
+                            "basic-pitch": {
+                                "status": "completed",
+                                "metrics": {
+                                    "noteCount": 12,
+                                    "maxPolyphony": 4,
+                                    "noteDensityPerSecond": 6.0,
+                                    "flags": ["high_note_density"],
+                                },
+                                "scorecard": build_manual_scorecard(None),
+                            }
+                        },
+                    }
+                ]
+            }
+            report_path.write_text(json.dumps(report), encoding="utf-8")
+
+            stdin_lines = [
+                "y",       # bassRecognizable
+                "y",       # toplineRecognizable
+                "n",       # chordsNotObviouslyWrong
+                "4.25",    # cleanupMinutes30s
+                "review notes",  # notes
+                "",
+            ]
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCORECARD_SCRIPT),
+                    "--report",
+                    str(report_path),
+                    "--no-play",
+                ],
+                input="\n".join(stdin_lines),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+
+            updated = json.loads(report_path.read_text(encoding="utf-8"))
+            scorecard = updated["clips"][0]["candidates"]["basic-pitch"]["scorecard"]
+            self.assertTrue(scorecard["bassRecognizable"])
+            self.assertTrue(scorecard["toplineRecognizable"])
+            self.assertFalse(scorecard["chordsNotObviouslyWrong"])
+            self.assertEqual(scorecard["cleanupMinutes30s"], 4.25)
+            self.assertEqual(scorecard["notes"], "review notes")
+
+    def test_already_scored_clip_is_skipped_without_rescore(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="asa_scorecard_cli_skip_") as temp_dir:
+            report_path = Path(temp_dir) / "report.json"
+            complete = build_manual_scorecard(
+                {
+                    "bassRecognizable": True,
+                    "toplineRecognizable": True,
+                    "chordsNotObviouslyWrong": True,
+                    "cleanupMinutes30s": 2.0,
+                    "notes": "preexisting",
+                }
+            )
+            report = {
+                "clips": [
+                    {
+                        "id": "clip_one",
+                        "audioPath": str(Path(temp_dir) / "missing.wav"),
+                        "candidates": {
+                            "basic-pitch": {
+                                "status": "completed",
+                                "metrics": {
+                                    "noteCount": 1,
+                                    "maxPolyphony": 1,
+                                    "noteDensityPerSecond": 0.1,
+                                    "flags": [],
+                                },
+                                "scorecard": complete,
+                            }
+                        },
+                    }
+                ]
+            }
+            report_path.write_text(json.dumps(report), encoding="utf-8")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCORECARD_SCRIPT),
+                    "--report",
+                    str(report_path),
+                    "--no-play",
+                ],
+                input="",
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            summary = json.loads(result.stdout)
+            self.assertEqual(summary["scored"], 0)
+            self.assertEqual(summary["skippedAlreadyComplete"], 1)
 
 
 if __name__ == "__main__":

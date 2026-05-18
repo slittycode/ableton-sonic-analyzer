@@ -18,6 +18,7 @@ REPO_DIR = Path(__file__).resolve().parent
 DEFAULT_MANIFEST_PATH = REPO_DIR / "tests" / "fixtures" / "phase1_eval_manifest.json"
 DEFAULT_REPORT_PATH = REPO_DIR / ".runtime" / "reports" / "phase1_eval_report.json"
 DEFAULT_BENCH_TRACKS_DIR = REPO_DIR / "tests" / "fixtures" / "bench_tracks"
+DEFAULT_TRANSCRIPTION_TRACKS_DIR = REPO_DIR / "tests" / "fixtures" / "transcription_tracks"
 EXPECTED_SPECTRAL_KEYS = {
     "subBass",
     "lowBass",
@@ -45,6 +46,19 @@ class RealTrackResult:
     status: str  # "evaluated" | "skipped_audio_missing" | "skipped_analyze_failed"
     skip_reason: str | None
     checks: list[FixtureCheck]
+    all_passed: bool
+
+
+@dataclass
+class TranscriptionTrackResult:
+    track_id: str
+    audio_path: str
+    category: str
+    description: str
+    status: str  # "evaluated" | "skipped_audio_missing" | "skipped_analyze_failed" | "skipped_no_transcription"
+    skip_reason: str | None
+    checks: list[FixtureCheck]
+    note_metrics: dict[str, Any] | None
     all_passed: bool
 
 
@@ -137,13 +151,31 @@ def _evaluate_threshold(
 
     target = float(config.get("target"))
     tolerance = float(config.get("tolerance", 0.0))
+    direction = str(config.get("direction", "")).strip().lower()
     if not isinstance(actual, (int, float)):
         return FixtureCheck(
             name=f"threshold:{field}",
             passed=False,
             message=f"expected numeric target={target}±{tolerance}, actual={actual}",
         )
-    delta = abs(float(actual) - target)
+    actual_value = float(actual)
+    if direction == "min":
+        bound = target - tolerance
+        passed = actual_value >= bound
+        return FixtureCheck(
+            name=f"threshold:{field}",
+            passed=passed,
+            message=f"target>={target} tolerance={tolerance} bound={round(bound, 6)} actual={actual}",
+        )
+    if direction == "max":
+        bound = target + tolerance
+        passed = actual_value <= bound
+        return FixtureCheck(
+            name=f"threshold:{field}",
+            passed=passed,
+            message=f"target<={target} tolerance={tolerance} bound={round(bound, 6)} actual={actual}",
+        )
+    delta = abs(actual_value - target)
     passed = delta <= tolerance
     return FixtureCheck(
         name=f"threshold:{field}",
@@ -287,6 +319,281 @@ def _evaluate_real_track(
     )
 
 
+def _match_notes(
+    detected: list[dict[str, Any]],
+    ground_truth: list[dict[str, Any]],
+    onset_window_s: float = 0.05,
+    pitch_tolerance_semitones: int = 1,
+) -> list[tuple[int, int]]:
+    """Greedy onset-sorted matching of detected notes to ground-truth notes.
+
+    For each ground-truth note (in onset order), pair with the earliest unused
+    detected note whose onset is within ±onset_window_s AND whose pitch differs
+    by no more than pitch_tolerance_semitones. Returns (gt_index, det_index)
+    pairs. Mirrors mir_eval.transcription onset/pitch semantics.
+    """
+    gt_indices = sorted(
+        range(len(ground_truth)),
+        key=lambda i: float(ground_truth[i].get("onsetSeconds", 0.0)),
+    )
+    det_indices_sorted = sorted(
+        range(len(detected)),
+        key=lambda i: float(detected[i].get("onsetSeconds", 0.0)),
+    )
+    used: set[int] = set()
+    matches: list[tuple[int, int]] = []
+    for gt_idx in gt_indices:
+        gt_onset = float(ground_truth[gt_idx].get("onsetSeconds", 0.0))
+        gt_pitch = int(ground_truth[gt_idx].get("pitchMidi", 0))
+        for det_idx in det_indices_sorted:
+            if det_idx in used:
+                continue
+            det_onset = float(detected[det_idx].get("onsetSeconds", 0.0))
+            if abs(det_onset - gt_onset) > onset_window_s:
+                continue
+            det_pitch = int(detected[det_idx].get("pitchMidi", 0))
+            if abs(det_pitch - gt_pitch) > pitch_tolerance_semitones:
+                continue
+            used.add(det_idx)
+            matches.append((gt_idx, det_idx))
+            break
+    return matches
+
+
+def _compute_note_metrics(
+    detected: list[dict[str, Any]],
+    ground_truth: list[dict[str, Any]],
+    matches: list[tuple[int, int]],
+) -> dict[str, Any]:
+    """Compute precision/recall/F1 and mean signed pitch error in cents.
+
+    Note: pitchMidi is an integer per the analyze.py contract, so
+    meanPitchCentsError is always a multiple of 100. This is a deliberate
+    coarseness limit — switch to a sub-semitone-aware detector if finer
+    pitch-accuracy reporting is needed.
+    """
+    matched_count = len(matches)
+    detected_count = len(detected)
+    gt_count = len(ground_truth)
+    missed_count = gt_count - matched_count
+    false_positive_count = detected_count - matched_count
+
+    if detected_count == 0:
+        precision = 1.0
+    else:
+        precision = matched_count / detected_count
+    if gt_count == 0:
+        recall = 1.0
+    else:
+        recall = matched_count / gt_count
+    if precision + recall == 0.0:
+        f1 = 0.0
+    else:
+        f1 = (2.0 * precision * recall) / (precision + recall)
+
+    if matched_count == 0:
+        mean_cents_error = 0.0
+    else:
+        cents_errors = [
+            (int(detected[d].get("pitchMidi", 0)) - int(ground_truth[g].get("pitchMidi", 0))) * 100
+            for g, d in matches
+        ]
+        mean_cents_error = sum(cents_errors) / float(matched_count)
+
+    return {
+        "precision": round(precision, 4),
+        "recall": round(recall, 4),
+        "f1": round(f1, 4),
+        "meanPitchCentsError": round(mean_cents_error, 4),
+        "matchedCount": matched_count,
+        "missedCount": missed_count,
+        "falsePositiveCount": false_positive_count,
+    }
+
+
+def _evaluate_transcription_track(
+    entry: dict[str, Any],
+    transcription_tracks_dir: Path,
+    transcribe_runner: Any = None,
+) -> TranscriptionTrackResult:
+    """Evaluate a single transcription-track entry from the manifest.
+
+    Mirrors `_evaluate_real_track` semantics — gracefully skips when the audio
+    is absent so a missing track never fails the run. `transcribe_runner` is a
+    callable `(audio_path, extra_flags) -> dict`; defaults to `_run_analyze`.
+    """
+    if transcribe_runner is None:
+        transcribe_runner = _run_analyze
+
+    track_id = str(entry.get("id") or "unknown")
+    audio_rel = str(entry.get("audioPath") or "")
+    category = str(entry.get("category") or "uncategorized")
+    description = str(entry.get("description") or "")
+    thresholds = entry.get("thresholds")
+    analyze_flags = entry.get("analyzeFlags")
+    ground_truth_notes = entry.get("groundTruthNotes")
+
+    if not isinstance(thresholds, dict):
+        thresholds = {}
+    if isinstance(analyze_flags, list):
+        flags_list = [str(flag) for flag in analyze_flags]
+    else:
+        flags_list = ["--transcribe"]
+    if not isinstance(ground_truth_notes, list):
+        ground_truth_notes = []
+
+    if not audio_rel:
+        return TranscriptionTrackResult(
+            track_id=track_id,
+            audio_path="",
+            category=category,
+            description=description,
+            status="skipped_audio_missing",
+            skip_reason="manifest entry has no audioPath",
+            checks=[],
+            note_metrics=None,
+            all_passed=True,
+        )
+
+    audio_path = (transcription_tracks_dir / audio_rel).resolve()
+    if not audio_path.exists():
+        return TranscriptionTrackResult(
+            track_id=track_id,
+            audio_path=str(audio_path),
+            category=category,
+            description=description,
+            status="skipped_audio_missing",
+            skip_reason=(
+                f"audio not present at {audio_path} — add the file locally to "
+                "include this track in transcription evaluation"
+            ),
+            checks=[],
+            note_metrics=None,
+            all_passed=True,
+        )
+
+    try:
+        payload = transcribe_runner(audio_path, flags_list)
+    except subprocess.CalledProcessError as exc:
+        stderr_tail = (exc.stderr or "")[-400:]
+        return TranscriptionTrackResult(
+            track_id=track_id,
+            audio_path=str(audio_path),
+            category=category,
+            description=description,
+            status="skipped_analyze_failed",
+            skip_reason=f"analyze.py failed (exit {exc.returncode}): {stderr_tail}",
+            checks=[],
+            note_metrics=None,
+            all_passed=False,
+        )
+
+    transcription_detail = payload.get("transcriptionDetail") if isinstance(payload, dict) else None
+    if not isinstance(transcription_detail, dict):
+        return TranscriptionTrackResult(
+            track_id=track_id,
+            audio_path=str(audio_path),
+            category=category,
+            description=description,
+            status="skipped_no_transcription",
+            skip_reason="analyze.py output had no transcriptionDetail block",
+            checks=[],
+            note_metrics=None,
+            all_passed=False,
+        )
+
+    detected_notes = transcription_detail.get("notes") or []
+    if not isinstance(detected_notes, list):
+        detected_notes = []
+    matches = _match_notes(detected_notes, ground_truth_notes)
+    note_metrics = _compute_note_metrics(detected_notes, ground_truth_notes, matches)
+
+    eval_payload = dict(payload)
+    eval_payload["noteMetrics"] = note_metrics
+
+    checks: list[FixtureCheck] = []
+    for field, config in thresholds.items():
+        if not isinstance(config, dict):
+            continue
+        checks.append(_evaluate_threshold(eval_payload, field, config))
+
+    return TranscriptionTrackResult(
+        track_id=track_id,
+        audio_path=str(audio_path),
+        category=category,
+        description=description,
+        status="evaluated",
+        skip_reason=None,
+        checks=checks,
+        note_metrics=note_metrics,
+        all_passed=all(check.passed for check in checks),
+    )
+
+
+def _evaluate_stepped_sine_synthetic(
+    transcribe_runner: Any = None,
+) -> TranscriptionTrackResult:
+    """Generate a stepped-sine WAV and evaluate it as a harness self-test.
+
+    Four notes at known MIDI pitches with 0.2s gaps. Provides at least one
+    transcription result even when no real tracks are present.
+    """
+    if transcribe_runner is None:
+        transcribe_runner = _run_analyze
+
+    sample_rate = 16000
+    note_duration_s = 0.6
+    gap_s = 0.2
+    pitch_midi_values = [60, 64, 67, 72]  # C4, E4, G4, C5
+    ground_truth: list[dict[str, Any]] = []
+    segments: list[np.ndarray] = []
+    cursor = 0.0
+    for pitch_midi in pitch_midi_values:
+        freq_hz = 440.0 * (2.0 ** ((pitch_midi - 69) / 12.0))
+        n_samples = int(round(note_duration_s * sample_rate))
+        t = np.linspace(0.0, note_duration_s, n_samples, endpoint=False, dtype=np.float32)
+        tone = 0.5 * np.sin(2.0 * np.pi * freq_hz * t)
+        envelope = np.ones_like(tone)
+        ramp = max(1, int(round(0.01 * sample_rate)))
+        envelope[:ramp] = np.linspace(0.0, 1.0, ramp, dtype=np.float32)
+        envelope[-ramp:] = np.linspace(1.0, 0.0, ramp, dtype=np.float32)
+        segments.append(tone * envelope)
+        ground_truth.append(
+            {
+                "pitchMidi": pitch_midi,
+                "onsetSeconds": round(cursor, 4),
+                "durationSeconds": round(note_duration_s, 4),
+            }
+        )
+        cursor += note_duration_s
+        gap = np.zeros(int(round(gap_s * sample_rate)), dtype=np.float32)
+        segments.append(gap)
+        cursor += gap_s
+
+    mono = np.concatenate(segments).astype(np.float32)
+
+    with tempfile.TemporaryDirectory(prefix="asa_stepped_sine_") as temp_dir:
+        wav_path = Path(temp_dir) / "stepped_sine.wav"
+        _write_stereo_wav(wav_path, mono, sample_rate)
+        entry = {
+            "id": "stepped_sine_synthetic",
+            "audioPath": wav_path.name,
+            "category": "synthetic_self_test",
+            "description": "Stepped sine self-test: four monophonic notes (C4, E4, G4, C5).",
+            "analyzeFlags": ["--transcribe"],
+            "groundTruthNotes": ground_truth,
+            "thresholds": {
+                "noteMetrics.f1": {"target": 0.5, "tolerance": 0.0, "direction": "min"},
+                "noteMetrics.meanPitchCentsError": {"target": 0.0, "tolerance": 100.0},
+            },
+        }
+        return _evaluate_transcription_track(
+            entry,
+            wav_path.parent,
+            transcribe_runner=transcribe_runner,
+        )
+
+
 def _evaluate_stability(
     outputs: list[dict[str, Any]],
     stability_checks: list[dict[str, Any]],
@@ -340,15 +647,23 @@ def run_phase1_evaluation(
     runs_per_fixture: int = 2,
     include_real: bool = False,
     real_tracks_dir: Path = DEFAULT_BENCH_TRACKS_DIR,
+    include_transcription: bool = False,
+    transcription_tracks_dir: Path = DEFAULT_TRANSCRIPTION_TRACKS_DIR,
+    transcribe_runner: Any = None,
 ) -> dict[str, Any]:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     fixtures = manifest.get("fixtures", [])
     stability_checks = manifest.get("stabilityChecks", [])
     real_tracks_manifest = manifest.get("realTracks", []) if include_real else []
+    transcription_manifest = (
+        manifest.get("transcriptionTracks", []) if include_transcription else []
+    )
     if not isinstance(fixtures, list) or len(fixtures) == 0:
         raise ValueError("Manifest must define one or more fixtures.")
     if not isinstance(real_tracks_manifest, list):
         raise ValueError("Manifest 'realTracks' must be a list when present.")
+    if not isinstance(transcription_manifest, list):
+        raise ValueError("Manifest 'transcriptionTracks' must be a list when present.")
 
     fixture_reports: list[dict[str, Any]] = []
     passed_checks = 0
@@ -443,11 +758,51 @@ def run_phase1_evaluation(
                 }
             )
 
+    transcription_reports: list[dict[str, Any]] = []
+    transcription_evaluated = 0
+    transcription_skipped = 0
+    transcription_failed_subprocess = 0
+
+    if include_transcription:
+        # Self-test first — guarantees the report has at least one transcription
+        # row even when no real tracks have been added to the manifest.
+        self_test = _evaluate_stepped_sine_synthetic(transcribe_runner=transcribe_runner)
+        if self_test.status == "evaluated":
+            transcription_evaluated += 1
+            passed_checks += sum(1 for check in self_test.checks if check.passed)
+            failed_checks += sum(1 for check in self_test.checks if not check.passed)
+        elif self_test.status == "skipped_audio_missing":
+            transcription_skipped += 1
+        else:
+            transcription_failed_subprocess += 1
+            failed_checks += 1
+        transcription_reports.append(_transcription_track_to_report(self_test))
+
+        for raw_entry in transcription_manifest:
+            if not isinstance(raw_entry, dict):
+                continue
+            result = _evaluate_transcription_track(
+                raw_entry, transcription_tracks_dir, transcribe_runner=transcribe_runner
+            )
+            if result.status == "evaluated":
+                transcription_evaluated += 1
+                passed_checks += sum(1 for check in result.checks if check.passed)
+                failed_checks += sum(1 for check in result.checks if not check.passed)
+            elif result.status == "skipped_audio_missing":
+                transcription_skipped += 1
+            else:
+                transcription_failed_subprocess += 1
+                failed_checks += 1
+            transcription_reports.append(_transcription_track_to_report(result))
+
     summary = {
         "fixtures": len(fixture_reports),
         "realTracksEvaluated": real_evaluated,
         "realTracksSkipped": real_skipped,
         "realTracksAnalyzeFailed": real_failed_subprocess,
+        "transcriptionTracksEvaluated": transcription_evaluated,
+        "transcriptionTracksSkipped": transcription_skipped,
+        "transcriptionTracksAnalyzeFailed": transcription_failed_subprocess,
         "checksPassed": passed_checks,
         "checksFailed": failed_checks,
         "allPassed": failed_checks == 0,
@@ -459,13 +814,38 @@ def run_phase1_evaluation(
         "runsPerFixture": runs_per_fixture,
         "includeReal": include_real,
         "realTracksDir": str(real_tracks_dir) if include_real else None,
+        "includeTranscription": include_transcription,
+        "transcriptionTracksDir": str(transcription_tracks_dir) if include_transcription else None,
         "fixtures": fixture_reports,
         "summary": summary,
     }
     if include_real:
         report["realTracks"] = real_track_reports
+    if include_transcription:
+        report["transcriptionTracks"] = transcription_reports
 
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     report["reportPath"] = str(report_path)
     return report
+
+
+def _transcription_track_to_report(result: TranscriptionTrackResult) -> dict[str, Any]:
+    return {
+        "id": result.track_id,
+        "audioPath": result.audio_path,
+        "category": result.category,
+        "description": result.description,
+        "status": result.status,
+        "skipReason": result.skip_reason,
+        "noteMetrics": result.note_metrics,
+        "checks": [
+            {
+                "name": check.name,
+                "passed": check.passed,
+                "message": check.message,
+            }
+            for check in result.checks
+        ],
+        "allPassed": result.all_passed,
+    }
