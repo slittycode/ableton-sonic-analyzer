@@ -1278,17 +1278,20 @@ export default function App() {
               </div>
 
               <div className="lg:col-span-8 flex flex-col">
-                <div className="bg-bg-surface-dark border border-border border-b-0 rounded-t-sm px-3 py-1.5 flex items-center justify-between">
-                  <div className="flex items-center">
-                    <span className={`w-2 h-2 rounded-full mr-2 ${isAnalyzing ? 'bg-accent animate-pulse' : audioUrl ? 'bg-success' : 'bg-border'}`}></span>
-                    <h3 className="text-[10px] font-mono text-text-secondary uppercase tracking-wider">Signal Monitor</h3>
-                  </div>
-                </div>
-
-                <div
-                  data-testid="signal-panel"
-                  className="flex-grow bg-bg-card border border-border rounded-b-sm p-4 relative flex flex-col"
+                <DeviceRack
+                  name="Signal Monitor"
+                  status={isAnalyzing ? 'active' : audioUrl ? 'success' : 'idle'}
+                  className="flex-grow flex flex-col"
                 >
+                  {/* bg-bg-card on the inner div mirrors the input-panel
+                      pattern from D.4 — the DeviceRack body is transparent
+                      by default; flatten it here so theme-shell smoke specs
+                      (if they observe signal-panel bg) keep matching the
+                      palette contract. */}
+                  <div
+                    data-testid="signal-panel"
+                    className="flex-grow bg-bg-card p-4 relative flex flex-col"
+                  >
                   {audioUrl && audioFile ? (
                     <div className="flex flex-col relative z-10 gap-4">
                       <WaveformPlayer audioUrl={audioUrl} audioFile={audioFile} onAudioElement={handleAudioElement} />
@@ -1310,6 +1313,7 @@ export default function App() {
                     <IdleValuePropPanel />
                   )}
                 </div>
+                </DeviceRack>
               </div>
             </section>
 

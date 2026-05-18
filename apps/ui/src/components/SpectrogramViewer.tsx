@@ -276,7 +276,7 @@ export function SpectrogramViewer({
                 onClick={() => setActiveKind(spec.kind)}
                 className={`px-2 py-0.5 text-[10px] font-mono uppercase tracking-wide rounded-sm transition-colors ${
                   spec.kind === activeKind
-                    ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                    ? 'bg-accent/20 text-accent border border-accent/30'
                     : 'text-text-secondary hover:text-text-primary border border-transparent'
                 }`}
               >
