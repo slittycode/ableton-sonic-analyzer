@@ -6,7 +6,7 @@ import { AnalysisStatusPanel } from './components/AnalysisStatusPanel';
 import { DiagnosticLog } from './components/DiagnosticLog';
 import { FileUpload } from './components/FileUpload';
 import { WaveformPlayer } from './components/WaveformPlayer';
-import { Button, Checkbox, DeviceRack } from './components/ui';
+import { Button, DeviceRack } from './components/ui';
 // Audit Finding #5: IdleValuePropPanel now occupies the Signal Monitor area
 // when no file is selected. It tells the producer what ASA does and what to
 // expect in 30s / 5min.
@@ -1122,21 +1122,30 @@ export default function App() {
                       </div>
                     </div>
                     <label
-                      htmlFor="pitch-note-toggle"
-                      className={`mt-4 rounded-sm border px-3 py-3 transition-colors cursor-pointer block ${
+                      className={`mt-4 rounded-sm border px-3 py-3 transition-colors cursor-pointer ${
                         pitchNoteTranslationRequested
                           ? 'border-accent bg-accent/10 text-accent'
                           : 'border-border bg-bg-panel text-text-secondary'
                       } ${isAnalyzing ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                       <div className="flex items-start gap-3">
-                        <Checkbox
-                          id="pitch-note-toggle"
+                        {/* Native input kept here rather than the Radix
+                            Checkbox primitive because Playwright smoke tests
+                            depend on getByLabel + .toBeChecked() + .uncheck()
+                            against this control (tests/smoke/upload-estimate-
+                            phase1.spec.ts:242). Those locators work reliably
+                            for native form controls; the Radix
+                            <button role="checkbox"> equivalent is less
+                            consistently supported. The Checkbox primitive
+                            still exists in components/ui/ for surfaces that
+                            aren't load-bearing for smoke selectors. */}
+                        <input
+                          type="checkbox"
                           checked={pitchNoteTranslationRequested}
-                          onCheckedChange={(checked) => setPitchNoteTranslationRequested(checked === true)}
+                          onChange={(e) => setPitchNoteTranslationRequested(e.target.checked)}
                           disabled={isAnalyzing}
                           aria-label="PITCH/NOTE TRANSLATION"
-                          className="mt-0.5"
+                          className="mt-0.5 h-4 w-4 accent-accent"
                         />
                         <div className="space-y-1">
                           <p className="text-[10px] font-mono uppercase tracking-wider">STEM PITCH/NOTE TRANSLATION</p>
@@ -1148,21 +1157,21 @@ export default function App() {
                       </div>
                     </label>
                     <label
-                      htmlFor="interpretation-toggle"
-                      className={`mt-3 rounded-sm border px-3 py-3 transition-colors cursor-pointer block ${
+                      className={`mt-3 rounded-sm border px-3 py-3 transition-colors cursor-pointer ${
                         interpretationRequested && phase2ConfigEnabled
                           ? 'border-accent bg-accent/10 text-accent'
                           : 'border-border bg-bg-panel text-text-secondary'
                       } ${isAnalyzing || !phase2ConfigEnabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                       <div className="flex items-start gap-3">
-                        <Checkbox
-                          id="interpretation-toggle"
+                        {/* See PITCH/NOTE toggle above for the rationale. */}
+                        <input
+                          type="checkbox"
                           checked={interpretationRequested}
-                          onCheckedChange={(checked) => handleInterpretationRequestedChange(checked === true)}
+                          onChange={(e) => handleInterpretationRequestedChange(e.target.checked)}
                           disabled={isAnalyzing || !phase2ConfigEnabled}
                           aria-label="AI INTERPRETATION"
-                          className="mt-0.5"
+                          className="mt-0.5 h-4 w-4 accent-accent"
                         />
                         <div className="space-y-1">
                           <div className="flex flex-wrap items-center gap-2">
