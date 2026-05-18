@@ -38,7 +38,7 @@ import {
   StatusBadge,
   TokenBadgeList,
 } from './MeasurementPrimitives';
-import { Button, DeviceRack, MetricTile, SectionHeader } from './ui';
+import { Button, DeviceRack, MetricTile, Pill, SectionHeader } from './ui';
 import { PhaseSourceBadge } from './PhaseSourceBadge';
 import { StickyNav, type StickyNavSection } from './StickyNav';
 import { CitationBlock, CitationHeadline } from './CitationBlock';
@@ -236,12 +236,14 @@ function SourcesToggle({ sources, showSources, onToggle }: { sources?: string[];
   if (!sources || sources.length === 0) return null;
   return (
     <div className="mt-3">
-      <button
+      <Button
+        variant="link"
+        size="sm"
         onClick={onToggle}
-        className="text-[10px] font-mono uppercase tracking-wide text-accent hover:text-accent/80 transition-colors flex items-center gap-1"
+        className="!text-accent hover:!text-accent/80 !normal-case !tracking-wide uppercase"
       >
         {showSources ? '▼' : '▶'} Sources
-      </button>
+      </Button>
       <Collapsible isOpen={showSources}>
         <div className="mt-2 text-xs text-text-secondary/70 font-mono">
           <span className="text-[10px] uppercase tracking-wide text-text-secondary/50">Based on:</span>
@@ -2019,12 +2021,13 @@ export function AnalysisResults({
                     available) AND at least one card has been applied —
                     avoids leading with a "0 of N" on first view. */}
                 {audioContentHash && mixAppliedCount > 0 && (
-                  <span
+                  <Pill
+                    tone="success"
+                    size="sm"
                     data-testid="mix-chain-applied-progress"
-                    className="text-[10px] font-mono uppercase tracking-wide text-success border border-success/30 bg-success/10 px-2 py-1 rounded"
                   >
                     {mixAppliedCount} of {mixCardCount} applied
-                  </span>
+                  </Pill>
                 )}
                 <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">SIGNAL FLOW</span>
               </div>
@@ -2035,19 +2038,32 @@ export function AnalysisResults({
             {mixGroups
               .filter((group) => group.cards.length > 0)
               .map((group) => (
-              <section key={group.name} className="space-y-3">
-                <h3
-                  data-text-role="meta"
-                  className={textRoleClassName('meta', 'border-b border-border/70 pb-1')}
-                >
-                  {groupIcon(group.name)} {group.name}
-                </h3>
+              <DeviceRack
+                key={group.name}
+                // The DeviceRack title strip carries the group name. The
+                // emoji from groupIcon() + the existing uppercase group.name
+                // ("DRUM PROCESSING" etc.) are preserved verbatim in the
+                // DOM text so analysisResultsUi.test.ts:441-450 selectors
+                // (toContain('🥁 DRUM PROCESSING') etc.) continue to pass.
+                name={`${groupIcon(group.name)} ${group.name}`}
+                status="idle"
+              >
+                {/* Audit-preserved annotation paragraph kept here so
+                    data-text-role="body" presence assertions
+                    (analysisResultsUi.test.ts:474) stay green. */}
                 {group.annotation && (
-                  <p data-text-role="meta" className={textRoleClassName('meta')}>
+                  <p
+                    data-text-role="meta"
+                    className={textRoleClassName('meta', 'mb-3')}
+                  >
                     {group.annotation}
                   </p>
                 )}
 
+                {/* Keep this exact className — the brittle assertion
+                    analysisResultsUi.test.ts:440 expects at least two
+                    occurrences of `grid gap-4 grid-cols-1 sm:grid-cols-2`
+                    (Mix Chain + Patches). */}
                 <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
                   {group.cards.map((card) => {
                     const isOpen = !!openMix[card.id];
@@ -2170,7 +2186,7 @@ export function AnalysisResults({
                     );
                   })}
                 </div>
-              </section>
+              </DeviceRack>
             ))}
           </div>
         </section>
