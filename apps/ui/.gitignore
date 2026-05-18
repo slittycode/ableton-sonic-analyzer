@@ -9,3 +9,4 @@ coverage/
 !.env.example
 playwright-report/
 test-results/
+storybook-static/
