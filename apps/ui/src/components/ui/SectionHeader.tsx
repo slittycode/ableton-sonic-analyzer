@@ -6,7 +6,15 @@ import { cn } from './cn';
 import { LedIndicator } from './LedIndicator';
 import type { Tone } from './variants';
 
-const sectionHeaderVariants = cva('flex items-center justify-between gap-3', {
+// Mobile-first layout: stack title and action vertically on narrow
+// viewports, then break to horizontal at md (768px). This restores the
+// pre-D.5a behavior where the Analysis Results header collapsed to
+// `flex-col` at 375px so the title wasn't squeezed off-screen by the
+// Download buttons. The mobile failure was caught by
+// tests/smoke/responsive-layout.spec.ts:192 which asserts the
+// "Analysis Results" h2 is visible at 375px — the parent shell's
+// overflow-hidden was clipping the overflowing title.
+const sectionHeaderVariants = cva('flex flex-col items-start gap-2 md:flex-row md:items-center md:justify-between md:gap-3', {
   variants: {
     variant: {
       inline: '',
