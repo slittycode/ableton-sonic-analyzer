@@ -1,7 +1,21 @@
 import React from 'react';
 import { RotateCcw, Square } from 'lucide-react';
 
-import { AnalysisRunSnapshot, AnalysisStageError, AnalysisStageStatus, BackendAnalysisEstimate } from '../types';
+import {
+  AnalysisRunSnapshot,
+  AnalysisStageError,
+  AnalysisStageStatus,
+  BackendAnalysisEstimate,
+} from '../types';
+import {
+  Button,
+  DeviceRack,
+  Panel,
+  SignalChain,
+  type SignalStage,
+  type SignalStageStatus,
+  type SignalTone,
+} from './ui';
 
 interface AnalysisStatusPanelProps {
   run: AnalysisRunSnapshot | null;
@@ -26,7 +40,7 @@ function formatElapsed(ms: number): string {
 function formatEstimateRange(estimate: BackendAnalysisEstimate): string {
   const lo = Math.round(estimate.totalLowMs / 1000);
   const hi = Math.round(estimate.totalHighMs / 1000);
-  return `${lo}s-${hi}s`;
+  return `${lo}s–${hi}s`;
 }
 
 export type ProgressTone = 'running' | 'success' | 'failed';
@@ -69,36 +83,6 @@ const STAGE_LABELS: Record<StageKey, string> = {
   pitchNoteTranslation: 'PITCH/NOTE',
   interpretation: 'INTERPRET',
 };
-
-/**
- * Maps progress tone to the Tailwind background-color class for the progress
- * bar fill. Used to surface failed/successful end-states visually, instead of
- * leaving the bar accent-orange even when a stage has FAILED. Indeterminate
- * fills use a lower-opacity variant so the pulsing partial bar reads as
- * activity rather than solid colour. Audit N1 sibling.
- */
-function progressFillClass(tone: ProgressTone, indeterminate: boolean): string {
-  if (tone === 'failed') return indeterminate ? 'bg-error/60' : 'bg-error';
-  if (tone === 'success') return indeterminate ? 'bg-success/60' : 'bg-success';
-  return indeterminate ? 'bg-accent/60' : 'bg-accent';
-}
-
-function statusDotClass(status: AnalysisStageStatus): string {
-  switch (status) {
-    case 'running':
-    case 'queued':
-      return 'bg-accent animate-pulse';
-    case 'completed':
-      return 'bg-success';
-    case 'failed':
-    case 'interrupted':
-      return 'bg-error';
-    case 'not_requested':
-      return 'bg-text-secondary/30';
-    default:
-      return 'bg-border';
-  }
-}
 
 function getStageSnapshot(run: AnalysisRunSnapshot, stageKey: StageKey) {
   switch (stageKey) {
@@ -246,20 +230,28 @@ export function computeLiveProgress(
   };
 }
 
-function statusTextClass(status: AnalysisStageStatus): string {
+/**
+ * Map a stage's internal status onto the visual SignalChain status. The
+ * SignalChain primitive owns the device-rack chrome for each stage, so we
+ * collapse the wider AnalysisStageStatus enum onto its smaller vocabulary.
+ */
+function toSignalStatus(status: AnalysisStageStatus): SignalStageStatus {
   switch (status) {
     case 'running':
+      return 'active';
     case 'queued':
-      return 'text-accent';
+    case 'blocked':
+    case 'ready':
+      return 'queued';
     case 'completed':
-      return 'text-success';
+      return 'success';
     case 'failed':
     case 'interrupted':
-      return 'text-error';
+      return 'error';
     case 'not_requested':
-      return 'text-text-secondary/50';
+      return 'idle';
     default:
-      return 'text-text-secondary';
+      return 'idle';
   }
 }
 
@@ -275,6 +267,15 @@ function statusLabel(status: AnalysisStageStatus): string {
     case 'ready': return 'READY';
     default: return String(status).toUpperCase();
   }
+}
+
+function rackStatusFromProgress(
+  progress: ProgressState,
+  isActive: boolean,
+): 'idle' | 'active' | 'success' | 'error' {
+  if (progress.tone === 'failed') return 'error';
+  if (progress.tone === 'success') return 'success';
+  return isActive ? 'active' : 'idle';
 }
 
 export function AnalysisStatusPanel({
@@ -315,156 +316,126 @@ export function AnalysisStatusPanel({
     },
   ];
 
-  return (
-    <div className="rounded-sm border border-border bg-bg-panel p-3 space-y-3">
-      {/* Header row */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <span className="text-[11px] font-mono text-text-secondary uppercase tracking-[0.2em]">Analysis Run</span>
-          {run && (
-            <span className="text-[9px] font-mono text-text-secondary/50 uppercase tracking-wider truncate">
-              {run.runId}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-3 shrink-0">
-          <div className="flex items-center gap-1.5">
-            <div className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-accent animate-pulse' : 'bg-success'}`} />
-            <span className="text-[10px] font-mono text-text-primary tabular-nums">{formatElapsed(elapsedMs)}</span>
-          </div>
-          {estimate && (
-            <span className="text-[9px] font-mono text-text-secondary/60 uppercase">
-              est {formatEstimateRange(estimate)}
-            </span>
-          )}
-          {onStopAnalysis && isActive && (
-            <button
-              onClick={onStopAnalysis}
-              className="flex items-center gap-1 rounded-sm border border-error/30 bg-error/10 px-2 py-1 text-error hover:bg-error/20 transition-colors"
-              title="Stop analysis"
-              aria-label="Stop analysis"
-            >
-              <Square className="w-3 h-3 fill-current" />
-              <span className="text-[9px] font-mono uppercase tracking-wider">Stop</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Audit Finding #6: primary readout. The stage diagnostic message used
-          to render at `text-[9px] text-secondary/50` below the percent — sized
-          as background fluff. During a 4–5 minute Phase 2 wait the producer
-          would tab away and miss any actual signal about what's happening.
-          Now it sits between the header and the stage chips as the visual
-          focus, with the active stage label as a mono eyebrow above it. The
-          chips below become the secondary "which stage is which" landmark. */}
-      <div
-        data-testid="status-panel-primary-readout"
-        className="rounded-sm border border-border/40 bg-bg-card/40 px-3 py-2.5"
-      >
-        {progress.activeStageKey && (
-          <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary/80 mb-1">
-            {STAGE_LABELS[progress.activeStageKey]}
-            {progress.tone === 'failed' ? ' · failure' : null}
-          </p>
-        )}
-        <p
-          className={`text-sm font-sans leading-snug ${
-            progress.tone === 'failed' ? 'text-error' : 'text-text-primary'
-          }`}
+  const signalStages: SignalStage[] = stages.map((stage) => {
+    const errorMarkedNonRetryable = stage.error?.retryable === false;
+    const isRetryable =
+      stage.onRetry &&
+      (stage.status === 'failed' || stage.status === 'interrupted' || stage.status === 'ready') &&
+      !errorMarkedNonRetryable;
+    // Audit N1: non-retryable failures (e.g. GEMINI_NOT_CONFIGURED) used to
+    // render FAILED with no actionable feedback. Surface the error code in
+    // the action slot so the user knows where to look; the full message
+    // lives in the title attribute.
+    const nonRetryableHint =
+      errorMarkedNonRetryable && stage.error?.code ? (
+        <span
+          className="font-mono text-[9px] uppercase tracking-wider text-error/70 truncate max-w-[8rem]"
+          title={stage.error?.message ?? stage.error.code}
         >
-          {progress.message}
-        </p>
-      </div>
+          {stage.error.code}
+        </span>
+      ) : null;
 
-      {/* Stage pipeline */}
-      <div className="flex items-stretch gap-1">
-        {stages.map((stage, i) => {
-          // A retry button only makes sense when (a) the parent provided a
-          // handler, (b) the stage is in a retryable state, and (c) the
-          // backend hasn't explicitly marked the error as non-retryable
-          // (e.g. GEMINI_NOT_CONFIGURED: clicking RETRY won't fix a missing
-          // env var). Audit N1 sibling: previously the button rendered for
-          // every failed stage regardless of error.retryable.
-          const errorMarkedNonRetryable = stage.error?.retryable === false;
-          const isRetryable =
-            stage.onRetry &&
-            (stage.status === 'failed' || stage.status === 'interrupted' || stage.status === 'ready') &&
-            !errorMarkedNonRetryable;
-          return (
-            <div
-              key={stage.key}
-              className={`flex-1 rounded-sm border p-2 ${
-                stage.status === 'running' || stage.status === 'queued'
-                  ? 'border-accent/30 bg-accent/5'
-                  : stage.status === 'completed'
-                    ? 'border-success/20 bg-success/5'
-                    : stage.status === 'failed' || stage.status === 'interrupted'
-                      ? 'border-error/20 bg-error/5'
-                      : 'border-border bg-bg-card'
-              }`}
-            >
-              <div className="flex items-center justify-between gap-1.5 mb-1">
-                <span className="text-[9px] font-mono text-text-secondary uppercase tracking-wider">
-                  {STAGE_LABELS[stage.key]}
-                </span>
-                <div className={`w-2 h-2 rounded-full shrink-0 ${statusDotClass(stage.status)}`} />
-              </div>
-              <div className="flex items-center justify-between gap-1">
-                <span className={`text-[10px] font-mono font-bold uppercase tracking-wider ${statusTextClass(stage.status)}`}>
-                  {statusLabel(stage.status)}
-                </span>
-                {isRetryable ? (
-                  <button
-                    onClick={stage.onRetry}
-                    className="flex items-center gap-0.5 text-accent hover:text-accent/80 transition-colors"
-                    title={`Retry ${STAGE_LABELS[stage.key]}`}
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                    <span className="text-[8px] font-mono uppercase tracking-wider">Retry</span>
-                  </button>
-                ) : errorMarkedNonRetryable && stage.error?.code ? (
-                  // Audit N1 sibling: a non-retryable failure (e.g.
-                  // GEMINI_NOT_CONFIGURED) used to render FAILED with no
-                  // actionable feedback. Surface the error code so the user
-                  // knows where to look; full message goes in the tooltip.
-                  <span
-                    className="text-[8px] font-mono uppercase tracking-wider text-error/70 truncate max-w-[8rem]"
-                    title={stage.error?.message ?? stage.error.code}
-                  >
-                    {stage.error.code}
-                  </span>
-                ) : null}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+    const action = isRetryable ? (
+      <Button
+        variant="ghost"
+        size="sm"
+        leadingIcon={<RotateCcw className="w-3 h-3" />}
+        onClick={stage.onRetry}
+        title={`Retry ${STAGE_LABELS[stage.key]}`}
+      >
+        Retry
+      </Button>
+    ) : (
+      nonRetryableHint
+    );
 
-      {/* Progress bar */}
-      <div className="space-y-1">
-        <div className="w-full h-1 bg-bg-app border border-border/20 rounded-sm overflow-hidden">
-          {progress.indeterminate ? (
-            <div className={`h-full w-1/3 rounded-sm animate-pulse ${progressFillClass(progress.tone, true)}`} />
-          ) : (
-            <div
-              className={`h-full rounded-sm transition-all duration-500 ease-out ${progressFillClass(progress.tone, false)} ${
-                progress.percent >= 95 && progress.tone === 'running' ? 'animate-pulse' : ''
-              }`}
-              style={{ width: `${progress.percent}%` }}
-            />
-          )}
-        </div>
-        <div className="flex items-center justify-end">
-          <span className="text-[9px] font-mono text-text-secondary/50 tabular-nums">
-            {progress.indeterminate ? 'estimating' : `${Math.round(progress.percent)}%`}
+    return {
+      key: stage.key,
+      name: STAGE_LABELS[stage.key],
+      status: toSignalStatus(stage.status),
+      statusLabel: statusLabel(stage.status),
+      action,
+    };
+  });
+
+  const rackStatus = rackStatusFromProgress(progress, isActive);
+  const subtitle = run ? `· ${run.runId.slice(-8)}` : undefined;
+  const railTone: SignalTone =
+    progress.tone === 'success' ? 'success' : progress.tone === 'failed' ? 'idle' : 'active';
+
+  const railProgressLabel = progress.indeterminate
+    ? 'estimating'
+    : `${Math.round(progress.percent)}%`;
+
+  return (
+    <DeviceRack
+      name="ANALYSIS RUN"
+      subtitle={subtitle}
+      status={rackStatus}
+      action={
+        onStopAnalysis && isActive ? (
+          <Button
+            variant="danger"
+            size="sm"
+            leadingIcon={<Square className="w-3 h-3 fill-current" />}
+            onClick={onStopAnalysis}
+            title="Stop analysis"
+            aria-label="Stop analysis"
+          >
+            Stop
+          </Button>
+        ) : undefined
+      }
+      signalIn={railTone}
+      signalOut={progress.tone === 'success' ? 'success' : 'idle'}
+      railContent={
+        <span className="flex items-center gap-3">
+          <span className="tabular-mono text-text-secondary">
+            {formatElapsed(elapsedMs)}
           </span>
-        </div>
-        {/* Audit Finding #6: the duplicate small `progress.message` that used
-            to render here was removed — the primary readout above is the
-            single source for "what's happening". Keeping it here would have
-            been visual noise repeating the same sentence twice. */}
+          {estimate && (
+            <span className="text-text-muted">est {formatEstimateRange(estimate)}</span>
+          )}
+          <span className="tabular-mono text-text-secondary">{railProgressLabel}</span>
+        </span>
+      }
+    >
+      <div className="space-y-3">
+        {/* Audit Finding #6: primary readout. The stage diagnostic message
+            used to render at `text-[9px] text-secondary/50` below the percent
+            — sized as background fluff. During a 4–5 minute Phase 2 wait the
+            producer would tab away and miss any actual signal about what's
+            happening. Now it sits at the top of the device body as the visual
+            focus, with the active stage label as a mono eyebrow above it. The
+            SignalChain below becomes the secondary "which stage is which"
+            landmark. */}
+        <Panel
+          variant="inset"
+          padding="sm"
+          data-testid="status-panel-primary-readout"
+        >
+          {progress.activeStageKey && (
+            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-secondary/80 mb-1">
+              {STAGE_LABELS[progress.activeStageKey]}
+              {progress.tone === 'failed' ? ' · failure' : null}
+            </p>
+          )}
+          <p
+            className={`text-sm font-sans leading-snug ${
+              progress.tone === 'failed' ? 'text-error' : 'text-text-primary'
+            }`}
+          >
+            {progress.message}
+          </p>
+        </Panel>
+
+        <SignalChain
+          stages={signalStages}
+          orientation="horizontal"
+          animated={isActive && progress.tone === 'running'}
+        />
       </div>
-    </div>
+    </DeviceRack>
   );
 }
