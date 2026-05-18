@@ -7,7 +7,8 @@
 import React, { useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp, Music2 } from 'lucide-react';
 import { Phase1Result, TranscriptionDetail } from '../types';
-import { formatDisplayText, getTextRoleClassName } from '../utils/displayText';
+import { getTextRoleClassName } from '../utils/displayText';
+import { Button, DeviceRack, EmptyState } from './ui';
 import { MelodyContourBlock } from './sessionMusician/MelodyContourBlock';
 import { NoteDraftBlock } from './sessionMusician/NoteDraftBlock';
 import {
@@ -153,56 +154,47 @@ export function SessionMusicianPanel({
   }, [isOptedOut, showMelodyBlock, showNoteDraftBlock]);
 
   return (
-    <section data-testid="session-musician-panel" className="space-y-4">
-      <div className="flex items-center justify-between border-b border-border pb-2">
-        <h2
-          data-text-role="section-title"
-          className={[getTextRoleClassName('section-title'), 'flex items-center'].join(' ')}
+    <DeviceRack
+      data-testid="session-musician-panel"
+      name="Session Musician"
+      subtitle="· Pitch & Melody"
+      status="idle"
+      className="space-y-0"
+      action={
+        <Button
+          variant="ghost"
+          iconOnly
+          size="sm"
+          onClick={() => setExpanded((prev) => !prev)}
+          aria-label={expanded ? 'Collapse session musician panel' : 'Expand session musician panel'}
+          title={expanded ? 'Collapse' : 'Expand'}
         >
-          <span className="w-2 h-2 bg-accent rounded-full mr-2" />
-          {formatDisplayText('Session Musician', 'title')}
-        </h2>
-        <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">
-          PITCH & MELODY
-        </span>
-      </div>
-
-      <div className="bg-bg-card border border-border rounded-sm p-4 space-y-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-full border border-accent/30 bg-accent/10">
-              <Music2 className="w-4 h-4 text-accent" />
-            </div>
-            <p
-              data-text-role="body"
-              className={[getTextRoleClassName('body'), 'opacity-80'].join(' ')}
-            >
-              {panelSummary}
-            </p>
+          {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </Button>
+      }
+    >
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-full border border-accent/30 bg-accent/10">
+            <Music2 className="w-4 h-4 text-accent" />
           </div>
-          <button
-            type="button"
-            onClick={() => setExpanded((prev) => !prev)}
-            aria-label={expanded ? 'Collapse session musician panel' : 'Expand session musician panel'}
-            title={expanded ? 'Collapse' : 'Expand'}
-            className="p-1.5 text-text-secondary hover:text-text-primary transition-colors self-start"
+          <p
+            data-text-role="body"
+            className={[getTextRoleClassName('body'), 'opacity-80'].join(' ')}
           >
-            {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </button>
+            {panelSummary}
+          </p>
         </div>
 
         {offBannerCopy && (
-          <div
+          <EmptyState
             data-testid="session-musician-off-banner"
-            className="rounded-sm border border-accent/20 bg-bg-panel p-3 space-y-1"
-          >
-            <p className="text-[10px] font-mono uppercase tracking-wide text-accent">
-              Pitch/note translation is off
-            </p>
-            <p className="text-[11px] font-mono text-text-secondary leading-relaxed">
-              {offBannerCopy}
-            </p>
-          </div>
+            tone="warning"
+            padding="sm"
+            title="Pitch/note translation is off"
+            description={offBannerCopy}
+            className="border-accent/20 bg-bg-panel"
+          />
         )}
 
         {expanded && (
@@ -226,21 +218,17 @@ export function SessionMusicianPanel({
               />
             )}
             {!showNoteDraftBlock && !showMelodyBlock && !offBannerCopy && (
-              <div
+              <EmptyState
                 data-testid="session-musician-no-data"
-                className="border border-border rounded-sm px-3 py-2 bg-bg-panel/40 space-y-1"
-              >
-                <p className="text-[11px] font-mono text-text-secondary uppercase tracking-wide">
-                  PITCH & MELODY UNAVAILABLE
-                </p>
-                <p className="text-[11px] font-mono text-text-secondary/80 leading-relaxed">
-                  Neither stem-aware transcription nor a measurement-layer melody contour were produced for this run. Check the stem listening notes if interpretation ran.
-                </p>
-              </div>
+                tone="neutral"
+                padding="sm"
+                title="PITCH & MELODY UNAVAILABLE"
+                description="Neither stem-aware transcription nor a measurement-layer melody contour were produced for this run. Check the stem listening notes if interpretation ran."
+              />
             )}
           </>
         )}
       </div>
-    </section>
+    </DeviceRack>
   );
 }

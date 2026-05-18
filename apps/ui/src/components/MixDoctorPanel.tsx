@@ -3,9 +3,9 @@ import type { MixDoctorReport, MixDynamicsIssue, MixIssue } from '../services/mi
 import {
   DeltaBadge,
   StatusBadge,
-  StyledDataTable,
 } from './MeasurementPrimitives';
-import { formatDisplayText, getTextRoleClassName } from '../utils/displayText';
+import { DataTable, MetricTile, Panel } from './ui';
+import { getTextRoleClassName } from '../utils/displayText';
 
 interface MixDoctorPanelProps {
   report: MixDoctorReport;
@@ -54,35 +54,29 @@ export function MixDoctorPanel({ report }: MixDoctorPanelProps) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div className="rounded-sm border border-border-light border-l-2 border-accent bg-bg-surface-dark p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-          <span data-text-role="eyebrow" className={getTextRoleClassName('eyebrow')}>
-            Target Genre
-          </span>
-          <div data-text-role="item-title" className={`mt-3 ${getTextRoleClassName('item-title')}`}>
-            {report.genreName}
-          </div>
-          <div className="mt-2">
-            <StatusBadge label={report.genreId} tone="muted" compact />
-          </div>
-        </div>
-
-        <div className="rounded-sm border border-border-light border-l-2 border-accent bg-bg-surface-dark p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-          <span data-text-role="eyebrow" className={getTextRoleClassName('eyebrow')}>
-            Health Score
-          </span>
-          <div className="mt-3">
+        <MetricTile
+          size="md"
+          accent="accent"
+          label="Target Genre"
+          value={report.genreName}
+          footer={<StatusBadge label={report.genreId} tone="muted" compact />}
+        />
+        <MetricTile
+          size="md"
+          accent="accent"
+          label="Health Score"
+          value={
             <StatusBadge
               label={`${report.overallScore}/100`}
               tone={toneForScore(report.overallScore)}
             />
-          </div>
-        </div>
-
-        <div className="rounded-sm border border-border-light border-l-2 border-accent bg-bg-surface-dark p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-          <span data-text-role="eyebrow" className={getTextRoleClassName('eyebrow')}>
-            Loudness Offset
-          </span>
-          <div className="mt-3">
+          }
+        />
+        <MetricTile
+          size="md"
+          accent="accent"
+          label="Loudness Offset"
+          value={
             <DeltaBadge
               value={report.loudnessOffset}
               decimals={1}
@@ -90,8 +84,8 @@ export function MixDoctorPanel({ report }: MixDoctorPanelProps) {
               warnThreshold={1.5}
               unit="dB"
             />
-          </div>
-        </div>
+          }
+        />
       </div>
 
       <div className="border-t border-border pt-3">
@@ -116,13 +110,10 @@ export function MixDoctorPanel({ report }: MixDoctorPanelProps) {
               message: report.stereoAdvice.message,
             },
           ].map((item) => (
-            <div
-              key={item.label}
-              className="rounded-sm border border-border-light bg-bg-card/35 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
-            >
+            <Panel key={item.label} variant="surface" padding="md">
               <StatusBadge label={item.label} tone={item.tone} compact />
               <p className="mt-2 text-sm leading-5 text-text-primary">{item.message}</p>
-            </div>
+            </Panel>
           ))}
         </div>
       </div>
@@ -132,7 +123,7 @@ export function MixDoctorPanel({ report }: MixDoctorPanelProps) {
           Band Diagnostics
         </span>
         <div className="mt-3">
-          <StyledDataTable
+          <DataTable
             data={report.advice}
             columns={[
               {
