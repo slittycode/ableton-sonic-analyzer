@@ -163,6 +163,12 @@ export function SessionMusicianPanel({
       data-testid="session-musician-panel"
       aria-label="Session Musician"
     >
+    {/* Visually-hidden <h2> so the smoke selector
+        tests/smoke/upload-phase1-midi.spec.ts:360
+        `panel.getByRole('heading', { name: /SESSION MUSICIAN/i })`
+        resolves. DeviceRack's title strip carries the same text
+        visually but as a styled <span>, not a heading element. */}
+    <h2 className="sr-only">Session Musician</h2>
     <DeviceRack
       name="Session Musician"
       subtitle="· Pitch & Melody"
