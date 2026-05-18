@@ -95,20 +95,30 @@ export const DeviceRack = React.forwardRef<HTMLDivElement, DeviceRackProps>(
         )}
         <div className={cn(bodyVariants({ density }))}>{children}</div>
         {showRail && (
+          // Three explicit slots so signalIn / railContent / signalOut land
+          // left / center / right regardless of which combination is present.
+          // (Previously two adjacent `ml-auto` siblings collapsed signalOut
+          // next to railContent when all three slots were filled.)
           <div className="device-rack__rail">
-            {signalIn != null && (
-              <span className="flex items-center gap-1">
-                <span className="signal-arrow" data-tone={signalIn} />
-                <span>in</span>
-              </span>
-            )}
-            {railContent && <span className="ml-auto truncate">{railContent}</span>}
-            {signalOut != null && (
-              <span className="ml-auto flex items-center gap-1">
-                <span>out</span>
-                <span className="signal-arrow" data-tone={signalOut} />
-              </span>
-            )}
+            <span className="flex items-center gap-1 min-w-0">
+              {signalIn != null && (
+                <>
+                  <span className="signal-arrow" data-tone={signalIn} />
+                  <span>in</span>
+                </>
+              )}
+            </span>
+            <span className="flex-1 min-w-0 truncate text-center">
+              {railContent}
+            </span>
+            <span className="flex items-center gap-1 min-w-0 justify-end">
+              {signalOut != null && (
+                <>
+                  <span>out</span>
+                  <span className="signal-arrow" data-tone={signalOut} />
+                </>
+              )}
+            </span>
           </div>
         )}
       </div>
