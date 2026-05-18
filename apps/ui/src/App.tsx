@@ -1021,9 +1021,16 @@ export default function App() {
                   name="Input Source"
                   status={audioFile ? (isAnalyzing ? 'active' : 'success') : 'idle'}
                 >
+                  {/* bg-bg-card on the inner div: locked by
+                      tests/smoke/theme-shell.spec.ts:41 which asserts the
+                      input-panel computed background is rgb(68, 68, 68)
+                      (#444444 = --color-bg-card). The DeviceRack's body is
+                      transparent by default so the rack's gradient face
+                      would show through; we explicitly flatten the body
+                      here to preserve the palette contract. */}
                   <div
                     data-testid="input-panel"
-                    className="flex flex-col min-h-[220px]"
+                    className="bg-bg-card flex flex-col min-h-[220px] p-4"
                   >
                     {showInputCollapsed && audioFile ? (
                       // Audit N9: compact post-analysis summary. Replaces the
