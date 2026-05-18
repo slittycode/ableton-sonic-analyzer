@@ -2041,11 +2041,19 @@ export function AnalysisResults({
               <DeviceRack
                 key={group.name}
                 // The DeviceRack title strip carries the group name. The
-                // emoji from groupIcon() + the existing uppercase group.name
-                // ("DRUM PROCESSING" etc.) are preserved verbatim in the
-                // DOM text so analysisResultsUi.test.ts:441-450 selectors
-                // (toContain('🥁 DRUM PROCESSING') etc.) continue to pass.
-                name={`${groupIcon(group.name)} ${group.name}`}
+                // emoji-or-SVG from groupIcon() + uppercase group.name
+                // ("DRUM PROCESSING" etc.) are preserved verbatim so
+                // analysisResultsUi.test.ts:441-450 selectors (toContain
+                // ('🥁 DRUM PROCESSING')) AND the BASS PROCESSING test at
+                // :448 which expects a `lucide-audio-waveform` SVG class
+                // nearby both pass. The name must be a React fragment —
+                // template-literal coercion turns the AudioWaveform JSX
+                // node into "[object Object]" and the SVG is lost.
+                name={
+                  <>
+                    {groupIcon(group.name)} {group.name}
+                  </>
+                }
                 status="idle"
               >
                 {/* Audit-preserved annotation paragraph kept here so
@@ -2200,12 +2208,13 @@ export function AnalysisResults({
             rightSlot={
               <div className="flex items-center gap-2">
                 {audioContentHash && patchAppliedCount > 0 && (
-                  <span
+                  <Pill
+                    tone="success"
+                    size="sm"
                     data-testid="patches-applied-progress"
-                    className="text-[10px] font-mono uppercase tracking-wide text-success border border-success/30 bg-success/10 px-2 py-1 rounded"
                   >
                     {patchAppliedCount} of {patchCards.length} applied
-                  </span>
+                  </Pill>
                 )}
                 <Sliders className="w-4 h-4 text-accent opacity-70" />
               </div>
@@ -2218,14 +2227,23 @@ export function AnalysisResults({
               bass patch without scanning all 8 cards. */}
           <div className="space-y-4">
             {patchGroups.map((group) => (
-              <section key={group.name} className="space-y-3">
-                <h3
-                  data-text-role="meta"
-                  className={textRoleClassName('meta', 'border-b border-border/70 pb-1')}
-                >
-                  {groupIcon(group.name)} {group.name}
-                </h3>
-
+              <DeviceRack
+                key={group.name}
+                // Mirror Mix Chain's D.5b shape. JSX fragment (not template
+                // literal) so groupIcon's BASS PROCESSING return value (an
+                // <AudioWaveform> SVG) renders as a real React node — the
+                // template-literal version stringifies it to "[object
+                // Object]" and analysisResultsUi.test.ts:448 fails.
+                name={
+                  <>
+                    {groupIcon(group.name)} {group.name}
+                  </>
+                }
+                status="idle"
+              >
+                {/* Keep the exact className — analysisResultsUi.test.ts:440
+                    expects ≥2 occurrences of `grid gap-4 grid-cols-1
+                    sm:grid-cols-2` across Mix Chain + Patches. */}
                 <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
                   {group.cards.map((patch) => {
                     const isOpen = !!openPatch[patch.id];
@@ -2342,7 +2360,7 @@ export function AnalysisResults({
                     );
                   })}
                 </div>
-              </section>
+              </DeviceRack>
             ))}
           </div>
         </section>
