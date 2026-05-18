@@ -321,27 +321,33 @@ interface ResultsSectionHeaderProps {
   className?: string;
 }
 
+/**
+ * Thin wrapper around the SectionHeader primitive — preserves the
+ * (title, rightSlot, titleRole, titleClassName, className) API the rest of
+ * AnalysisResults expects while letting the primitive own the actual layout
+ * + LED indicator + data-text-role propagation. The static accent dot
+ * (`<span class="w-2 h-2 bg-accent rounded-full">`) is upgraded to the
+ * pulsing `.led-indicator--active` glyph that every other DeviceRack /
+ * SectionHeader in the migration uses.
+ */
 function ResultsSectionHeader({
   title,
-  rightSlot = null,
+  rightSlot,
   titleRole,
-  titleClassName = '',
-  className = '',
+  titleClassName,
+  className,
 }: ResultsSectionHeaderProps) {
-  const resolvedTitleClassName = titleRole
-    ? textRoleClassName(titleRole, `flex items-center gap-2 ${titleClassName}`.trim())
-    : ['text-sm font-mono uppercase tracking-wider text-text-secondary flex items-center gap-2', titleClassName]
-        .filter(Boolean)
-        .join(' ');
-
   return (
-    <div className={['flex items-center justify-between gap-3 border-b border-border pb-2', className].filter(Boolean).join(' ')}>
-      <h2 data-text-role={titleRole} className={resolvedTitleClassName}>
-        <span className="w-2 h-2 bg-accent rounded-full flex-shrink-0"></span>
-        {title}
-      </h2>
-      {rightSlot ? <div className="flex items-center flex-shrink-0">{rightSlot}</div> : null}
-    </div>
+    <SectionHeader
+      title={title}
+      titleRole={titleRole}
+      titleClassName={titleClassName}
+      action={rightSlot}
+      variant="underline"
+      size="md"
+      ledTone="accent"
+      className={className}
+    />
   );
 }
 
