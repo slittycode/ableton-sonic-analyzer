@@ -6,7 +6,7 @@ import { AnalysisStatusPanel } from './components/AnalysisStatusPanel';
 import { DiagnosticLog } from './components/DiagnosticLog';
 import { FileUpload } from './components/FileUpload';
 import { WaveformPlayer } from './components/WaveformPlayer';
-import { Button, Checkbox, DeviceRack, Panel } from './components/ui';
+import { Button, Checkbox, DeviceRack } from './components/ui';
 // Audit Finding #5: IdleValuePropPanel now occupies the Signal Monitor area
 // when no file is selected. It tells the producer what ASA does and what to
 // expect in 30s / 5min.
