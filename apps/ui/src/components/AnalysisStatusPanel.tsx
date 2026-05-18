@@ -234,20 +234,33 @@ export function computeLiveProgress(
  * Map a stage's internal status onto the visual SignalChain status. The
  * SignalChain primitive owns the device-rack chrome for each stage, so we
  * collapse the wider AnalysisStageStatus enum onto its smaller vocabulary.
+ *
+ * - `running`        → active   (LED pulses, cable animates)
+ * - `queued`         → queued   (waiting in line behind earlier stages)
+ * - `blocked`        → queued   (waiting on measurement to finish; same
+ *                                visual semantic as queued)
+ * - `ready`          → idle     (failed stage was reset and is now waiting
+ *                                for the user to click Retry — the Retry
+ *                                button in the action slot owns this state's
+ *                                CTA, so the device tile reads as idle
+ *                                rather than queued-for-auto-execution)
+ * - `completed`      → success
+ * - `failed`/`interrupted` → error
+ * - `not_requested`  → idle     (stage was not requested for this run)
  */
-function toSignalStatus(status: AnalysisStageStatus): SignalStageStatus {
+export function toSignalStatus(status: AnalysisStageStatus): SignalStageStatus {
   switch (status) {
     case 'running':
       return 'active';
     case 'queued':
     case 'blocked':
-    case 'ready':
       return 'queued';
     case 'completed':
       return 'success';
     case 'failed':
     case 'interrupted':
       return 'error';
+    case 'ready':
     case 'not_requested':
       return 'idle';
     default:
@@ -255,7 +268,7 @@ function toSignalStatus(status: AnalysisStageStatus): SignalStageStatus {
   }
 }
 
-function statusLabel(status: AnalysisStageStatus): string {
+export function statusLabel(status: AnalysisStageStatus): string {
   switch (status) {
     case 'running': return 'RUNNING';
     case 'queued': return 'QUEUED';
@@ -269,7 +282,13 @@ function statusLabel(status: AnalysisStageStatus): string {
   }
 }
 
-function rackStatusFromProgress(
+/**
+ * Map the live ProgressState + isActive onto a DeviceRack status tone for
+ * the outer ANALYSIS RUN rack. Failure dominates (error tone) regardless of
+ * isActive; an explicit success tone overrides isActive; otherwise the rack
+ * lights up active while running and falls to idle when no stage is active.
+ */
+export function rackStatusFromProgress(
   progress: ProgressState,
   isActive: boolean,
 ): 'idle' | 'active' | 'success' | 'error' {
