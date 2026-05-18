@@ -100,17 +100,27 @@ def summarize_midi_file(midi_path: Path, audio_duration_seconds: float) -> dict[
     duration_denominator = max(float(audio_duration_seconds), 1e-9)
     note_count = len(notes)
     note_density = note_count / duration_denominator
+    distinct_pitch_count = len(set(pitch_values))
+    mean_active_polyphony = weighted_active_polyphony / max(active_time, 1e-9)
     flags: list[str] = []
     if max_polyphony <= 1:
         flags.append("monophonic_output")
     if note_density >= 12.0:
         flags.append("high_note_density")
+    if note_density > 15.0:
+        flags.append("note_clutter")
+    if distinct_pitch_count > 30 and mean_active_polyphony < 3.0:
+        flags.append("octave_junk")
+    if max_polyphony > 8:
+        flags.append("dense_chords_unusable")
+    if note_density < 1.0 and float(audio_duration_seconds) >= 10.0:
+        flags.append("sparse_likely_undertranscribed")
 
     min_pitch = min(pitch_values)
     max_pitch = max(pitch_values)
     return {
         "noteCount": note_count,
-        "distinctPitchCount": len(set(pitch_values)),
+        "distinctPitchCount": distinct_pitch_count,
         "pitchRange": {
             "minMidi": min_pitch,
             "maxMidi": max_pitch,
@@ -119,10 +129,7 @@ def summarize_midi_file(midi_path: Path, audio_duration_seconds: float) -> dict[
         },
         "maxPolyphony": max_polyphony,
         "meanTimelinePolyphony": round(weighted_timeline_polyphony / duration_denominator, 4),
-        "meanActivePolyphony": round(
-            weighted_active_polyphony / max(active_time, 1e-9),
-            4,
-        ),
+        "meanActivePolyphony": round(mean_active_polyphony, 4),
         "averageNoteDurationSeconds": round(total_note_duration / note_count, 4),
         "noteDensityPerSecond": round(note_density, 4),
         "flags": flags,

@@ -17,6 +17,7 @@ from phase1_evaluation import (
     DEFAULT_BENCH_TRACKS_DIR,
     DEFAULT_MANIFEST_PATH,
     DEFAULT_REPORT_PATH,
+    DEFAULT_TRANSCRIPTION_TRACKS_DIR,
     run_phase1_evaluation,
 )
 from phase1_report_html import default_html_report_path, render_html_report
@@ -67,6 +68,25 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--include-transcription",
+        action="store_true",
+        help=(
+            "Opt in to evaluating Layer 2 (torchcrepe) transcription against "
+            "manifest.transcriptionTracks. Always runs the stepped-sine self-"
+            "test even when the corpus is empty. Missing audio files are "
+            "skipped with a clear notice rather than failing the run."
+        ),
+    )
+    parser.add_argument(
+        "--transcription-tracks-dir",
+        type=Path,
+        default=DEFAULT_TRANSCRIPTION_TRACKS_DIR,
+        help=(
+            f"Directory holding local transcription reference tracks "
+            f"(default: {DEFAULT_TRANSCRIPTION_TRACKS_DIR})"
+        ),
+    )
+    parser.add_argument(
         "--html-report",
         type=Path,
         default=None,
@@ -89,16 +109,30 @@ def main() -> None:
         runs_per_fixture=max(args.runs, 1),
         include_real=args.include_real,
         real_tracks_dir=args.real_tracks_dir,
+        include_transcription=args.include_transcription,
+        transcription_tracks_dir=args.transcription_tracks_dir,
     )
     summary_line: dict[str, Any] = {
         "summary": report["summary"],
         "reportPath": report["reportPath"],
     }
+    notes: list[str] = []
     if args.include_real and report["summary"]["realTracksSkipped"] > 0:
-        summary_line["note"] = (
+        notes.append(
             "Some real tracks were skipped because audio files were not present "
             f"in {args.real_tracks_dir}. See report for per-track skipReason."
         )
+    if (
+        args.include_transcription
+        and report["summary"]["transcriptionTracksSkipped"] > 0
+    ):
+        notes.append(
+            "Some transcription tracks were skipped because audio files were "
+            f"not present in {args.transcription_tracks_dir}. See report for "
+            "per-track skipReason."
+        )
+    if notes:
+        summary_line["note"] = " ".join(notes)
 
     if args.html_report is not None:
         if isinstance(args.html_report, Path):
