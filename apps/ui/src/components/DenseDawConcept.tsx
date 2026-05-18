@@ -40,8 +40,8 @@ const cueCards = [
 ];
 
 const channelStrips = [
-  { name: 'Input', tone: '#ff7a1a', db: '-2.1', meter: 82 },
-  { name: 'Glue', tone: '#ff9f43', db: '-6.8', meter: 64 },
+  { name: 'Input', tone: 'var(--color-accent)', db: '-2.1', meter: 82 },
+  { name: 'Glue', tone: 'var(--color-accent)', db: '-6.8', meter: 64 },
   { name: 'Stereo', tone: '#70d6ff', db: '-8.4', meter: 56 },
   { name: 'Limiter', tone: '#ffd166', db: '-1.2', meter: 92 },
 ];
@@ -49,7 +49,7 @@ const channelStrips = [
 const noteLanes = [
   {
     name: 'Bass stem',
-    accent: '#ff7a1a',
+    accent: 'var(--color-accent)',
     notes: [
       { left: '2%', width: '18%' },
       { left: '24%', width: '12%' },
@@ -95,7 +95,7 @@ function SectionFrame({
           <p className="text-[10px] font-mono uppercase tracking-[0.28em] text-[#8a8a8a]">{eyebrow}</p>
           <h2 className="mt-1 text-sm font-semibold uppercase tracking-[0.14em] text-[#f3efe8]">{title}</h2>
         </div>
-        <div className="h-2.5 w-2.5 rounded-full bg-[#ff7a1a] shadow-[0_0_14px_rgba(255,122,26,0.75)]" />
+        <div className="h-2.5 w-2.5 rounded-full bg-[var(--color-accent)] shadow-[0_0_14px_rgba(255,122,26,0.75)]" />
       </div>
       <div className="p-5">{children}</div>
     </section>
@@ -133,19 +133,19 @@ export default function DenseDawConcept() {
               <div className="flex flex-wrap items-center gap-3">
                 <a
                   href={getAppViewHref('app')}
-                  className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/5 px-3 py-1.5 text-[11px] font-mono uppercase tracking-[0.18em] text-[#d7d0c7] transition-colors hover:border-[#ff7a1a]/50 hover:text-white"
+                  className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/5 px-3 py-1.5 text-[11px] font-mono uppercase tracking-[0.18em] text-[#d7d0c7] transition-colors hover:border-[var(--color-accent)]/50 hover:text-white"
                 >
                   <ArrowLeft className="h-3.5 w-3.5" />
                   Current UI
                 </a>
-                <span className="inline-flex items-center gap-2 rounded-full border border-[#ff7a1a]/35 bg-[#ff7a1a]/10 px-3 py-1.5 text-[11px] font-mono uppercase tracking-[0.18em] text-[#ffb27d]">
+                <span className="inline-flex items-center gap-2 rounded-full border border-[var(--color-accent)]/35 bg-[var(--color-accent)]/10 px-3 py-1.5 text-[11px] font-mono uppercase tracking-[0.18em] text-[#ffb27d]">
                   Dense DAW concept
                 </span>
               </div>
 
               <div className="flex items-start gap-3">
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                  <AudioWaveform className="h-7 w-7 text-[#ff7a1a]" />
+                  <AudioWaveform className="h-7 w-7 text-[var(--color-accent)]" />
                 </div>
                 <div>
                   <p className="text-[10px] font-mono uppercase tracking-[0.32em] text-[#8a8a8a]">ASA parallel concept</p>
@@ -188,7 +188,7 @@ export default function DenseDawConcept() {
                 <div className="rounded-[1.1rem] border border-white/8 bg-[#101010] p-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <button className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-[#ff7a1a]/40 bg-[#ff7a1a]/12 text-[#ff9f43]">
+                      <button className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-[var(--color-accent)]/40 bg-[var(--color-accent)]/12 text-[var(--color-accent)]">
                         <Play className="ml-0.5 h-5 w-5 fill-current" />
                       </button>
                       <div>
@@ -216,8 +216,8 @@ export default function DenseDawConcept() {
                       <svg viewBox="0 0 1200 220" className="absolute inset-0 h-full w-full">
                         <defs>
                           <linearGradient id="wave-fill" x1="0%" y1="0%" x2="100%" y2="0%">
-                            <stop offset="0%" stopColor="#ff7a1a" stopOpacity="0.18" />
-                            <stop offset="40%" stopColor="#ff9f43" stopOpacity="0.42" />
+                            <stop offset="0%" stopColor="var(--color-accent)" stopOpacity="0.18" />
+                            <stop offset="40%" stopColor="var(--color-accent)" stopOpacity="0.42" />
                             <stop offset="100%" stopColor="#70d6ff" stopOpacity="0.22" />
                           </linearGradient>
                         </defs>
@@ -237,7 +237,7 @@ export default function DenseDawConcept() {
                           strokeLinecap="round"
                         />
                       </svg>
-                      <div className="absolute inset-y-0 left-[61%] w-[2px] bg-[#ff7a1a] shadow-[0_0_18px_rgba(255,122,26,0.9)]" />
+                      <div className="absolute inset-y-0 left-[61%] w-[2px] bg-[var(--color-accent)] shadow-[0_0_18px_rgba(255,122,26,0.9)]" />
                       <div className="absolute inset-x-4 bottom-3 flex items-center justify-between text-[9px] font-mono uppercase tracking-[0.24em] text-[#7f7b74]">
                         {transportMarkers.map((marker) => (
                           <span key={marker}>{marker}</span>
@@ -366,7 +366,7 @@ export default function DenseDawConcept() {
                         height: `${height}%`,
                         background:
                           height > 80
-                            ? 'linear-gradient(180deg, #ff7a1a, #7c2c00)'
+                            ? 'linear-gradient(180deg, var(--color-accent), #7c2c00)'
                             : height > 60
                               ? 'linear-gradient(180deg, #ffd166, #7b5a13)'
                               : 'linear-gradient(180deg, #70d6ff, #154b66)',
@@ -387,7 +387,7 @@ export default function DenseDawConcept() {
                       ) : card.label === 'Export' ? (
                         <Activity className="h-4 w-4 text-[#70d6ff]" />
                       ) : (
-                        <Disc3 className="h-4 w-4 text-[#ff7a1a]" />
+                        <Disc3 className="h-4 w-4 text-[var(--color-accent)]" />
                       )}
                       <p className="text-[10px] font-mono uppercase tracking-[0.24em] text-[#8a8a8a]">{card.label}</p>
                     </div>
