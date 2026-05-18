@@ -154,8 +154,16 @@ export function SessionMusicianPanel({
   }, [isOptedOut, showMelodyBlock, showNoteDraftBlock]);
 
   return (
-    <DeviceRack
+    // <section> wrapper preserves the semantic element that smoke
+    // selectors target (upload-phase1-midi.spec.ts:631 uses
+    // `page.locator('section').filter({ hasText: /SESSION MUSICIAN/i })`).
+    // DeviceRack itself renders a <div>; without this wrapper the smoke
+    // locator finds nothing and the panel reads as missing.
+    <section
       data-testid="session-musician-panel"
+      aria-label="Session Musician"
+    >
+    <DeviceRack
       name="Session Musician"
       subtitle="· Pitch & Melody"
       status="idle"
@@ -230,5 +238,6 @@ export function SessionMusicianPanel({
         )}
       </div>
     </DeviceRack>
+    </section>
   );
 }
