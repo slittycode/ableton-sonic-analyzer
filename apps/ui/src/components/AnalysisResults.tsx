@@ -38,6 +38,7 @@ import {
   StatusBadge,
   TokenBadgeList,
 } from './MeasurementPrimitives';
+import { Button, DeviceRack, MetricTile, SectionHeader } from './ui';
 import { PhaseSourceBadge } from './PhaseSourceBadge';
 import { StickyNav, type StickyNavSection } from './StickyNav';
 import { CitationBlock, CitationHeadline } from './CitationBlock';
@@ -840,176 +841,175 @@ export function AnalysisResults({
       data-testid="analysis-results-root"
       className="space-y-12"
     >
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-border relative">
-        <div>
-          <h1
-            data-text-role="page-title"
-            className={textRoleClassName('page-title', 'flex items-center')}
+      <div className="flex flex-col gap-2 pb-6 border-b border-border relative">
+        <SectionHeader
+          size="lg"
+          variant="inline"
+          eyebrow="ASA Results"
+          titleRole="page-title"
+          ledTone="accent"
+          title={formatDisplayText('Analysis Results', 'title')}
+          action={
+            <>
+              <Button
+                variant="secondary"
+                size="md"
+                leadingIcon={<FileJson className="w-3 h-3" />}
+                onClick={handleExportJSON}
+                data-testid="analysis-export-json"
+              >
+                Download data
+              </Button>
+              <Button
+                variant="primary"
+                size="md"
+                leadingIcon={<FileText className="w-3 h-3" />}
+                onClick={handleExportMD}
+                data-testid="analysis-export-markdown"
+              >
+                Download report
+              </Button>
+            </>
+          }
+        />
+        {headerSubtitle && (
+          <p
+            data-text-role="meta"
+            data-testid="analysis-results-subtitle"
+            className={textRoleClassName('meta', 'opacity-70 pl-4')}
           >
-            <Activity className="w-6 h-6 mr-3 text-accent" />
-            {formatDisplayText('Analysis Results', 'title')}
-          </h1>
-          {headerSubtitle && (
-            <p
-              data-text-role="meta"
-              className={textRoleClassName('meta', 'mt-1 opacity-70')}
-              data-testid="analysis-results-subtitle"
-            >
-              {headerSubtitle}
-            </p>
-          )}
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleExportJSON}
-            data-testid="analysis-export-json"
-            className="flex items-center gap-2 px-4 py-2 bg-bg-panel border border-border rounded text-xs font-mono uppercase tracking-wider hover:bg-bg-card-hover hover:border-accent/50 transition-all group"
-          >
-            <FileJson className="w-3 h-3 text-text-secondary group-hover:text-accent" />
-            <span>Download data</span>
-          </button>
-          <button
-            onClick={handleExportMD}
-            data-testid="analysis-export-markdown"
-            className="flex items-center gap-2 px-4 py-2 bg-accent/10 border border-accent/50 text-accent rounded text-xs font-mono uppercase tracking-wider hover:bg-accent/20 transition-all shadow-[0_0_10px_rgba(255,85,0,0.1)]"
-          >
-            <FileText className="w-3 h-3" />
-            <span>Download report</span>
-          </button>
-        </div>
+            {headerSubtitle}
+          </p>
+        )}
       </div>
 
       <StickyNav sections={navSections} />
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {/* TEMPO */}
-        <AccentMetricCard
-          label={
-            <span className="flex items-center gap-1.5">
-              <Activity className="w-3.5 h-3.5 text-accent/60" />
-              <span>TEMPO</span>
-            </span>
-          }
-          value={finalBpm}
-          unit="BPM"
-          headerRight={<PhaseSourceBadge source="measured" />}
-          footer={
-            <div className="space-y-2">
-              {/* Audit Finding #4: `SCORE 0.86` badge retired in favor of the
-                  canonical band pill — same vocabulary as Key, Character, and
-                  every other confidence surface. */}
-              <ConfidenceBandBadge variant="compact" confidence={phase1.bpmConfidence} />
-              {phase1.bpmSource && (
-                <span className="block text-[8px] font-mono uppercase tracking-wide text-text-secondary/50">
-                  {phase1.bpmSource.replace(/_/g, ' ')}
-                </span>
-              )}
-            </div>
-          }
-        />
-
-        {/* KEY SIG */}
-        <AccentMetricCard
-          label={
-            <span className="flex items-center gap-1.5">
-              <Music className="w-3.5 h-3.5 text-accent/60" />
-              <span>KEY SIG</span>
-            </span>
-          }
-          value={<span className="truncate block">{finalKey}</span>}
-          headerRight={
-            <div className="flex items-center gap-1">
-              <PhaseSourceBadge source="measured" />
-              {lowConfidenceIndicator(keyIsApproximate)}
-            </div>
-          }
-          footer={
-            <div className="space-y-1.5">
-              <MetricBar
-                value={phase1.keyConfidence}
-                color="var(--color-accent)"
-                glow
-              />
-              {/* Audit Finding #4: `CONF 62%` text replaced with the canonical
-                  band pill so every confidence reads in the same vocabulary. */}
-              <ConfidenceBandBadge variant="compact" confidence={phase1.keyConfidence} />
-            </div>
-          }
-        />
-
-        {/* METER */}
-        <AccentMetricCard
-          label={
-            <span className="flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-accent/60" />
-              <span>METER</span>
-            </span>
-          }
-          value={phase1.timeSignature}
-          footer={<StatusBadge label={meterStatusLabel(phase1)} tone="muted" compact />}
-        />
-
-        {/* CHARACTER — genre primary, characteristic pills secondary */}
-        {phase1.genreDetail ? (
-          <AccentMetricCard
-            label={
-              <span className="flex items-center gap-1.5">
-                <Disc className="w-3.5 h-3.5 text-accent/60" />
-                <span>CHARACTER</span>
-              </span>
-            }
-            value={<span className="truncate block capitalize text-[1.5rem]">{phase1.genreDetail.genre}</span>}
+      <DeviceRack name="Measurement Summary" density="dense" status="success">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {/* TEMPO */}
+          <MetricTile
+            size="lg"
+            accent="accent"
+            icon={<Activity className="w-3.5 h-3.5 text-accent/60" />}
+            label="TEMPO"
+            value={finalBpm}
+            unit="BPM"
             headerRight={<PhaseSourceBadge source="measured" />}
             footer={
               <div className="space-y-2">
-                <TokenBadgeList
-                  items={[
-                    { label: phase1.genreDetail.genreFamily, tone: 'accent' },
-                    ...(phase1.genreDetail.secondaryGenre
-                      ? [{ label: phase1.genreDetail.secondaryGenre, tone: 'muted' as const }]
-                      : []),
-                  ]}
-                />
-                <MetricBar
-                  value={phase1.genreDetail.confidence}
-                  color="var(--color-accent)"
-                  glow
-                />
-                {/* Audit Finding #4: `CONF X%` replaced with the canonical
-                    band pill — same vocabulary across every confidence. */}
-                <ConfidenceBandBadge
-                  variant="compact"
-                  confidence={phase1.genreDetail.confidence}
-                />
+                {/* Audit Finding #4: `SCORE 0.86` badge retired in favor of the
+                    canonical band pill — same vocabulary as Key, Character, and
+                    every other confidence surface. */}
+                <ConfidenceBandBadge variant="compact" confidence={phase1.bpmConfidence} />
+                {phase1.bpmSource && (
+                  <span className="block text-[8px] font-mono uppercase tracking-wide text-text-secondary/50">
+                    {phase1.bpmSource.replace(/_/g, ' ')}
+                  </span>
+                )}
               </div>
             }
           />
-        ) : (
-          <AccentMetricCard
-            label={
-              <span className="flex items-center gap-1.5">
-                <Disc className="w-3.5 h-3.5 text-accent/60" />
-                <span>CHARACTER</span>
-              </span>
+
+          {/* KEY SIG */}
+          <MetricTile
+            size="lg"
+            accent="accent"
+            icon={<Music className="w-3.5 h-3.5 text-accent/60" />}
+            label="KEY SIG"
+            value={<span className="truncate block">{finalKey}</span>}
+            headerRight={
+              <div className="flex items-center gap-1">
+                <PhaseSourceBadge source="measured" />
+                {lowConfidenceIndicator(keyIsApproximate)}
+              </div>
             }
-            value={<span className="text-base font-mono uppercase tracking-wide text-text-secondary/60">SCANNING...</span>}
             footer={
-              characteristicPills.length > 0 ? (
-                <div className="w-full flex flex-wrap gap-1">
-                  {characteristicPills.map((item, idx) => (
-                    <span
-                      key={`${item.name}-${idx}`}
-                      className={`inline-flex items-center px-2 py-1 rounded-sm border text-[9px] font-mono uppercase tracking-wide ${characteristicPillClass(item.confidence)}`}
-                    >
-                      {shortenCharacteristicName(item.name)}
-                    </span>
-                  ))}
-                </div>
-              ) : undefined
+              <div className="space-y-1.5">
+                <MetricBar
+                  value={phase1.keyConfidence}
+                  color="var(--color-accent)"
+                  glow
+                />
+                {/* Audit Finding #4: `CONF 62%` text replaced with the canonical
+                    band pill so every confidence reads in the same vocabulary. */}
+                <ConfidenceBandBadge variant="compact" confidence={phase1.keyConfidence} />
+              </div>
             }
           />
-        )}
-      </div>
+
+          {/* METER */}
+          <MetricTile
+            size="lg"
+            accent="accent"
+            icon={<Clock className="w-3.5 h-3.5 text-accent/60" />}
+            label="METER"
+            value={phase1.timeSignature}
+            footer={<StatusBadge label={meterStatusLabel(phase1)} tone="muted" compact />}
+          />
+
+          {/* CHARACTER — genre primary, characteristic pills secondary */}
+          {phase1.genreDetail ? (
+            <MetricTile
+              size="lg"
+              accent="accent"
+              icon={<Disc className="w-3.5 h-3.5 text-accent/60" />}
+              label="CHARACTER"
+              value={<span className="truncate block capitalize">{phase1.genreDetail.genre}</span>}
+              headerRight={<PhaseSourceBadge source="measured" />}
+              footer={
+                <div className="space-y-2">
+                  <TokenBadgeList
+                    items={[
+                      { label: phase1.genreDetail.genreFamily, tone: 'accent' },
+                      ...(phase1.genreDetail.secondaryGenre
+                        ? [{ label: phase1.genreDetail.secondaryGenre, tone: 'muted' as const }]
+                        : []),
+                    ]}
+                  />
+                  <MetricBar
+                    value={phase1.genreDetail.confidence}
+                    color="var(--color-accent)"
+                    glow
+                  />
+                  {/* Audit Finding #4: `CONF X%` replaced with the canonical
+                      band pill — same vocabulary across every confidence. */}
+                  <ConfidenceBandBadge
+                    variant="compact"
+                    confidence={phase1.genreDetail.confidence}
+                  />
+                </div>
+              }
+            />
+          ) : (
+            <MetricTile
+              size="lg"
+              accent="accent"
+              icon={<Disc className="w-3.5 h-3.5 text-accent/60" />}
+              label="CHARACTER"
+              value={
+                <span className="text-base font-mono uppercase tracking-wide text-text-secondary/60">
+                  SCANNING...
+                </span>
+              }
+              footer={
+                characteristicPills.length > 0 ? (
+                  <div className="w-full flex flex-wrap gap-1">
+                    {characteristicPills.map((item, idx) => (
+                      <span
+                        key={`${item.name}-${idx}`}
+                        className={`inline-flex items-center px-2 py-1 rounded-sm border text-[9px] font-mono uppercase tracking-wide ${characteristicPillClass(item.confidence)}`}
+                      >
+                        {shortenCharacteristicName(item.name)}
+                      </span>
+                    ))}
+                  </div>
+                ) : undefined
+              }
+            />
+          )}
+        </div>
+      </DeviceRack>
 
       {/* Audit Finding #1: MeasurementDashboard was here at the top of the
           results scroll, ahead of Style / Sonic Elements / Mix Chain / Patches.
