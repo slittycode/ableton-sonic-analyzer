@@ -92,8 +92,8 @@ Operational and one-shot scripts live in two places. They are not on the request
 
 `apps/backend/`, `apps/ui/`, and `scripts/` are the product. The remaining top-level directories are off-path and safe to skip unless the task explicitly names them:
 
-1. `advisory/` — auditor notes and one-shot reviews (e.g. `phase1_audit/`). Not imported by either app.
-2. `experiments/` — sandbox scratch space (e.g. `crepe_test/` carries only a venv). Throwaway by intent; do not wire production code here.
+1. `audits/` — dated, automated audit reports (e.g. `nightly-2026-05-14.md`). Past-tense paper trail; not imported by either app. (Older one-shot advisory deliverables like the phase 1 audit have been archived under `docs/history/phase1-audit/`.)
+2. `incorporations/` — planning docs for incorporating upstream projects (e.g. `forking-plans-2026-05-14.md`). Planning notes only; not code.
 3. `docs/` — long-form rationale (`ARCHITECTURE_STRATEGY.md`, `history/`). Read these *before* structural changes; do not treat them as living API docs.
 4. `tests/ground_truth/` — labeled-corpus fixtures consumed by `scripts/calibrate_confidence.py` (see `tests/ground_truth/README.md`). Not a test suite — each app owns its own (`apps/backend/tests/`, `apps/ui/tests/`).
 
