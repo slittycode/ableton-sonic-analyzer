@@ -6,6 +6,7 @@ import { AnalysisStatusPanel } from './components/AnalysisStatusPanel';
 import { DiagnosticLog } from './components/DiagnosticLog';
 import { FileUpload } from './components/FileUpload';
 import { WaveformPlayer } from './components/WaveformPlayer';
+import { Button, DeviceRack } from './components/ui';
 // Audit Finding #5: IdleValuePropPanel now occupies the Signal Monitor area
 // when no file is selected. It tells the producer what ASA does and what to
 // expect in 30s / 5min.
@@ -1016,14 +1017,20 @@ export default function App() {
           <main className="space-y-5">
             <section className="grid grid-cols-1 lg:grid-cols-12 gap-3 md:gap-4">
               <div className="lg:col-span-4 flex flex-col gap-4">
-                <div className="flex flex-col">
-                  <div className="bg-bg-surface-dark border border-border border-b-0 rounded-t-sm px-3 py-1.5 flex items-center">
-                    <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
-                    <h3 className="text-[10px] font-mono text-text-secondary uppercase tracking-wider">Input Source</h3>
-                  </div>
+                <DeviceRack
+                  name="Input Source"
+                  status={audioFile ? (isAnalyzing ? 'active' : 'success') : 'idle'}
+                >
+                  {/* bg-bg-card on the inner div: locked by
+                      tests/smoke/theme-shell.spec.ts:41 which asserts the
+                      input-panel computed background is rgb(68, 68, 68)
+                      (#444444 = --color-bg-card). The DeviceRack's body is
+                      transparent by default so the rack's gradient face
+                      would show through; we explicitly flatten the body
+                      here to preserve the palette contract. */}
                   <div
                     data-testid="input-panel"
-                    className="bg-bg-card border border-border rounded-b-sm p-4 flex flex-col min-h-[220px]"
+                    className="bg-bg-card flex flex-col min-h-[220px] p-4"
                   >
                     {showInputCollapsed && audioFile ? (
                       // Audit N9: compact post-analysis summary. Replaces the
@@ -1054,20 +1061,21 @@ export default function App() {
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
-                          <button
-                            type="button"
+                          <Button
+                            variant="secondary"
+                            size="md"
                             onClick={handleFileClear}
-                            className="flex-1 text-[10px] font-mono uppercase tracking-wider text-text-secondary border border-border bg-bg-panel hover:border-accent/40 hover:text-text-primary px-2 py-2 rounded-sm transition-colors"
+                            className="flex-1"
                           >
                             ↺ Analyze new file
-                          </button>
-                          <button
-                            type="button"
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="md"
                             onClick={() => setInputManuallyExpanded(true)}
-                            className="text-[10px] font-mono uppercase tracking-wider text-text-secondary border border-border bg-bg-panel hover:border-accent/40 hover:text-text-primary px-2 py-2 rounded-sm transition-colors"
                           >
                             Adjust settings
-                          </button>
+                          </Button>
                         </div>
                       </div>
                     ) : (
@@ -1079,13 +1087,13 @@ export default function App() {
                             <p className="text-[10px] font-mono uppercase tracking-wider text-text-secondary">
                               Editing analysis settings
                             </p>
-                            <button
-                              type="button"
+                            <Button
+                              variant="secondary"
+                              size="sm"
                               onClick={() => setInputManuallyExpanded(false)}
-                              className="text-[10px] font-mono uppercase tracking-wider text-text-secondary border border-border bg-bg-panel hover:border-accent/40 hover:text-text-primary px-2 py-1 rounded-sm transition-colors"
                             >
                               Hide
-                            </button>
+                            </Button>
                           </div>
                         )}
                     <FileUpload
@@ -1128,6 +1136,16 @@ export default function App() {
                       } ${isAnalyzing ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                       <div className="flex items-start gap-3">
+                        {/* Native input kept here rather than the Radix
+                            Checkbox primitive because Playwright smoke tests
+                            depend on getByLabel + .toBeChecked() + .uncheck()
+                            against this control (tests/smoke/upload-estimate-
+                            phase1.spec.ts:242). Those locators work reliably
+                            for native form controls; the Radix
+                            <button role="checkbox"> equivalent is less
+                            consistently supported. The Checkbox primitive
+                            still exists in components/ui/ for surfaces that
+                            aren't load-bearing for smoke selectors. */}
                         <input
                           type="checkbox"
                           checked={pitchNoteTranslationRequested}
@@ -1153,6 +1171,7 @@ export default function App() {
                       } ${isAnalyzing || !phase2ConfigEnabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                       <div className="flex items-start gap-3">
+                        {/* See PITCH/NOTE toggle above for the rationale. */}
                         <input
                           type="checkbox"
                           checked={interpretationRequested}
@@ -1238,25 +1257,24 @@ export default function App() {
                           transition={{ duration: 0.3, ease: 'easeOut', delay: 0.1 }}
                           className="mt-4 flex justify-end"
                         >
-                          <motion.button
+                          <Button
+                            variant="primary"
+                            size="lg"
+                            ledIndicator
+                            leadingIcon={<Play className="w-3 h-3 fill-current" />}
                             onClick={handleStartAnalysis}
                             disabled={isAnalyzeDisabled}
-                            whileHover={isAnalyzeDisabled ? {} : { scale: 1.02 }}
-                            whileTap={isAnalyzeDisabled ? {} : { scale: 0.98 }}
-                            className="group relative bg-bg-panel border border-accent/60 hover:bg-accent hover:border-accent text-accent hover:text-bg-app shadow-[0_0_10px_rgba(255,136,0,0.15)] hover:shadow-[0_0_18px_rgba(255,136,0,0.4)] disabled:opacity-40 disabled:shadow-none disabled:border-border disabled:text-text-secondary disabled:cursor-not-allowed font-bold py-2.5 px-7 rounded-sm flex items-center transition-all duration-200 uppercase tracking-wider font-mono text-xs"
                             title={estimateWrongService ? 'Point the UI at the Sonic Analyzer backend to enable analysis.' : undefined}
                           >
-                            <span className="w-1.5 h-1.5 rounded-full bg-accent group-hover:bg-bg-app/50 group-disabled:bg-border mr-3 animate-pulse" />
-                            <Play className="w-3 h-3 mr-2 fill-current" />
                             Run Analysis
-                          </motion.button>
+                          </Button>
                         </motion.div>
                       </>
                     )}
                       </>
                     )}
                   </div>
-                </div>
+                </DeviceRack>
               </div>
 
               <div className="lg:col-span-8 flex flex-col">
