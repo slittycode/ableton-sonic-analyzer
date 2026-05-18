@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { UploadCloud, FileAudio, X, AlertTriangle } from 'lucide-react';
 
 import { isSupportedAudioFile } from '../services/audioFile';
+import { Button, Panel, Pill } from './ui';
 
 interface FileUploadProps {
   onFileSelect: (file: File) => void;
@@ -139,24 +140,26 @@ export function FileUpload({
           </div>
           <p className="text-sm font-bold mb-1 tracking-wide text-text-primary">Drop Audio Here</p>
           <p className="text-[10px] text-text-secondary font-mono uppercase tracking-wider">or click to browse</p>
-          <div className="mt-4 flex gap-2">
-             {['MP3', 'WAV', 'FLAC', 'AIFF'].map(fmt => (
-               <span key={fmt} className="text-[9px] font-mono text-text-secondary border border-border px-1.5 py-0.5 rounded-sm bg-bg-panel opacity-60">
-                 {fmt}
-               </span>
-             ))}
+          <div className="mt-4 flex gap-1.5">
+            {['MP3', 'WAV', 'FLAC', 'AIFF'].map((fmt) => (
+              <Pill key={fmt} tone="neutral" variant="outline" size="xs">
+                {fmt}
+              </Pill>
+            ))}
           </div>
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              void onLoadDemoTrack();
-            }}
-            disabled={isLoading || isDemoLoading}
-            className="mt-4 rounded-sm border border-border bg-bg-panel px-3 py-1.5 text-[10px] font-mono uppercase tracking-wider text-text-secondary transition-colors hover:border-accent/40 hover:text-accent disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isDemoLoading ? 'Loading Demo...' : 'Load Demo Track'}
-          </button>
+          <div className="mt-4">
+            <Button
+              variant="secondary"
+              size="md"
+              onClick={(event) => {
+                event.stopPropagation();
+                void onLoadDemoTrack();
+              }}
+              disabled={isLoading || isDemoLoading}
+            >
+              {isDemoLoading ? 'Loading Demo...' : 'Load Demo Track'}
+            </Button>
+          </div>
           {fileError && (
             <div className="mt-3 flex items-center gap-2 text-error text-[10px] font-mono uppercase tracking-wider" role="alert">
               <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
@@ -165,36 +168,45 @@ export function FileUpload({
           )}
         </div>
       ) : (
-        <div className="bg-bg-card border border-border rounded-sm p-4 flex items-center justify-between relative overflow-hidden group">
-          <div className="absolute left-0 top-0 bottom-0 w-1 bg-accent"></div>
-          <div className="flex items-center space-x-4 pl-2">
-            <div className="bg-bg-panel p-2 rounded-sm border border-border">
-              <FileAudio className="w-6 h-6 text-accent" />
-            </div>
-            <div>
-              <p className="font-bold text-sm tracking-tight truncate max-w-[200px] md:max-w-xs">{selectedFile.name}</p>
-              <p className="text-[10px] text-text-secondary font-mono uppercase tracking-wider flex items-center mt-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-success mr-2"></span>
-                Ready • {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
-              </p>
-              {fileSizeWarning && (
-                <p className="text-[10px] text-warning font-mono uppercase tracking-wider flex items-center mt-1">
-                  <AlertTriangle className="w-3 h-3 shrink-0 mr-1.5" />
-                  {fileSizeWarning}
+        <Panel variant="surface" padding="md" className="relative overflow-hidden group">
+          {/* Accent stripe down the left edge — the same Live device-on
+              affordance used elsewhere. */}
+          <div className="absolute left-0 top-0 bottom-0 w-1 bg-accent" aria-hidden />
+          <div className="flex items-center justify-between gap-3 pl-2">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="bg-bg-panel p-2 rounded-sm border border-border shrink-0">
+                <FileAudio className="w-6 h-6 text-accent" />
+              </div>
+              <div className="min-w-0">
+                <p className="font-bold text-sm tracking-tight truncate max-w-[200px] md:max-w-xs">
+                  {selectedFile.name}
                 </p>
-              )}
+                <p className="text-[10px] text-text-secondary font-mono uppercase tracking-wider flex items-center mt-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-success mr-2" aria-hidden />
+                  Ready • {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
+                </p>
+                {fileSizeWarning && (
+                  <p className="text-[10px] text-warning font-mono uppercase tracking-wider flex items-center mt-1">
+                    <AlertTriangle className="w-3 h-3 shrink-0 mr-1.5" />
+                    {fileSizeWarning}
+                  </p>
+                )}
+              </div>
             </div>
+            {!isLoading && (
+              <Button
+                variant="ghost"
+                size="sm"
+                iconOnly
+                onClick={clearFile}
+                title="Remove File"
+                aria-label="Remove File"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            )}
           </div>
-          {!isLoading && (
-            <button
-              onClick={clearFile}
-              className="p-1.5 hover:bg-bg-panel rounded-sm border border-transparent hover:border-border transition-all group/btn"
-              title="Remove File"
-            >
-              <X className="w-4 h-4 text-text-secondary group-hover/btn:text-error" />
-            </button>
-          )}
-        </div>
+        </Panel>
       )}
     </div>
   );
