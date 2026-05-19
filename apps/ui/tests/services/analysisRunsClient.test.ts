@@ -287,6 +287,58 @@ describe('analysisRunsClient', () => {
     expect(snapshot.stages.pitchNoteTranslation.preferredAttemptId).toBe('sym_123');
   });
 
+  it('preserves sampleRate on spectrogram refs through the parser', async () => {
+    // Backend emits sampleRate only on the STFT artifact (source SR preserved).
+    // Without round-tripping it through parseSpectralArtifactRef, the
+    // SpectrogramViewer cursor falls back to 44100 and reports wrong Hz
+    // on 48k/96k files — the regression this whole change is meant to fix.
+    const snapshotWithSpectral = {
+      ...baseRunSnapshot,
+      artifacts: {
+        ...baseRunSnapshot.artifacts,
+        spectral: {
+          spectrograms: [
+            {
+              artifactId: 'art_mel',
+              kind: 'spectrogram_mel',
+              filename: 'mel_spectrogram.png',
+              mimeType: 'image/png',
+              sizeBytes: 12345,
+            },
+            {
+              artifactId: 'art_stft',
+              kind: 'spectrogram_stft',
+              filename: 'stft_spectrogram.png',
+              mimeType: 'image/png',
+              sizeBytes: 23456,
+              sampleRate: 48000,
+            },
+          ],
+          timeSeries: null,
+          onsetStrength: null,
+          chromaInteractive: null,
+        },
+      },
+    };
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: () => Promise.resolve(snapshotWithSpectral),
+    } as Response));
+
+    const snapshot = await getAnalysisRun('run_123', {
+      apiBaseUrl: 'http://127.0.0.1:8100',
+    });
+
+    const spectrograms = snapshot.artifacts?.spectral?.spectrograms ?? [];
+    const byKind = Object.fromEntries(spectrograms.map((s) => [s.kind, s]));
+    expect(byKind.spectrogram_stft?.sampleRate).toBe(48000);
+    // Mel doesn't carry source-SR provenance; field stays undefined.
+    expect(byKind.spectrogram_mel?.sampleRate).toBeUndefined();
+  });
+
   it('projects phase 1 from the canonical run and injects pitch/note transcription detail', () => {
     const phase1 = projectPhase1FromRun(baseRunSnapshot);
 

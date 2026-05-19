@@ -77,6 +77,9 @@ export function SpectrogramViewer({
     () => spectrograms.find((s) => s.kind === activeKind) ?? spectrograms[0] ?? null,
     [spectrograms, activeKind],
   );
+  // Mirrors activeSpec.sampleRate so drawOverlay (a stable useCallback that
+  // doesn't list activeKind in its deps) reads the current tab's SR without
+  // a one-frame lag during tab switches. Same pattern as activeKindRef above.
   activeSampleRateRef.current = activeSpec?.sampleRate;
   const directImageUrl = useMemo(
     () => (activeSpec ? buildArtifactUrl(apiBaseUrl, runId, activeSpec.artifactId) : ''),
