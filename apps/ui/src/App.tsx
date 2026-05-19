@@ -1262,7 +1262,7 @@ export default function App() {
                             size="lg"
                             ledIndicator
                             leadingIcon={<Play className="w-3 h-3 fill-current" />}
-                            onClick={handleStartAnalysis}
+                            onClick={() => handleStartAnalysis()}
                             disabled={isAnalyzeDisabled}
                             title={estimateWrongService ? 'Point the UI at the Sonic Analyzer backend to enable analysis.' : undefined}
                           >
@@ -1328,7 +1328,7 @@ export default function App() {
                 <div className="flex items-center gap-2 shrink-0">
                   {errorRetryable && audioFile && (
                     <button
-                      onClick={handleStartAnalysis}
+                      onClick={() => handleStartAnalysis()}
                       disabled={isAnalyzing}
                       className="px-2 py-1 bg-accent/20 text-accent border border-accent/30 rounded-sm hover:bg-accent/30 transition-colors uppercase tracking-wider text-[10px] disabled:opacity-50"
                     >
@@ -1379,7 +1379,7 @@ export default function App() {
                   }}
                   apiBaseUrl={appConfig.apiBaseUrl}
                   runId={activeRunId ?? undefined}
-                  pitchNoteMode={analysisRun?.requestedStages.pitchNoteMode ?? null}
+                  pitchNoteMode={(analysisRun?.requestedStages.pitchNoteMode ?? null) as 'stem_notes' | 'off' | null}
                   interpretationStatus={analysisRun?.stages.interpretation.status ?? null}
                   // Audit Finding #14 + #15: hash from the backend's source-audio
                   // artifact keys the per-file applied-recommendations tracker

@@ -419,3 +419,18 @@ body {
     font-variant-numeric: tabular-nums;
   }
 }
+
+/* Respect user OS-level motion preference. Neutralizes the device-rack LED
+   pulse, signal-cable flow, EQ-spinner bounce, and the 50+ Tailwind
+   transition utilities scattered across components. Applies at the top level
+   so cascade layer ordering can't override it. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

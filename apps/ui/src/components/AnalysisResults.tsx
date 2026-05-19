@@ -25,6 +25,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { assertNever } from '../utils/assertNever';
 import { downloadFile, generateMarkdown } from '../utils/exportUtils';
 import { INTERPRETATION_LABEL } from '../services/phaseLabels';
 import { MeasurementDashboard } from './MeasurementDashboard';
@@ -129,7 +130,7 @@ export function getInterpretationSubtitle(
     case 'not_requested':
       return 'Measurements only';
     default:
-      return null;
+      return assertNever(status);
   }
 }
 
@@ -148,7 +149,13 @@ export function getInterpretationSubtitle(
 export function getPhase2NavDisabledReason(
   status: AnalysisStageStatus | null | undefined,
 ): string {
+  // `completed` with no cards = Phase 2 returned nothing actionable. Falls
+  // back to the legacy phrasing alongside null/undefined so an empty result
+  // still reads honest.
+  if (status == null) return 'Recommendations not produced this run';
   switch (status) {
+    case 'completed':
+      return 'Recommendations not produced this run';
     case 'running':
       return 'AI interpretation in progress…';
     case 'queued':
@@ -161,13 +168,8 @@ export function getPhase2NavDisabledReason(
       return 'AI interpretation failed — retry from progress panel';
     case 'interrupted':
       return 'AI interpretation stopped';
-    case 'completed':
-    case null:
-    case undefined:
     default:
-      // `completed` with no cards = Phase 2 returned nothing actionable. Fall
-      // through to the legacy phrasing so an empty result still reads honest.
-      return 'Recommendations not produced this run';
+      return assertNever(status);
   }
 }
 
