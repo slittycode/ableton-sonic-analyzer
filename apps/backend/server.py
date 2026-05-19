@@ -1031,6 +1031,7 @@ def _generate_spectral_artifacts(runtime: AnalysisRuntime, run_id: str) -> None:
     the measurement — spectral visualizations are additive, not critical.
     """
     try:
+        import librosa
         from spectral_viz import generate_all_artifacts
 
         source = runtime.get_source_artifact(run_id)
@@ -1038,24 +1039,36 @@ def _generate_spectral_artifacts(runtime: AnalysisRuntime, run_id: str) -> None:
             source.get("path"),
             purpose="Source audio artifact for spectral generation",
         )
+        # Header-only metadata read; soundfile.info() under the hood.
+        # The STFT spectrogram preserves source SR so the y-axis spans
+        # 0 → source_sr/2 rather than always 0 → 22.05 kHz.
+        stft_sr = int(librosa.get_samplerate(source_local_path))
         with tempfile.TemporaryDirectory(prefix="spectral_viz_") as tmp_dir:
             artifacts = generate_all_artifacts(source_local_path, tmp_dir)
             _MIME_TYPES = {
                 "spectrogram_mel": "image/png",
+                "spectrogram_stft": "image/png",
                 "spectral_time_series": "application/json",
             }
             _FILENAMES = {
                 "spectrogram_mel": "mel_spectrogram.png",
+                "spectrogram_stft": "stft_spectrogram.png",
                 "spectral_time_series": "spectral_time_series.json",
             }
             for kind, path in artifacts.items():
+                provenance: dict[str, Any] = {
+                    "generator": "spectral_viz",
+                    "schemaVersion": "spectral.v1",
+                }
+                if kind == "spectrogram_stft":
+                    provenance["sampleRate"] = stft_sr
                 runtime.record_artifact(
                     run_id,
                     kind=kind,
                     source_path=path,
                     filename=_FILENAMES.get(kind, os.path.basename(path)),
                     mime_type=_MIME_TYPES.get(kind, "application/octet-stream"),
-                    provenance={"generator": "spectral_viz", "schemaVersion": "spectral.v1"},
+                    provenance=provenance,
                 )
     except Exception as exc:
         print(

@@ -108,6 +108,55 @@ def generate_spectrograms(
     return results
 
 
+def generate_stft_spectrogram(
+    audio_path: str,
+    output_dir: str,
+    *,
+    n_fft: int = DEFAULT_N_FFT,
+    hop_length: int = DEFAULT_HOP_LENGTH,
+) -> dict[str, Any]:
+    """Generate a linear-Hz STFT spectrogram PNG at the source sample rate.
+
+    Unlike :func:`generate_spectrograms` (mel-scaled at a forced 44.1 kHz),
+    this loads the audio at its native sample rate (``sr=None``) so the
+    rendered y-axis spans 0 → source_sr/2. A 96 kHz file renders 0–48 kHz;
+    a 22.05 kHz file renders 0–11.025 kHz. The displayed Nyquist matches
+    the file, which is what makes hard frequency cutoffs (e.g. lossy
+    re-encodes wrapped as FLAC) visually obvious.
+
+    Returns a dict with both the file path and the actual sample rate the
+    audio was loaded at::
+
+        {"spectrogram_stft": "/path/to/stft_spectrogram.png", "sampleRate": 48000}
+    """
+    import matplotlib.figure as mpl_figure
+
+    y, actual_sr = librosa.load(audio_path, sr=None, mono=True)
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+
+    S = librosa.stft(y, n_fft=n_fft, hop_length=hop_length)
+    S_db = librosa.amplitude_to_db(np.abs(S), ref=np.max)
+
+    fig = mpl_figure.Figure(figsize=(FIG_WIDTH_INCHES, FIG_HEIGHT_INCHES), dpi=FIG_DPI)
+    ax = fig.add_axes((0, 0, 1, 1))
+    ax.set_axis_off()
+    librosa.display.specshow(
+        S_db,
+        sr=int(actual_sr),
+        hop_length=hop_length,
+        x_axis=None,
+        y_axis="linear",
+        ax=ax,
+        cmap="magma",
+    )
+    stft_path = out / "stft_spectrogram.png"
+    fig.savefig(str(stft_path), dpi=FIG_DPI, bbox_inches="tight", pad_inches=0)
+    fig.clear()
+
+    return {"spectrogram_stft": str(stft_path), "sampleRate": int(actual_sr)}
+
+
 def compute_spectral_time_series(
     audio_path: str,
     *,
@@ -576,6 +625,11 @@ def generate_all_artifacts(
     results = generate_spectrograms(
         audio_path, output_dir, sr=sr, n_fft=n_fft, hop_length=hop_length
     )
+
+    stft_result = generate_stft_spectrogram(
+        audio_path, output_dir, n_fft=n_fft, hop_length=hop_length
+    )
+    results["spectrogram_stft"] = stft_result["spectrogram_stft"]
 
     ts_data = compute_spectral_time_series(
         audio_path, sr=sr, n_fft=n_fft, hop_length=hop_length, max_points=max_points

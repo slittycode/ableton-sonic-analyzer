@@ -12,7 +12,7 @@
 | `auth_context.py` | Hosted-mode user-context resolution. Establishes the current run owner in the canonical API path. |
 | `worker.py` | Dedicated worker-process entry point for hosted-style background stage execution. |
 | `upload_limits.py` | Canonical raw-audio (100 MiB) and request-envelope (101 MiB) limits, plus the protected-route list. Operator contract is generated, not hand-edited — see `scripts/render_upload_limit_contract.py`. |
-| `spectral_viz.py` | Librosa-based spectrogram generation and spectral time-series extraction. Produces mel/chroma PNG spectrograms and per-frame spectral evolution JSON. Called after successful measurement; failures are non-critical. |
+| `spectral_viz.py` | Librosa-based spectrogram generation and spectral time-series extraction. Produces mel/STFT/chroma PNG spectrograms and per-frame spectral evolution JSON. The STFT variant preserves the source file's native sample rate so the y-axis spans 0 → source_sr/2 (rather than always 0 → 22.05 kHz); other variants render at 44.1 kHz. Called after successful measurement; failures are non-critical. |
 | `url_ingest.py` | SSRF-guarded URL-mode ingestion for `POST /api/analysis-runs`. Fetches a public `http`/`https` audio file and streams the bytes through the same downstream pipeline as a multipart upload, enforcing the shared 100 MiB cap. |
 | `csv_export.py` | CSV exporters for Phase 1 time-series fields, keyed by dotted JSON path. Backs `GET /api/analysis-runs/{run_id}/export/csv/{field_path}` and keeps the route handler a thin lookup-and-serve. |
 | `stage_status.py` | Collapses the eight internal stage statuses into the additive client-facing `publicStatus` field carried on every stage in the run snapshot. |

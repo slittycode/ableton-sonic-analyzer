@@ -131,6 +131,46 @@ class SpectralTimeSeriesTests(unittest.TestCase):
             self.assertLessEqual(v, 1.0)
 
 
+class STFTSpectrogramTests(unittest.TestCase):
+    """Coverage for the source-SR-preserving linear-Hz STFT spectrogram."""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory(prefix="spectral_viz_stft_test_")
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def _run_at_sr(self, sr: int) -> dict:
+        from spectral_viz import generate_stft_spectrogram
+
+        audio_path = os.path.join(self.temp_dir.name, f"test_{sr}.wav")
+        _create_test_wav(audio_path, sr=sr)
+        out_dir = os.path.join(self.temp_dir.name, f"out_{sr}")
+        return generate_stft_spectrogram(audio_path, out_dir)
+
+    def test_preserves_source_sample_rate_at_44100(self) -> None:
+        result = self._run_at_sr(44100)
+        self.assertEqual(result["sampleRate"], 44100)
+        self.assertTrue(os.path.isfile(result["spectrogram_stft"]))
+
+    def test_preserves_source_sample_rate_at_48000(self) -> None:
+        result = self._run_at_sr(48000)
+        self.assertEqual(result["sampleRate"], 48000)
+        self.assertTrue(os.path.isfile(result["spectrogram_stft"]))
+
+    def test_preserves_source_sample_rate_at_96000(self) -> None:
+        result = self._run_at_sr(96000)
+        self.assertEqual(result["sampleRate"], 96000)
+        self.assertTrue(os.path.isfile(result["spectrogram_stft"]))
+
+    def test_output_is_valid_png(self) -> None:
+        result = self._run_at_sr(48000)
+        with open(result["spectrogram_stft"], "rb") as f:
+            header = f.read(8)
+        self.assertEqual(header[:4], b"\x89PNG")
+        self.assertGreater(os.path.getsize(result["spectrogram_stft"]), 1000)
+
+
 class GenerateAllArtifactsTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory(prefix="spectral_viz_test_")
@@ -140,16 +180,17 @@ class GenerateAllArtifactsTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
 
-    def test_generate_all_produces_two_artifacts(self) -> None:
+    def test_generate_all_produces_three_artifacts(self) -> None:
         from spectral_viz import generate_all_artifacts
 
         out_dir = os.path.join(self.temp_dir.name, "out")
         result = generate_all_artifacts(self.audio_path, out_dir)
 
         self.assertIn("spectrogram_mel", result)
+        self.assertIn("spectrogram_stft", result)
         self.assertNotIn("spectrogram_chroma", result)
         self.assertIn("spectral_time_series", result)
-        self.assertEqual(len(result), 2)
+        self.assertEqual(len(result), 3)
         for path in result.values():
             self.assertTrue(os.path.isfile(path))
 

@@ -626,3 +626,80 @@ class AnalysisRuntimeTests(unittest.TestCase):
 
         self.assertEqual(row["grounded_measurement_output_id"], grounding["measurementOutputId"])
         self.assertEqual(row["grounded_pitch_note_attempt_id"], pitch_note_attempt_id)
+
+
+class SpectralArtifactSnapshotTests(unittest.TestCase):
+    """Verifies the STFT-spectrogram sampleRate provenance is exposed on the
+    public artifact ref via `_normalize_run_snapshot` while mel and other
+    kinds remain unaffected."""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory(prefix="asa_spectral_snapshot_test_")
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def _runtime(self):
+        from analysis_runtime import AnalysisRuntime
+
+        return AnalysisRuntime(Path(self.temp_dir.name) / "runtime", max_pending_per_stage=4)
+
+    def _stub_png(self, name: str) -> str:
+        png_path = Path(self.temp_dir.name) / name
+        # 8-byte PNG header + minimal padding; size_bytes just needs to be > 0.
+        png_path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 64)
+        return str(png_path)
+
+    def test_stft_spectrogram_exposes_sample_rate_on_public_ref(self) -> None:
+        from server_phase1 import _normalize_run_snapshot
+
+        runtime = self._runtime()
+        created = runtime.create_run(
+            filename="track.wav",
+            content=b"fake-audio",
+            mime_type="audio/wav",
+            owner_user_id="user_xyz",
+            pitch_note_mode="off",
+            pitch_note_backend="auto",
+            interpretation_mode="off",
+            interpretation_profile="producer_summary",
+            interpretation_model=None,
+        )
+        run_id = created["runId"]
+
+        runtime.record_artifact(
+            run_id,
+            kind="spectrogram_mel",
+            source_path=self._stub_png("mel.png"),
+            filename="mel_spectrogram.png",
+            mime_type="image/png",
+            provenance={"generator": "spectral_viz", "schemaVersion": "spectral.v1"},
+        )
+        runtime.record_artifact(
+            run_id,
+            kind="spectrogram_stft",
+            source_path=self._stub_png("stft.png"),
+            filename="stft_spectrogram.png",
+            mime_type="image/png",
+            provenance={
+                "generator": "spectral_viz",
+                "schemaVersion": "spectral.v1",
+                "sampleRate": 48000,
+            },
+        )
+
+        snapshot = runtime.get_run(run_id, owner_user_id="user_xyz")
+        normalized = _normalize_run_snapshot(snapshot, runtime=runtime)
+
+        spectrograms = normalized["artifacts"]["spectral"]["spectrograms"]
+        by_kind = {s["kind"]: s for s in spectrograms}
+
+        self.assertIn("spectrogram_mel", by_kind)
+        self.assertIn("spectrogram_stft", by_kind)
+        self.assertNotIn("sampleRate", by_kind["spectrogram_mel"])
+        self.assertEqual(by_kind["spectrogram_stft"]["sampleRate"], 48000)
+
+        # path and contentSha256 must NOT leak into the public envelope.
+        self.assertNotIn("path", by_kind["spectrogram_stft"])
+        self.assertNotIn("contentSha256", by_kind["spectrogram_stft"])
+        self.assertNotIn("provenance", by_kind["spectrogram_stft"])
