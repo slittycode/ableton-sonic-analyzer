@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   formatFrequency,
+  pickInitialSpectrogramKind,
   pixelToFreqCQT,
   pixelToFreqLinear,
   pixelToFreqMel,
@@ -79,6 +80,18 @@ describe('pixelToFreqLinear', () => {
   it('respects custom sample rate', () => {
     expect(pixelToFreqLinear(0, 256, 48000)).toBeCloseTo(24000, 0);
   });
+
+  it('preserves 48 kHz source SR (top = 24 kHz, midpoint = 12 kHz)', () => {
+    expect(pixelToFreqLinear(0, 256, 48000)).toBeCloseTo(24000, 0);
+    expect(pixelToFreqLinear(128, 256, 48000)).toBeCloseTo(12000, 0);
+    expect(pixelToFreqLinear(256, 256, 48000)).toBeCloseTo(0, 0);
+  });
+
+  it('preserves 96 kHz source SR (top = 48 kHz, midpoint = 24 kHz)', () => {
+    expect(pixelToFreqLinear(0, 256, 96000)).toBeCloseTo(48000, 0);
+    expect(pixelToFreqLinear(128, 256, 96000)).toBeCloseTo(24000, 0);
+    expect(pixelToFreqLinear(256, 256, 96000)).toBeCloseTo(0, 0);
+  });
 });
 
 describe('pixelToTime', () => {
@@ -96,6 +109,37 @@ describe('pixelToTime', () => {
 
   it('returns 0 when imageWidth is 0', () => {
     expect(pixelToTime(100, 0, 120)).toBe(0);
+  });
+});
+
+describe('pickInitialSpectrogramKind', () => {
+  it('prefers STFT when present', () => {
+    expect(
+      pickInitialSpectrogramKind([
+        { kind: 'spectrogram_mel' },
+        { kind: 'spectrogram_stft' },
+        { kind: 'spectrogram_cqt' },
+      ]),
+    ).toBe('spectrogram_stft');
+  });
+
+  it('picks STFT even if it is the only entry', () => {
+    expect(pickInitialSpectrogramKind([{ kind: 'spectrogram_stft' }])).toBe(
+      'spectrogram_stft',
+    );
+  });
+
+  it('falls back to the first entry when STFT is absent', () => {
+    expect(
+      pickInitialSpectrogramKind([
+        { kind: 'spectrogram_mel' },
+        { kind: 'spectrogram_cqt' },
+      ]),
+    ).toBe('spectrogram_mel');
+  });
+
+  it('falls back to spectrogram_mel for an empty list', () => {
+    expect(pickInitialSpectrogramKind([])).toBe('spectrogram_mel');
   });
 });
 

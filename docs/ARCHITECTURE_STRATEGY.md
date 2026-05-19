@@ -109,7 +109,8 @@ Librosa generates spectrogram images and per-frame spectral time-series data for
 **Boundary:** `spectralDetail` (Essentia, authoritative scalars) vs spectrogram/time-series artifacts (librosa, for display). If a librosa time-series disagrees with an Essentia mean, the Essentia value is the measurement.
 
 **What librosa produces:**
-- Mel spectrogram PNG (128 mels, magma colormap)
+- STFT spectrogram PNG (linear-Hz axis, source sample rate preserved, magma colormap) — the default tab in the UI; renders 0 → source_sr/2 so high-SR files reveal their true Nyquist range
+- Mel spectrogram PNG (128 mels, magma colormap) — secondary tab
 - Chroma-over-time PNG (12 pitch classes, CQT-based)
 - Spectral evolution JSON (centroid, rolloff, bandwidth, flatness per frame, downsampled to ~500 points)
 

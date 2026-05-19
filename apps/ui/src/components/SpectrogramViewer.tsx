@@ -9,6 +9,7 @@ import { useSpectralCursor } from '../hooks/useSpectralCursorBus';
 import { useImageZoom } from '../hooks/useImageZoom';
 import {
   formatFrequency,
+  pickInitialSpectrogramKind,
   pixelToFreqCQT,
   pixelToFreqLinear,
   pixelToFreqMel,
@@ -22,6 +23,7 @@ interface SpectrogramViewerProps {
 }
 
 const TAB_LABELS: Record<string, string> = {
+  spectrogram_stft: 'STFT',
   spectrogram_mel: 'Mel',
   spectrogram_chroma: 'Chroma',
   spectrogram_cqt: 'CQT',
@@ -31,11 +33,12 @@ const TAB_LABELS: Record<string, string> = {
 };
 
 /** Kinds that have a meaningful frequency axis. */
-const FREQ_KINDS: Record<string, (y: number, h: number) => number> = {
+const FREQ_KINDS: Record<string, (y: number, h: number, sr?: number) => number> = {
   spectrogram_mel: (y, h) => pixelToFreqMel(y, h),
   spectrogram_cqt: (y, h) => pixelToFreqCQT(y, h),
-  spectrogram_harmonic: (y, h) => pixelToFreqLinear(y, h),
-  spectrogram_percussive: (y, h) => pixelToFreqLinear(y, h),
+  spectrogram_harmonic: (y, h, sr) => pixelToFreqLinear(y, h, sr ?? 44100),
+  spectrogram_percussive: (y, h, sr) => pixelToFreqLinear(y, h, sr ?? 44100),
+  spectrogram_stft: (y, h, sr) => pixelToFreqLinear(y, h, sr ?? 44100),
 };
 
 export function SpectrogramViewer({
@@ -45,8 +48,8 @@ export function SpectrogramViewer({
   durationSeconds,
 }: SpectrogramViewerProps) {
   // ---- ALL HOOKS FIRST (before any early return) ----
-  const [activeKind, setActiveKind] = useState<string>(
-    spectrograms[0]?.kind ?? 'spectrogram_mel',
+  const [activeKind, setActiveKind] = useState<string>(() =>
+    pickInitialSpectrogramKind(spectrograms),
   );
   const containerRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
@@ -54,6 +57,7 @@ export function SpectrogramViewer({
   const localHoverRef = useRef<{ mouseX: number; mouseY: number } | null>(null);
   const activeKindRef = useRef(activeKind);
   activeKindRef.current = activeKind;
+  const activeSampleRateRef = useRef<number | undefined>(undefined);
 
   const { publish, subscribe } = useSpectralCursor('spectrogram-viewer');
   const { zoomState, isZoomed, handlers: zoomHandlers, controls, visibleRange, wheelRef } = useImageZoom();
@@ -73,6 +77,10 @@ export function SpectrogramViewer({
     () => spectrograms.find((s) => s.kind === activeKind) ?? spectrograms[0] ?? null,
     [spectrograms, activeKind],
   );
+  // Mirrors activeSpec.sampleRate so drawOverlay (a stable useCallback that
+  // doesn't list activeKind in its deps) reads the current tab's SR without
+  // a one-frame lag during tab switches. Same pattern as activeKindRef above.
+  activeSampleRateRef.current = activeSpec?.sampleRate;
   const directImageUrl = useMemo(
     () => (activeSpec ? buildArtifactUrl(apiBaseUrl, runId, activeSpec.artifactId) : ''),
     [activeSpec, apiBaseUrl, runId],
@@ -178,7 +186,9 @@ export function SpectrogramViewer({
     const mins = Math.floor(time / 60);
     const secs = (time % 60).toFixed(1);
     const timePart = `${mins}:${secs.padStart(4, '0')}`;
-    const freqPart = hasFreq ? ` · ${formatFrequency(freqFn(local.mouseY, h))}` : '';
+    const freqPart = hasFreq
+      ? ` · ${formatFrequency(freqFn(local.mouseY, h, activeSampleRateRef.current))}`
+      : '';
     const label = `${timePart}${freqPart}`;
 
     ctx.font = '10px ui-monospace, monospace';

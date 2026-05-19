@@ -124,3 +124,25 @@ export function formatFrequency(hz: number): string {
   }
   return `${Math.round(hz)} Hz`;
 }
+
+// ---------------------------------------------------------------------------
+// Default-tab selection
+// ---------------------------------------------------------------------------
+
+/**
+ * Pick the initial active spectrogram tab. The source-SR-preserved STFT
+ * variant wins when present; otherwise fall back to whatever the runtime
+ * ordered first, then to `spectrogram_mel` for empty-list safety.
+ *
+ * Extracted so the selection logic can be unit-tested without spinning up
+ * the DOM (Vitest runs in `node`).
+ */
+export function pickInitialSpectrogramKind(
+  spectrograms: ReadonlyArray<{ kind: string }>,
+): string {
+  return (
+    spectrograms.find((s) => s.kind === 'spectrogram_stft')?.kind ??
+    spectrograms[0]?.kind ??
+    'spectrogram_mel'
+  );
+}

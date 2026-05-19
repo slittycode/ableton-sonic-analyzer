@@ -288,8 +288,28 @@ def _normalize_run_snapshot(
         if run_id:
             snapshot = dict(snapshot)
             snapshot["artifacts"] = dict(snapshot.get("artifacts") or {})
-            spectral_artifacts = runtime.get_artifacts_by_kind(run_id, "spectrogram")
+            # Spectrograms use the internal getter so provenance is available
+            # for lifting per-artifact `sampleRate` onto the public ref (used
+            # by the STFT variant whose y-axis runs 0 → source_sr/2). Ownership
+            # is already enforced upstream at the snapshot route via
+            # `runtime.get_run(run_id, owner_user_id=...)`; this raw getter
+            # does not re-check, and does not need to.
+            spectral_artifacts = runtime.get_internal_artifacts_by_kind(run_id, "spectrogram")
             ts_artifacts = runtime.get_artifacts_by_kind(run_id, "spectral_time_series")
+
+            def _strip_spectrogram(a: dict[str, Any]) -> dict[str, Any]:
+                out: dict[str, Any] = {
+                    "artifactId": a["artifactId"],
+                    "kind": a["kind"],
+                    "filename": a["filename"],
+                    "mimeType": a["mimeType"],
+                    "sizeBytes": a["sizeBytes"],
+                }
+                sr = (a.get("provenance") or {}).get("sampleRate")
+                if sr is not None:
+                    out["sampleRate"] = int(sr)
+                return out
+
             _strip_internal = lambda a: {
                 "artifactId": a["artifactId"],
                 "kind": a["kind"],
@@ -300,7 +320,7 @@ def _normalize_run_snapshot(
             onset_artifacts = runtime.get_artifacts_by_kind(run_id, "onset_strength")
             chroma_artifacts = runtime.get_artifacts_by_kind(run_id, "chroma_interactive")
             snapshot["artifacts"]["spectral"] = {
-                "spectrograms": [_strip_internal(a) for a in spectral_artifacts],
+                "spectrograms": [_strip_spectrogram(a) for a in spectral_artifacts],
                 "timeSeries": _strip_internal(ts_artifacts[0]) if ts_artifacts else None,
                 "onsetStrength": _strip_internal(onset_artifacts[0]) if onset_artifacts else None,
                 "chromaInteractive": _strip_internal(chroma_artifacts[0]) if chroma_artifacts else None,

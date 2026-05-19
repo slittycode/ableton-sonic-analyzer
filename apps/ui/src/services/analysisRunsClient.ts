@@ -344,13 +344,20 @@ function parseArtifact(value: Record<string, unknown>): AnalysisRunArtifact {
 
 function parseSpectralArtifactRef(value: unknown, label: string): SpectralArtifactRef {
   const s = value as Record<string, unknown>;
-  return {
+  const ref: SpectralArtifactRef = {
     artifactId: expectString(s.artifactId, `${label} artifactId`),
     kind: expectString(s.kind, `${label} kind`) as SpectralArtifactRef['kind'],
     filename: expectString(s.filename, `${label} filename`),
     mimeType: expectString(s.mimeType, `${label} mimeType`),
     sizeBytes: expectNumber(s.sizeBytes, `${label} sizeBytes`),
   };
+  // Optional. Backend only emits it for `spectrogram_stft` (source-SR
+  // preserved). Without this pass-through the hover crosshair would always
+  // fall back to 44100 and report wrong Hz on 48k/96k files.
+  if (typeof s.sampleRate === 'number' && Number.isFinite(s.sampleRate)) {
+    ref.sampleRate = s.sampleRate;
+  }
+  return ref;
 }
 
 function parseSpectralArtifacts(value: unknown): SpectralArtifacts {

@@ -84,6 +84,7 @@ export interface SpectralArtifactRef {
   artifactId: string;
   kind:
     | 'spectrogram_mel'
+    | 'spectrogram_stft'
     | 'spectrogram_chroma'
     | 'spectrogram_cqt'
     | 'spectrogram_harmonic'
@@ -93,6 +94,7 @@ export interface SpectralArtifactRef {
   filename: string;
   mimeType: string;
   sizeBytes: number;
+  sampleRate?: number;
 }
 
 export interface SpectralArtifacts {
