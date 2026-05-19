@@ -1278,17 +1278,22 @@ export default function App() {
               </div>
 
               <div className="lg:col-span-8 flex flex-col">
-                <div className="bg-bg-surface-dark border border-border border-b-0 rounded-t-sm px-3 py-1.5 flex items-center justify-between">
-                  <div className="flex items-center">
-                    <span className={`w-2 h-2 rounded-full mr-2 ${isAnalyzing ? 'bg-accent animate-pulse' : audioUrl ? 'bg-success' : 'bg-border'}`}></span>
-                    <h3 className="text-[10px] font-mono text-text-secondary uppercase tracking-wider">Signal Monitor</h3>
-                  </div>
-                </div>
-
-                <div
+                {/* data-testid="signal-panel" lifted onto the DeviceRack so
+                    the testid wraps the title strip (containing the
+                    visible "Signal Monitor" text the
+                    tests/smoke/error-states.spec.ts:524 selector
+                    `signalPanel.getByText('Signal Monitor')` looks for).
+                    The inner bg-bg-card div preserves the palette
+                    contract the theme-shell smoke locks. */}
+                <DeviceRack
                   data-testid="signal-panel"
-                  className="flex-grow bg-bg-card border border-border rounded-b-sm p-4 relative flex flex-col"
+                  name="Signal Monitor"
+                  status={isAnalyzing ? 'active' : audioUrl ? 'success' : 'idle'}
+                  className="flex-grow flex flex-col"
                 >
+                  <div
+                    className="flex-grow bg-bg-card p-4 relative flex flex-col"
+                  >
                   {audioUrl && audioFile ? (
                     <div className="flex flex-col relative z-10 gap-4">
                       <WaveformPlayer audioUrl={audioUrl} audioFile={audioFile} onAudioElement={handleAudioElement} />
@@ -1310,6 +1315,7 @@ export default function App() {
                     <IdleValuePropPanel />
                   )}
                 </div>
+                </DeviceRack>
               </div>
             </section>
 
