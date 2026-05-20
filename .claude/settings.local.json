@@ -6,7 +6,8 @@
       "Skill(update-config)",
       "Skill(commit-commands:commit-push-pr)",
       "Skill(commit-commands:commit-push-pr:*)",
-      "mcp__Control_Chrome__execute_javascript"
+      "mcp__Control_Chrome__execute_javascript",
+      "mcp__726edc52-7fd8-4da5-944f-84f446a0ee01__hub_repo_details"
     ]
   }
 }
