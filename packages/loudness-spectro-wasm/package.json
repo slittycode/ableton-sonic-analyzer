@@ -1,0 +1,15 @@
+{
+  "name": "@asa/loudness-spectro-wasm",
+  "version": "0.1.0",
+  "description": "BS.1770-5 / EBU R128 loudness (lifted from openmeters) compiled to WebAssembly and callable from JS. Spectral-reassignment spectrogram to follow.",
+  "license": "GPL-3.0-or-later",
+  "main": "pkg/asa_dsp_wasm.js",
+  "types": "pkg/asa_dsp_wasm.d.ts",
+  "files": ["pkg"],
+  "scripts": {
+    "build": "bash scripts/build-wasm.sh web pkg",
+    "build:node": "bash scripts/build-wasm.sh nodejs pkg-node",
+    "test:rust": "cargo test",
+    "test:smoke": "npm run build:node && node test/loudness.smoke.cjs"
+  }
+}

@@ -10,4 +10,5 @@
 pub mod dsp;
 pub mod integrated;
 pub mod loudness;
+pub mod measure;
 pub mod util;

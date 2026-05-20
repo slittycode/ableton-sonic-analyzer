@@ -2,8 +2,9 @@
 /target
 /crates/*/target
 
-# wasm-pack output (generated)
+# wasm-pack / wasm-bindgen output (generated)
 /pkg
+/pkg-node
 /crates/*/pkg
 
 # Node

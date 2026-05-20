@@ -2,7 +2,7 @@
 # DSP is lifted from openmeters (httpsworldview/openmeters, GPL-3.0-or-later).
 [workspace]
 resolver = "2"
-members = ["crates/asa-dsp"]
+members = ["crates/asa-dsp", "crates/asa-dsp-wasm"]
 
 [profile.release]
 opt-level = "z"
