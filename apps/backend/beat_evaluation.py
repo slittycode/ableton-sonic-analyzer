@@ -136,16 +136,32 @@ def _parse_gtzan_rhythm(annotation_path: Path) -> dict[str, Any]:
     return {"beats": times, "downbeats": downbeats, "meter": meter, "tempo": tempo}
 
 
+def _modal_downbeat_gap(beat_times: Any, downbeat_times: Any) -> int | None:
+    """Modal number of beats between consecutive downbeats, or None if undeterminable.
+
+    The single source of truth for "beats per bar from a beat grid + its downbeats"
+    — used both for annotation parsing and for inferring a method's own meter.
+    """
+    beats = sorted(float(b) for b in beat_times)
+    downbeats = list(downbeat_times)
+    if not beats or len(downbeats) < 2:
+        return None
+    index_by_time = {round(t, 6): i for i, t in enumerate(beats)}
+    db_indices = sorted(index_by_time[round(float(d), 6)] for d in downbeats if round(float(d), 6) in index_by_time)
+    if len(db_indices) < 2:
+        return None
+    gaps = np.diff(np.asarray(db_indices, dtype=np.int64))
+    gaps = gaps[gaps > 0]
+    if gaps.size == 0:
+        return None
+    return int(np.bincount(gaps).argmax())
+
+
 def _infer_meter(times: list[float], downbeats: list[float], positions: list[int]) -> int | None:
     """Beats-per-bar from beats between consecutive downbeats; fall back to max position."""
-    if downbeats and len(downbeats) >= 2 and times:
-        time_to_index = {round(t, 6): i for i, t in enumerate(times)}
-        db_indices = [time_to_index[round(d, 6)] for d in downbeats if round(d, 6) in time_to_index]
-        if len(db_indices) >= 2:
-            gaps = np.diff(np.asarray(sorted(db_indices), dtype=np.int64))
-            gaps = gaps[gaps > 0]
-            if gaps.size:
-                return int(np.bincount(gaps).argmax())
+    gap = _modal_downbeat_gap(times, downbeats)
+    if gap is not None:
+        return gap
     valid_positions = [p for p in positions if p > 0]
     if valid_positions:
         return int(max(valid_positions))
@@ -255,17 +271,7 @@ def _tempo_accuracy(ref_tempo: float | None, est_tempo: float | None) -> tuple[f
 
 
 def _infer_meter_from_beats(beats: list[float], downbeats: list[float]) -> int:
-    if not beats or len(downbeats) < 2:
-        return 4
-    times = sorted(float(b) for b in beats)
-    time_to_index = {round(t, 6): i for i, t in enumerate(times)}
-    db_idx = sorted(time_to_index[round(d, 6)] for d in downbeats if round(d, 6) in time_to_index)
-    if len(db_idx) >= 2:
-        gaps = np.diff(np.asarray(db_idx, dtype=np.int64))
-        gaps = gaps[gaps > 0]
-        if gaps.size:
-            return int(np.bincount(gaps).argmax())
-    return 4
+    return _modal_downbeat_gap(beats, downbeats) or 4
 
 
 def _downbeat_tolerant(ref_db: Any, est_beats: list[float], meter: int, mir) -> float:

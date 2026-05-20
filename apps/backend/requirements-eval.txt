@@ -12,4 +12,6 @@
 # on the product request path). madmom is intentionally omitted — we run dbn=False.
 
 mir_eval==0.8.2
-beat_this @ git+https://github.com/CPJKU/beat_this.git
+# Pinned to an immutable release tag so the GTZAN run and the ASA-slice run
+# compare the same model code (a ship/no-ship decision must be reproducible).
+beat_this @ git+https://github.com/CPJKU/beat_this.git@v1.1.0

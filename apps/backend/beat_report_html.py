@@ -43,16 +43,16 @@ _TEMPLATE = """<!doctype html>
  &nbsp; on {{ gate.asaRelevantClipCount }} asaRelevant clips</p>
 
 <h2>Method summary — asaRelevant subset (the pass-bar surface)</h2>
-{{ asa_table }}
+{{ asa_table | safe }}
 <h2>Method summary — full set (context)</h2>
-{{ full_table }}
+{{ full_table | safe }}
 
 <h2>Meter detection ({{ meter.clips }} clips)</h2>
 <p>exact-match rate <b>{{ meter.exactMatchRate }}</b> · non-4/4 exact-match
  <b>{{ meter.nonFourFourExactMatchRate }}</b> over {{ meter.nonFourFourClips }} non-4/4 clips</p>
 
 <h2>Per-genre downbeat F1 (strict)</h2>
-{{ genre_table }}
+{{ genre_table | safe }}
 <p class="muted">Research-only. Source of truth: {{ report_path }}</p>
 </body></html>"""
 
