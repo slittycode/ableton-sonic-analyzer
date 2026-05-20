@@ -1,0 +1,14 @@
+[package]
+name = "asa-dsp"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+description = "BS.1770-5 loudness + spectral-reassignment DSP, lifted from openmeters, for ASA."
+
+[lib]
+crate-type = ["rlib"]
+
+# ebur128 is an independent BS.1770 implementation used ONLY as a test oracle
+# (mirrors openmeters' own dev-dependency choice). Not a runtime dependency.
+[dev-dependencies]
+ebur128 = "0.1.10"

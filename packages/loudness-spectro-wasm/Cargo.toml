@@ -1,0 +1,12 @@
+# Workspace for the ASA loudness + spectrogram WASM library.
+# DSP is lifted from openmeters (httpsworldview/openmeters, GPL-3.0-or-later).
+[workspace]
+resolver = "2"
+members = ["crates/asa-dsp"]
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

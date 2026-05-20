@@ -1,0 +1,10 @@
+# Rust build artifacts
+/target
+/crates/*/target
+
+# wasm-pack output (generated)
+/pkg
+/crates/*/pkg
+
+# Node
+node_modules/
