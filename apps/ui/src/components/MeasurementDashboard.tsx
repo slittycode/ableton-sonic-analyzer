@@ -527,7 +527,7 @@ const BreathingBpmPulse = ({ bpm, bpmSource }: { bpm: number; bpmSource?: string
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.5 }}
-      className="flex min-h-[188px] w-full shrink-0 items-center justify-center rounded-sm border border-[#1e1e1e] bg-[#141414] px-4 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] md:w-[176px]"
+      className="flex min-h-[188px] w-full shrink-0 items-center justify-center rounded-sm border border-border bg-bg-surface-dark px-4 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] md:w-[176px]"
     >
       <svg viewBox="0 0 120 120" className="w-[120px] h-[120px]">
         <circle cx="60" cy="60" r="52" fill="none" stroke="#ff880015" strokeWidth="10" />
@@ -668,7 +668,7 @@ const ComparativeMetricTile = ({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay }}
-      className="bg-[#141414] border border-[#1e1e1e] rounded-sm p-3"
+      className="bg-bg-surface-dark border border-border rounded-sm p-3"
     >
       <span
         className="text-[10px] font-mono uppercase tracking-wider block"
@@ -788,7 +788,7 @@ const RhythmGridPanel = ({ phase1 }: { phase1: Phase1Result }) => {
   return (
     <div
       data-testid="rhythm-grid-panel"
-      className="rounded-sm border border-[#1e1e1e] bg-[#141414] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
+      className="rounded-sm border border-border bg-bg-surface-dark p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
     >
       <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
         <div className="flex flex-wrap items-center gap-2">
@@ -836,7 +836,7 @@ const RhythmGridPanel = ({ phase1 }: { phase1: Phase1Result }) => {
               <div
                 key={`bar-header-${barNumber}`}
                 data-testid={`rhythm-grid-bar-${barNumber}`}
-                className="rounded-sm border border-[#242424] bg-[#101010] px-2 py-2 text-center text-[10px] font-mono text-text-secondary"
+                className="rounded-sm border border-border-light bg-bg-surface-dark px-2 py-2 text-center text-[10px] font-mono text-text-secondary"
                 style={{ width: `${barCellWidth}px` }}
               >
                 {barNumber}
@@ -847,7 +847,7 @@ const RhythmGridPanel = ({ phase1 }: { phase1: Phase1Result }) => {
           <div className="mt-2 space-y-2">
             {lanes.map((lane) => (
               <div key={lane.label} className="flex items-start gap-3">
-                <div className="flex min-h-[42px] w-[136px] shrink-0 flex-col justify-center rounded-sm border border-[#202020] bg-[#121212] px-3 py-2">
+                <div className="flex min-h-[42px] w-[136px] shrink-0 flex-col justify-center rounded-sm border border-border bg-bg-surface-dark px-3 py-2">
                   <span
                     className="text-[10px] font-mono uppercase tracking-[0.12em]"
                     style={{ color: lane.labelColor }}
@@ -866,7 +866,7 @@ const RhythmGridPanel = ({ phase1 }: { phase1: Phase1Result }) => {
                     return (
                       <div
                         key={`${lane.label}-bar-${barNumber}`}
-                        className="rounded-sm border border-[#202020] bg-[#111111] p-1"
+                        className="rounded-sm border border-border bg-bg-surface-dark p-1"
                         style={{ width: `${barCellWidth}px` }}
                       >
                         <div
@@ -959,7 +959,7 @@ const SidechainEnvelope = ({
     resolvedStrength >= 0.7 ? 'heavy' : resolvedStrength >= 0.4 ? 'moderate' : 'subtle';
 
   return (
-    <div className="flex h-full flex-col rounded-sm border border-[#242424] bg-[#101010] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
+    <div className="flex h-full flex-col rounded-sm border border-border-light bg-bg-surface-dark px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
       <div className="flex items-start justify-between gap-3">
         <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
           Sidechain Envelope
@@ -995,7 +995,7 @@ const SidechainEnvelope = ({
         <path d={d} fill="none" stroke="url(#sc-stroke-panel)" strokeWidth="2.2" opacity="0.95" />
       </svg>
       <div className="mt-3 grid grid-cols-2 gap-3">
-        <div className="rounded-sm border border-[#232323] bg-[#121212] px-3 py-2">
+        <div className="rounded-sm border border-border-light bg-bg-surface-dark px-3 py-2">
           <span className="block text-[10px] font-mono uppercase tracking-wide text-text-secondary">
             Confidence
           </span>
@@ -1003,7 +1003,7 @@ const SidechainEnvelope = ({
             {Math.round(resolvedConfidence * 100)}%
           </span>
         </div>
-        <div className="rounded-sm border border-[#232323] bg-[#121212] px-3 py-2">
+        <div className="rounded-sm border border-border-light bg-bg-surface-dark px-3 py-2">
           <span className="block text-[10px] font-mono uppercase tracking-wide text-text-secondary">
             Regularity
           </span>
@@ -1049,7 +1049,7 @@ const EffectsFieldPanel = ({
     const pulseCells = Array.from({ length: 16 }, (_, index) => index % pulseStride === 0);
 
     return (
-      <div className="flex h-full flex-col rounded-sm border border-[#242424] bg-[#101010] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
+      <div className="flex h-full flex-col rounded-sm border border-border-light bg-bg-surface-dark px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
         <div className="flex items-start justify-between gap-3">
           <div>
             <span className="block text-[10px] font-mono uppercase tracking-wide text-text-secondary">
@@ -1066,7 +1066,7 @@ const EffectsFieldPanel = ({
           {pulseCells.map((active, index) => (
             <div
               key={index}
-              className="rounded-sm border border-[#2e2614] bg-[#15120b]"
+              className="rounded-sm border border-border-light bg-bg-surface-dark"
               style={{
                 height: active ? 24 : 12,
                 opacity: active ? 0.85 : 0.45,
@@ -1082,7 +1082,7 @@ const EffectsFieldPanel = ({
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-3">
-          <div className="rounded-sm border border-[#2a2416] bg-[#121212] px-3 py-2">
+          <div className="rounded-sm border border-border-light bg-bg-surface-dark px-3 py-2">
             <span className="block text-[10px] font-mono uppercase tracking-wide text-text-secondary">
               Gate Events
             </span>
@@ -1090,7 +1090,7 @@ const EffectsFieldPanel = ({
               {gatingEventCount ?? 'n/a'}
             </span>
           </div>
-          <div className="rounded-sm border border-[#2a2416] bg-[#121212] px-3 py-2">
+          <div className="rounded-sm border border-border-light bg-bg-surface-dark px-3 py-2">
             <span className="block text-[10px] font-mono uppercase tracking-wide text-text-secondary">
               Gate Regularity
             </span>
@@ -1113,7 +1113,7 @@ const EffectsFieldPanel = ({
   ];
 
   return (
-    <div className="flex h-full flex-col rounded-sm border border-[#242424] bg-[#101010] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
+    <div className="flex h-full flex-col rounded-sm border border-border-light bg-bg-surface-dark px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
       <div className="flex items-start justify-between gap-3">
         <div>
           <span className="block text-[10px] font-mono uppercase tracking-wide text-text-secondary">
@@ -1163,7 +1163,7 @@ const PhraseStructureTimeline = ({ phraseGrid }: { phraseGrid: PhraseGrid }) => 
   ];
 
   return (
-    <div className="rounded-sm border border-[#1e1e1e] bg-[#141414] px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+    <div className="rounded-sm border border-border bg-bg-surface-dark px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
       <div className="mb-3 flex items-center justify-between">
         <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
           Phrase Structure
@@ -2330,7 +2330,7 @@ export function MeasurementDashboard({
           <div className="border-t border-border pt-3">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {phase1.grooveDetail && (
-                <div className="bg-[#141414] border border-[#1e1e1e] rounded-sm p-3">
+                <div className="bg-bg-surface-dark border border-border rounded-sm p-3">
                   <div className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mb-3">
                     Swing
                   </div>
@@ -2369,7 +2369,7 @@ export function MeasurementDashboard({
                 </div>
               )}
               {phase1.beatsLoudness && (
-                <div className="bg-[#141414] border border-[#1e1e1e] rounded-sm p-3">
+                <div className="bg-bg-surface-dark border border-border rounded-sm p-3">
                   <HorizontalDominance
                     kickRatio={phase1.beatsLoudness.kickDominantRatio}
                     midRatio={phase1.beatsLoudness.midDominantRatio}
@@ -2407,7 +2407,7 @@ export function MeasurementDashboard({
             <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary block">
               Sidechain & Effects
             </span>
-            <div className="rounded-sm border border-[#1e1e1e] bg-[#141414] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+            <div className="rounded-sm border border-border bg-bg-surface-dark p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
               <div className="grid gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(260px,0.9fr)]">
                 <SidechainEnvelope
                   envelopeShape={phase1.sidechainDetail?.envelopeShape}
