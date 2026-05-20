@@ -1,0 +1,11 @@
+# Rust build artifacts
+/target
+/crates/*/target
+
+# wasm-pack / wasm-bindgen output (generated)
+/pkg
+/pkg-node
+/crates/*/pkg
+
+# Node
+node_modules/
