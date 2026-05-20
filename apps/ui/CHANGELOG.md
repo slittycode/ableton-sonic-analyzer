@@ -4,6 +4,10 @@ All notable changes to `sonic-analyzer-UI` are documented here in reverse chrono
 
 ## Unreleased
 
+- **Design-system migration ("D-series").** Added a shared primitive layer under `src/components/ui/` (`Button`, `Panel`, `DeviceRack`, `SectionHeader`, `MetricBar`/`MetricBarRow`/`MetricTile`, `DataTable`, `EmptyState`, `LedIndicator`, `Pill`, `SignalChain`, `ChainSeparator`, `TimeReadout`, `Checkbox`, `Tooltip`), each with a `*.stories.tsx`, barrel-exported from `src/components/ui/index.ts` (`variants.ts` for variants, `cn.ts` for class merging). Migrated feature components (FileUpload, Results header + metric strip, Mix Chain, Patches, MeasurementDashboard, Signal Monitor → DeviceRack, SessionMusicianPanel, MixDoctorPanel, SpectrogramViewer, DenseDawConcept) onto the primitives and onto semantic design tokens, replacing inline hex with tokens. Dropped unused `.ableton-{panel,device,header}` styles.
+- Enabled TypeScript strict mode; added `prefers-reduced-motion` support and exhaustive `switch` handling.
+- Source-SR-preserving STFT spectrogram is now the default spectrogram tab.
+
 ## v1.6.0 — Full Live E2E Suite
 
 - Added a full live browser-level E2E suite under `tests/e2e` covering real local-backend and live Gemini flows.
