@@ -253,11 +253,25 @@ export interface TempoCurvePoint {
   bpm: number;
 }
 
+export type DownbeatSource = 'kick_accent' | 'stride';
+
 export interface RhythmDetail {
   onsetRate: number;
   beatGrid: number[];
   downbeats: number[];
   beatPositions: number[];
+  /**
+   * How the bar-1 phase was resolved: 'kick_accent' (kick-heaviest beat
+   * position within the detected meter) or 'stride' (legacy 4/4 fallback when
+   * per-beat low-band data is unavailable).
+   */
+  downbeatSource?: DownbeatSource;
+  /**
+   * How distinctly the chosen bar-1 position dominates the other beat positions
+   * in kick energy. Collapses toward 0 for four-on-the-floor. Low values are
+   * honest hedging — soften bar-aligned recommendations accordingly.
+   */
+  downbeatConfidence?: number | null;
   grooveAmount: number;
   tempoStability?: number | null;
   phraseGrid?: PhraseGrid | null;

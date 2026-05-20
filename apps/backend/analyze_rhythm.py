@@ -146,10 +146,49 @@ def _detect_onset_times(
     return onset_times[np.isfinite(onset_times)]
 
 
+def _parse_meter(time_signature: str | None) -> int:
+    """Beats-per-bar from an 'N/D' time-signature string; default 4."""
+    if isinstance(time_signature, str) and "/" in time_signature:
+        numerator = time_signature.split("/", 1)[0].strip()
+        if numerator.isdigit():
+            meter = int(numerator)
+            if 2 <= meter <= 12:
+                return meter
+    return 4
+
+
+def _compute_downbeat_phase(low_band: np.ndarray, meter: int) -> tuple[int, float]:
+    """Pick the bar-1 phase as the kick-heaviest beat position within the meter.
+
+    Returns (phase, confidence). Confidence is how distinctly that position
+    dominates the others: it collapses toward 0 for four-on-the-floor (a kick on
+    every beat carries no phase information), and rises when one position owns
+    the kick. A low value is honest hedging, not a failure — downstream consumers
+    must treat it as such.
+    """
+    arr = np.asarray(low_band, dtype=np.float64)
+    arr = arr[np.isfinite(arr)]
+    if meter <= 1 or arr.size < meter:
+        return 0, 0.0
+
+    position_means = np.asarray(
+        [float(np.mean(arr[p::meter])) if arr[p::meter].size > 0 else 0.0 for p in range(meter)],
+        dtype=np.float64,
+    )
+    phase = int(np.argmax(position_means))
+    ordered = np.sort(position_means)[::-1]
+    top = float(ordered[0])
+    second = float(ordered[1]) if ordered.size > 1 else 0.0
+    confidence = (top - second) / (top + 1e-9) if top > 0 else 0.0
+    return phase, float(np.clip(confidence, 0.0, 1.0))
+
+
 def analyze_rhythm_detail(
     mono: np.ndarray,
     sample_rate: int,
     rhythm_data: dict | None,
+    beat_data: dict | None = None,
+    time_signature: str | None = None,
 ) -> dict:
     """Onset rate, beat positions, and groove amount from shared rhythm data."""
     try:
@@ -171,8 +210,29 @@ def analyze_rhythm_detail(
         )
 
         beat_grid = [round(float(t), 3) for t in ticks]
-        beat_positions = [((index % 4) + 1) for index in range(len(beat_grid))]
-        downbeats = beat_grid[::4]
+
+        # Real bar-1 phase from the kick-accent pattern within the detected meter
+        # (replaces the old beat_grid[::4] stride that assumed 4/4 with beat 1 at
+        # index 0). Falls back to that stride when per-beat low-band data is
+        # unavailable. The resolved phase/meter are written back into rhythm_data
+        # so structure snapping consumes the same downbeats (single source).
+        meter = _parse_meter(time_signature)
+        low_band = (
+            np.asarray(beat_data.get("lowBand", []), dtype=np.float64)
+            if beat_data is not None
+            else np.asarray([], dtype=np.float64)
+        )
+        if low_band.size >= meter:
+            phase, downbeat_confidence = _compute_downbeat_phase(low_band, meter)
+            downbeat_source = "kick_accent"
+        else:
+            phase, downbeat_confidence = 0, 0.0
+            downbeat_source = "stride"
+
+        beat_positions = [(((index - phase) % meter) + 1) for index in range(len(beat_grid))]
+        downbeats = beat_grid[phase::meter]
+        rhythm_data["downbeatPhase"] = phase
+        rhythm_data["meter"] = meter
 
         # Groove amount: stdev of beat interval diffs, normalized by mean interval
         if len(ticks) >= 3:
@@ -213,6 +273,8 @@ def analyze_rhythm_detail(
                 "beatGrid": beat_grid,
                 "downbeats": downbeats,
                 "beatPositions": beat_positions,
+                "downbeatSource": downbeat_source,
+                "downbeatConfidence": round(downbeat_confidence, 4),
                 "grooveAmount": round(groove, 4),
                 "tempoStability": tempo_stability,
                 "phraseGrid": phrase_grid,

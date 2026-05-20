@@ -2430,6 +2430,22 @@ export function MeasurementDashboard({
           </div>
         )}
 
+        {phase1.rhythmDetail?.downbeatSource && (
+          <div className="border-t border-border pt-3">
+            <MetricRow
+              label="Downbeat (bar 1) detection"
+              value={
+                phase1.rhythmDetail.downbeatSource === 'kick_accent'
+                  ? `kick-accent · confidence ${formatNumber(
+                      phase1.rhythmDetail.downbeatConfidence ?? 0,
+                      2,
+                    )}`
+                  : 'assumed (4/4 stride — phase unverified)'
+              }
+            />
+          </div>
+        )}
+
         {phase1.rhythmDetail?.phraseGrid && (
           <div className="border-t border-border pt-3">
             <PhraseStructureTimeline phraseGrid={phase1.rhythmDetail.phraseGrid} />
