@@ -23,6 +23,16 @@ cd "$ROOT"
 cargo build -p asa-dsp-wasm --target wasm32-unknown-unknown --release
 WASM="target/wasm32-unknown-unknown/release/asa_dsp_wasm.wasm"
 
+# Guard: wasm-bindgen-cli must exactly match the wasm-bindgen crate version,
+# or it emits a cryptic parse error. Compare against Cargo.lock.
+LOCK_VER="$(awk '/^name = "wasm-bindgen"$/{f=1} f&&/^version = /{gsub(/[",]/,"",$3); print $3; exit}' Cargo.lock)"
+CLI_VER="$("$WASM_BINDGEN_BIN" --version 2>/dev/null | awk '{print $2}')"
+if [ -n "$LOCK_VER" ] && [ -n "$CLI_VER" ] && [ "$LOCK_VER" != "$CLI_VER" ]; then
+  echo "ERROR: wasm-bindgen-cli is $CLI_VER but Cargo.lock pins wasm-bindgen $LOCK_VER." >&2
+  echo "       Install the matching CLI: cargo install wasm-bindgen-cli --version $LOCK_VER" >&2
+  exit 1
+fi
+
 rm -rf "$OUT"
 "$WASM_BINDGEN_BIN" --target "$TARGET_KIND" --out-dir "$OUT" "$WASM"
 
