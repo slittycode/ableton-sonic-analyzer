@@ -9,7 +9,9 @@
   "scripts": {
     "build": "bash scripts/build-wasm.sh web pkg",
     "build:node": "bash scripts/build-wasm.sh nodejs pkg-node",
+    "build:cli": "cargo build --release -p measure-cli",
     "test:rust": "cargo test",
+    "test:ebu": "cargo test --test ebu_conformance",
     "test:smoke": "npm run build:node && node test/loudness.smoke.cjs"
   }
 }

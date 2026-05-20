@@ -1,0 +1,18 @@
+# Native CLI wrapper around asa-dsp::measure::measure_loudness, used by the
+# pyloudnorm cross-check (scripts/pyloudnorm_crosscheck.py). Native-only: it
+# pulls in `hound` for WAV decode, so it is deliberately NOT part of the wasm
+# graph (asa-dsp / asa-dsp-wasm stay wasm-clean).
+[package]
+name = "measure-cli"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+description = "Native CLI: decode a WAV at its native rate and print asa-dsp loudness as JSON."
+
+[[bin]]
+name = "measure-cli"
+path = "src/main.rs"
+
+[dependencies]
+asa-dsp = { path = "../asa-dsp" }
+hound = "3"

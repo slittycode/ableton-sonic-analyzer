@@ -10,5 +10,8 @@ crate-type = ["rlib"]
 
 # ebur128 is an independent BS.1770 implementation used ONLY as a test oracle
 # (mirrors openmeters' own dev-dependency choice). Not a runtime dependency.
+# hound is a pure-Rust WAV reader used ONLY by the optional official-EBU-test-set
+# path in tests/ebu_conformance.rs; it never enters the wasm runtime graph.
 [dev-dependencies]
 ebur128 = "0.1.10"
+hound = "3"

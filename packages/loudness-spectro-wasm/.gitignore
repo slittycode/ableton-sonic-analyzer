@@ -9,3 +9,6 @@
 
 # Node
 node_modules/
+
+# Fetched EBU compliance set + any local cross-check corpus (never committed)
+testsets/
