@@ -126,7 +126,7 @@ Scan this table once before drafting a recommendation. Cite the MOST SPECIFIC ap
 | Drum-bus character / hat-snare moves | `kickDetail.*`, `snareDetail.*`, `hihatDetail.*`, `transientDensityDetail.{band}.onsetRatePerSecond` / `.eventCount` |
 | Synthesis / Sound design | `kickDetail.*`, `bassDetail.*`, `supersawDetail.*`, `acidDetail.*`, `synthesisCharacter.*`, `melodyDetail.*` |
 | Vocal-bus processing | `vocalDetail.hasVocals`, `vocalDetail.confidence`, `vocalDetail.formantStrength`, `vocalDetail.stemEnergyRatio` (gate: see VOCAL DETECTION section below) |
-| Arrangement automation / build-drop | `arrangementDetail.noveltyCurve`, `arrangementDetail.noveltyPeaks`, `structure.segments`, `lufsCurve.shortTerm`, `spectralBalanceTimeSeries` |
+| Arrangement automation / build-drop | `arrangementDetail.noveltyCurve`, `arrangementDetail.noveltyPeaks`, `structure.segments`, `lufsCurve.shortTerm`, `spectralBalanceTimeSeries`, `rhythmDetail.downbeats`, `rhythmDetail.downbeatConfidence` |
 | Chord / harmonic moves | `key`, `keyConfidence`, `chordDetail.dominantChords`, `chordDetail.chordTimeline`, `chordDetail.chordChangeCount` |
 | Tempo automation | `bpm`, `bpmConfidence`, `rhythmDetail.tempoCurve`, `timeSignature` |
 
@@ -137,6 +137,7 @@ Recent measurement additions are easy to miss; cite them when relevant rather th
 - lufsCurve.shortTerm / lufsCurve.momentary — per-frame EBU R128 loudness over time. Cite for section-relative dynamics ("the short-term LUFS rises from -16 LU at 1:23 to -8 LU at 1:30"), breakdown-vs-drop contrast, automation hints.
 - spectralBalanceTimeSeries — per-frame 7-band balance ([{t, subBass, lowBass, lowMids, mids, upperMids, highs, brilliance}, ...]). Cite for filter-sweep claims, build-up brightness opening, time-localized spectral motion that the spectralBalance scalars conflate away.
 - rhythmDetail.tempoCurve — instantaneous-BPM curve smoothed across beats. Cite when discussing ritardando/accelerando, DJ-tool tempo blends, or any tempo-modulated section. If the curve is flat, the single mean BPM is enough.
+- rhythmDetail.downbeats — measured bar-1 (downbeat) timestamps, phase-resolved from the kick-accent pattern within the detected meter (no longer a fixed every-4th-beat assumption). Cite for bar-aligned moves: where a drop/section should land, scene/clip boundaries on bar 1, arrangement locators. ALWAYS pair with rhythmDetail.downbeatConfidence — when it is low (≈0, typical of four-on-the-floor where every beat carries a kick), the beat grid is solid but which beat is "1" is uncertain, so hedge the bar-1 claim accordingly.
 - stereoDetail.correlationCurve — 1-second windowed L/R correlation, full and sub-band. Cite for Utility-width automation, mono-collapsing the drop, stereo motion the global stereoCorrelation misses.
 - arrangementDetail.noveltyCurve — higher-resolution (256-point) arrangement-change timeline. Cite for build-up ramps, transition density, sections-within-sections detail. arrangementDetail.noveltyPeaks remains the peak summary.
 When these fields exist in the payload AND are relevant to a recommendation, prefer citing them over reaching for older scalar fields alone.

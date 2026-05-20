@@ -101,6 +101,8 @@ export const PHASE1_NEW_FIELD_PATHS = [
   'stemAnalysis.*.reverbDetail',     // #5: per-stem reverb (any of drums/bass/other/vocals)
   'chordDetail.chordTimeline',       // #2: librosa+Viterbi chord-timeline segments
   'chordDetail.chordChangeCount',    // #2: count of transitions in the Viterbi timeline
+  // Downbeats — real meter-aware bar-1 detection (kick-accent phase)
+  'rhythmDetail.downbeats',
 ] as const;
 
 /**
@@ -152,6 +154,7 @@ export const CONFIDENCE_PAIRS: Record<string, string> = {
   'genreDetail': 'genreDetail.confidence',
   'chordDetail': 'chordDetail.chordStrength',
   'chordDetail.chordTimeline': 'chordDetail.chordStrength',
+  'rhythmDetail.downbeats': 'rhythmDetail.downbeatConfidence',
 };
 
 /**

@@ -295,14 +295,32 @@ class AnalyzeStructuralSnapshotTests(unittest.TestCase):
         self.assertIsInstance(beat_positions, list)
         self.assertEqual(len(beat_positions), len(beat_grid))
         self.assertTrue(all(isinstance(value, int) for value in beat_positions))
-        self.assertTrue(all(value in {1, 2, 3, 4} for value in beat_positions))
+
+        # Positions cycle 1..meter, phase-aligned so that position 1 marks a
+        # downbeat. The phase is data-dependent (kick-accent resolved), so assert
+        # the cycle structure rather than a fixed beat_grid[::4] stride.
+        meter = max(beat_positions)
+        self.assertGreaterEqual(meter, 2)
+        self.assertTrue(all(1 <= value <= meter for value in beat_positions))
+        phase = beat_positions.index(1)
         self.assertEqual(
             beat_positions,
-            [((index % 4) + 1) for index in range(len(beat_grid))],
+            [(((index - phase) % meter) + 1) for index in range(len(beat_grid))],
         )
 
         self.assertIsInstance(downbeats, list)
-        self.assertEqual(downbeats, beat_grid[::4])
+        self.assertEqual(downbeats, beat_grid[phase::meter])
+        self.assertEqual(
+            downbeats,
+            [beat_grid[i] for i, pos in enumerate(beat_positions) if pos == 1],
+        )
+
+        source = rhythm_detail.get("downbeatSource")
+        self.assertIn(source, {"kick_accent", "stride"})
+        confidence = rhythm_detail.get("downbeatConfidence")
+        self.assertIsInstance(confidence, (int, float))
+        self.assertGreaterEqual(confidence, 0.0)
+        self.assertLessEqual(confidence, 1.0)
 
 
 class AnalyzeFastStructuralSnapshotTests(unittest.TestCase):
@@ -625,6 +643,47 @@ class AnalyzeRhythmAndStructureTests(unittest.TestCase):
                 beat_rate,
                 "Audio-derived onset rate should exceed the beat rate on syncopated material",
             )
+
+    def test_downbeat_phase_resolves_kick_accented_position(self) -> None:
+        import analyze_rhythm
+
+        self.assertEqual(analyze_rhythm._parse_meter("4/4"), 4)
+        self.assertEqual(analyze_rhythm._parse_meter("3/4"), 3)
+        self.assertEqual(analyze_rhythm._parse_meter(None), 4)
+        self.assertEqual(analyze_rhythm._parse_meter("garbage"), 4)
+
+        # Kick accented on beat position 2 within a 4/4 bar → phase 2, confident.
+        low_band = np.asarray([0.1, 0.1, 1.0, 0.1] * 8, dtype=np.float64)
+        phase, confidence = analyze_rhythm._compute_downbeat_phase(low_band, 4)
+        self.assertEqual(phase, 2)
+        self.assertGreater(confidence, 0.5)
+
+        # Four-on-the-floor (kick on every beat) carries no phase info → ~0.
+        flat = np.ones(32, dtype=np.float64)
+        _flat_phase, flat_confidence = analyze_rhythm._compute_downbeat_phase(flat, 4)
+        self.assertLess(flat_confidence, 1e-6)
+
+        # Fewer beats than the meter → safe stride fallback.
+        self.assertEqual(
+            analyze_rhythm._compute_downbeat_phase(np.asarray([0.5, 0.5]), 4),
+            (0, 0.0),
+        )
+
+    def test_resolve_downbeats_uses_resolved_phase_with_legacy_fallback(self) -> None:
+        import analyze_structure
+
+        ticks = np.asarray([float(i) for i in range(16)], dtype=np.float64)
+
+        # No phase/meter recorded → legacy 4/4 stride from index 0.
+        legacy, interval = analyze_structure._resolve_downbeats_and_interval({"ticks": ticks})
+        np.testing.assert_array_equal(legacy, ticks[::4])
+        self.assertAlmostEqual(interval, 1.0)
+
+        # Resolved bar-1 phase shifts the downbeat grid accordingly.
+        real, _ = analyze_structure._resolve_downbeats_and_interval(
+            {"ticks": ticks, "downbeatPhase": 2, "meter": 4}
+        )
+        np.testing.assert_array_equal(real, ticks[2::4])
 
     def test_structure_snaps_to_downbeats_and_merges_short_segments(self) -> None:
         mono = np.zeros(40_000, dtype=np.float32)

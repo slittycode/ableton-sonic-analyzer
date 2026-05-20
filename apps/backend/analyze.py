@@ -1545,11 +1545,20 @@ def main():
     )
     result.update(analyze_plr(result.get("lufsIntegrated"), result.get("truePeak")))
 
-    # Rhythm detail
-    result.update(analyze_rhythm_detail(mono, sample_rate, rhythm_data))
-
-    # Shared beat-domain loudness data used by groove + sidechain analyses.
+    # Shared beat-domain loudness data used by rhythm detail + groove + sidechain.
     beat_data = _extract_beat_loudness_data(mono, sample_rate, rhythm_data)
+
+    # Rhythm detail — real meter-aware downbeats derived from the per-beat
+    # kick-accent pattern (beat_data) and the detected time signature.
+    result.update(
+        analyze_rhythm_detail(
+            mono,
+            sample_rate,
+            rhythm_data,
+            beat_data=beat_data,
+            time_signature=result.get("timeSignature"),
+        )
+    )
 
     # Groove detail (Tier 2 — always run)
     result.update(analyze_groove(mono, sample_rate, rhythm_data, beat_data))

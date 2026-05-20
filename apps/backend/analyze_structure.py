@@ -424,7 +424,11 @@ def _compute_structure_merge_floor(
 def _resolve_downbeats_and_interval(
     rhythm_data: dict | None,
 ) -> tuple[np.ndarray, float | None]:
-    """Return assumed downbeats and the median beat interval when rhythm exists."""
+    """Return downbeats and the median beat interval when rhythm exists.
+
+    Uses the bar-1 phase/meter resolved by analyze_rhythm_detail (kick-accent
+    heuristic) when present, falling back to the legacy 4/4 stride otherwise.
+    """
     if rhythm_data is None:
         return np.asarray([], dtype=np.float64), None
 
@@ -440,7 +444,12 @@ def _resolve_downbeats_and_interval(
         if finite_intervals.size > 0:
             median_beat_interval = float(np.median(finite_intervals))
 
-    return ticks[::4], median_beat_interval
+    meter = int(rhythm_data.get("meter", 4) or 4)
+    if meter <= 0:
+        meter = 4
+    phase = int(rhythm_data.get("downbeatPhase", 0) or 0) % meter
+
+    return ticks[phase::meter], median_beat_interval
 
 
 def _merge_short_structure_segments(
