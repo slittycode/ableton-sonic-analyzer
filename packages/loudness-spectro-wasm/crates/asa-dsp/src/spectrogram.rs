@@ -191,7 +191,10 @@ impl SpectrogramProcessor {
         self.config
     }
 
-    fn hilbert_len_for(window_size: usize) -> usize {
+    /// FFT length of the analytic (Hilbert) signal for a given analysis-window
+    /// size. Public so the wasm boundary derives the reassignment latency
+    /// (`(hilbert_len-1)/2`) from the same source of truth.
+    pub fn hilbert_len_for(window_size: usize) -> usize {
         (window_size * 2).next_power_of_two().max(2)
     }
 

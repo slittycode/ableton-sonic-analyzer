@@ -113,7 +113,7 @@ pub fn reassigned_spectrogram(
     let cfgn = processor.config();
     let sr = cfgn.sample_rate;
     let hop_used = cfgn.hop_size as f32;
-    let hilbert_len = (cfgn.fft_size * 2).next_power_of_two().max(2);
+    let hilbert_len = SpectrogramProcessor::hilbert_len_for(cfgn.fft_size);
     let half_latency = (hilbert_len as f32 - 1.0) * 0.5; // window-center origin
 
     let mut points: Vec<f32> = Vec::new();
@@ -126,12 +126,12 @@ pub fn reassigned_spectrogram(
             let SpectrogramColumn::Reassigned(pts) = col else {
                 continue;
             };
-            let col_time = col_index as f32 * hop_used + half_latency;
             for p in pts {
                 if !p.magnitude_db.is_finite() {
                     continue; // sentinel (filtered bin)
                 }
-                let abs_time = (col_time - p.time_offset * hop_used) / sr;
+                let abs_time =
+                    reassigned_abs_time(col_index, hop_used, half_latency, p.time_offset, sr);
                 // Deterministic single-pass reservoir: O(1) memory beyond `cap`.
                 if (seen as usize) < cap {
                     points.push(abs_time);
@@ -163,11 +163,25 @@ pub fn reassigned_spectrogram(
 
 #[inline]
 fn next_rand(state: &mut u64) -> u64 {
-    // SplitMix-style LCG step; high bits used to avoid low-bit modulo bias.
+    // Knuth MMIX LCG step; high bits used to avoid low-bit modulo bias.
     *state = state
         .wrapping_mul(6_364_136_223_846_793_005)
         .wrapping_add(1_442_695_040_888_963_407);
     *state >> 33
+}
+
+/// Absolute time (seconds) of a reassigned point. `time_offset` is the upstream
+/// fractional-column reassignment (in hops, subtractive); `half_latency` is the
+/// analysis-window center within the read buffer, `(hilbert_len-1)/2` samples.
+#[inline]
+fn reassigned_abs_time(
+    col_index: usize,
+    hop: f32,
+    half_latency: f32,
+    time_offset: f32,
+    sample_rate: f32,
+) -> f32 {
+    (col_index as f32 * hop + half_latency - time_offset * hop) / sample_rate
 }
 
 /// A-weighted average spectrum (whole file). All three arrays are length
@@ -211,15 +225,45 @@ pub fn a_weighted_spectrum(
         fft_size
     };
     let s = averaged_spectrum(samples, channels.max(1), sample_rate, fft_size);
-    let bin_hz = if fft_size > 0 {
-        sample_rate / fft_size as f32
-    } else {
-        0.0
-    };
     SpectrumResult {
         frequencies: s.frequency_bins,
         magnitudes_db: s.magnitudes_db,
         magnitudes_unweighted_db: s.magnitudes_unweighted_db,
-        bin_hz,
+        bin_hz: sample_rate / fft_size as f32,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn next_rand_is_deterministic_and_varies() {
+        let mut a = 0x1234_5678_9ABC_DEF0_u64;
+        let mut b = a;
+        let seq_a: Vec<u64> = (0..4).map(|_| next_rand(&mut a)).collect();
+        let seq_b: Vec<u64> = (0..4).map(|_| next_rand(&mut b)).collect();
+        assert_eq!(seq_a, seq_b, "same seed must reproduce the sequence");
+        assert!(seq_a.windows(2).any(|w| w[0] != w[1]), "values should vary");
+    }
+
+    #[test]
+    fn reassigned_abs_time_matches_formula() {
+        let sr = 48_000.0;
+        let hop = 512.0;
+        // hilbert_len for fft 2048 = next_pow2(4096) = 4096 -> half_latency 2047.5
+        let half = (4096.0_f32 - 1.0) * 0.5;
+
+        // Column 0 with no reassignment offset = pure window-center latency.
+        let t0 = reassigned_abs_time(0, hop, half, 0.0, sr);
+        assert!((t0 - 2047.5 / sr).abs() < 1e-6);
+
+        // Each column advances by exactly hop/sr.
+        let t1 = reassigned_abs_time(1, hop, half, 0.0, sr);
+        assert!((t1 - t0 - hop / sr).abs() < 1e-6);
+
+        // A +1-hop reassignment offset is subtractive: pulls time back by hop/sr.
+        let t0_shift = reassigned_abs_time(0, hop, half, 1.0, sr);
+        assert!((t0 - t0_shift - hop / sr).abs() < 1e-6);
     }
 }
