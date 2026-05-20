@@ -612,7 +612,8 @@ function getInterpretationProfileSnapshot(
   return null;
 }
 
-function parsePitchNoteResult(value: unknown): PitchNoteTranslationStageSnapshot['result'] {
+function parsePitchNoteResult(value: unknown): NonNullable<PitchNoteTranslationStageSnapshot['result']> {
+  type Parsed = NonNullable<PitchNoteTranslationStageSnapshot['result']>;
   const result = expectRecord(value, 'pitch/note result');
   return {
     transcriptionMethod: asString(result.transcriptionMethod) ?? 'unknown',
@@ -625,11 +626,11 @@ function parsePitchNoteResult(value: unknown): PitchNoteTranslationStageSnapshot
       : [],
     perStemAverageConfidence: parsePerStemAverageConfidence(result.perStemAverageConfidence),
     dominantPitches: Array.isArray(result.dominantPitches)
-      ? result.dominantPitches.map((entry) => expectRecord(entry, 'dominant pitch') as PitchNoteTranslationStageSnapshot['result']['dominantPitches'][number])
+      ? result.dominantPitches.map((entry) => expectRecord(entry, 'dominant pitch') as Parsed['dominantPitches'][number])
       : [],
-    pitchRange: expectRecord(result.pitchRange, 'pitch/note pitchRange') as PitchNoteTranslationStageSnapshot['result']['pitchRange'],
+    pitchRange: expectRecord(result.pitchRange, 'pitch/note pitchRange') as Parsed['pitchRange'],
     notes: Array.isArray(result.notes)
-      ? result.notes.map((entry) => expectRecord(entry, 'pitch/note note') as unknown as PitchNoteTranslationStageSnapshot['result']['notes'][number])
+      ? result.notes.map((entry) => expectRecord(entry, 'pitch/note note') as unknown as Parsed['notes'][number])
       : [],
   };
 }

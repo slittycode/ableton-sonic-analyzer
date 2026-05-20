@@ -7,6 +7,7 @@ import {
   AnalysisStageStatus,
   BackendAnalysisEstimate,
 } from '../types';
+import { assertNever } from '../utils/assertNever';
 import {
   Button,
   DeviceRack,
@@ -93,7 +94,7 @@ function getStageSnapshot(run: AnalysisRunSnapshot, stageKey: StageKey) {
     case 'interpretation':
       return run.stages.interpretation;
     default:
-      return run.stages.measurement;
+      return assertNever(stageKey);
   }
 }
 
@@ -176,7 +177,7 @@ function stageSummary(run: AnalysisRunSnapshot | null, stageKey: StageKey): stri
     case 'not_requested':
       return 'Not requested for this run.';
     default:
-      return 'Awaiting stage state.';
+      return assertNever(stage.status);
   }
 }
 

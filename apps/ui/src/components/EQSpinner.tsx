@@ -126,7 +126,7 @@ export function EQSpinner({ audioUrl }: EQSpinnerProps) {
       {ABLETON_COLORS.map((color, i) => (
         <div
           key={i}
-          ref={el => barsRef.current[i] = el}
+          ref={el => { barsRef.current[i] = el; }}
           className="w-2 rounded-t-sm"
           style={{
             backgroundColor: color,

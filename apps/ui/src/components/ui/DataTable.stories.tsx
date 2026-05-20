@@ -4,10 +4,10 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { DataTable } from './DataTable';
 import { Pill } from './Pill';
 
-const meta: Meta<typeof DataTable> = {
+const meta = {
   title: 'UI/DataTable',
-  component: DataTable as React.ComponentType<unknown>,
-};
+  component: DataTable,
+} satisfies Meta<typeof DataTable>;
 
 export default meta;
 type Story = StoryObj<typeof DataTable>;

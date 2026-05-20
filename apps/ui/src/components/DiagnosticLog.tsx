@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 
 import { Phase2ConsistencyReport } from './Phase2ConsistencyReport';
 import { BackendTimingDiagnostics, DiagnosticLogEntry, DiagnosticLogStatus } from '../types';
+import { assertNever } from '../utils/assertNever';
 
 interface DiagnosticLogProps {
   logs: DiagnosticLogEntry[];
@@ -13,6 +14,7 @@ function statusLabel(status: DiagnosticLogStatus | undefined): string {
 }
 
 function statusClass(status: DiagnosticLogStatus | undefined): string {
+  if (status === undefined) return 'text-success border-success/30 bg-success/10';
   switch (status) {
     case 'running':
       return 'text-accent border-accent/30 bg-accent/10';
@@ -20,8 +22,10 @@ function statusClass(status: DiagnosticLogStatus | undefined): string {
       return 'text-error border-error/30 bg-error/10';
     case 'skipped':
       return 'text-warning border-warning/30 bg-warning/10';
-    default:
+    case 'success':
       return 'text-success border-success/30 bg-success/10';
+    default:
+      return assertNever(status);
   }
 }
 
