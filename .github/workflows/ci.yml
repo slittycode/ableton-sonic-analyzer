@@ -50,3 +50,20 @@ jobs:
             echo "$BAD"
             exit 1
           fi
+
+  loudness-wasm:
+    name: Loudness WASM
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/loudness-spectro-wasm
+    steps:
+      - uses: actions/checkout@v6
+      # rustup is preinstalled on ubuntu-latest; add the wasm target only.
+      - run: rustup target add wasm32-unknown-unknown
+      # Conformance + the existing ebur128 cross-checks + measure-cli compile.
+      # Network-free: the official-set path is skipped when ASA_EBU_TESTSET_DIR
+      # is unset.
+      - run: cargo test
+      # Prove wasm32 compat without needing wasm-bindgen-cli.
+      - run: cargo build --release -p asa-dsp-wasm --target wasm32-unknown-unknown

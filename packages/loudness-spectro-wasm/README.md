@@ -53,15 +53,42 @@ npm run build:node     # -> pkg-node/ (for the Node smoke test)
 
 ## Validation
 
-`npm run test:rust` cross-checks the DSP against the independent **`ebur128`**
-crate (mirrors openmeters' own test oracle): integrated within **0.1 LU**,
-short-term within **0.001 LU**, true-peak within **0.1 dB**, LRA within **1 LU**;
-streaming chunks match single-shot. `npm run test:smoke` exercises the generated
-WASM from Node.
+Three independent layers, run by `npm run test:rust` (`cargo test`):
 
-Still to come (per the incorporation plan): the **EBU Tech 3341/3342 compliance
-test set** as the primary oracle and **pyloudnorm** as a second independent
-cross-check on real-world material.
+1. **Absolute EBU Tech 3341/3342 conformance** (primary oracle,
+   `crates/asa-dsp/tests/ebu_conformance.rs`). Synthesized, network-free signals
+   whose correct EBU reading is known a priori: a dual-mono 1 kHz sine at peak
+   −X dBFS must read −X LUFS (integrated, momentary-max, short-term-max), at both
+   44.1 kHz and 48 kHz; LRA on a −23/−33 step must read ≈10 LU. Run just these
+   with `npm run test:ebu`.
+2. **`ebur128` cross-check** (independent BS.1770 implementation, mirrors
+   openmeters' own test oracle): integrated within **0.1 LU**, short-term within
+   **0.001 LU**, true-peak within **0.2 dB**, LRA within **1 LU**; streaming
+   chunks match single-shot.
+3. **pyloudnorm cross-check** (a third, Python implementation; dev/CI helper,
+   not a committed gate). Build the native CLI with `npm run build:cli`
+   (`cargo build --release -p measure-cli`), then:
+
+   ```bash
+   pip install pyloudnorm soundfile numpy
+   python scripts/pyloudnorm_crosscheck.py <corpus-dir>   # asserts |Δ| < 0.5 LU
+   ```
+
+`npm run test:smoke` additionally exercises the generated WASM from Node.
+
+### Optional: the official EBU compliance set
+
+`scripts/fetch-ebu-testset.sh` downloads the official EBU Tech 3341/3342 signals
+into `testsets/ebu/` (gitignored); the URL is supplied via `EBU_TESTSET_URL`
+(not hardcoded). Then:
+
+```bash
+ASA_EBU_TESTSET_DIR=testsets/ebu cargo test --test ebu_conformance
+```
+
+runs the optional official-set path. Populate the `EXPECTED` filename→LUFS table
+in `ebu_conformance.rs` from EBU Tech 3341 §2.1 first — an unmatched WAV is
+reported as a skip, never a phantom pass/fail.
 
 ## Attribution / license
 
