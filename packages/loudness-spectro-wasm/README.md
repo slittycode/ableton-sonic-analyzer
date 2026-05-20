@@ -1,8 +1,8 @@
 # @asa/loudness-spectro-wasm
 
-Browser-first WebAssembly DSP for ASA: **ITU-R BS.1770-5 / EBU R128 loudness**
-today, **spectral-reassignment spectrogram** next. The DSP is lifted from
-[openmeters](https://github.com/httpsworldview/openmeters) (Rust) and compiled to
+Browser-first WebAssembly DSP for ASA: **ITU-R BS.1770-5 / EBU R128 loudness**, an
+**A-weighted spectrum**, and a **spectral-reassignment spectrogram**. The DSP is lifted
+from [openmeters](https://github.com/httpsworldview/openmeters) (Rust) and compiled to
 WASM via `wasm-bindgen` — not reimplemented in JS.
 
 ## Status
@@ -12,8 +12,8 @@ WASM via `wasm-bindgen` — not reimplemented in JS.
 | BS.1770-5 K-weighting, momentary, short-term | ✅ lifted from openmeters |
 | True-peak (4× oversampled, Annex 2) | ✅ lifted from openmeters |
 | **Integrated loudness + gating + LRA** | ✅ added here (openmeters is a live meter and omits these) |
-| A-weighted spectrum | ⏳ Phase 2 |
-| Spectral-reassignment spectrogram | ⏳ Phase 2 |
+| A-weighted spectrum (whole-file average) | ✅ lifted from openmeters |
+| Spectral-reassignment spectrogram | ✅ lifted from openmeters |
 | Streaming push API across the JS boundary | ⏳ (native streaming exists) |
 
 ## API
@@ -31,6 +31,33 @@ r.short_term_max_lufs; // LUFS
 r.true_peak_dbtp;      // dBTP
 r.free();              // release the wasm-owned result
 ```
+
+### Spectrogram + spectrum
+
+```ts
+import init, { reassignedSpectrogram, aWeightedSpectrum } from "@asa/loudness-spectro-wasm";
+await init();
+
+// Sparse spectral-reassignment spectrogram. Offline defaults: fftSize 2048, hop 512.
+const sg = reassignedSpectrogram(samples, 48000, /*channels*/ 2,
+                                 /*fftSize*/ 2048, /*hop*/ 512, /*maxPoints*/ 300000);
+sg.points;       // Float32Array of [absTimeSec, freqHz, magDb] triples
+sg.point_count;  // number of triples (capped to maxPoints)
+sg.num_columns; sg.hop_seconds; sg.max_freq_hz;
+sg.free();
+
+// Whole-file A-weighted average spectrum.
+const sp = aWeightedSpectrum(samples, 48000, /*channels*/ 2, /*fftSize*/ 4096);
+sp.frequencies;              // Float32Array, Hz (length fftSize/2+1)
+sp.magnitudes_db;            // A-weighted dB
+sp.magnitudes_unweighted_db; // unweighted dB
+sp.bin_hz;
+sp.free();
+```
+
+The spectrogram runs 3 FFTs per column (Hilbert-analytic Auger–Flandrin reassignment), so
+for whole-file analysis prefer a larger `hop` (≥512) and run it in a Web Worker. Output is
+capped to `maxPoints` via a deterministic single-pass reservoir (no tail loss).
 
 ### ⚠ Decode without resampling
 
