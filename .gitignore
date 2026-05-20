@@ -57,6 +57,11 @@ apps/backend/tests/fixtures/bench_tracks/*
 !apps/backend/tests/fixtures/bench_tracks/README.md
 apps/backend/tests/fixtures/estimations/
 
+# Beat-tracking eval corpus (GTZAN audio + GTZAN-Rhythm annotations): local-only,
+# never redistributed. Keep the README so the directory shape is checked in.
+apps/backend/tests/fixtures/beat_tracks/*
+!apps/backend/tests/fixtures/beat_tracks/README.md
+
 # Ephemeral local state
 .claude/scheduled_tasks.lock
 .continue.sh

@@ -1,0 +1,29 @@
+{
+  "datasetName": "GTZAN + GTZAN-Rhythm (Marchand/Fresnel/Peeters 2015)",
+  "annotationFormat": "gtzan_rhythm",
+  "currentShippingMethod": "kick_accent",
+  "_comment": "Example/template. Audio + annotations live under tests/fixtures/beat_tracks/ (gitignored, not committed) — see that dir's README. Generate the full 1000-clip manifest with scripts/build_beat_manifest.py. asaRelevant flags the electronic-adjacent genres (disco, hiphop, pop) the pass bar is judged on.",
+  "clips": [
+    {
+      "id": "disco.00000",
+      "genre": "disco",
+      "audioPath": "beat_tracks/gtzan/audio/disco/disco.00000.wav",
+      "annotationPath": "beat_tracks/gtzan/annotations/disco.00000.beats",
+      "asaRelevant": true
+    },
+    {
+      "id": "hiphop.00000",
+      "genre": "hiphop",
+      "audioPath": "beat_tracks/gtzan/audio/hiphop/hiphop.00000.wav",
+      "annotationPath": "beat_tracks/gtzan/annotations/hiphop.00000.beats",
+      "asaRelevant": true
+    },
+    {
+      "id": "blues.00000",
+      "genre": "blues",
+      "audioPath": "beat_tracks/gtzan/audio/blues/blues.00000.wav",
+      "annotationPath": "beat_tracks/gtzan/annotations/blues.00000.beats",
+      "asaRelevant": false
+    }
+  ]
+}
