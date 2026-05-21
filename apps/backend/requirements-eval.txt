@@ -1,0 +1,17 @@
+# Research-only dependencies for the beat/downbeat measurement gate
+# (beat_evaluation.py + scripts/evaluate_beats.py). These are NOT part of the
+# product and must NOT be added to requirements.txt or installed into the
+# product venv. Install into a SEPARATE venv:
+#
+#   python3.11 -m venv apps/backend/venv-eval
+#   apps/backend/venv-eval/bin/pip install -r apps/backend/requirements.txt \
+#                                          -r apps/backend/requirements-eval.txt
+#
+# torch is already pinned in requirements.txt (2.10.0); beat_this rides on it.
+# beat_this auto-downloads its checkpoint on first use (offline-eval only, never
+# on the product request path). madmom is intentionally omitted — we run dbn=False.
+
+mir_eval==0.8.2
+# Pinned to an immutable release tag so the GTZAN run and the ASA-slice run
+# compare the same model code (a ship/no-ship decision must be reproducible).
+beat_this @ git+https://github.com/CPJKU/beat_this.git@v1.1.0
