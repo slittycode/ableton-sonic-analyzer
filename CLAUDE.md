@@ -85,17 +85,19 @@ Operational and one-shot scripts live in two places. They are not on the request
 2. `render_upload_limit_contract.py` — regenerate the operator-facing upload-limit contract text from `upload_limits.py`. Run after changing the canonical limits.
 3. `evaluate_phase1.py`, `evaluate_polyphonic.py`, `evaluate_structure_sweep.py` — offline evaluation harnesses for the Phase 1 detector battery, the research polyphonic transcriber, and structure-segmentation parameter sweeps. Wired to `phase1_evaluation.py` / `polyphonic_evaluation.py`.
 4. `audit_pass1.py`, `genre_check.py`, `replay_catalog_validation.py` — corpus auditing and Live 12 device-catalog validation. `genre_corpus.md` is the corpus manifest.
+5. `import_midi_to_ground_truth.py`, `score_polyphonic_clip.py` — corpus-building helpers for the transcription/polyphonic ground-truth fixtures (`tests/fixtures/transcription_tracks/`, `tests/fixtures/polyphonic_tracks/`). Research-only; see those fixtures' READMEs and `docs/LAYER2_EVALUATION.md` / `docs/POLYPHONIC_TRANSCRIPTION_SPIKE.md`.
 
 ## Architecture
 
 ### Repo Layout — what's on the product path
 
-`apps/backend/`, `apps/ui/`, and `scripts/` are the product. The remaining top-level directories are off-path and safe to skip unless the task explicitly names them:
+`apps/backend/`, `apps/ui/`, and `scripts/` are the product path. `packages/` holds forward-looking product code that isn't wired into the request path yet (see below). The remaining top-level directories are off-path and safe to skip unless the task explicitly names them:
 
-1. `audits/` — dated, automated audit reports (e.g. `nightly-2026-05-14.md`). Past-tense paper trail; not imported by either app. (Older one-shot advisory deliverables like the phase 1 audit have been archived under `docs/history/phase1-audit/`.)
-2. `incorporations/` — planning docs for incorporating upstream projects (e.g. `forking-plans-2026-05-14.md`). Planning notes only; not code.
-3. `docs/` — long-form rationale (`ARCHITECTURE_STRATEGY.md`, `history/`). Read these *before* structural changes; do not treat them as living API docs.
-4. `tests/ground_truth/` — labeled-corpus fixtures consumed by `scripts/calibrate_confidence.py` (see `tests/ground_truth/README.md`). Not a test suite — each app owns its own (`apps/backend/tests/`, `apps/ui/tests/`).
+1. `packages/loudness-spectro-wasm/` — browser-first WebAssembly DSP (ITU-R BS.1770-5 / EBU R128 loudness today, spectral-reassignment spectrogram planned). Rust lifted from [openmeters](https://github.com/httpsworldview/openmeters) and compiled via `wasm-bindgen`, GPL-3.0-or-later. **Phase 1: standalone, not yet imported by `apps/ui` or `apps/backend`.** Has its own Cargo workspace, `npm`/`cargo` build, and EBU/ebur128/pyloudnorm validation layers — see [`packages/loudness-spectro-wasm/README.md`](packages/loudness-spectro-wasm/README.md). When integration lands, the canonical Phase 1 LUFS contract still comes from the Essentia path until this is wired in and proven at parity.
+2. `audits/` — dated, automated audit reports (e.g. `nightly-2026-05-19.md`). Past-tense paper trail; not imported by either app. (Older one-shot advisory deliverables like the phase 1 audit have been archived under `docs/history/phase1-audit/`.)
+3. `incorporations/` — planning docs for incorporating upstream projects (e.g. `forking-plans-2026-05-14.md`). Planning notes only; not code.
+4. `docs/` — long-form rationale (`ARCHITECTURE_STRATEGY.md`, `history/`). Read these *before* structural changes; do not treat them as living API docs.
+5. `tests/ground_truth/` — labeled-corpus fixtures consumed by `scripts/calibrate_confidence.py` (see `tests/ground_truth/README.md`). Not a test suite — each app owns its own (`apps/backend/tests/`, `apps/ui/tests/`).
 
 ### Three-Layer Model
 
@@ -169,6 +171,9 @@ Artifact access goes through `artifact_storage.py` rather than direct disk paths
 14. **`server_samples.py` + `sample_generation.py`, `sample_theory.py`, `sample_synthesis.py`, `sample_drums.py`**: Phase 3 audition-sample generation. `sample_theory.py` builds the PyTheory musical plan, `sample_synthesis.py` renders audio (FluidSynth with sine-additive fallback), `sample_drums.py` synthesizes drum one-shots, `sample_generation.py` orchestrates and emits the citation manifest. On-demand only.
 15. **`dsp_bandbank.py` + `dsp_utils.py`**: Shared DSP primitives — `BatchedBandpass` (4th-order Butterworth bandpass bank) and cross-module utility functions.
 16. **`phase1_evaluation.py` + `phase1_report_html.py`, `polyphonic_evaluation.py`**: Offline evaluation harnesses (deterministic-metric / detector-stability reporting and research-only polyphonic transcription). Not on the product path; driven by `scripts/evaluate_*.py`.
+17. **`utils/cleanup.py`**: Periodic artifact-cleanup helpers used by the server background-task loop.
+
+Not core, but present: **`symbolic_extract.py`** is an orphaned, broken earlier worker entry point (it imports a removed `BasicPitchBackend` and fails at module load); it's superseded by `analyze.py --pitch-note-only`, referenced from nowhere, and slated for removal — don't extend it. See `apps/backend/ARCHITECTURE.md`.
 
 The subprocess isolation means `analyze.py` works as a standalone CLI. Check `apps/backend/JSON_SCHEMA.md` before adding new analyzer output fields. Check `apps/backend/ARCHITECTURE.md` for the full HTTP flow and contract details.
 
@@ -200,6 +205,8 @@ Single-page React 19 + Vite + TypeScript + Tailwind CSS v4 app with no router. V
 16. **`src/config.ts`**: Runtime resolution of `VITE_API_BASE_URL` and feature flags; falls back to `http://127.0.0.1:8100`. Supports window-level overrides (`window.__VITE_API_BASE_URL_OVERRIDE__`, `window.__VITE_ENABLE_PHASE2_GEMINI_OVERRIDE__`) for hosted deployments that inject config at runtime without a rebuild.
 
 `AnalysisResults.tsx` is the large results surface, lazy-loaded via Suspense. Manual vendor chunks in `vite.config.ts` control bundle splitting.
+
+**Design-system primitives (`src/components/ui/`):** the shared, Ableton-inspired UI vocabulary (`Button`, `Panel`, `DeviceRack`, `SectionHeader`, `MetricBar`/`MetricBarRow`/`MetricTile`, `DataTable`, `EmptyState`, `LedIndicator`, `Pill`, `SignalChain`, `ChainSeparator`, `TimeReadout`, `Checkbox`, `Tooltip`), barrel-exported from `src/components/ui/index.ts`. Each primitive ships a `*.stories.tsx`; variants live in `variants.ts`, the class-merge helper in `cn.ts`. Feature components were migrated onto these primitives and onto the semantic design tokens in `src/index.css` (the "D-series" migration — see Recent Refactors). Build new UI from these primitives and reuse the tokens before adding raw colors or one-off components.
 
 ### Frontend-Backend Contract
 
@@ -272,6 +279,8 @@ A quick map from intent to the right place to start:
 
 - **Backend and frontend monoliths were intentionally split** (commit `5c40dd44`, "refactor: split monoliths into domain modules") into domain modules — `analyze_core/_detection/_rhythm/_segments/_structure/_transcription` on the backend, focused service files on the frontend. The split is the current target shape; resist consolidating it back.
 - **Hosted runtime foundation landed without disturbing local mode.** `runtime_profile.py`, `worker.py`, `artifact_storage.py`, and `auth_context.py` are the seams. Local-mode code should not branch on profile unless it has to; the boundary handles it.
+- **UI design-system migration (the "D-series").** A shared primitive layer landed in `apps/ui/src/components/ui/` (with Storybook stories and semantic design tokens in `src/index.css`), and feature components were migrated onto it — inline hex colors were replaced with tokens and bespoke layout boxes with primitives like `DeviceRack`/`SectionHeader`. Build on the primitives and tokens; don't reintroduce one-off styled boxes or raw hex.
+- **WASM loudness library (Phase 1).** `packages/loudness-spectro-wasm/` lifts openmeters' BS.1770-5 / EBU R128 loudness into a Rust→WASM package with EBU 3341/3342, `ebur128`, and pyloudnorm conformance layers. It's standalone and **not yet wired into either app** — leave the Essentia loudness path authoritative until integration is proven at parity. Don't reimplement this DSP in JS; the package is the home for it.
 
 ## Backport Candidates
 
