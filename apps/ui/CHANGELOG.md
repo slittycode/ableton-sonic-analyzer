@@ -4,6 +4,7 @@ All notable changes to `sonic-analyzer-UI` are documented here in reverse chrono
 
 ## Unreleased
 
+- **Loudness-action guardrail.** Added `src/services/loudnessGuardrails.ts` (objective loudness defects: digital clipping via `saturationDetail.clippedSampleCount`, true-peak overs via `truePeak`) and a `MISSING_LOUDNESS_ACTION` check (`validateLoudnessActionPresence`) in `phase2Validator.ts` — flags when Phase 2 fails to address a measured loudness defect with a MASTERING/DYNAMICS card.
 - **Design-system migration ("D-series").** Added a shared primitive layer under `src/components/ui/` (`Button`, `Panel`, `DeviceRack`, `SectionHeader`, `MetricBar`/`MetricBarRow`/`MetricTile`, `DataTable`, `EmptyState`, `LedIndicator`, `Pill`, `SignalChain`, `ChainSeparator`, `TimeReadout`, `Checkbox`, `Tooltip`), each with a `*.stories.tsx`, barrel-exported from `src/components/ui/index.ts` (`variants.ts` for variants, `cn.ts` for class merging). Migrated feature components (FileUpload, Results header + metric strip, Mix Chain, Patches, MeasurementDashboard, Signal Monitor → DeviceRack, SessionMusicianPanel, MixDoctorPanel, SpectrogramViewer, DenseDawConcept) onto the primitives and onto semantic design tokens, replacing inline hex with tokens. Dropped unused `.ableton-{panel,device,header}` styles.
 - Enabled TypeScript strict mode; added `prefers-reduced-motion` support and exhaustive `switch` handling.
 - Source-SR-preserving STFT spectrogram is now the default spectrogram tab.

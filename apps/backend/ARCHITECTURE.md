@@ -20,10 +20,13 @@
 | `dsp_bandbank.py` + `dsp_utils.py` | Shared DSP primitives: `BatchedBandpass` (4th-order Butterworth bandpass bank with zero-phase `filtfilt`) and cross-module utility functions. |
 | `phase1_evaluation.py` + `phase1_report_html.py` | Offline Phase 1 evaluation harness — deterministic-metric and detector-stability reporting, with a standalone HTML render. Not on the product path; driven by `scripts/evaluate_phase1.py`. |
 | `polyphonic_evaluation.py` + `scripts/evaluate_polyphonic.py` | Research-only offline polyphonic-transcription evaluation harness. Not on the product path. |
+| `beat_evaluation.py` + `beat_report_html.py` | Research-only beat/downbeat measurement gate. Benchmarks the neural tracker CPJKU/beat_this against the shipping kick-accent downbeat heuristic on a labeled corpus. Off the product path; driven by `scripts/evaluate_beats.py` (corpus manifest from `scripts/build_beat_manifest.py`). Deleting it restores the product exactly. |
+| `loudness_rec_evaluation.py` + `scripts/evaluate_loudness_recs.py` | Research/test-only reachability check for the deterministic subset of a loudness recommendation (gain-to-target-LUFS + true-peak ceiling). Renders/re-measures audio with ASA's own Essentia measurements as oracle. Must not be imported by `analyze.py` or `server.py`. |
 | `utils/cleanup.py` | Periodic artifact cleanup helpers used by the server background-task loop. |
 | `symbolic_extract.py` | **Orphaned.** Earlier worker-process entry point for pitch/note translation; superseded by `analyze.py --pitch-note-only`. Currently imports a removed `BasicPitchBackend` and would fail at module load. Not invoked from anywhere else in the tree; slated for removal. |
 | `tests/test_server.py` | Contract tests for estimate, timeout, and success envelopes. |
 | `tests/test_analyze.py` | Structural snapshot tests for the raw analyzer JSON output. Owns `EXPECTED_TOP_LEVEL_KEYS` — update it whenever you add a root field. |
+| `tests/test_phase1_golden.py` | Golden-snapshot regression gate over measured Phase 1 *values* (fixture `tests/fixtures/golden/phase1_default.json`). Re-baseline deliberately when a measurement change is intended. |
 | `tests/test_spectral_viz.py` | Unit tests for spectrogram generation, time-series computation, and artifact orchestration. |
 | `tests/test_csv_export.py` | Round-trip CSV-exporter tests against the registry in `csv_export.py`. |
 | `tests/test_sample_*.py` + `tests/test_server_samples.py` | Phase 3 audition-sample synthesis and HTTP contract tests. |
