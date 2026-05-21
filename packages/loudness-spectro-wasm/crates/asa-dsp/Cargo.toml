@@ -8,6 +8,11 @@ description = "BS.1770-5 loudness + spectral-reassignment DSP, lifted from openm
 [lib]
 crate-type = ["rlib"]
 
+[dependencies]
+# Pure-Rust FFTs; both compile cleanly to wasm32 (scalar fallback, no threads).
+rustfft = "6.4"
+realfft = "3.5"
+
 # ebur128 is an independent BS.1770 implementation used ONLY as a test oracle
 # (mirrors openmeters' own dev-dependency choice). Not a runtime dependency.
 # hound is a pure-Rust WAV reader used ONLY by the optional official-EBU-test-set

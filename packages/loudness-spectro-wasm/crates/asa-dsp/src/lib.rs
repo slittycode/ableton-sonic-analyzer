@@ -11,4 +11,7 @@ pub mod dsp;
 pub mod integrated;
 pub mod loudness;
 pub mod measure;
+pub mod spectrogram;
+pub mod spectrum;
 pub mod util;
+pub mod window;

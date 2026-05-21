@@ -12,6 +12,6 @@
     "build:cli": "cargo build --release -p measure-cli",
     "test:rust": "cargo test",
     "test:ebu": "cargo test --test ebu_conformance",
-    "test:smoke": "npm run build:node && node test/loudness.smoke.cjs"
+    "test:smoke": "npm run build:node && node test/loudness.smoke.cjs && node test/spectrogram.smoke.cjs && node test/spectrum.smoke.cjs"
   }
 }
