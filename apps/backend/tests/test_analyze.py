@@ -340,12 +340,17 @@ class AnalyzeFastStructuralSnapshotTests(unittest.TestCase):
         cls.temp_dir.cleanup()
 
     def test_output_schema_matches_full_mode(self) -> None:
-        """Fast mode must emit the same top-level key set as full mode."""
+        """Fast mode must emit exactly the shared top-level key set (EXPECTED_TOP_LEVEL_KEYS).
+
+        Full mode emits these keys *plus* a few detail-only fields (keyProfile,
+        tuningFrequency, tuningCents, lufsMomentaryMax, lufsShortTermMax, pitchDetail), so
+        this asserts the shared contract — not a byte-for-byte match with full mode.
+        """
         self.assertEqual(
             set(self.payload.keys()),
             EXPECTED_TOP_LEVEL_KEYS,
-            "Fast mode output schema diverged from full mode. Update EXPECTED_TOP_LEVEL_KEYS "
-            "if the output contract changed intentionally.",
+            "Fast mode output schema diverged from the shared key set. Update "
+            "EXPECTED_TOP_LEVEL_KEYS if the output contract changed intentionally.",
         )
 
     def test_core_fields_are_populated(self) -> None:
