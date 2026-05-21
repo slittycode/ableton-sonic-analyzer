@@ -1247,3 +1247,137 @@ describe('validatePhase2Consistency', () => {
     });
   });
 });
+
+describe('Loudness action presence (objective safety net)', () => {
+  // The check runs only on "new shape" Phase 2 (recommendations expose
+  // phase1Fields); these helpers guarantee that shape with valid citations that
+  // do NOT touch the loudness family, so the only variable under test is the
+  // presence/absence of a true-peak / clipping recommendation.
+  const newShapePhase2 = (overrides: Partial<Phase2Result> = {}): Phase2Result =>
+    createBasePhase2({
+      mixAndMasterChain: [
+        {
+          order: 1, device: 'EQ Eight', parameter: 'Low Cut', value: '30 Hz',
+          reason: 'Removes rumble', phase1Fields: ['spectralBalance'],
+        },
+      ],
+      abletonRecommendations: [
+        {
+          device: 'Operator', category: 'SYNTHESIS', parameter: 'Coarse', value: '1.00',
+          reason: 'Matches tonal center', phase1Fields: ['bpm'],
+        },
+      ],
+      ...overrides,
+    });
+
+  const clippingPhase1 = () =>
+    createBasePhase1({
+      truePeak: 0.9,
+      saturationDetail: { clippedSampleCount: 1280, clippedSamplePercent: 0.4 } as any,
+    });
+
+  const loudnessViolations = (result: ValidationReport) =>
+    result.violations.filter(v => v.type === 'MISSING_LOUDNESS_ACTION');
+
+  it('warns when clipping is measured but no recommendation cites the loudness family', () => {
+    const result = validatePhase2Consistency(clippingPhase1(), newShapePhase2());
+    const loudness = loudnessViolations(result);
+    expect(loudness).toHaveLength(1);
+    expect(loudness[0].severity).toBe('WARNING');
+    expect(loudness[0].field).toContain('saturationDetail.clippedSampleCount');
+  });
+
+  it('does not warn when a recommendation cites the clipping measurement', () => {
+    const phase2 = newShapePhase2({
+      mixAndMasterChain: [
+        {
+          order: 1, device: 'Limiter', parameter: 'Ceiling', value: '-0.3 dB',
+          reason: 'Tame clipping', phase1Fields: ['saturationDetail.clippedSampleCount'],
+        },
+      ],
+    });
+    expect(loudnessViolations(validatePhase2Consistency(clippingPhase1(), phase2))).toHaveLength(0);
+  });
+
+  it('does not warn when a recommendation cites truePeak for an over', () => {
+    const phase1 = createBasePhase1({ truePeak: 1.2 });
+    const phase2 = newShapePhase2({
+      abletonRecommendations: [
+        {
+          device: 'Limiter', category: 'MASTERING', parameter: 'Ceiling', value: '-0.3 dB',
+          reason: 'Restore inter-sample headroom', phase1Fields: ['truePeak'],
+        },
+      ],
+    });
+    expect(loudnessViolations(validatePhase2Consistency(phase1, phase2))).toHaveLength(0);
+  });
+
+  it('warns on an unaddressed true-peak over (linear > 1.0)', () => {
+    const result = validatePhase2Consistency(createBasePhase1({ truePeak: 1.1 }), newShapePhase2());
+    const loudness = loudnessViolations(result);
+    expect(loudness).toHaveLength(1);
+    expect(loudness[0].field).toContain('truePeak');
+  });
+
+  it('does not warn for a clean master (no clipping, peak below full scale)', () => {
+    const phase1 = createBasePhase1({
+      truePeak: 0.8,
+      saturationDetail: { clippedSampleCount: 0, clippedSamplePercent: 0 } as any,
+    });
+    expect(loudnessViolations(validatePhase2Consistency(phase1, newShapePhase2()))).toHaveLength(0);
+  });
+
+  it('emits a WARNING, never an ERROR — an unaddressed defect does not fail the gate alone', () => {
+    const result = validatePhase2Consistency(clippingPhase1(), newShapePhase2());
+    expect(loudnessViolations(result).every(v => v.severity === 'WARNING')).toBe(true);
+  });
+
+  it('still warns when only a non-loudness category (SYNTHESIS) cites the clipping field', () => {
+    // Closes the false-negative gap: a SYNTHESIS card citing master clipping is
+    // not a loudness fix and must not silence the warning.
+    const phase2 = newShapePhase2({
+      abletonRecommendations: [
+        {
+          device: 'Operator', category: 'SYNTHESIS', parameter: 'Coarse', value: '1.00',
+          reason: 'Creative move', phase1Fields: ['saturationDetail.clippedSampleCount'],
+        },
+      ],
+    });
+    expect(loudnessViolations(validatePhase2Consistency(clippingPhase1(), phase2))).toHaveLength(1);
+  });
+
+  it('accepts an EFFECTS-category card (e.g. a pre-master Saturator) as a loudness fix', () => {
+    const phase2 = newShapePhase2({
+      abletonRecommendations: [
+        {
+          device: 'Saturator', category: 'EFFECTS', parameter: 'Drive', value: '3 dB',
+          reason: 'Pre-master saturation tames the clipped peaks',
+          phase1Fields: ['saturationDetail.clippedSampleCount'],
+        },
+      ],
+    });
+    expect(loudnessViolations(validatePhase2Consistency(clippingPhase1(), phase2))).toHaveLength(0);
+  });
+
+  it('does not let a secretSauce workflow step satisfy the rule (narrative, not a device card)', () => {
+    const phase2 = newShapePhase2({
+      secretSauce: {
+        ...createBasePhase2().secretSauce,
+        workflowSteps: [
+          {
+            step: 1, trackContext: 'Master', device: 'Limiter', parameter: 'Ceiling', value: '-0.3 dB',
+            instruction: 'Add a limiter', measurementJustification: 'clipping',
+            phase1Fields: ['saturationDetail.clippedSampleCount'],
+          },
+        ],
+      },
+    });
+    expect(loudnessViolations(validatePhase2Consistency(clippingPhase1(), phase2))).toHaveLength(1);
+  });
+
+  it('skips the check for legacy-shape Phase 2 (no phase1Fields anywhere)', () => {
+    // createBasePhase2() carries no phase1Fields, so isNewShapePhase2() is false.
+    const result = validatePhase2Consistency(clippingPhase1(), createBasePhase2());
+    expect(loudnessViolations(result)).toHaveLength(0);
+  });
+});
