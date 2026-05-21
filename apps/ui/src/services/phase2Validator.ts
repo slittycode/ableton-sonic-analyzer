@@ -1,4 +1,8 @@
 import { Phase1Result, Phase2Result, AbletonRecommendation } from '../types';
+import {
+  loudnessDefectsDemandingAction,
+  citationAddressesLoudnessDefect,
+} from './loudnessGuardrails';
 
 export type ValidationViolationType =
   | 'NUMERIC_OVERRIDE'
@@ -8,7 +12,8 @@ export type ValidationViolationType =
   | 'TRIVIAL_CITATIONS'
   | 'NEW_FIELD_UNCITED'
   | 'LOW_CONFIDENCE_NOT_HEDGED'
-  | 'RECOMMENDATION_SALVAGED';
+  | 'RECOMMENDATION_SALVAGED'
+  | 'MISSING_LOUDNESS_ACTION';
 
 export interface ValidationViolation {
   type: ValidationViolationType;
@@ -257,6 +262,12 @@ export function validatePhase2Consistency(
     // low-confidence measurement must be hedged, not imperative.
     violations.push(...validateLowConfidenceHedging(phase1, phase2));
     checkedFields++;
+
+    // 9. Objective loudness safety net — a measured clipping / true-peak over
+    // must be addressed by a cited mastering/dynamics recommendation. Gated by
+    // isNewShapePhase2 because it detects the action via phase1Fields citations.
+    violations.push(...validateLoudnessActionPresence(phase1, phase2));
+    checkedFields++;
   }
 
   // 8. Salvage warnings — only when diagnostics are passed in. Surfaces the
@@ -450,6 +461,69 @@ function validatePhase1FieldCitations(
   }
 
   return violations;
+}
+
+/**
+ * Objective loudness safety net. When Phase 1 shows a genre-independent defect
+ * — digital clipping (saturationDetail.clippedSampleCount > 0) or a true-peak
+ * over (truePeak above 0 dBFS, linear) — at least one Phase 2 recommendation
+ * must address it by citing the triggering measurement (truePeak or
+ * saturationDetail.*). Loudness "too loud / too quiet" relative to a genre or
+ * platform target is deliberately NOT checked here — that is subjective and
+ * owned by Gemini. This asserts correctness, not taste.
+ *
+ * The trigger logic lives in loudnessGuardrails.ts so the offline evaluation
+ * harness shares one definition. Gated by isNewShapePhase2 (the caller), since
+ * it detects the corrective action via phase1Fields citations.
+ */
+function validateLoudnessActionPresence(
+  phase1: Phase1Result,
+  phase2: Phase2Result,
+): ValidationViolation[] {
+  const defects = loudnessDefectsDemandingAction(phase1);
+  if (defects.length === 0) {
+    return [];
+  }
+
+  const buckets: Array<Array<{ phase1Fields?: string[] }>> = [
+    phase2.mixAndMasterChain ?? [],
+    phase2.abletonRecommendations ?? [],
+    phase2.secretSauce?.workflowSteps ?? [],
+  ];
+  const addressed = buckets.some(bucket =>
+    bucket.some(
+      rec =>
+        Array.isArray(rec.phase1Fields) &&
+        rec.phase1Fields.some(
+          field => typeof field === 'string' && citationAddressesLoudnessDefect(field),
+        ),
+    ),
+  );
+  if (addressed) {
+    return [];
+  }
+
+  const detail = defects
+    .map(d =>
+      d.kind === 'CLIPPING'
+        ? `${d.value} clipped sample(s) (saturationDetail.clippedSampleCount)`
+        : `true peak ${d.value} over full scale (truePeak)`,
+    )
+    .join('; ');
+
+  return [
+    {
+      type: 'MISSING_LOUDNESS_ACTION',
+      field: defects.map(d => d.field).join(', '),
+      phase1Value: defects.map(d => d.value),
+      severity: 'WARNING',
+      message:
+        `Phase 1 shows an objective loudness defect — ${detail} — but no Phase 2 ` +
+        'recommendation cites truePeak or saturationDetail.* to address it. Add a ' +
+        'MASTERING/DYNAMICS card (e.g. Limiter with Ceiling -0.3 dBFS, or a pre-master ' +
+        'Saturator) citing the triggering measurement.',
+    },
+  ];
 }
 
 /**

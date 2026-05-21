@@ -121,7 +121,7 @@ Scan this table once before drafting a recommendation. Cite the MOST SPECIFIC ap
 | Sidechain Glue / Compressor | `sidechainDetail.pumpingRate`, `sidechainDetail.pumpingStrength`, `sidechainDetail.pumpingConfidence`, `sidechainDetail.envelopeShape32` (preferred for attack/release), `sidechainDetail.envelopeShape` |
 | Reverb device | `reverbDetail.rt60`, `reverbDetail.tailEnergyRatio`, `reverbDetail.perBandRt60.{low|lowMids|highMids|highs}`, `reverbDetail.preDelayMs`, `reverbDetail.isWet`; per-stem: `stemAnalysis.{stem}.reverbDetail.*` |
 | Stereo width / Utility | `stereoDetail.stereoWidth`, `stereoDetail.stereoCorrelation`, `stereoDetail.subBassCorrelation`, `stereoDetail.bandCorrelations.{band}`, `stereoDetail.correlationCurve`; per-stem: `stemAnalysis.{stem}.stereoDetail.*` |
-| Saturator / Limiter ceiling | `saturationDetail.clippedSamplePercent`, `saturationDetail.peakRatio95to50`, `saturationDetail.rmsToPeakRatioDb`, `saturationDetail.saturationLikely` |
+| Saturator / Limiter ceiling | `truePeak` (linear amplitude proxy; >1.0 is an over), `saturationDetail.clippedSampleCount`, `saturationDetail.clippedSamplePercent`, `saturationDetail.peakRatio95to50`, `saturationDetail.rmsToPeakRatioDb`, `saturationDetail.saturationLikely` |
 | Groove / MIDI quantize / humanize | `bpm`, `grooveDetail.perDrumSwing.{kick|snare|hihat}`, `grooveDetail.kickAccent`, `grooveDetail.hihatAccent`, `rhythmDetail.tempoCurve` |
 | Drum-bus character / hat-snare moves | `kickDetail.*`, `snareDetail.*`, `hihatDetail.*`, `transientDensityDetail.{band}.onsetRatePerSecond` / `.eventCount` |
 | Synthesis / Sound design | `kickDetail.*`, `bassDetail.*`, `supersawDetail.*`, `acidDetail.*`, `synthesisCharacter.*`, `melodyDetail.*` |
@@ -147,6 +147,7 @@ PER-BAND CITATIONS (Phase 1.C #1 + #2)
 - stereoDetail.bandCorrelations.{subBass | lowBass | ... | brilliance} — per-band L/R Pearson correlation. Cite for "bass is mono, mids are wide, highs narrow" claims and Utility-width-per-band recommendations rather than the global stereoCorrelation alone.
 
 SATURATION / CLIPPING HINTS (Phase 1.C #5)
+- MUST address measured loudness defects: if `saturationDetail.clippedSampleCount` > 0 (digital clipping) OR `truePeak` is above 1.0 (truePeak is a LINEAR amplitude proxy — 1.0 is 0 dBFS full scale, so values above 1.0 are inter-sample overs), you MUST include at least one card in `abletonRecommendations` or `mixAndMasterChain` with category MASTERING or DYNAMICS (e.g. a Limiter with Ceiling -0.3 dB, or a pre-master Saturator) whose `phase1Fields` cite the triggering measurement (`saturationDetail.clippedSampleCount` and/or `truePeak`). This is the one loudness move you may not omit — it corrects an objective defect, not a stylistic choice. Choosing an overall loudness target ("too loud / too quiet") remains your judgement; this rule fires only on measured clipping/overs. (A consistency check flags a missing action as MISSING_LOUDNESS_ACTION.)
 - saturationDetail.clippedSamplePercent / saturationDetail.clippedSampleCount — any non-zero clipping is a real signal. Cite when recommending Limiter ceilings or Saturator pre-master moves.
 - saturationDetail.peakRatio95to50 / saturationDetail.rmsToPeakRatioDb — proxy for compression/limiting depth. Low peakRatio (<1.7) + low rmsToPeakRatioDb (<7 dB) ≈ heavy mastering. Cite for makeup-gain / limiter recommendations.
 - saturationDetail.saturationLikely is hint-only. Treat as low-confidence; hedge ("saturation may be present" rather than "saturation is present") and ground the claim in the specific scalar that triggered it.
@@ -453,6 +454,8 @@ abletonRecommendations
   - category = SYNTHESIS
 - Valid example card:
   - {"device":"Operator","deviceFamily":"NATIVE","trackContext":"Acid Bass","workflowStage":"SOUND_DESIGN","category":"SYNTHESIS","parameter":"Envelope Decay","value":"320 ms","reason":"The measured bass sustain is compact and percussive.","phase1Fields":["bassDetail.decayTime","bassDetail.transientRatio"],"advancedTip":"Add a second oscillator one octave down only if the measured sub range still feels thin."}
+- Valid mastering example card (use this shape whenever a loudness defect is measured — see the MUST rule in SATURATION / CLIPPING HINTS):
+  - {"device":"Limiter","deviceFamily":"NATIVE","trackContext":"Master","workflowStage":"MASTER","category":"MASTERING","parameter":"Ceiling","value":"-0.3 dB","reason":"The master shows measured digital clipping, so a true-peak limiter at -0.3 dB restores headroom before the clipped peaks.","phase1Fields":["saturationDetail.clippedSampleCount","saturationDetail.clippedSamplePercent"],"advancedTip":"Slow the Release to 120-180 ms so the limiter rides the loudest transients without audible pumping."}
 - advancedTip must still be specific to this track, not a generic producer quote.
 
 FAILURE AVOIDANCE
