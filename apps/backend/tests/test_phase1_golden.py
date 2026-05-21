@@ -5,11 +5,15 @@ emitted JSON matches a committed golden snapshot within tolerance. It is a safet
 changes to ``analyze.py`` / the DSP feature modules: any unintended drift in any output
 field surfaces as a failed assertion that names the drifted path.
 
-Determinism: the default analyze path (no ``--separate`` / ``--transcribe``) is pure-DSP
-and contains no RNG / ML / timestamps; output floats are explicitly rounded. Output was
-confirmed byte-identical across 5 repeated local runs, so the tolerance below
-(ABS_TOL / REL_TOL) is insurance against cross-environment float jitter (e.g. multi-thread
-reduction order on the CI runner), not run-to-run noise. One field is excluded:
+Determinism vs portability: the default analyze path (no ``--separate`` / ``--transcribe``)
+is pure-DSP and contains no RNG / ML / timestamps; output was byte-identical across 5
+repeated runs *in one environment*. Across environments it is not bit-identical: analyze.py
+rounds every output float (1-4 decimals), and a different BLAS/thread order on the CI runner
+can push a raw value across a rounding boundary, flipping the last digit by a whole step.
+The comparator therefore tolerates one rounding step at each field's own precision (see
+``_numbers_equal``) plus proportional/absolute float slack -- enough to be portable, while
+still biting any change larger than a field's reported resolution and every
+string/enum/key/list-length change. One field is excluded:
 ``melodyDetail.midiFile`` is the path of a transient MIDI artifact analyze writes next to
 the input, so it varies per run/location and carries no measurement. Exclude a field by
 adding its exact dotted path to ``EXCLUDED_PATHS`` rather than loosening the global
@@ -44,7 +48,14 @@ _ANALYZE_PY = _BACKEND_ROOT / "analyze.py"
 _GOLDEN_PATH = Path(__file__).resolve().parent / "fixtures" / "golden" / "phase1_default.json"
 _UPDATE_ENV = "UPDATE_PHASE1_GOLDEN"
 
-# Tolerance for numeric leaves: equal iff abs(a-g) <= max(ABS_TOL, REL_TOL*abs(g)).
+# Numeric tolerance. Two numbers are equal iff
+#   abs(a-g) <= max(ABS_TOL, REL_TOL*abs(g), one rounding step at g's decimal precision).
+# The rounding-step term is the load-bearing one for cross-environment portability:
+# analyze.py rounds every output float (1-4 decimals), and a different BLAS/thread order on
+# another machine can nudge a raw value across a rounding boundary, flipping the last digit
+# by a whole step (e.g. 135.4 -> 135.5). Absorbing one step at each field's own precision
+# tolerates that while still biting changes larger than a field's reported resolution, plus
+# every string/enum/key/list-length change (which are environment-stable).
 ABS_TOL = 1e-3
 REL_TOL = 1e-3
 
@@ -118,6 +129,14 @@ def _fmt(value: object) -> str:
     return text if len(text) <= 80 else text[:77] + "..."
 
 
+def _decimals(value: float) -> int:
+    """Decimal places in the shortest round-trip repr (0 for ints / scientific notation)."""
+    text = repr(float(value))
+    if "e" in text or "E" in text:
+        return 0
+    return len(text.split(".")[1]) if "." in text else 0
+
+
 def _numbers_equal(golden: float, actual: float) -> bool:
     g = float(golden)
     a = float(actual)
@@ -125,7 +144,10 @@ def _numbers_equal(golden: float, actual: float) -> bool:
         return math.isnan(g) and math.isnan(a)
     if math.isinf(g) or math.isinf(a):
         return g == a  # both +inf or both -inf
-    return abs(a - g) <= max(ABS_TOL, REL_TOL * abs(g))
+    rounding_step = 10.0 ** (-_decimals(g))
+    # +1e-9 absorbs binary-float error when comparing clean decimal values at the step
+    # boundary (e.g. 0.90 - 0.89 == 0.010000000000000009, just over a 0.01 step).
+    return abs(a - g) <= max(ABS_TOL, REL_TOL * abs(g), rounding_step) + 1e-9
 
 
 def _diff(golden: object, actual: object, path: str, out: list[str]) -> None:
@@ -338,6 +360,17 @@ class GoldenComparatorMetaTests(unittest.TestCase):
         self.assertNotEqual(diff({"x": {"a": 1}}, {"x": [1]}), [])  # dict vs list
         self.assertNotEqual(diff({"x": "s"}, {"x": 1.0}), [])       # str vs number
         self.assertNotEqual(diff({"x": 1.0}, {"x": None}), [])      # number vs None
+
+    def test_rounding_boundary_flip_is_tolerated_but_real_change_bites(self) -> None:
+        # 1-decimal field (step 0.1): a one-step cross-env flip is tolerated, >1 step bites.
+        self.assertEqual(diff({"x": 135.4}, {"x": 135.5}), [])
+        self.assertNotEqual(diff({"x": 135.4}, {"x": 135.6}), [])
+        # 2-decimal field (step 0.01): one-step tolerated, larger bites.
+        self.assertEqual(diff({"x": 0.89}, {"x": 0.90}), [])
+        self.assertNotEqual(diff({"x": 0.89}, {"x": 0.92}), [])
+        # Small-magnitude 1-decimal value (the case the tight tolerance used to fail on).
+        self.assertEqual(diff({"x": 0.2}, {"x": 0.3}), [])
+        self.assertNotEqual(diff({"x": 0.2}, {"x": 0.5}), [])
 
     def test_excluded_path_is_ignored(self) -> None:
         self.assertIn("melodyDetail.midiFile", EXCLUDED_PATHS)
