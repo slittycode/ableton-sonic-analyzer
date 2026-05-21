@@ -472,10 +472,24 @@ function validatePhase1FieldCitations(
  * platform target is deliberately NOT checked here — that is subjective and
  * owned by Gemini. This asserts correctness, not taste.
  *
+ * What counts as "addressing" the defect, scoped to track the prompt's MUST
+ * rule (a MASTERING/DYNAMICS card on measured clipping/overs):
+ *   - mixAndMasterChain — any card citing the loudness family. These have no
+ *     category field; the mix/master chain IS the mastering pipeline, so a
+ *     loudness citation there is inherently a mastering move.
+ *   - abletonRecommendations — only cards whose category is a loudness move
+ *     (MASTERING / DYNAMICS / EFFECTS — EFFECTS because the prompt routes a
+ *     pre-master Saturator there). This stops a stray SYNTHESIS card that
+ *     happens to cite truePeak from silencing the warning.
+ *   - secretSauce.workflowSteps are narrative steps, not the device cards the
+ *     prompt rule names, so they do not count.
+ *
  * The trigger logic lives in loudnessGuardrails.ts so the offline evaluation
  * harness shares one definition. Gated by isNewShapePhase2 (the caller), since
  * it detects the corrective action via phase1Fields citations.
  */
+const LOUDNESS_FIX_CATEGORIES: ReadonlySet<string> = new Set(['MASTERING', 'DYNAMICS', 'EFFECTS']);
+
 function validateLoudnessActionPresence(
   phase1: Phase1Result,
   phase2: Phase2Result,
@@ -485,20 +499,17 @@ function validateLoudnessActionPresence(
     return [];
   }
 
-  const buckets: Array<Array<{ phase1Fields?: string[] }>> = [
-    phase2.mixAndMasterChain ?? [],
-    phase2.abletonRecommendations ?? [],
-    phase2.secretSauce?.workflowSteps ?? [],
-  ];
-  const addressed = buckets.some(bucket =>
-    bucket.some(
-      rec =>
-        Array.isArray(rec.phase1Fields) &&
-        rec.phase1Fields.some(
-          field => typeof field === 'string' && citationAddressesLoudnessDefect(field),
-        ),
-    ),
-  );
+  const citesLoudnessFamily = (rec: { phase1Fields?: string[] }): boolean =>
+    Array.isArray(rec.phase1Fields) &&
+    rec.phase1Fields.some(
+      field => typeof field === 'string' && citationAddressesLoudnessDefect(field),
+    );
+
+  const addressed =
+    (phase2.mixAndMasterChain ?? []).some(citesLoudnessFamily) ||
+    (phase2.abletonRecommendations ?? []).some(
+      rec => LOUDNESS_FIX_CATEGORIES.has(rec.category) && citesLoudnessFamily(rec),
+    );
   if (addressed) {
     return [];
   }

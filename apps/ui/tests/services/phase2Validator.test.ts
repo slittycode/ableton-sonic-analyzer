@@ -1332,6 +1332,49 @@ describe('Loudness action presence (objective safety net)', () => {
     expect(loudnessViolations(result).every(v => v.severity === 'WARNING')).toBe(true);
   });
 
+  it('still warns when only a non-loudness category (SYNTHESIS) cites the clipping field', () => {
+    // Closes the false-negative gap: a SYNTHESIS card citing master clipping is
+    // not a loudness fix and must not silence the warning.
+    const phase2 = newShapePhase2({
+      abletonRecommendations: [
+        {
+          device: 'Operator', category: 'SYNTHESIS', parameter: 'Coarse', value: '1.00',
+          reason: 'Creative move', phase1Fields: ['saturationDetail.clippedSampleCount'],
+        },
+      ],
+    });
+    expect(loudnessViolations(validatePhase2Consistency(clippingPhase1(), phase2))).toHaveLength(1);
+  });
+
+  it('accepts an EFFECTS-category card (e.g. a pre-master Saturator) as a loudness fix', () => {
+    const phase2 = newShapePhase2({
+      abletonRecommendations: [
+        {
+          device: 'Saturator', category: 'EFFECTS', parameter: 'Drive', value: '3 dB',
+          reason: 'Pre-master saturation tames the clipped peaks',
+          phase1Fields: ['saturationDetail.clippedSampleCount'],
+        },
+      ],
+    });
+    expect(loudnessViolations(validatePhase2Consistency(clippingPhase1(), phase2))).toHaveLength(0);
+  });
+
+  it('does not let a secretSauce workflow step satisfy the rule (narrative, not a device card)', () => {
+    const phase2 = newShapePhase2({
+      secretSauce: {
+        ...createBasePhase2().secretSauce,
+        workflowSteps: [
+          {
+            step: 1, trackContext: 'Master', device: 'Limiter', parameter: 'Ceiling', value: '-0.3 dB',
+            instruction: 'Add a limiter', measurementJustification: 'clipping',
+            phase1Fields: ['saturationDetail.clippedSampleCount'],
+          },
+        ],
+      },
+    });
+    expect(loudnessViolations(validatePhase2Consistency(clippingPhase1(), phase2))).toHaveLength(1);
+  });
+
   it('skips the check for legacy-shape Phase 2 (no phase1Fields anywhere)', () => {
     // createBasePhase2() carries no phase1Fields, so isNewShapePhase2() is false.
     const result = validatePhase2Consistency(clippingPhase1(), createBasePhase2());
