@@ -295,6 +295,8 @@ The plan's "Out of scope" list is correct:
 - **nightingale** — desktop shell; not relevant until/unless ASA grows a desktop app.
 - **ChordMiniApp / chordonomicon / rawl** — harmonic-domain tools; flagged separately in [`BACKLOG.md`](../../BACKLOG.md) as a Harmonia track.
 
+> **Correction (2026-05-22):** "Harmonia" was later verified to be a phantom — no such project exists (`github.com/slittycode/harmonia` 404s; absent from `CLAUDE.md` / `PURPOSE.md` / `BACKLOG.md`). **`BACKLOG.md` has never contained a "Harmonia track"** — this cross-reference was dangling at birth (the line was introduced in the same commit that added `BACKLOG.md` itself). The three named repos are real but were mis-scoped to a non-existent sibling. See the correction banner in [`incorporations/forking-plans-2026-05-14.md`](../../incorporations/forking-plans-2026-05-14.md).
+
 No change to the deferral logic.
 
 ---

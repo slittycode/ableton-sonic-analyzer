@@ -22,6 +22,30 @@ proceeded using the task description as the spec, the actual upstream
 repos as the authoritative source for license / API / schema, and the
 prior `external-repo-review-2026-05-13.md` for house style.
 
+> **CORRECTION (2026-05-22): "Harmonia" is a phantom — it does not exist.**
+> A later investigation (4 independent agents + first-hand repo/web
+> forensics, including an adversarial pass tasked with proving it real)
+> found no Harmonia project anywhere. `github.com/slittycode/harmonia`
+> returns 404; the owner's account lists no such repo and none matching the
+> "React + Tonal.js reharmonization" signature; there is no repo, submodule,
+> dependency, directory, or code tying Harmonia to anything real
+> (`@tonaljs/*` is only a *transitive* dep of ASA, via `midi-writer-js`).
+> "Harmonia" appears nowhere in `CLAUDE.md`, `PURPOSE.md`, or `BACKLOG.md`,
+> and the earliest mention (in `external-repo-review-2026-05-13.md`) cited a
+> "Harmonia track" in `BACKLOG.md` that has never existed — a dangling
+> citation. The name entered ASA's docs from the out-of-repo
+> `routine-discoveries` task framing (see the Environment note above) and
+> propagated by re-description: a citation loop with no primary source.
+>
+> **Consequence for this document:** every "Harmonia-facing" framing below
+> is void, and the Harmonia asides in Plans 4–6 are moot. **Plans 7
+> (ChordMiniApp) and 8 (chordonomicon) have been re-scoped to ASA** — see
+> the re-scope note at the head of each plan; their detailed
+> adopt/adapt/reject tables were written against Harmonia's symbolic-first
+> premise and need ASA-specific re-evaluation before any action. The
+> `routine-discoveries` repository needs the same correction in a session
+> scoped to it.
+
 ---
 
 ## License Map (read before reading any upstream source)
@@ -570,7 +594,19 @@ quantity. Two partial validations:
 
 ---
 
-## Plan 7 — ChordMiniApp (Harmonia)
+## Plan 7 — ChordMiniApp (ASA — re-scoped)
+
+> **Re-scoped to ASA (2026-05-22).** Originally framed for the (phantom)
+> Harmonia sibling — see the correction banner at the top of this file.
+> Retained as an **optional ASA-facing reference**: ChordMiniApp is a real,
+> MIT-licensed UX precedent for *presenting* chord analysis, relevant to how
+> ASA could display its **existing Phase 1 chord detection** (`chordDetail.*`,
+> `chroma`) — not to any reharmonization feature, which ASA does not have.
+> The adopt/adapt/reject tables below were written against Harmonia's
+> symbolic-first, client-side premise; against ASA's audio-first reality
+> several calls change, so treat the tables as raw input requiring
+> ASA-specific re-evaluation, not as decisions. Read "Harmonia" below as
+> "the originally-assumed consumer."
 
 ### Source
 
@@ -722,7 +758,18 @@ sets the UX bar; Plan 8 provides the ground truth.
 
 ---
 
-## Plan 8 — chordonomicon (Harmonia)
+## Plan 8 — chordonomicon (ASA — re-scoped)
+
+> **Re-scoped to ASA (2026-05-22).** Originally framed for the (phantom)
+> Harmonia sibling — see the correction banner at the top of this file.
+> Retained as an **optional ASA-facing reference**: chordonomicon is a real
+> labeled chord-progression dataset that could serve as an **evaluation set
+> for ASA's existing chord/key detection** (cross-checking `chordDetail.*`
+> and `key` against labeled progressions) — not for a reharmonization model,
+> which ASA does not build. The CC-BY-NC-4.0 license discipline below still
+> applies. The adopt/adapt/reject table was written against Harmonia's
+> premise and needs ASA-specific re-evaluation before action. Read "Harmonia"
+> below as "the originally-assumed consumer."
 
 ### Source
 
