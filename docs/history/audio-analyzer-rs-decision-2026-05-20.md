@@ -66,6 +66,8 @@ same-class Rust oracle — see Follow-up.
 **Harmonia** project (React + Tonal.js) can derive tonnetz from the chroma ASA already
 exports (`spectralDetail.chroma`). Emitting it now would be speculative schema surface.
 
+> **Correction (2026-05-22):** the "sibling **Harmonia** project" referenced above was later verified to be a phantom — no such project exists (`github.com/slittycode/harmonia` 404s; no repo/code; absent from `CLAUDE.md` / `PURPOSE.md` / `BACKLOG.md`). It entered the docs from an out-of-repo task framing and propagated unverified. The conclusion is unaffected and stands on its own: `tonnetz` has no ASA consumer, so don't emit it. See the correction banner in [`../../incorporations/forking-plans-2026-05-14.md`](../../incorporations/forking-plans-2026-05-14.md).
+
 ## Verified facts (provenance)
 
 - **Crate** (via its GitHub `Cargo.toml` / README): Rust edition 2024, MIT, v1.0.0, ~21★;
