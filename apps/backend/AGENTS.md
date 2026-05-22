@@ -120,6 +120,8 @@ python3.11 -m venv venv
 - `spectral_viz.py`: Librosa spectrogram and spectral time-series artifacts. Non-critical — failures don't break a run.
 - `phase1_evaluation.py` + `phase1_report_html.py`: Offline Phase 1 evaluation harness — deterministic-metric and detector-stability reporting, with a standalone HTML render. Not on the product path; driven by `scripts/evaluate_phase1.py`.
 - `polyphonic_evaluation.py` + `scripts/evaluate_polyphonic.py`: **Research-only.** Offline polyphonic-transcription evaluation harness, not part of the shipped product path.
+- `beat_evaluation.py` + `beat_report_html.py`: **Research-only.** Beat/downbeat measurement gate comparing the shipping kick-accent heuristic against neural `beat_this`. Driven by `scripts/evaluate_beats.py` (+ `scripts/build_beat_manifest.py`); optional neural deps in `requirements-eval.txt`. Never imported by `analyze.py`/`server.py`.
+- `loudness_rec_evaluation.py`: **Eval/test-only.** Reachability check that re-measures rendered audio to confirm a loudness recommendation's deterministic subset is physically reachable. Driven by `scripts/evaluate_loudness_recs.py`. Must not be imported on the product path.
 - `utils/cleanup.py`: Periodic artifact cleanup helpers used by the server background-task loop.
 - `symbolic_extract.py`: **Orphaned and broken.** Earlier worker-process entry point for pitch/note translation; superseded by `analyze.py --pitch-note-only`. Still imports a removed `BasicPitchBackend` symbol from `analyze.py`, so loading the module would raise `ImportError`. Not referenced from any other module. Slated for removal — do not extend it.
 - `tests/test_server.py`: OpenAPI and envelope contract tests.
@@ -135,7 +137,7 @@ Under `apps/backend/scripts/` (not on the product path):
 - `bootstrap.sh`: create/recreate the venv with the pinned Python 3.11 dependencies.
 - `dev.sh`: backend-only dev launcher used by the monorepo `./scripts/dev.sh`.
 - `render_upload_limit_contract.py`: re-renders the operator-facing upload-limit contract whenever `upload_limits.py` numbers change.
-- `evaluate_phase1.py`, `evaluate_structure_sweep.py`, `evaluate_polyphonic.py`, `genre_check.py`, `audit_pass1.py`, `replay_catalog_validation.py`: research and audit harnesses for measurement quality and prompt-output review. Outputs land under `.runtime/reports/` and are intentionally not wired into the live API.
+- `evaluate_phase1.py`, `evaluate_structure_sweep.py`, `evaluate_polyphonic.py`, `evaluate_beats.py` (+ `build_beat_manifest.py`), `evaluate_loudness_recs.py`, `genre_check.py`, `audit_pass1.py`, `replay_catalog_validation.py`: research and audit harnesses for measurement quality, the beat/downbeat gate, prescriptive-loudness reachability, and prompt-output review. Outputs land under `.runtime/reports/` (or `.runtime/beat_eval/`) and are intentionally not wired into the live API. The beat gate's optional neural deps live in `requirements-eval.txt` — install into a separate venv, never the product venv.
 
 ## Code Style
 

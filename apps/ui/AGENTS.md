@@ -96,7 +96,8 @@ RUN_GEMINI_LIVE_SMOKE=true VITE_ENABLE_PHASE2_GEMINI=true GEMINI_API_KEY=your_ke
 - `src/services/sampleGenerationClient.ts`: Phase 3 audition-sample POST/GET against `/api/analysis-runs/{run_id}/samples` plus per-clip artifact streaming.
 - `src/services/audioFile.ts`: client-side audio validation, blank-MIME extension fallback, and preview-URL lifecycle.
 - `src/services/mixDoctor.ts`: client-side spectral-balance scoring against genre profiles.
-- `src/services/phase2Validator.ts`: runtime guardrail — chain-of-custody checks of Phase 2 against Phase 1 (BPM, key, LUFS, genre/DSP, numeric bounds).
+- `src/services/phase2Validator.ts`: runtime guardrail — chain-of-custody checks of Phase 2 against Phase 1 (BPM, key, LUFS, genre/DSP, numeric bounds, and the objective loudness-action safety net).
+- `src/services/loudnessGuardrails.ts`: objective, genre-independent loudness-defect triggers (clipping / true-peak over) consumed by `phase2Validator.ts` to assert a measured defect is actually addressed. `TRUE_PEAK_OVER_LINEAR` here mirrors the backend's `loudness_rec_evaluation.py`.
 - `src/services/phase1Picker.ts` + `phaseLabels.ts`: phase-snapshot projection helpers used by the results surface.
 - `src/services/appliedRecommendations.ts` + `userLabels.ts`: applied-recommendations tracker and persisted label state used by the audit overhaul.
 - `src/services/fieldAnalytics.ts` + `diagnosticLogs.ts`: instrumentation hooks and diagnostic log capture for the request panel.
