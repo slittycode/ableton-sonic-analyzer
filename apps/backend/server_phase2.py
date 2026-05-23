@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from analysis_runtime import AnalysisRuntime, UnsupportedPitchNoteModeError
+from audio_mime import canonical_audio_mime
 from server_phase1 import (
     _coerce_nullable_number,
     _coerce_nullable_string,
@@ -728,6 +729,13 @@ def _build_combined_stem_summary_result(stem_results: list[dict[str, Any]]) -> d
 
 
 def _get_audio_mime_type(filename: str, fallback: str = "audio/mpeg") -> str:
+    # Prefer the canonical, host-stable audio map so a FLAC handed to Gemini is
+    # labeled ``audio/flac`` on every OS (the host MIME database returns
+    # ``audio/x-flac`` on macOS, which Gemini may reject). Fall back to the host
+    # database only for extensions outside the canonical audio set.
+    canonical = canonical_audio_mime(filename)
+    if canonical:
+        return canonical
     mime, _ = mimetypes.guess_type(filename)
     if mime and mime.startswith("audio/"):
         return mime
