@@ -4984,5 +4984,40 @@ class CsvExportRouteTests(unittest.TestCase):
         self.assertEqual(payload["error"]["code"], "RUN_NOT_FOUND")
 
 
+class AudioMimeTypeTests(unittest.TestCase):
+    """The MIME _get_audio_mime_type returns is sent to the Gemini Files API,
+    which accepts only the plain IANA spellings — never the host-dependent
+    audio/x-* variants the OS mimetypes DB emits on macOS."""
+
+    def test_accepted_formats_use_canonical_gemini_spellings(self) -> None:
+        cases = {
+            "track.flac": "audio/flac",
+            "song.wav": "audio/wav",
+            "loop.mp3": "audio/mpeg",
+            "stab.aif": "audio/aiff",
+            "stab.aiff": "audio/aiff",
+        }
+        for filename, expected in cases.items():
+            with self.subTest(filename=filename):
+                self.assertEqual(server._get_audio_mime_type(filename), expected)
+
+    def test_never_returns_x_prefixed_variants(self) -> None:
+        # Regression guard: macOS mimetypes returns audio/x-flac / audio/x-wav,
+        # which Gemini rejects. The canonical map must short-circuit before that.
+        for filename in ("track.flac", "song.wav", "stab.aiff"):
+            with self.subTest(filename=filename):
+                self.assertNotIn("x-", server._get_audio_mime_type(filename))
+
+    def test_extension_match_is_case_insensitive(self) -> None:
+        self.assertEqual(server._get_audio_mime_type("TRACK.FLAC"), "audio/flac")
+
+    def test_unknown_extension_uses_fallback(self) -> None:
+        self.assertEqual(server._get_audio_mime_type("upload.bin"), "audio/mpeg")
+        self.assertEqual(
+            server._get_audio_mime_type("upload.bin", fallback="audio/wav"),
+            "audio/wav",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -14,6 +14,7 @@ from server_phase1 import (
     _normalize_spectral_detail,
     _safe_snippet,
 )
+from url_ingest import CANONICAL_AUDIO_MIME
 
 
 GEMINI_RETRYABLE_SUBSTRINGS = [
@@ -728,6 +729,16 @@ def _build_combined_stem_summary_result(stem_results: list[dict[str, Any]]) -> d
 
 
 def _get_audio_mime_type(filename: str, fallback: str = "audio/mpeg") -> str:
+    # This value is sent to the Gemini Files API (inline_data.mime_type /
+    # files.upload), which accepts only the plain IANA spellings. Resolve ASA's
+    # accepted audio formats from the shared canonical map first, so the MIME is
+    # host-independent — macOS mimetypes returns audio/x-flac / audio/x-wav, which
+    # Gemini rejects. Fall back to the OS database only for other audio types.
+    dot = filename.rfind(".")
+    extension = filename[dot:].lower() if dot != -1 else ""
+    canonical = CANONICAL_AUDIO_MIME.get(extension)
+    if canonical:
+        return canonical
     mime, _ = mimetypes.guess_type(filename)
     if mime and mime.startswith("audio/"):
         return mime
