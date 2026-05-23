@@ -149,5 +149,54 @@ class ValidatePhase2CitationPathsTests(unittest.TestCase):
         )
 
 
+class SpectralRenameNormalizationTests(unittest.TestCase):
+    """Regression: the validator must collect allowed paths from the *normalized*
+    payload (the shape Gemini is prompted with), not the raw analyzer output.
+
+    ``_normalize_measurement_result_for_gemini`` renames spectral fields with a
+    ``Mean`` suffix (``spectralCentroid`` -> ``spectralCentroidMean``), top-level
+    and per-stem. Gemini cites the renamed names; walking the raw payload would
+    flag every such valid citation as ``UNRESOLVED_CITATION_PATH``.
+    """
+
+    # Raw analyzer output: spectralDetail still uses the pre-rename field names.
+    MEASUREMENT_RAW = {
+        "spectralDetail": {"spectralCentroid": 1800.0, "spectralRolloff": 8000.0},
+        "stemAnalysis": {"bass": {"spectralDetail": {"spectralCentroid": 400.0}}},
+    }
+
+    def test_renamed_top_level_spectral_citation_is_not_flagged(self):
+        phase2 = {
+            "abletonRecommendations": [
+                {"device": "EQ Eight", "phase1Fields": ["spectralDetail.spectralCentroidMean"]}
+            ]
+        }
+        warnings = _validate_phase2_citation_paths(phase2, self.MEASUREMENT_RAW)
+        self.assertEqual(warnings, [])
+
+    def test_renamed_per_stem_spectral_citation_is_not_flagged(self):
+        phase2 = {
+            "mixAndMasterChain": [
+                {
+                    "device": "EQ Eight",
+                    "phase1Fields": ["stemAnalysis.bass.spectralDetail.spectralCentroidMean"],
+                }
+            ]
+        }
+        warnings = _validate_phase2_citation_paths(phase2, self.MEASUREMENT_RAW)
+        self.assertEqual(warnings, [])
+
+    def test_invented_spectral_path_still_flagged_after_normalization(self):
+        # Normalization fixes false positives without masking genuinely bad paths.
+        phase2 = {
+            "abletonRecommendations": [
+                {"device": "EQ Eight", "phase1Fields": ["spectralDetail.spectralFakeMean"]}
+            ]
+        }
+        warnings = _validate_phase2_citation_paths(phase2, self.MEASUREMENT_RAW)
+        self.assertEqual(len(warnings), 1)
+        self.assertEqual(warnings[0]["code"], "UNRESOLVED_CITATION_PATH")
+
+
 if __name__ == "__main__":
     unittest.main()

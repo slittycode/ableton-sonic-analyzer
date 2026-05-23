@@ -2654,8 +2654,16 @@ def _validate_phase2_citation_paths(
     Coarser than the frontend's ``validatePhase1FieldCitations`` (which also
     flags missing/empty ``phase1Fields`` arrays as errors); the frontend remains
     authoritative for the rich consistency checks.
+
+    Collects allowed paths from the *normalized* payload — the same shape Gemini
+    is prompted with (see ``_build_phase2_prompt`` -> ``AUTHORITATIVE_MEASUREMENT_RESULT_JSON``).
+    ``_normalize_measurement_result_for_gemini`` renames spectral fields (e.g.
+    ``spectralCentroid`` -> ``spectralCentroidMean``, top-level and per-stem), so a
+    raw payload would lack the very names Gemini cites and emit false positives.
+    The frontend avoids this by walking the already-renamed ``Phase1Result``.
     """
-    allowed = _collect_measurement_field_paths(measurement_result)
+    normalized = _normalize_measurement_result_for_gemini(measurement_result)
+    allowed = _collect_measurement_field_paths(normalized)
     warnings: list[dict[str, Any]] = []
 
     for index, item in enumerate(phase2_result.get("mixAndMasterChain") or []):

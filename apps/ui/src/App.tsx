@@ -949,13 +949,21 @@ export default function App() {
   // Recompute the chain-of-custody report where the results render so producers
   // see drift / citation / hedging violations on the results surface, not only
   // inside the Diagnostic Log. Same validator the interpretation log entry uses.
-  const phase2ConsistencyReport = React.useMemo(
-    () =>
-      phase1ForRender && phase2ForRender
-        ? validatePhase2Consistency(phase1ForRender, phase2ForRender)
-        : null,
-    [phase1ForRender, phase2ForRender],
-  );
+  const phase2ConsistencyReport = React.useMemo(() => {
+    if (!phase1ForRender || !phase2ForRender) {
+      return null;
+    }
+    // Non-fatal, matching the analyzer's guarded call (see analyzer.ts): the
+    // validator is pure logic, but a throw here is on the render path with no
+    // error boundary above <App>, so it would blank the entire UI. Degrade to
+    // "no report" instead of crashing the results surface.
+    try {
+      return validatePhase2Consistency(phase1ForRender, phase2ForRender);
+    } catch (error) {
+      console.error('[App] phase2 consistency validation threw', error);
+      return null;
+    }
+  }, [phase1ForRender, phase2ForRender]);
 
   return (
     <div className="min-h-screen bg-bg-app px-3 py-3 md:px-6 md:py-5 font-sans flex items-center justify-center">
