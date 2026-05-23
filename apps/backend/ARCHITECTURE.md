@@ -14,6 +14,7 @@
 | `upload_limits.py` | Canonical raw-audio (100 MiB) and request-envelope (101 MiB) limits, plus the protected-route list. Operator contract is generated, not hand-edited — see `scripts/render_upload_limit_contract.py`. |
 | `spectral_viz.py` | Librosa-based spectrogram generation and spectral time-series extraction. Produces mel/STFT/chroma PNG spectrograms and per-frame spectral evolution JSON. The STFT variant preserves the source file's native sample rate so the y-axis spans 0 → source_sr/2 (rather than always 0 → 22.05 kHz); other variants render at 44.1 kHz. Called after successful measurement; failures are non-critical. |
 | `url_ingest.py` | SSRF-guarded URL-mode ingestion for `POST /api/analysis-runs`. Fetches a public `http`/`https` audio file and streams the bytes through the same downstream pipeline as a multipart upload, enforcing the shared 100 MiB cap. |
+| `audio_mime.py` | Canonical, host-independent filename→MIME resolution for ingested audio (`canonical_audio_mime`). Mirrors the frontend map in `apps/ui/src/services/audioFile.ts` so a `.flac` resolves to `audio/flac` on every OS — stdlib `mimetypes` is host-dependent (`audio/x-flac` on macOS vs `audio/flac` on Linux), which failed the test gate and could mislabel a FLAC handed to Gemini. Used by `server.py`, `server_phase2.py`, and `url_ingest.py`. |
 | `csv_export.py` | CSV exporters for Phase 1 time-series fields, keyed by dotted JSON path. Backs `GET /api/analysis-runs/{run_id}/export/csv/{field_path}` and keeps the route handler a thin lookup-and-serve. |
 | `stage_status.py` | Collapses the eight internal stage statuses into the additive client-facing `publicStatus` field carried on every stage in the run snapshot. |
 | `server_samples.py` + `sample_generation.py` / `sample_theory.py` / `sample_synthesis.py` / `sample_drums.py` | Phase 3 audition-sample generation. PyTheory musical plan, FluidSynth (sine-additive fallback) audio render, NumPy drum one-shots, and a citation manifest tying every clip back to a Phase 1 field. On-demand only — not part of the staged-execution queue. See [`docs/SAMPLE_GENERATION.md`](../../docs/SAMPLE_GENERATION.md). |
@@ -311,6 +312,10 @@ When the analyzer never produces a valid JSON object, `timings.fileDurationSecon
 7. Parse and validate the response against the Phase 2 schema.
 8. Return `{ requestId, phase2: Phase2Result | null, message, diagnostics }`.
 9. Clean up the temporary file in the `finally` block.
+
+### Phase 2 citation-path verification
+
+When an interpretation result is produced (the canonical `…/interpretations` route and the legacy `/api/phase2` wrapper both route through the same handling), `_validate_phase2_citation_paths` (in [`server_phase2.py`](server_phase2.py), called from [`server.py`](server.py)) checks every recommendation's `phase1Fields` citations against the *normalized* authoritative measurement payload — the same shape Gemini is prompted with. Cited dotted paths that don't resolve are flagged as **WARNING-only** entries on the `validationWarnings` channel; they never reject the response and never raise. This is a backend defense-in-depth mirror of the frontend's `validatePhase1FieldCitations` (in `apps/ui/src/services/phase2Validator.ts`), so a non-browser API consumer can't silently accept invented citations. Phase 1 stays authoritative either way.
 
 ## Transcription Pipeline
 
