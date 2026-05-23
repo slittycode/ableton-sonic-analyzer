@@ -166,8 +166,13 @@ def _compute_downbeat_phase(low_band: np.ndarray, meter: int) -> tuple[int, floa
     the kick. A low value is honest hedging, not a failure — downstream consumers
     must treat it as such.
     """
+    # Sanitize non-finite beats to 0 IN PLACE — never compact the array. The
+    # resolved phase is applied to the caller's unfiltered beat_grid, so dropping
+    # elements here would rotate every later beat's position and desync the two
+    # index spaces (a single NaN would shift the downbeat and, perversely, raise
+    # confidence). A dropout beat carries no kick energy, so 0 is the honest value.
     arr = np.asarray(low_band, dtype=np.float64)
-    arr = arr[np.isfinite(arr)]
+    arr = np.where(np.isfinite(arr), arr, 0.0)
     if meter <= 1 or arr.size < meter:
         return 0, 0.0
 
