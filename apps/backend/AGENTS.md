@@ -120,11 +120,15 @@ python3.11 -m venv venv
 - `spectral_viz.py`: Librosa spectrogram and spectral time-series artifacts. Non-critical — failures don't break a run.
 - `phase1_evaluation.py` + `phase1_report_html.py`: Offline Phase 1 evaluation harness — deterministic-metric and detector-stability reporting, with a standalone HTML render. Not on the product path; driven by `scripts/evaluate_phase1.py`.
 - `polyphonic_evaluation.py` + `scripts/evaluate_polyphonic.py`: **Research-only.** Offline polyphonic-transcription evaluation harness, not part of the shipped product path.
+- `beat_evaluation.py` + `beat_report_html.py`: **Research-only.** Beat/downbeat measurement gate benchmarking CPJKU/beat_this against the shipping kick-accent downbeat heuristic. Driven by `scripts/evaluate_beats.py`; deleting it restores the product exactly.
+- `loudness_rec_evaluation.py`: **Eval/test-only.** Reachability check for the deterministic subset of a loudness recommendation (gain-to-target-LUFS + true-peak ceiling). Must not be imported by `analyze.py` or `server.py`.
 - `utils/cleanup.py`: Periodic artifact cleanup helpers used by the server background-task loop.
 - `symbolic_extract.py`: **Orphaned and broken.** Earlier worker-process entry point for pitch/note translation; superseded by `analyze.py --pitch-note-only`. Still imports a removed `BasicPitchBackend` symbol from `analyze.py`, so loading the module would raise `ImportError`. Not referenced from any other module. Slated for removal — do not extend it.
 - `tests/test_server.py`: OpenAPI and envelope contract tests.
 - `tests/test_analyze.py`: generated WAV fixture, `EXPECTED_TOP_LEVEL_KEYS` snapshot, raw payload assertions.
 - `tests/test_csv_export.py`, `tests/test_sample_*.py`, `tests/test_server_samples.py`: Coverage for CSV export and Phase 3 audition samples.
+- `tests/test_phase1_golden.py`: golden-snapshot regression gate over measured Phase 1 values (`tests/fixtures/golden/phase1_default.json`). Re-baseline deliberately when a measurement change is intended.
+- `tests/test_beat_evaluation.py`, `tests/test_loudness_rec_evaluation.py`: unit coverage for the research/eval-only beat and loudness-recommendation harnesses.
 - `ARCHITECTURE.md`: backend responsibilities and request flow.
 - `JSON_SCHEMA.md`: raw CLI schema plus HTTP mapping notes.
 
@@ -135,7 +139,7 @@ Under `apps/backend/scripts/` (not on the product path):
 - `bootstrap.sh`: create/recreate the venv with the pinned Python 3.11 dependencies.
 - `dev.sh`: backend-only dev launcher used by the monorepo `./scripts/dev.sh`.
 - `render_upload_limit_contract.py`: re-renders the operator-facing upload-limit contract whenever `upload_limits.py` numbers change.
-- `evaluate_phase1.py`, `evaluate_structure_sweep.py`, `evaluate_polyphonic.py`, `genre_check.py`, `audit_pass1.py`, `replay_catalog_validation.py`: research and audit harnesses for measurement quality and prompt-output review. Outputs land under `.runtime/reports/` and are intentionally not wired into the live API.
+- `evaluate_phase1.py`, `evaluate_structure_sweep.py`, `evaluate_polyphonic.py`, `evaluate_beats.py`, `evaluate_loudness_recs.py`, `build_beat_manifest.py`, `genre_check.py`, `audit_pass1.py`, `replay_catalog_validation.py`: research and audit harnesses for measurement quality, beat/downbeat and loudness-recommendation gates, and prompt-output review. Outputs land under `.runtime/` and are intentionally not wired into the live API. The beat gate's optional neural deps (`beat_this`, `mir_eval`) live in `requirements-eval.txt` — install into a separate venv, never the product venv.
 
 ## Code Style
 
