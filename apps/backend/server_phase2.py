@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from analysis_runtime import AnalysisRuntime, UnsupportedPitchNoteModeError
+from audio_mime import canonical_audio_mime
 from server_phase1 import (
     _coerce_nullable_number,
     _coerce_nullable_string,
@@ -728,6 +729,9 @@ def _build_combined_stem_summary_result(stem_results: list[dict[str, Any]]) -> d
 
 
 def _get_audio_mime_type(filename: str, fallback: str = "audio/mpeg") -> str:
+    canonical = canonical_audio_mime(filename)
+    if canonical:
+        return canonical
     mime, _ = mimetypes.guess_type(filename)
     if mime and mime.startswith("audio/"):
         return mime
@@ -2638,5 +2642,3 @@ def _parse_stem_summary_result(
     if not _is_valid_stem_summary_shape(parsed):
         return None, "Stem summary skipped because Gemini returned an invalid response shape."
     return parsed, None
-
-

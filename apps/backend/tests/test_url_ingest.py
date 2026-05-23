@@ -224,7 +224,7 @@ class MimeTypePickerTests(unittest.TestCase):
 
     def test_no_content_type_falls_back_to_filename(self):
         self.assertEqual(
-            url_ingest._pick_mime_type("", "/audio.wav"), "audio/x-wav"
+            url_ingest._pick_mime_type("", "/audio.wav"), "audio/wav"
         )
 
     def test_unknown_extension_falls_back_to_octet_stream(self):

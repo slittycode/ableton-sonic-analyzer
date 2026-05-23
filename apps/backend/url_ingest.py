@@ -39,6 +39,7 @@ from urllib.parse import unquote, urlparse
 import requests
 
 import upload_limits
+from audio_mime import canonical_audio_mime
 
 
 __all__ = [
@@ -380,10 +381,14 @@ def _pick_mime_type(content_type_header: str, url_path: str) -> str:
     }:
         return primary
 
-    # Fall back to filename-based sniffing.
+    # Fall back to filename-based sniffing. Prefer the canonical map so
+    # supported audio types resolve identically on every host.
     import mimetypes
 
     filename = _extract_filename(url_path)
+    canonical = canonical_audio_mime(filename)
+    if canonical:
+        return canonical
     guessed, _enc = mimetypes.guess_type(filename)
     if guessed:
         return guessed

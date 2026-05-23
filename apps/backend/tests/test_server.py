@@ -4984,5 +4984,12 @@ class CsvExportRouteTests(unittest.TestCase):
         self.assertEqual(payload["error"]["code"], "RUN_NOT_FOUND")
 
 
+class AudioMimeTypeTests(unittest.TestCase):
+    def test_get_audio_mime_type_prefers_canonical_audio_types(self) -> None:
+        self.assertEqual(server._get_audio_mime_type("track.flac"), "audio/flac")
+        self.assertEqual(server._get_audio_mime_type("track.wav"), "audio/wav")
+        self.assertEqual(server._get_audio_mime_type("track.aiff"), "audio/aiff")
+
+
 if __name__ == "__main__":
     unittest.main()
