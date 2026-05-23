@@ -2578,6 +2578,138 @@ def _validate_phase2_semantics(phase2_result: dict[str, Any]) -> list[dict[str, 
     return warnings
 
 
+def _walk_measurement_paths(value: Any, prefix: str, paths: set[str]) -> None:
+    """Faithful port of walkForPaths() in apps/ui/src/services/phase2Validator.ts.
+
+    Registers the dotted path of every nested key. For arrays, registers the
+    array path itself and, for arrays of objects, descends into ``prefix.key``
+    so a citation against an array-item field (e.g. ``noveltyPeaks.time``)
+    resolves. Keeping this byte-for-byte equivalent to the frontend is what lets
+    the two citation-existence checks agree.
+    """
+    if value is None:
+        return
+    if isinstance(value, list):
+        if prefix:
+            paths.add(prefix)
+        for item in value:
+            if isinstance(item, dict):
+                for key in item:
+                    sub_path = f"{prefix}.{key}" if prefix else key
+                    _walk_measurement_paths(item[key], sub_path, paths)
+        return
+    if not isinstance(value, dict):
+        if prefix:
+            paths.add(prefix)
+        return
+    if prefix:
+        paths.add(prefix)
+    for key in value:
+        sub_path = f"{prefix}.{key}" if prefix else key
+        _walk_measurement_paths(value[key], sub_path, paths)
+
+
+def _collect_measurement_field_paths(measurement_result: dict[str, Any]) -> set[str]:
+    """Collect every concrete dotted path present in the measurement payload.
+
+    Mirror of collectPhase1FieldPaths() in phase2Validator.ts.
+    """
+    paths: set[str] = set()
+    _walk_measurement_paths(measurement_result, "", paths)
+    return paths
+
+
+def _validate_citation_paths_for_record(
+    *,
+    warnings: list[dict[str, Any]],
+    record: dict[str, Any],
+    base_path: str,
+    allowed: set[str],
+) -> None:
+    phase1_fields = record.get("phase1Fields")
+    if not isinstance(phase1_fields, list):
+        return
+    for cited in phase1_fields:
+        if not isinstance(cited, str):
+            continue
+        normalized = cited.strip()
+        if not normalized or normalized in allowed:
+            continue
+        warnings.append(
+            _build_phase2_validation_warning(
+                code="UNRESOLVED_CITATION_PATH",
+                path=f"{base_path}.phase1Fields",
+                message=(
+                    f'phase1Fields entry "{normalized}" does not resolve to any path '
+                    "present in the authoritative measurement payload."
+                ),
+                original_value=normalized,
+            )
+        )
+
+
+def _validate_phase2_citation_paths(
+    phase2_result: dict[str, Any],
+    measurement_result: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Backend defense-in-depth mirror of the frontend's citation-existence check.
+
+    For every recommendation that exposes a ``phase1Fields`` array, flag each
+    cited dotted path that does not resolve against the authoritative
+    measurement payload. WARNING-only — never reject and never raise; Phase 1
+    authority means an invented citation is flagged, not failed.
+
+    Coarser than the frontend's ``validatePhase1FieldCitations`` (which also
+    flags missing/empty ``phase1Fields`` arrays as errors); the frontend remains
+    authoritative for the rich consistency checks.
+
+    Collects allowed paths from the *normalized* payload — the same shape Gemini
+    is prompted with (see ``_build_phase2_prompt`` -> ``AUTHORITATIVE_MEASUREMENT_RESULT_JSON``).
+    ``_normalize_measurement_result_for_gemini`` renames spectral fields (e.g.
+    ``spectralCentroid`` -> ``spectralCentroidMean``, top-level and per-stem), so a
+    raw payload would lack the very names Gemini cites and emit false positives.
+    The frontend avoids this by walking the already-renamed ``Phase1Result``.
+    """
+    normalized = _normalize_measurement_result_for_gemini(measurement_result)
+    allowed = _collect_measurement_field_paths(normalized)
+    warnings: list[dict[str, Any]] = []
+
+    for index, item in enumerate(phase2_result.get("mixAndMasterChain") or []):
+        record = _as_record(item)
+        if record:
+            _validate_citation_paths_for_record(
+                warnings=warnings,
+                record=record,
+                base_path=f"mixAndMasterChain[{index}]",
+                allowed=allowed,
+            )
+
+    for index, item in enumerate(phase2_result.get("abletonRecommendations") or []):
+        record = _as_record(item)
+        if record:
+            _validate_citation_paths_for_record(
+                warnings=warnings,
+                record=record,
+                base_path=f"abletonRecommendations[{index}]",
+                allowed=allowed,
+            )
+
+    secret_sauce = _as_record(phase2_result.get("secretSauce"))
+    steps = secret_sauce.get("workflowSteps") if secret_sauce else None
+    if isinstance(steps, list):
+        for index, item in enumerate(steps):
+            record = _as_record(item)
+            if record:
+                _validate_citation_paths_for_record(
+                    warnings=warnings,
+                    record=record,
+                    base_path=f"secretSauce.workflowSteps[{index}]",
+                    allowed=allowed,
+                )
+
+    return warnings
+
+
 def _is_string_array(value: Any) -> bool:
     return isinstance(value, list) and all(isinstance(item, str) for item in value)
 

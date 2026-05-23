@@ -637,6 +637,52 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).toContain('Track Character');
   });
 
+  it('surfaces the chain-of-custody report on the results page when it has user-visible violations', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults as React.ComponentType<Record<string, unknown>>, {
+        phase1: baseMeasurement,
+        phase2: phase2V2,
+        phase2SchemaVersion: 'interpretation.v2',
+        phase2ConsistencyReport: {
+          passed: false,
+          violations: [
+            {
+              type: 'NUMERIC_OVERRIDE',
+              field: 'bpm',
+              severity: 'ERROR',
+              message: 'Phase 2 contradicts the measured BPM.',
+            },
+          ],
+          summary: { errorCount: 1, warningCount: 0, checkedFields: 5 },
+        },
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).toContain('data-testid="consistency-report"');
+    expect(html).toContain('Chain-of-Custody Check');
+    expect(html).toContain('Phase 2 contradicts the measured BPM.');
+  });
+
+  it('omits the chain-of-custody report section when the report is clean', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults as React.ComponentType<Record<string, unknown>>, {
+        phase1: baseMeasurement,
+        phase2: phase2V2,
+        phase2SchemaVersion: 'interpretation.v2',
+        phase2ConsistencyReport: {
+          passed: true,
+          violations: [],
+          summary: { errorCount: 0, warningCount: 0, checkedFields: 5 },
+        },
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).not.toContain('data-testid="consistency-report"');
+    expect(html).not.toContain('CONSISTENCY OK');
+  });
+
   it('groups routing auto-repairs into a softer adjustment banner', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults as React.ComponentType<Record<string, unknown>>, {

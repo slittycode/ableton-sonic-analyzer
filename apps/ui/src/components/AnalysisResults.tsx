@@ -28,6 +28,8 @@ import { motion } from 'motion/react';
 import { assertNever } from '../utils/assertNever';
 import { downloadFile, generateMarkdown } from '../utils/exportUtils';
 import { INTERPRETATION_LABEL } from '../services/phaseLabels';
+import type { ValidationReport } from '../services/phase2Validator';
+import { Phase2ConsistencyReport } from './Phase2ConsistencyReport';
 import { MeasurementDashboard } from './MeasurementDashboard';
 import { SamplePlayback } from './SamplePlayback';
 import { SessionMusicianPanel } from './SessionMusicianPanel';
@@ -69,6 +71,12 @@ export interface AnalysisResultsProps {
   stemSummary?: StemSummaryResult | null;
   phase2SchemaVersion?: InterpretationSchemaVersion | null;
   phase2ValidationWarnings?: InterpretationValidationWarning[] | null;
+  /**
+   * Frontend-computed chain-of-custody report (BPM/key/LUFS drift, citation
+   * completeness, hedging). Rendered alongside the backend-projected
+   * `phase2ValidationWarnings` so both consistency channels read as one surface.
+   */
+  phase2ConsistencyReport?: ValidationReport | null;
   phase2StatusMessage?: string | null;
   sourceFileName?: string | null;
   spectralArtifacts?: SpectralArtifacts | null;
@@ -618,6 +626,7 @@ export function AnalysisResults({
   stemSummary = null,
   phase2SchemaVersion = null,
   phase2ValidationWarnings = null,
+  phase2ConsistencyReport = null,
   phase2StatusMessage = null,
   sourceFileName = null,
   spectralArtifacts = null,
@@ -1052,6 +1061,19 @@ export function AnalysisResults({
           </p>
         )}
       </section>
+
+      {phase2ConsistencyReport &&
+        phase2ConsistencyReport.violations.some((v) => v.audience !== 'dev') && (
+          <section
+            data-testid="consistency-report"
+            className="space-y-3 rounded-sm border border-border bg-bg-card p-4"
+          >
+            <h2 className="text-sm font-mono uppercase tracking-wider text-text-primary">
+              Chain-of-Custody Check
+            </h2>
+            <Phase2ConsistencyReport report={phase2ConsistencyReport} hideWhenClean />
+          </section>
+        )}
 
       {groupedValidationWarnings.length > 0 && (
         <section

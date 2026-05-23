@@ -123,7 +123,6 @@ python3.11 -m venv venv
 - `beat_evaluation.py` + `beat_report_html.py`: **Research-only.** Beat/downbeat measurement gate benchmarking CPJKU/beat_this against the shipping kick-accent downbeat heuristic. Driven by `scripts/evaluate_beats.py`; deleting it restores the product exactly.
 - `loudness_rec_evaluation.py`: **Eval/test-only.** Reachability check for the deterministic subset of a loudness recommendation (gain-to-target-LUFS + true-peak ceiling). Must not be imported by `analyze.py` or `server.py`.
 - `utils/cleanup.py`: Periodic artifact cleanup helpers used by the server background-task loop.
-- `symbolic_extract.py`: **Orphaned and broken.** Earlier worker-process entry point for pitch/note translation; superseded by `analyze.py --pitch-note-only`. Still imports a removed `BasicPitchBackend` symbol from `analyze.py`, so loading the module would raise `ImportError`. Not referenced from any other module. Slated for removal — do not extend it.
 - `tests/test_server.py`: OpenAPI and envelope contract tests.
 - `tests/test_analyze.py`: generated WAV fixture, `EXPECTED_TOP_LEVEL_KEYS` snapshot, raw payload assertions.
 - `tests/test_csv_export.py`, `tests/test_sample_*.py`, `tests/test_server_samples.py`: Coverage for CSV export and Phase 3 audition samples.
