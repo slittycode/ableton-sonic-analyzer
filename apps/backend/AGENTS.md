@@ -139,7 +139,7 @@ Under `apps/backend/scripts/` (not on the product path):
 - `bootstrap.sh`: create/recreate the venv with the pinned Python 3.11 dependencies.
 - `dev.sh`: backend-only dev launcher used by the monorepo `./scripts/dev.sh`.
 - `render_upload_limit_contract.py`: re-renders the operator-facing upload-limit contract whenever `upload_limits.py` numbers change.
-- `evaluate_phase1.py`, `evaluate_structure_sweep.py`, `evaluate_polyphonic.py`, `evaluate_beats.py`, `evaluate_loudness_recs.py`, `build_beat_manifest.py`, `genre_check.py`, `audit_pass1.py`, `replay_catalog_validation.py`: research and audit harnesses for measurement quality, beat/downbeat and loudness-recommendation gates, and prompt-output review. Outputs land under `.runtime/` and are intentionally not wired into the live API.
+- `evaluate_phase1.py`, `evaluate_structure_sweep.py`, `evaluate_polyphonic.py`, `evaluate_beats.py`, `evaluate_loudness_recs.py`, `build_beat_manifest.py`, `genre_check.py`, `audit_pass1.py`, `replay_catalog_validation.py`: research and audit harnesses for measurement quality, beat/downbeat and loudness-recommendation gates, and prompt-output review. Outputs land under `.runtime/` and are intentionally not wired into the live API. The beat gate's optional neural deps (`beat_this`, `mir_eval`) live in `requirements-eval.txt` — install into a separate venv, never the product venv.
 
 ## Code Style
 
