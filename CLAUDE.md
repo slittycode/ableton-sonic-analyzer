@@ -173,8 +173,6 @@ Artifact access goes through `artifact_storage.py` rather than direct disk paths
 16. **`phase1_evaluation.py` + `phase1_report_html.py`, `polyphonic_evaluation.py`**: Offline evaluation harnesses (deterministic-metric / detector-stability reporting and research-only polyphonic transcription). Not on the product path; driven by `scripts/evaluate_*.py`.
 17. **`utils/cleanup.py`**: Periodic artifact-cleanup helpers used by the server background-task loop.
 
-Not core, but present: **`symbolic_extract.py`** is an orphaned, broken earlier worker entry point (it imports a removed `BasicPitchBackend` and fails at module load); it's superseded by `analyze.py --pitch-note-only`, referenced from nowhere, and slated for removal — don't extend it. See `apps/backend/ARCHITECTURE.md`.
-
 The subprocess isolation means `analyze.py` works as a standalone CLI. Check `apps/backend/JSON_SCHEMA.md` before adding new analyzer output fields. Check `apps/backend/ARCHITECTURE.md` for the full HTTP flow and contract details.
 
 **Phase 2 (`POST /api/phase2`, legacy compat):** Uploads audio to Gemini inline if ≤100 MiB, or via the Gemini Files API if larger. Phase 1 JSON is appended to the system prompt from `prompts/phase2_system.txt`. Also relevant: `prompts/stem_summary_system.txt` and `prompts/live12_device_catalog.json`.

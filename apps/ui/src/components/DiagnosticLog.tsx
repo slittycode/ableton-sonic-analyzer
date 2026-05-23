@@ -161,6 +161,11 @@ export function DiagnosticLog({ logs, defaultExpanded }: DiagnosticLogProps) {
                       <Phase2ConsistencyReport report={log.validationReport} />
                     </div>
                   )}
+                  {log.stageKey === 'interpretation' && log.validationError && (
+                    <div className="pl-2 pt-2 text-[10px] font-mono uppercase tracking-wide text-error">
+                      CONSISTENCY CHECK FAILED: {log.validationError}
+                    </div>
+                  )}
                 </div>
               );
             })}

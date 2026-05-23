@@ -112,6 +112,7 @@ function buildInterpretationLog(
   phase2: Phase2Result,
   audioMetadata: DiagnosticLogEntry['audioMetadata'],
   validationReport: DiagnosticLogEntry['validationReport'],
+  validationError?: string,
 ): DiagnosticLogEntry {
   return {
     model: 'ai-interpretation',
@@ -127,6 +128,7 @@ function buildInterpretationLog(
     status: 'success',
     message: 'AI interpretation complete.',
     validationReport,
+    validationError,
   };
 }
 
@@ -278,17 +280,20 @@ export async function monitorAnalysisRun(
       if (!interpretationReported) {
         if (displayPhase2) {
           let validationReport: DiagnosticLogEntry['validationReport'];
+          let validationError: string | undefined;
           try {
             if (displayPhase1) {
               validationReport = validatePhase2Consistency(displayPhase1, displayPhase2);
             }
-          } catch {
+          } catch (err) {
             validationReport = undefined;
+            validationError = err instanceof Error ? err.message : String(err);
+            console.error('[analyzer] phase2 validation threw', err);
           }
 
           onPhase2Complete(
             displayPhase2,
-            buildInterpretationLog(runId, displayPhase2, audioMetadata, validationReport),
+            buildInterpretationLog(runId, displayPhase2, audioMetadata, validationReport, validationError),
           );
           interpretationReported = true;
         } else if (snapshot.stages.interpretation.status === 'not_requested') {

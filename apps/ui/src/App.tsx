@@ -36,6 +36,7 @@ import {
   mapBackendError,
 } from './services/backendPhase1Client';
 import { MEASUREMENT_LABEL, INTERPRETATION_LABEL } from './services/phaseLabels';
+import { validatePhase2Consistency } from './services/phase2Validator';
 import {
   AnalysisRunSnapshot,
   AnalysisStageStatus,
@@ -945,6 +946,16 @@ export default function App() {
   const stemSummaryForRender = analysisRun ? projectStemSummaryFromRun(analysisRun) : null;
   const phase2SchemaVersion = analysisRun ? getPhase2SchemaVersionFromRun(analysisRun) : null;
   const phase2ValidationWarnings = analysisRun ? projectPhase2ValidationWarningsFromRun(analysisRun) : [];
+  // Recompute the chain-of-custody report where the results render so producers
+  // see drift / citation / hedging violations on the results surface, not only
+  // inside the Diagnostic Log. Same validator the interpretation log entry uses.
+  const phase2ConsistencyReport = React.useMemo(
+    () =>
+      phase1ForRender && phase2ForRender
+        ? validatePhase2Consistency(phase1ForRender, phase2ForRender)
+        : null,
+    [phase1ForRender, phase2ForRender],
+  );
 
   return (
     <div className="min-h-screen bg-bg-app px-3 py-3 md:px-6 md:py-5 font-sans flex items-center justify-center">
@@ -1370,6 +1381,7 @@ export default function App() {
                   stemSummary={stemSummaryForRender}
                   phase2SchemaVersion={phase2SchemaVersion}
                   phase2ValidationWarnings={phase2ValidationWarnings}
+                  phase2ConsistencyReport={phase2ConsistencyReport}
                   phase2StatusMessage={phase2StatusMessage}
                   sourceFileName={audioFile?.name ?? null}
                   spectralArtifacts={analysisRun?.artifacts?.spectral ?? null}
