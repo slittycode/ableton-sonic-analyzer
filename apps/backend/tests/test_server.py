@@ -4984,5 +4984,20 @@ class CsvExportRouteTests(unittest.TestCase):
         self.assertEqual(payload["error"]["code"], "RUN_NOT_FOUND")
 
 
+class AudioMimeTypeTests(unittest.TestCase):
+    """The Gemini-upload labeling path must resolve canonical, host-stable types.
+
+    audio_mime / url_ingest are covered in test_audio_mime.py; this guards the
+    server-side ``_get_audio_mime_type`` helper that labels audio for Gemini, so
+    a FLAC is sent as ``audio/flac`` on every OS (the host MIME database returns
+    ``audio/x-flac`` on macOS, which Gemini may reject).
+    """
+
+    def test_get_audio_mime_type_prefers_canonical_audio_types(self) -> None:
+        self.assertEqual(server._get_audio_mime_type("track.flac"), "audio/flac")
+        self.assertEqual(server._get_audio_mime_type("track.wav"), "audio/wav")
+        self.assertEqual(server._get_audio_mime_type("track.aiff"), "audio/aiff")
+
+
 if __name__ == "__main__":
     unittest.main()
