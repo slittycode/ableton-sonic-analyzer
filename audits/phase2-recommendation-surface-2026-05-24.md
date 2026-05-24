@@ -160,3 +160,31 @@ reconstruction data). Expanding it is high-leverage and complements the prompt w
 **Governance:** `packages/loudness-spectro-wasm/` still has zero imports yet runs a `loudness-wasm` CI
 job on every PR (`.github/workflows/ci.yml`). Decision overdue since #88: wire it in at proven Essentia
 parity, or shelve it + drop the CI job. (Matches Priority 2 in `asa-next-work-priorities`.)
+
+---
+
+## Live verification — VTSS – Can't Catch Me (2026-05-24)
+
+Ran the real track through measurement + Phase 2 (Gemini 2.5 Flash, inline path, Demucs skipped)
+via the canonical `/api/analysis-runs` flow. Phase 1: 144.9 BPM, C Minor, psytrance (conf 1.0),
+kick 800 hits / 76 Hz / THD 0.68 / distorted. Phase 2 produced **25 measurement-cited cards**.
+
+**Confirmed working in real Gemini output:**
+- Tier-1 #11 Limiter True-Peak: emitted `Limiter | True Peak = On` citing `truePeak`.
+- Tier-2 kick rules: `Drum Buss | Boom Frequency = 76 Hz` ← `kickDetail.fundamentalHz`; Drum Buss
+  Drive ← `kickDetail.isDistorted`/`thd`. Sentinel guard correctly inert (kickCount=800).
+- `sidechainDetail.envelopeShape32` cited (now covered by the validator confidence pair).
+
+**Validator caught (both non-fatal — the chain-of-custody surface working as designed):**
+- `UNKNOWN_PARAMETER` `EQ Eight | High Cut` — model over-generalized the Damping→High Cut fix
+  (the *Reverb* card used High Cut correctly). Fixed by the High-Cut clarification (commit
+  697b0e0a). Warrants a confirming re-run.
+- `UNRESOLVED_CITATION_PATH` `arrangementOverview.segments` — pre-existing Phase-2 self-citation
+  tendency the prompt already warns against (~line 213); candidate for descriptor-hook / worked-
+  example reinforcement.
+
+**Not exercised on this track (correctly):** `effectsDetail.gating*` (no gating present),
+`genreDetail.*` (context, not card citations), `synthesisCharacter`/`textureCharacter` (strong
+kick/acid/supersaw signals dominated). Adding these to the citation map alone did NOT drive
+citation usage — validating the program review's point that **worked examples**, not just map
+entries, drive field adoption. Use that for the next Tier-2 batch.
