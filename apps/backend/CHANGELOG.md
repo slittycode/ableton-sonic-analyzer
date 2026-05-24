@@ -4,6 +4,10 @@ All notable changes to `sonic-analyzer` are documented here in reverse chronolog
 
 ## Unreleased
 
+- Added a Phase 1 golden-snapshot regression gate (`tests/test_phase1_golden.py`, fixture `tests/fixtures/golden/phase1_default.json`) that pins measured analyzer values so unintended numeric drift fails CI.
+- Added a research-only beat/downbeat measurement gate (`beat_evaluation.py` + `beat_report_html.py`, `scripts/evaluate_beats.py`, `scripts/build_beat_manifest.py`) benchmarking CPJKU/beat_this against the shipping kick-accent downbeat heuristic. Off the product path — deleting it restores the product exactly.
+- Added an eval/test-only loudness-recommendation reachability harness (`loudness_rec_evaluation.py`, `scripts/evaluate_loudness_recs.py`) that re-measures rendered audio to confirm the deterministic subset of a loudness recommendation is physically reachable. Not imported by `analyze.py` or `server.py`.
+- Updated `prompts/phase2_system.txt` to require a MASTERING/DYNAMICS action whenever Phase 1 measures clipping (`saturationDetail.clippedSampleCount`) or a true-peak over (`truePeak`), enforced UI-side as `MISSING_LOUDNESS_ACTION`.
 - Standardized the canonical local backend port on `8100` so it stays in sync with the UI's `3100` local-dev convention and the new workspace launcher flow.
 - Added a tracked backend-owned `scripts/dev.sh` launcher that starts the full local stack, overrides stale UI backend env values at runtime, and deprecates the unversioned workspace-root launcher flow.
 - Reworked `analyze_structure()` to use matrix-based SBic feature input, replacing the ineffective direct PCM SBic path that was silently falling back in this environment.

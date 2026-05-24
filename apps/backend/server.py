@@ -140,6 +140,7 @@ from server_phase2 import (  # noqa: F401 — re-exported for test backward comp
     _sanitize_optional_phase2_fields,
     _stem_summary_label,
     _validate_phase2_catalog_entry,
+    _validate_phase2_citation_paths,
     _validate_phase2_semantics,
 )
 
@@ -1614,10 +1615,16 @@ def _run_interpretation_request_with_profile_config(
             if profile_id == "producer_summary" and interpretation_result is not None
             else []
         )
+        citation_path_warnings = (
+            _validate_phase2_citation_paths(interpretation_result, measurement_result)
+            if profile_id == "producer_summary" and interpretation_result is not None
+            else []
+        )
         validation_warnings = (
             parse_validation_warnings
             + style_profile_warnings
             + semantic_validation_warnings
+            + citation_path_warnings
         )
         diagnostics = _build_diagnostics(
             response_ready_at=_current_time(),

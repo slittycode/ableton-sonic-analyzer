@@ -280,4 +280,5 @@ export interface DiagnosticLogEntry {
   estimateHighMs?: number;
   timings?: BackendTimingDiagnostics;
   validationReport?: import('../services/phase2Validator').ValidationReport;
+  validationError?: string;
 }

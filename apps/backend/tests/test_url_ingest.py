@@ -223,8 +223,8 @@ class MimeTypePickerTests(unittest.TestCase):
         )
 
     def test_no_content_type_falls_back_to_filename(self):
-        # Canonical (Gemini-accepted) spelling, host-independent — not the
-        # platform-dependent "audio/x-wav" the OS mimetypes DB may return.
+        # Canonical, host-independent: ``.wav`` -> ``audio/wav`` on every OS
+        # (the host MIME database returns ``audio/x-wav`` on some platforms).
         self.assertEqual(
             url_ingest._pick_mime_type("", "/audio.wav"), "audio/wav"
         )

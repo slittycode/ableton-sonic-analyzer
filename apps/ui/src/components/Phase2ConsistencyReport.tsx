@@ -4,6 +4,13 @@ import type { ValidationReport, ValidationViolation } from '../services/phase2Va
 
 interface Phase2ConsistencyReportProps {
   report: ValidationReport;
+  /**
+   * When set, suppress the "CONSISTENCY OK" row for a passed/clean report so the
+   * results surface shows nothing on a clean run instead of green noise above
+   * the recommendations. The Diagnostic Log leaves it unset to keep the
+   * affirmative signal for the dev audience.
+   */
+  hideWhenClean?: boolean;
 }
 
 function formatViolationType(type: ValidationViolation['type']): string {
@@ -20,7 +27,7 @@ function severityClass(severity: ValidationViolation['severity']): string {
   return severity === 'ERROR' ? 'text-error' : 'text-warning';
 }
 
-export function Phase2ConsistencyReport({ report }: Phase2ConsistencyReportProps) {
+export function Phase2ConsistencyReport({ report, hideWhenClean = false }: Phase2ConsistencyReportProps) {
   // Audit Finding #1E: dev-audience violations (currently NEW_FIELD_UNCITED
   // coverage signals) stay in `report.violations` and `report.summary` so
   // tests and offline analysis see them, but they are suppressed from the
@@ -31,6 +38,9 @@ export function Phase2ConsistencyReport({ report }: Phase2ConsistencyReportProps
   const userWarningCount = userVisible.filter((v) => v.severity === 'WARNING').length;
 
   if (report.passed && userVisible.length === 0) {
+    if (hideWhenClean) {
+      return null;
+    }
     return (
       <div className="text-[10px] font-mono uppercase tracking-wide text-success/70">
         CONSISTENCY OK

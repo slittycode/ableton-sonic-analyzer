@@ -4985,38 +4985,18 @@ class CsvExportRouteTests(unittest.TestCase):
 
 
 class AudioMimeTypeTests(unittest.TestCase):
-    """The MIME _get_audio_mime_type returns is sent to the Gemini Files API,
-    which accepts only the plain IANA spellings — never the host-dependent
-    audio/x-* variants the OS mimetypes DB emits on macOS."""
+    """The Gemini-upload labeling path must resolve canonical, host-stable types.
 
-    def test_accepted_formats_use_canonical_gemini_spellings(self) -> None:
-        cases = {
-            "track.flac": "audio/flac",
-            "song.wav": "audio/wav",
-            "loop.mp3": "audio/mpeg",
-            "stab.aif": "audio/aiff",
-            "stab.aiff": "audio/aiff",
-        }
-        for filename, expected in cases.items():
-            with self.subTest(filename=filename):
-                self.assertEqual(server._get_audio_mime_type(filename), expected)
+    audio_mime / url_ingest are covered in test_audio_mime.py; this guards the
+    server-side ``_get_audio_mime_type`` helper that labels audio for Gemini, so
+    a FLAC is sent as ``audio/flac`` on every OS (the host MIME database returns
+    ``audio/x-flac`` on macOS, which Gemini may reject).
+    """
 
-    def test_never_returns_x_prefixed_variants(self) -> None:
-        # Regression guard: macOS mimetypes returns audio/x-flac / audio/x-wav,
-        # which Gemini rejects. The canonical map must short-circuit before that.
-        for filename in ("track.flac", "song.wav", "stab.aiff"):
-            with self.subTest(filename=filename):
-                self.assertNotIn("x-", server._get_audio_mime_type(filename))
-
-    def test_extension_match_is_case_insensitive(self) -> None:
-        self.assertEqual(server._get_audio_mime_type("TRACK.FLAC"), "audio/flac")
-
-    def test_unknown_extension_uses_fallback(self) -> None:
-        self.assertEqual(server._get_audio_mime_type("upload.bin"), "audio/mpeg")
-        self.assertEqual(
-            server._get_audio_mime_type("upload.bin", fallback="audio/wav"),
-            "audio/wav",
-        )
+    def test_get_audio_mime_type_prefers_canonical_audio_types(self) -> None:
+        self.assertEqual(server._get_audio_mime_type("track.flac"), "audio/flac")
+        self.assertEqual(server._get_audio_mime_type("track.wav"), "audio/wav")
+        self.assertEqual(server._get_audio_mime_type("track.aiff"), "audio/aiff")
 
 
 if __name__ == "__main__":

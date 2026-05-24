@@ -39,6 +39,7 @@ from urllib.parse import unquote, urlparse
 import requests
 
 import upload_limits
+from audio_mime import canonical_audio_mime
 
 
 __all__ = [
@@ -49,7 +50,6 @@ __all__ = [
     "UrlFetchFailedError",
     "UrlTooLargeError",
     "fetch_url_to_bytes",
-    "CANONICAL_AUDIO_MIME",
 ]
 
 
@@ -371,23 +371,6 @@ def _extract_filename(url_path: str) -> str:
     return segment
 
 
-# Canonical, host-independent MIME types for the audio formats ASA accepts.
-# The OS mimetypes database disagrees across hosts — macOS reports `audio/x-flac`
-# / `audio/x-wav` where Linux reports the plain forms — so known audio extensions
-# are resolved from this map before falling back to `mimetypes.guess_type`. These
-# are the plain IANA spellings the Gemini Files API accepts. The Phase 2 upload
-# path resolves its own MIME from the filename via
-# `server_phase2._get_audio_mime_type`, which imports this same map so the URL and
-# multipart paths agree on what Gemini receives.
-CANONICAL_AUDIO_MIME: Final[dict[str, str]] = {
-    ".mp3": "audio/mpeg",
-    ".wav": "audio/wav",
-    ".flac": "audio/flac",
-    ".aif": "audio/aiff",
-    ".aiff": "audio/aiff",
-}
-
-
 def _pick_mime_type(content_type_header: str, url_path: str) -> str:
     """Prefer the response Content-Type; fall back to filename guess."""
     # Strip charset / parameters: "audio/mpeg; charset=binary" -> "audio/mpeg".
@@ -398,12 +381,12 @@ def _pick_mime_type(content_type_header: str, url_path: str) -> str:
     }:
         return primary
 
-    # Fall back to filename-based sniffing. Canonical map first (host-independent),
-    # then the OS mimetypes database for anything outside ASA's accepted formats.
+    # Fall back to filename-based sniffing. Prefer the canonical, host-stable
+    # audio map (apps/backend/audio_mime.py) so a ``.flac`` resolves identically
+    # on macOS and Linux; only consult the host MIME database for extensions
+    # outside that map.
     filename = _extract_filename(url_path)
-    dot = filename.rfind(".")
-    extension = filename[dot:].lower() if dot != -1 else ""
-    canonical = CANONICAL_AUDIO_MIME.get(extension)
+    canonical = canonical_audio_mime(filename)
     if canonical:
         return canonical
 
