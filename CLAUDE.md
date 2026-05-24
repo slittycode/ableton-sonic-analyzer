@@ -138,7 +138,7 @@ The backend supports staged execution via `analysis_runtime.py`, which persists 
 
 Run-oriented endpoints (`/api/analysis-runs*`) are the canonical interface for staged execution. Legacy `POST /api/analyze`, `POST /api/analyze/estimate`, and `POST /api/phase2` remain only as temporary compatibility wrappers — do not build new functionality on them.
 
-Phase 3 audition-sample generation (`POST/GET /api/analysis-runs/{run_id}/samples`) is **on-demand**, not a queue stage — the UI explicitly requests it after interpretation completes. See `server_samples.py` and the `sample_*.py` modules. On the frontend, `apps/ui/src/components/SamplePlayback.tsx` is the entry point — mounted from `AnalysisResults.tsx` and driven by `src/services/sampleGenerationClient.ts` (`generateSamples` posts, `fetchSamples` retrieves).
+Phase 3 audition-sample generation (`POST/GET /api/analysis-runs/{run_id}/samples`) is **on-demand**, not a queue stage — the UI explicitly requests it after interpretation completes. See `server_samples.py` and the `sample_*.py` modules. On the frontend, `apps/ui/src/components/SamplePlayback.tsx` is the entry point — mounted from `AnalysisResults.tsx` and driven by `src/services/sampleGenerationClient.ts` (`generateSamples` posts, `fetchExistingManifest` retrieves).
 
 Frontend polling: `src/services/analysisRunsClient.ts` creates runs and polls stage snapshots. `src/services/analyzer.ts` orchestrates the create-run + poll loop and projects display payloads.
 

@@ -19,6 +19,7 @@ Canonical live-analysis routes:
 - `POST /api/analysis-runs` — multipart upload or SSRF-guarded URL ingestion
 - `GET /api/analysis-runs/{run_id}`
 - `DELETE /api/analysis-runs/{run_id}` — owner delete; operator `X-Admin-Key` bypass when `SONIC_ANALYZER_ADMIN_KEY` is set
+- `POST /api/analysis-runs/{run_id}/interrupt` — terminate active child processes for the run and mark stages interrupted
 - `GET /api/analysis-runs/{run_id}/artifacts...`
 - `GET /api/analysis-runs/{run_id}/source-audio`
 - `GET /api/analysis-runs/{run_id}/export/csv/{field_path}`

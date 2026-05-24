@@ -2,7 +2,7 @@
 
 **Last updated:** May 2026 (Phase 3 audition samples shipped; CSV export, URL ingest, admin DELETE, source-audio route, `publicStatus`, and reassigned spectrogram landed in the same window — no shifts to the three-layer thesis or library decisions below)  
 **Status:** Living document — update when experiments produce results or the AI capability landscape shifts materially.  
-**Sources:** ChatGPT o3 deep research (March 2026), Codex architecture hardening audit, Perplexity ecosystem research (Demucs/separation alternatives), session analysis with Claude Sonnet, and the 2026-03-18 reality audit ([archived](archive/stage3-reality-audit-2026-03-18.md)). The three `deep-research-report*.md` files originally cited here were external research inputs and are not committed to this repo.
+**Sources:** ChatGPT o3 deep research (March 2026), Codex architecture hardening audit, Perplexity ecosystem research (Demucs/separation alternatives), session analysis with Claude Sonnet, and the 2026-03-18 reality audit ([archived](history/archive/stage3-reality-audit-2026-03-18.md)). The three `deep-research-report*.md` files originally cited here were external research inputs and are not committed to this repo.
 
 This document is not a specification. It is a record of *why* the architecture is shaped the way it is, so that future development decisions — by agents or humans — can be made with the reasoning visible rather than just the conclusions.
 
