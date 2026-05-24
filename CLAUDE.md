@@ -20,6 +20,8 @@ The short version: ASA helps intermediate Ableton Live 12 producers answer "how 
 
 ## Commands
 
+First-time local setup (Python 3.11 venv, Node deps, Phase 2 Gemini wiring) is documented step-by-step in [`docs/SETUP.md`](docs/SETUP.md) — start there on a fresh checkout.
+
 ### Full Stack
 
 ```bash
@@ -166,16 +168,17 @@ Artifact access goes through `artifact_storage.py` rather than direct disk paths
 9. **`upload_limits.py`**: Canonical 100 MiB raw-audio / 101 MiB request-envelope limits. Regenerate the operator contract via `scripts/render_upload_limit_contract.py` if numbers change.
 10. **`spectral_viz.py`**: Librosa-based spectrogram/time-series artifacts. Called after measurement; failures are non-critical.
 11. **`url_ingest.py`**: SSRF-guarded URL-mode ingestion for `POST /api/analysis-runs` — fetches a public `http`/`https` audio URL and feeds it through the same downstream pipeline as a multipart upload.
-12. **`csv_export.py`**: CSV exporters for Phase 1 time-series fields, backing `GET /api/analysis-runs/{run_id}/export/csv/{field_path}`. Keeps the route handler a thin lookup-and-serve. Field paths are an explicit allowlist (`csv_export.list_supported_fields()` — currently `lufsCurve.shortTerm`, `lufsCurve.momentary`, `rhythmDetail.tempoCurve`, `spectralBalanceTimeSeries`); arbitrary descent into the payload is not supported. Example: `curl http://127.0.0.1:8100/api/analysis-runs/<run_id>/export/csv/rhythmDetail.tempoCurve -o tempo.csv`.
-13. **`stage_status.py`**: Collapses the eight internal stage statuses into the additive client-facing `publicStatus` field on every stage snapshot.
-14. **`server_samples.py` + `sample_generation.py`, `sample_theory.py`, `sample_synthesis.py`, `sample_drums.py`**: Phase 3 audition-sample generation. `sample_theory.py` builds the PyTheory musical plan, `sample_synthesis.py` renders audio (FluidSynth with sine-additive fallback), `sample_drums.py` synthesizes drum one-shots, `sample_generation.py` orchestrates and emits the citation manifest. On-demand only.
-15. **`dsp_bandbank.py` + `dsp_utils.py`**: Shared DSP primitives — `BatchedBandpass` (4th-order Butterworth bandpass bank) and cross-module utility functions.
-16. **`phase1_evaluation.py` + `phase1_report_html.py`, `polyphonic_evaluation.py`, `beat_evaluation.py` + `beat_report_html.py`, `loudness_rec_evaluation.py`**: Offline evaluation harnesses (deterministic-metric / detector-stability reporting, research-only polyphonic transcription, the beat/downbeat measurement gate that benchmarks CPJKU/beat_this against the shipping kick-accent heuristic, and loudness-recommendation reachability). Not on the product path; driven by `scripts/evaluate_*.py`. Deleting them restores the product exactly.
-17. **`utils/cleanup.py`**: Periodic artifact-cleanup helpers used by the server background-task loop.
+12. **`audio_mime.py`**: Host-independent canonical extension→MIME resolution (stdlib `mimetypes` resolves `.flac` differently on macOS vs Linux CI). Mirrors `AUDIO_EXTENSION_MIME_TYPES` in [src/services/audioFile.ts](apps/ui/src/services/audioFile.ts); consumed by `server.py`, `server_phase2.py`, and `url_ingest.py` so a FLAC handed to Gemini is `audio/flac` on every OS. Keep the two maps in sync (see Tripwires).
+13. **`csv_export.py`**: CSV exporters for Phase 1 time-series fields, backing `GET /api/analysis-runs/{run_id}/export/csv/{field_path}`. Keeps the route handler a thin lookup-and-serve. Field paths are an explicit allowlist (`csv_export.list_supported_fields()` — currently `lufsCurve.shortTerm`, `lufsCurve.momentary`, `rhythmDetail.tempoCurve`, `spectralBalanceTimeSeries`); arbitrary descent into the payload is not supported. Example: `curl http://127.0.0.1:8100/api/analysis-runs/<run_id>/export/csv/rhythmDetail.tempoCurve -o tempo.csv`.
+14. **`stage_status.py`**: Collapses the eight internal stage statuses into the additive client-facing `publicStatus` field on every stage snapshot.
+15. **`server_samples.py` + `sample_generation.py`, `sample_theory.py`, `sample_synthesis.py`, `sample_drums.py`**: Phase 3 audition-sample generation. `sample_theory.py` builds the PyTheory musical plan, `sample_synthesis.py` renders audio (FluidSynth with sine-additive fallback), `sample_drums.py` synthesizes drum one-shots, `sample_generation.py` orchestrates and emits the citation manifest. On-demand only.
+16. **`dsp_bandbank.py` + `dsp_utils.py`**: Shared DSP primitives — `BatchedBandpass` (4th-order Butterworth bandpass bank) and cross-module utility functions.
+17. **`phase1_evaluation.py` + `phase1_report_html.py`, `polyphonic_evaluation.py`, `beat_evaluation.py` + `beat_report_html.py`, `loudness_rec_evaluation.py`**: Offline evaluation harnesses (deterministic-metric / detector-stability reporting, research-only polyphonic transcription, the beat/downbeat measurement gate that benchmarks CPJKU/beat_this against the shipping kick-accent heuristic, and loudness-recommendation reachability). Not on the product path; driven by `scripts/evaluate_*.py`. Deleting them restores the product exactly.
+18. **`utils/cleanup.py`**: Periodic artifact-cleanup helpers used by the server background-task loop.
 
 The subprocess isolation means `analyze.py` works as a standalone CLI. Check `apps/backend/JSON_SCHEMA.md` before adding new analyzer output fields. Check `apps/backend/ARCHITECTURE.md` for the full HTTP flow and contract details.
 
-**Phase 2 (`POST /api/phase2`, legacy compat):** Uploads audio to Gemini inline if ≤100 MiB, or via the Gemini Files API if larger. Phase 1 JSON is appended to the system prompt from `prompts/phase2_system.txt`. Also relevant: `prompts/stem_summary_system.txt` and `prompts/live12_device_catalog.json`.
+**Phase 2 (`POST /api/phase2`, legacy compat):** Uploads audio to Gemini inline if ≤100 MiB, or via the Gemini Files API if larger. Phase 1 JSON is appended to the system prompt from `prompts/phase2_system.txt`. Also relevant: `prompts/stem_summary_system.txt` and `prompts/live12_device_catalog.json`. Backend defense-in-depth: `server_phase2.py`'s `_validate_phase2_citation_paths` mirrors the frontend citation-existence check and emits `validationWarnings` when a recommendation cites a Phase 1 path that doesn't exist — it flags invented citations rather than failing, since Phase 1 stays authoritative (invariant #1).
 
 **Python version constraint:** Python 3.11.x required on macOS arm64. Essentia 2.1b6 wheels are only published for 3.11; this constraint may be relaxable if Essentia publishes 3.12+ wheels.
 
@@ -192,7 +195,7 @@ Single-page React 19 + Vite + TypeScript + Tailwind CSS v4 app with no router. V
 5. **`src/services/spectralArtifactsClient.ts`**: Fetches spectrogram/spectral-evolution artifacts via `/api/analysis-runs/{run_id}/artifacts/…`.
 6. **`src/services/sampleGenerationClient.ts`**: Phase 3 audition-sample POST/GET against `/api/analysis-runs/{run_id}/samples`, plus per-clip artifact streaming.
 7. **`src/services/mixDoctor.ts`**: Mix advisory logic — client-side scoring and suggestions against measured spectral balance.
-8. **`src/services/phase2Validator.ts`** + **`loudnessGuardrails.ts`**: Runtime guardrail. Validates Phase 2 consistency against Phase 1 (`validateBPMConsistency`, `validateKeyConsistency`, `validateLUFSConsistency`, `validateGenreDSPConsistency`, `validateNumericBounds`, `validateLoudnessActionPresence`). `loudnessGuardrails.ts` defines the objective loudness defects (digital clipping via `saturationDetail.clippedSampleCount`, true-peak overs via `truePeak`) that a Phase 2 mastering/dynamics card *must* address — a missing action surfaces as a `MISSING_LOUDNESS_ACTION` violation.
+8. **`src/services/phase2Validator.ts`** + **`loudnessGuardrails.ts`**: Runtime guardrail. Validates Phase 2 consistency against Phase 1 (`validateBPMConsistency`, `validateKeyConsistency`, `validateLUFSConsistency`, `validateGenreDSPConsistency`, `validateNumericBounds`, `validateLoudnessActionPresence`). `loudnessGuardrails.ts` defines the objective loudness defects (digital clipping via `saturationDetail.clippedSampleCount`, true-peak overs via `truePeak`) that a Phase 2 mastering/dynamics card *must* address — a missing action surfaces as a `MISSING_LOUDNESS_ACTION` violation. The aggregate `validatePhase2Consistency` drives **`Phase2ConsistencyReport.tsx`**, which renders the chain-of-custody report on the results surface (`AnalysisResults.tsx`, `hideWhenClean`) and in full inside the diagnostic log (`DiagnosticLog.tsx`); `App.tsx` computes the report and passes it down.
 9. **`src/services/appliedRecommendations.ts`** + **`userLabels.ts`**: Applied-recommendations tracker and persisted-label state used by the audit overhaul.
 10. **`src/services/phase1Picker.ts`** + **`phaseLabels.ts`**: Phase-snapshot projection helpers consumed by the results surface.
 11. **`src/services/audioFile.ts`**: Client-side audio validation, blank-MIME extension fallback, preview-URL lifecycle.
@@ -214,6 +217,7 @@ The interface between apps is `Phase1Result` (in [src/types/measurement.ts](apps
 
 ```bash
 # apps/ui/.env (copy from .env.example)
+VITE_RUNTIME_PROFILE="local"             # frontend profile; controls API-URL fallback when VITE_API_BASE_URL is omitted
 VITE_API_BASE_URL="http://127.0.0.1:8100"
 VITE_ENABLE_PHASE2_GEMINI="true"
 RUN_GEMINI_LIVE_SMOKE="false"    # set "true" to run live Playwright tests against real Gemini Files API
@@ -250,6 +254,7 @@ Things that look like normal code changes but silently break the contract. Most 
 6. **Hard-coding `Path(...)` for artifacts in new code.** Artifact access must go through [artifact_storage.py](apps/backend/artifact_storage.py). Direct paths work in `local` profile and break silently in `hosted`.
 7. **Editing `apps/ui/.env` and expecting `dev.sh` to honor it.** `dev.sh` reads `apps/ui/.env` but *overrides* `VITE_API_BASE_URL` for the spawned UI process so stale `.env` files don't break the stack. To point the UI at a non-canonical backend, edit `dev.sh` or run the UI directly with the env var on the command line.
 8. **Phase 2 prompts that don't reference Phase 1 measurements.** The chain-of-custody invariant is enforced at runtime by [phase2Validator.ts](apps/ui/src/services/phase2Validator.ts) (`validateBPMConsistency`, `validateKeyConsistency`, `validateLUFSConsistency`, `validateGenreDSPConsistency`). If a prompt change lets Phase 2 emit a contradicting value, the validator surfaces it in the UI as a violation — not a silent failure, but worth knowing where the check lives.
+9. **Letting `audio_mime.py` and `audioFile.ts` MIME maps drift apart.** [audio_mime.py](apps/backend/audio_mime.py) pins a host-independent extension→MIME map and is the backend mirror of `AUDIO_EXTENSION_MIME_TYPES` in [src/services/audioFile.ts](apps/ui/src/services/audioFile.ts). Changing one without the other reintroduces the macOS-vs-Linux divergence (stdlib `mimetypes` resolves `.flac` inconsistently) that failed the backend gate and can mislabel a FLAC sent to Gemini.
 
 ## Where to Make the Change
 
