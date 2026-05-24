@@ -188,3 +188,42 @@ kick 800 hits / 76 Hz / THD 0.68 / distorted. Phase 2 produced **25 measurement-
 kick/acid/supersaw signals dominated). Adding these to the citation map alone did NOT drive
 citation usage — validating the program review's point that **worked examples**, not just map
 entries, drive field adoption. Use that for the next Tier-2 batch.
+
+---
+
+## Tier-2 batch 2 — SHIPPED (2026-05-24)
+
+Acting on the worked-example lesson above, three decision-rule blocks + five gated worked example
+cards were added to `phase2_system.txt` (+27 lines) for the three highest-leverage uncited surfaces:
+
+1. **Sidechain** (SIDECHAIN ENVELOPE section): `pumpingStrength`→Threshold/Ratio table, Glue vs
+   Compressor(Peak/RMS=RMS) choice, `routingBlueprint.sidechainSource` trigger + omit-gate; worked
+   Compressor `Sidechain=On` card citing `pumpingStrength`/`pumpingConfidence`/`envelopeShape32`.
+2. **Stereo** (new STEREO IMAGING RULES block): MUST-rule for negative `stereoCorrelation`, Utility
+   Bass Mono from `subBassMono`/`subBassCorrelation`, `stereoWidth`→Utility Width %, EQ Eight M/S as
+   rule-only; worked Utility `Bass Mono=On` card.
+3. **Melody/key** (new MELODY / KEY / HARMONY block): Scale/Auto Shift from `keyConfidence`,
+   Arpeggiator from `noteCount`+`chordChangeCount`, Chord from `chordTimelineAgreement === true`
+   (boolean, not numeric), `tuningCents`→Operator `Oscillator A Fine` (never Wavetable), oscillator
+   shape from `oddToEvenRatio`, vibrato rule-only; worked Scale + Arpeggiator + Chord cards.
+
+Decisions: vibrato kept rule-only (no `melodyDetail.vibratoConfidence` CONFIDENCE_PAIRS entry — a
+card citing it would silently fall back to `pitchConfidence`, the bug-#9 pattern); no descriptor-hook
+changes (Gemini cites from the raw payload). Placement matches the proven MASTERING split: rules in
+topic sections, worked cards in the `abletonRecommendations` Valid-example block.
+
+**Verification.** Backend `test_phase2_citation_paths`+`test_phase2_grammar_fix` (32 OK), frontend
+`phase2Validator.test.ts` (65 OK); a strict catalog cross-check confirmed all five new cards
+(JSON/device/parameter/family/category/stage/full-mix). Live Gemini run (gemini-2.5-flash, inline,
+Demucs skipped) on VTSS – Can't Catch Me (144.9 BPM, C Minor, psytrance): **STEREO fired** (`Utility
+Stereo Width = 110%` ← `stereoDetail.stereoWidth`+`stereoCorrelation`, since `stereoWidth` 0.09),
+**MELODY fired** (`Scale Name = Minor (Base C)` ← `key`+`keyConfidence`). **SIDECHAIN correctly
+self-suppressed** — measured pumping was weak/rate-less (`pumpingRate=None`, `pumpingConfidence`
+0.26, `pumpingStrength` 0.31), so the gate held; Bass Mono correctly skipped (`subBassMono` true,
+`subBassCorrelation` 0.98). No new validator warnings attributable to this batch.
+
+**Pre-existing bugs surfaced by the live run (NOT batch-2; candidates for a Tier-1 follow-up):**
+- `phase2_system.txt:180` teaches Reverb `PreDelay`, but the catalog param is `Predelay` (lowercase
+  d) → produced a live `UNKNOWN_PARAMETER Reverb | PreDelay`.
+- `phase2_system.txt` Operator exemplar (the long-standing "Valid example card") cites parameter
+  `Envelope Decay`; the Operator catalog param is `Amp Envelope Decay`.
