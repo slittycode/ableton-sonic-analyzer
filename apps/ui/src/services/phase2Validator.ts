@@ -154,6 +154,7 @@ export const CONFIDENCE_PAIRS: Record<string, string> = {
   'sidechainDetail.pumpingStrength': 'sidechainDetail.pumpingConfidence',
   'sidechainDetail.pumpingRegularity': 'sidechainDetail.pumpingConfidence',
   'sidechainDetail.envelopeShape': 'sidechainDetail.pumpingConfidence',
+  'sidechainDetail.envelopeShape32': 'sidechainDetail.pumpingConfidence',
   'melodyDetail': 'melodyDetail.pitchConfidence',
   'transcriptionDetail': 'transcriptionDetail.averageConfidence',
   'genreDetail': 'genreDetail.confidence',
