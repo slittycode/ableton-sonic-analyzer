@@ -674,6 +674,31 @@ class AnalyzeRhythmAndStructureTests(unittest.TestCase):
             (0, 0.0),
         )
 
+    def test_downbeat_phase_is_robust_to_non_finite_beats(self) -> None:
+        # A non-finite lowBand value (silent intro, BeatLoudness dropout) must be
+        # sanitized IN PLACE, not filtered out. Filtering would compact the array
+        # and rotate the phase relative to the unfiltered beat_grid the caller
+        # indexes — shifting the downbeat to the wrong beat. Kick lives on
+        # position 2; a NaN at a non-kick index must not move the resolved phase.
+        import analyze_rhythm
+
+        clean = np.asarray([0.1, 0.1, 1.0, 0.1] * 8, dtype=np.float64)
+        clean_phase, _ = analyze_rhythm._compute_downbeat_phase(clean, 4)
+        self.assertEqual(clean_phase, 2)
+
+        with_nan = clean.copy()
+        with_nan[0] = np.nan  # non-kick beat goes missing
+        nan_phase, nan_conf = analyze_rhythm._compute_downbeat_phase(with_nan, 4)
+        self.assertEqual(nan_phase, 2)  # would be 1 if the array were compacted
+        self.assertGreater(nan_conf, 0.5)
+
+        # +inf / -inf are handled the same way and never crash the mean/argmax.
+        with_inf = clean.copy()
+        with_inf[1] = np.inf
+        with_inf[5] = -np.inf
+        inf_phase, _ = analyze_rhythm._compute_downbeat_phase(with_inf, 4)
+        self.assertEqual(inf_phase, 2)
+
     def test_resolve_downbeats_uses_resolved_phase_with_legacy_fallback(self) -> None:
         import analyze_structure
 

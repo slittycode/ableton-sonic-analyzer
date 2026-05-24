@@ -211,7 +211,7 @@ Both Python deps are added to `requirements.txt` because they install cleanly vi
 ## Rollout
 
 1. Land prototype behind no feature flag (the endpoint is opt-in by virtue of requiring an explicit POST).
-2. Frontend renders the panel only when `stages.sampleGeneration.status == "completed"`; trigger button is always visible after Phase 2 finishes.
+2. Frontend shows the trigger after Phase 2 (interpretation) finishes and renders the results once the manifest is available (a `200` from `GET /api/analysis-runs/{run_id}/samples`; `404` until generated). Sample generation is *not* a snapshot stage — see "Snapshot integration" above — so there is no `stages.sampleGeneration.status` to gate on.
 3. Iterate on synthesis quality based on real-track auditioning. Specifically: tune the chord-voicing rules, evaluate whether the kick model is convincing enough that the user trusts the `fundamentalHz` measurement.
 4. If audition proves valuable, promote to a proper stage with its own attempts table and auto-enqueue. If not, remove cleanly — nothing else in the codebase depends on it.
 

@@ -673,12 +673,13 @@ describe('analyzeAudio', () => {
     );
   });
 
-  it('silently skips validation when the validator throws', async () => {
+  it('records a validation error on the interpretation log when the validator throws', async () => {
     createAnalysisRunMock.mockResolvedValue(makeRunSnapshot());
     getAnalysisRunMock.mockResolvedValue(makeRunSnapshot());
     validatePhase2ConsistencyMock.mockImplementation(() => {
       throw new Error('validator blew up');
     });
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     const file = new File(['audio-data'], 'track.mp3', { type: 'audio/mpeg' });
     const onPhase2Complete = vi.fn();
@@ -700,10 +701,16 @@ describe('analyzeAudio', () => {
     );
 
     expect(validatePhase2ConsistencyMock).toHaveBeenCalledWith(phase1Result, phase2Result);
+    // Interpretation still reports — the failure is non-fatal.
     expect(onError).not.toHaveBeenCalled();
     expect(onPhase2Complete).toHaveBeenCalledTimes(1);
     expect(onPhase2Complete.mock.calls[0]?.[0]).toBe(phase2Result);
+    // The validation failure is recorded, not silently swallowed.
     expect(onPhase2Complete.mock.calls[0]?.[1]?.validationReport).toBeUndefined();
+    expect(onPhase2Complete.mock.calls[0]?.[1]?.validationError).toBe('validator blew up');
     expect(onPhase2Complete.mock.calls[0]?.[1]?.requestId).toBe('run_123');
+    expect(consoleErrorSpy).toHaveBeenCalled();
+
+    consoleErrorSpy.mockRestore();
   });
 });

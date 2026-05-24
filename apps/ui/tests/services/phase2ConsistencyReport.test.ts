@@ -30,6 +30,40 @@ describe('Phase2ConsistencyReport', () => {
     expect(html).not.toContain('<table');
   });
 
+  it('renders nothing for a clean report when hideWhenClean is set', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(Phase2ConsistencyReport, {
+        report: buildReport(),
+        hideWhenClean: true,
+      }),
+    );
+
+    expect(html).toBe('');
+  });
+
+  it('still renders the table for a failing report when hideWhenClean is set', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(Phase2ConsistencyReport, {
+        report: buildReport({
+          passed: false,
+          violations: [
+            {
+              type: 'NUMERIC_OVERRIDE',
+              field: 'bpm',
+              severity: 'ERROR',
+              message: 'BPM contradiction.',
+            },
+          ],
+          summary: { errorCount: 1, warningCount: 0, checkedFields: 5 },
+        }),
+        hideWhenClean: true,
+      }),
+    );
+
+    expect(html).toContain('<table');
+    expect(html).toContain('BPM contradiction.');
+  });
+
   it('renders an error violation row with the field and detail message', () => {
     const html = renderToStaticMarkup(
       React.createElement(Phase2ConsistencyReport, {
