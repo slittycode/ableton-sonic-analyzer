@@ -99,8 +99,8 @@ The node labels above are schematic. The actual entry points are
 `sample_generation.generate_samples()` (orchestrator);
 `sample_theory.plan_chord_progression()` / `plan_bass_root()` / `plan_melody_phrase()`;
 `sample_drums.synth_kick()` / `synth_snare()` / `synth_hat()`;
-`sample_synthesis.render_clip()` and `write_midi()`; and
-`analysis_runtime.record_artifact()`.
+`sample_synthesis.render_clip()` and `write_midi()`; and the
+`AnalysisRuntime.record_artifact()` method in `analysis_runtime.py`.
 
 ## Module Inventory
 
