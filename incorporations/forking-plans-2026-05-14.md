@@ -8,7 +8,7 @@ project — React + Tonal.js chord-progression / reharmonization tool).
 **Anchor:** [PURPOSE.md](../PURPOSE.md) — every plan ties back to one of
 its three "build it" criteria or the "stop and reconsider" branch.
 
-**Companion review:** [`docs/external-repo-review-2026-05-13.md`](../docs/external-repo-review-2026-05-13.md)
+**Companion review:** [`docs/history/external-repo-review-2026-05-13.md`](../docs/history/external-repo-review-2026-05-13.md)
 already covers openmeters, soundscope, Partiels, and forever-jukebox
 (Tracks 1–3 there). This batch deliberately avoids those upstreams and
 opens five new tracks — three ASA-facing, two Harmonia-facing — numbered
@@ -513,7 +513,7 @@ measurement."
 - **Track 1 (prior review, openmeters):** the openmeters port was
   rejected; ASA's existing Essentia `LoudnessEBUR128` was verified
   correct on stereo at 44.1 kHz and 48 kHz via the EBU R128 spike
-  ([`docs/track1-spike-outcome-2026-05-13.md`](../docs/track1-spike-outcome-2026-05-13.md)).
+  ([`docs/history/track1-spike-outcome-2026-05-13.md`](../docs/history/track1-spike-outcome-2026-05-13.md)).
 - **Plan 4 (this batch, audio-analyzer-rs):** a cross-check oracle, not a
   measurement source. ASA's Phase 1 remains canonical (Quality
   Invariant 1).
@@ -683,7 +683,7 @@ What Harmonia gets from the reference review:
 **Reference-only.** No code lift. Output: an architecture-and-UX review
 doc inside Harmonia's repo, structured as adopt / adapt / reject per
 surface and per architectural choice, mirroring the discipline of
-[`docs/external-repo-review-2026-05-13.md`](../docs/external-repo-review-2026-05-13.md)'s
+[`docs/history/external-repo-review-2026-05-13.md`](../docs/history/external-repo-review-2026-05-13.md)'s
 Track 3.
 
 **Stack-fit reasoning.** Harmonia is React + Tonal.js, symbolic-first,
@@ -990,7 +990,7 @@ REST API, the HF dataset card itself), this is called out inline and
 made the first checklist item under the affected plan's Definition of
 done. The house style — License Map up front, adopt / adapt / reject
 tables, per-plan DoD, closing Sequencing section — mirrors
-[`docs/external-repo-review-2026-05-13.md`](../docs/external-repo-review-2026-05-13.md),
+[`docs/history/external-repo-review-2026-05-13.md`](../docs/history/external-repo-review-2026-05-13.md),
 which covers the three preceding tracks (openmeters, Partiels,
 forever-jukebox) that this batch deliberately does not re-cover.
 
