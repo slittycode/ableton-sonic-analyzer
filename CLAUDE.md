@@ -81,7 +81,7 @@ Operational and one-shot scripts live in two places. They are not on the request
 3. `calibrate_confidence.py` — threshold-sweep harness for the pitch / chord / sidechain detectors. Research-only.
 
 `apps/backend/scripts/`:
-1. `bootstrap.sh` — recreate the Python 3.11 venv (covered above).
+1. `bootstrap.sh` — recreate the Python 3.11 venv (covered above). `dev.sh` here is a thin shim that `exec`s the repo-root `scripts/dev.sh` full-stack launcher.
 2. `render_upload_limit_contract.py` — regenerate the operator-facing upload-limit contract text from `upload_limits.py`. Run after changing the canonical limits.
 3. `evaluate_phase1.py`, `evaluate_polyphonic.py`, `evaluate_structure_sweep.py`, `evaluate_beats.py`, `evaluate_loudness_recs.py` — offline evaluation harnesses for the Phase 1 detector battery, the research polyphonic transcriber, structure-segmentation parameter sweeps, the beat/downbeat measurement gate, and loudness-recommendation reachability. Wired to `phase1_evaluation.py` / `polyphonic_evaluation.py` / `beat_evaluation.py` / `loudness_rec_evaluation.py`. `build_beat_manifest.py` assembles the beat-eval corpus manifest. All research-only. The beat gate's optional neural deps (`beat_this`, `mir_eval`) live in `apps/backend/requirements-eval.txt` — install into a separate venv, never the product venv.
 4. `audit_pass1.py`, `genre_check.py`, `replay_catalog_validation.py` — corpus auditing and Live 12 device-catalog validation. `genre_corpus.md` is the corpus manifest.

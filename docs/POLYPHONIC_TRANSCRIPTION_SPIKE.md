@@ -100,7 +100,7 @@ Notes:
 Basic Pitch only:
 
 ```bash
-cd /Users/christiansmith/code/projects/asa/apps/backend
+cd /path/to/asa/apps/backend
 ./venv/bin/python scripts/evaluate_polyphonic.py \
   --manifest /absolute/path/to/polyphonic_manifest.json
 ```
@@ -108,7 +108,7 @@ cd /Users/christiansmith/code/projects/asa/apps/backend
 Basic Pitch plus MT3:
 
 ```bash
-cd /Users/christiansmith/code/projects/asa/apps/backend
+cd /path/to/asa/apps/backend
 ./venv/bin/python scripts/evaluate_polyphonic.py \
   --manifest /absolute/path/to/polyphonic_manifest.json \
   --mt3-command "python /absolute/path/to/run_mt3.py --audio {audio_path} --midi-out {midi_path}"
@@ -117,7 +117,7 @@ cd /Users/christiansmith/code/projects/asa/apps/backend
 With Demucs diagnostics:
 
 ```bash
-cd /Users/christiansmith/code/projects/asa/apps/backend
+cd /path/to/asa/apps/backend
 ./venv/bin/python scripts/evaluate_polyphonic.py \
   --manifest /absolute/path/to/polyphonic_manifest.json \
   --save-demucs-diagnostics
