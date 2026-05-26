@@ -29,6 +29,7 @@ describe('FIELD_LABELS', () => {
     ['sidechainDetail.pumpingStrength', 'Pumping strength'],
     ['genreDetail.genre', 'Genre'],
     ['reverbDetail.rt60', 'Reverb tail (RT60)'],
+    ['reverbDetail.measured', 'Reverb measured'],
   ])('maps %s to producer label %s', (path, expected) => {
     expect(FIELD_LABELS[path]).toBe(expected);
   });

@@ -2694,6 +2694,17 @@ def _validate_phase2_citation_paths(
                 allowed=allowed,
             )
 
+    for index, item in enumerate(phase2_result.get("trackLayout") or []):
+        record = _as_record(item)
+        grounding = _as_record(record.get("grounding")) if record else None
+        if grounding:
+            _validate_citation_paths_for_record(
+                warnings=warnings,
+                record=grounding,
+                base_path=f"trackLayout[{index}].grounding",
+                allowed=allowed,
+            )
+
     secret_sauce = _as_record(phase2_result.get("secretSauce"))
     steps = secret_sauce.get("workflowSteps") if secret_sauce else None
     if isinstance(steps, list):
@@ -2778,5 +2789,4 @@ def _parse_stem_summary_result(
     if not _is_valid_stem_summary_shape(parsed):
         return None, "Stem summary skipped because Gemini returned an invalid response shape."
     return parsed, None
-
 

@@ -184,7 +184,7 @@ const FX_RULES: FXRule[] = [
     condition: (f) => f.spectralCentroidMean < 1000,
     artifact: 'Dark overall spectrum — low spectral centroid',
     recommendation:
-      'Add presence: EQ Eight, boost 3-5kHz by 2-3dB with a gentle Q. Ableton Exciter on master: Freq 3kHz, Drive 10-15%.',
+      'Add presence: EQ Eight, boost 3-5kHz by 2-3dB with a gentle Q. For harmonic excitement on the master, Saturator with Color enabled (Freq ~4kHz, Drive 5-10%) — Live 12 has no "Exciter" device.',
   },
   {
     condition: (f) => f.onsetDensity > 8,

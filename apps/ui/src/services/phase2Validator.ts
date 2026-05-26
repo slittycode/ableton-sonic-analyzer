@@ -58,10 +58,11 @@ const TRIVIAL_CITATION_DOMINANCE_THRESHOLD = 0.6;
 
 /**
  * Confidence below which paired recommendation text must use hedged language.
- * Mirrors the PURPOSE.md invariant: low-confidence measurements must propagate
- * to hedged recommendations, not confident-sounding guesses.
+ * Most detector confidences are normalized 0-1. `bpmConfidence` is Essentia's
+ * unbounded RhythmExtractor2013 confidence, so it uses its own threshold.
  */
-const LOW_CONFIDENCE_THRESHOLD = 0.4;
+const NORMALIZED_LOW_CONFIDENCE_THRESHOLD = 0.4;
+const BPM_LOW_CONFIDENCE_THRESHOLD = 1.0;
 
 /**
  * Phase 1 fields whose presence-but-zero-citations should warn. The list now
@@ -144,7 +145,7 @@ export const CONFIDENCE_PAIRS: Record<string, string> = {
   'timeSignature': 'timeSignatureConfidence',
   'acidDetail': 'acidDetail.confidence',
   'acidDetail.isAcid': 'acidDetail.confidence',
-  'reverbDetail': 'reverbDetail.confidence',
+  'reverbDetail': 'reverbDetail.measured',
   'vocalDetail': 'vocalDetail.confidence',
   'vocalDetail.hasVocals': 'vocalDetail.confidence',
   'supersawDetail': 'supersawDetail.confidence',
@@ -154,6 +155,7 @@ export const CONFIDENCE_PAIRS: Record<string, string> = {
   'sidechainDetail.pumpingStrength': 'sidechainDetail.pumpingConfidence',
   'sidechainDetail.pumpingRegularity': 'sidechainDetail.pumpingConfidence',
   'sidechainDetail.envelopeShape': 'sidechainDetail.pumpingConfidence',
+  'sidechainDetail.envelopeShape32': 'sidechainDetail.pumpingConfidence',
   'melodyDetail': 'melodyDetail.pitchConfidence',
   'transcriptionDetail': 'transcriptionDetail.averageConfidence',
   'genreDetail': 'genreDetail.confidence',
@@ -293,16 +295,17 @@ export function validatePhase2Consistency(
 }
 
 /**
- * Returns true if at least one recommendation across mixAndMasterChain,
- * abletonRecommendations, or secretSauce.workflowSteps exposes a phase1Fields
- * array. Used to gate the citation contract check so legacy stored Phase 2
- * results from before the contract landed do not produce spurious errors.
+ * Returns true if at least one citation-bearing Phase 2 object exposes a
+ * phase1Fields array. Used to gate the citation contract check so legacy stored
+ * Phase 2 results from before the contract landed do not produce spurious
+ * errors.
  */
 function isNewShapePhase2(phase2: Phase2Result): boolean {
   const buckets: Array<Array<{ phase1Fields?: string[] }>> = [
     phase2.mixAndMasterChain ?? [],
     phase2.abletonRecommendations ?? [],
     phase2.secretSauce?.workflowSteps ?? [],
+    (phase2.trackLayout ?? []).map((item) => item.grounding ?? {}),
   ];
   for (const bucket of buckets) {
     for (const rec of bucket) {
@@ -373,6 +376,7 @@ interface CitationBearing {
 interface CitationBucket {
   pathPrefix: string;
   recs: CitationBearing[];
+  citationPath: (index: number) => string;
 }
 
 /**
@@ -392,17 +396,31 @@ function validatePhase1FieldCitations(
   const allowed = collectPhase1FieldPaths(phase1);
 
   const buckets: CitationBucket[] = [
-    { pathPrefix: 'mixAndMasterChain', recs: phase2.mixAndMasterChain ?? [] },
-    { pathPrefix: 'abletonRecommendations', recs: phase2.abletonRecommendations ?? [] },
+    {
+      pathPrefix: 'mixAndMasterChain',
+      recs: phase2.mixAndMasterChain ?? [],
+      citationPath: (index) => `mixAndMasterChain[${index}].phase1Fields`,
+    },
+    {
+      pathPrefix: 'abletonRecommendations',
+      recs: phase2.abletonRecommendations ?? [],
+      citationPath: (index) => `abletonRecommendations[${index}].phase1Fields`,
+    },
     {
       pathPrefix: 'secretSauce.workflowSteps',
       recs: phase2.secretSauce?.workflowSteps ?? [],
+      citationPath: (index) => `secretSauce.workflowSteps[${index}].phase1Fields`,
+    },
+    {
+      pathPrefix: 'trackLayout',
+      recs: (phase2.trackLayout ?? []).map((item) => item.grounding ?? {}),
+      citationPath: (index) => `trackLayout[${index}].grounding.phase1Fields`,
     },
   ];
 
   for (const bucket of buckets) {
     bucket.recs.forEach((rec, index) => {
-      const fieldPath = `${bucket.pathPrefix}[${index}].phase1Fields`;
+      const fieldPath = bucket.citationPath(index);
       const phase1Fields = rec.phase1Fields;
 
       if (!Array.isArray(phase1Fields)) {
@@ -411,7 +429,7 @@ function validatePhase1FieldCitations(
           field: fieldPath,
           severity: 'ERROR',
           message:
-            `Recommendation at ${bucket.pathPrefix}[${index}] is missing the required ` +
+            `Citation-bearing entry at ${fieldPath} is missing the required ` +
             'phase1Fields citation array. Per the Citation Contract every recommendation ' +
             'must list the Phase 1 measurement paths that justify it.',
         });
@@ -424,7 +442,7 @@ function validatePhase1FieldCitations(
           field: fieldPath,
           severity: 'ERROR',
           message:
-            `Recommendation at ${bucket.pathPrefix}[${index}] has an empty phase1Fields array. ` +
+            `Citation-bearing entry at ${fieldPath} has an empty phase1Fields array. ` +
             'At least one Phase 1 measurement path must be cited.',
         });
         return;
@@ -1179,6 +1197,50 @@ function containsAny(text: string, words: string[]): { matched: string | null } 
   return { matched: null };
 }
 
+interface LowConfidenceTrigger {
+  field: string;
+  confidenceField: string;
+  value: number | boolean;
+  rank: number;
+  ruleDescription: string;
+}
+
+function lowConfidenceTriggerForCitation(
+  phase1: Phase1Result,
+  cited: string,
+): LowConfidenceTrigger | null {
+  const confidencePath =
+    CONFIDENCE_PAIRS[cited] ?? CONFIDENCE_PAIRS[cited.split('.')[0]];
+  if (!confidencePath) return null;
+
+  if (confidencePath === 'reverbDetail.measured') {
+    const measured = readBooleanAtPath(phase1, confidencePath);
+    if (measured !== false) return null;
+    return {
+      field: cited,
+      confidenceField: confidencePath,
+      value: measured,
+      rank: 0,
+      ruleDescription: 'reverbDetail.measured === false',
+    };
+  }
+
+  const value = readNumberAtPath(phase1, confidencePath);
+  if (value === null) return null;
+  const threshold =
+    confidencePath === 'bpmConfidence'
+      ? BPM_LOW_CONFIDENCE_THRESHOLD
+      : NORMALIZED_LOW_CONFIDENCE_THRESHOLD;
+  if (value >= threshold) return null;
+  return {
+    field: cited,
+    confidenceField: confidencePath,
+    value,
+    rank: value / threshold,
+    ruleDescription: `${confidencePath} < ${threshold}`,
+  };
+}
+
 function validateLowConfidenceHedging(
   phase1: Phase1Result,
   phase2: Phase2Result,
@@ -1194,23 +1256,15 @@ function validateLowConfidenceHedging(
     // confidence value among the rec's cited fields as the gate. (If the rec
     // cites multiple fields and any one has low confidence, the text needs
     // hedging.)
-    let lowestConfidence: number | null = null;
-    let triggeringField: string | null = null;
-    let triggeringConfidenceField: string | null = null;
+    let strongestTrigger: LowConfidenceTrigger | null = null;
     for (const cited of rec.phase1Fields) {
-      const confidencePath =
-        CONFIDENCE_PAIRS[cited] ?? CONFIDENCE_PAIRS[cited.split('.')[0]];
-      if (!confidencePath) continue;
-      const value = readNumberAtPath(phase1, confidencePath);
-      if (value === null) continue;
-      if (value >= LOW_CONFIDENCE_THRESHOLD) continue;
-      if (lowestConfidence === null || value < lowestConfidence) {
-        lowestConfidence = value;
-        triggeringField = cited;
-        triggeringConfidenceField = confidencePath;
+      const trigger = lowConfidenceTriggerForCitation(phase1, cited);
+      if (!trigger) continue;
+      if (strongestTrigger === null || trigger.rank < strongestTrigger.rank) {
+        strongestTrigger = trigger;
       }
     }
-    if (lowestConfidence === null) continue;
+    if (strongestTrigger === null) continue;
 
     const imperative = containsAny(rec.reasonText, IMPERATIVE_WORDS);
     const hedge = containsAny(rec.reasonText, HEDGE_WORDS);
@@ -1218,13 +1272,18 @@ function validateLowConfidenceHedging(
       violations.push({
         type: 'LOW_CONFIDENCE_NOT_HEDGED',
         field: `${rec.bucket}[${rec.index}]`,
-        phase1Value: { confidenceField: triggeringConfidenceField, value: lowestConfidence },
+        phase1Value: {
+          confidenceField: strongestTrigger.confidenceField,
+          value: strongestTrigger.value,
+          rule: strongestTrigger.ruleDescription,
+        },
         phase2Value: imperative.matched,
         severity: 'ERROR',
         message:
-          `Recommendation at ${rec.bucket}[${rec.index}] cites "${triggeringField}" whose paired ` +
-          `confidence ${triggeringConfidenceField}=${lowestConfidence} is below the ` +
-          `${LOW_CONFIDENCE_THRESHOLD} threshold, but the text uses the imperative word ` +
+          `Recommendation at ${rec.bucket}[${rec.index}] cites "${strongestTrigger.field}" and ` +
+          `triggered low-confidence rule ${strongestTrigger.ruleDescription} ` +
+          `(actual ${strongestTrigger.confidenceField}=${strongestTrigger.value}), ` +
+          `but the text uses the imperative word ` +
           `"${imperative.matched}" without any hedging language. Low-confidence ` +
           `measurements must propagate to hedged recommendations (PURPOSE.md invariant #4).`,
       });
@@ -1242,6 +1301,16 @@ function readNumberAtPath(payload: unknown, path: string): number | null {
   }
   if (typeof cursor === 'number' && Number.isFinite(cursor)) return cursor;
   return null;
+}
+
+function readBooleanAtPath(payload: unknown, path: string): boolean | null {
+  let cursor: any = payload;
+  for (const part of path.split('.')) {
+    if (cursor === null || cursor === undefined) return null;
+    if (typeof cursor !== 'object') return null;
+    cursor = (cursor as Record<string, unknown>)[part];
+  }
+  return typeof cursor === 'boolean' ? cursor : null;
 }
 
 function validateSalvagedRecommendations(

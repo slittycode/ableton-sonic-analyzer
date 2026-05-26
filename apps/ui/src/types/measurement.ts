@@ -310,7 +310,7 @@ export interface SidechainDetail {
 
 export interface EffectsDetail {
   gatingDetected?: boolean | null;
-  gatingRate?: number | null;
+  gatingRate?: 'quarter' | '8th' | '16th' | null;
   gatingRegularity?: number | null;
   gatingEventCount?: number | null;
 }

@@ -461,7 +461,7 @@
         "Dry/Wet",
         "Color",
         "Base",
-        "Frequency",
+        "Freq",
         "Width",
         "Depth"
       ]
@@ -807,8 +807,8 @@
         "Gate",
         "Retrigger",
         "Offset",
-        "Tranpose Steps",
-        "Tranpose Distance"
+        "Steps",
+        "Distance"
       ]
     },
     {

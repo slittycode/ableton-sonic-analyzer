@@ -72,6 +72,7 @@ export const FIELD_LABELS: Record<string, string> = {
 
   // Reverb / acid / vocals / supersaw detectors
   'reverbDetail.rt60': 'Reverb tail (RT60)',
+  'reverbDetail.measured': 'Reverb measured',
   'reverbDetail.confidence': 'Reverb detection confidence',
   'acidDetail.isAcid': 'Acid bass detected',
   'acidDetail.confidence': 'Acid detection confidence',

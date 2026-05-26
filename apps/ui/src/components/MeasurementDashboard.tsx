@@ -1026,26 +1026,18 @@ const EffectsFieldPanel = ({
   pumpingConfidence,
 }: {
   gatingDetected?: boolean | null;
-  gatingRate?: number | null;
+  gatingRate?: 'quarter' | '8th' | '16th' | null;
   gatingRegularity?: number | null;
   gatingEventCount?: number | null;
   pumpingStrength?: number | null;
   pumpingRegularity?: number | null;
   pumpingConfidence?: number | null;
 }) => {
-  const rateLabel =
-    gatingRate === 16
-      ? '16th'
-      : gatingRate === 8
-        ? '8th'
-        : gatingRate === 4
-          ? 'quarter'
-          : gatingRate != null
-            ? `${gatingRate}`
-            : 'n/a';
+  const rateLabel = gatingRate ?? 'n/a';
 
   if (gatingDetected) {
-    const pulseStride = gatingRate === 16 ? 1 : gatingRate === 8 ? 2 : gatingRate === 4 ? 4 : 3;
+    const pulseStride =
+      gatingRate === '16th' ? 1 : gatingRate === '8th' ? 2 : gatingRate === 'quarter' ? 4 : 3;
     const pulseCells = Array.from({ length: 16 }, (_, index) => index % pulseStride === 0);
 
     return (
@@ -2603,13 +2595,13 @@ export function MeasurementDashboard({
               </div>
               {phase1.effectsDetail.gatingRate !== undefined &&
                 phase1.effectsDetail.gatingRate !== null && (
-                  <MetricBarRow
+                  <MetricRow
                     label="Gating Rate"
-                    value={phase1.effectsDetail.gatingRate}
-                    min={0}
-                    max={8}
-                    color="#f59e0b"
-                    valueLabel={formatNumber(phase1.effectsDetail.gatingRate, 2)}
+                    value={
+                      <span className="font-mono tabular-nums">
+                        {phase1.effectsDetail.gatingRate}
+                      </span>
+                    }
                   />
                 )}
               {phase1.effectsDetail.gatingRegularity !== undefined &&
