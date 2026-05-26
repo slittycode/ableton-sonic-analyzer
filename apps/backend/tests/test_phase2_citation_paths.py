@@ -122,6 +122,23 @@ class ValidatePhase2CitationPathsTests(unittest.TestCase):
             warnings[0]["path"], "secretSauce.workflowSteps[0].phase1Fields"
         )
 
+    def test_track_layout_grounding_bucket_is_checked(self):
+        phase2 = {
+            "trackLayout": [
+                {
+                    "order": 1,
+                    "name": "Bass",
+                    "grounding": {"phase1Fields": ["kickDetail.madeUpField"]},
+                }
+            ]
+        }
+        warnings = _validate_phase2_citation_paths(phase2, self.MEASUREMENT)
+        self.assertEqual(len(warnings), 1)
+        self.assertEqual(warnings[0]["code"], "UNRESOLVED_CITATION_PATH")
+        self.assertEqual(
+            warnings[0]["path"], "trackLayout[0].grounding.phase1Fields"
+        )
+
     def test_missing_or_nonstring_entries_are_skipped(self):
         phase2 = {
             "abletonRecommendations": [

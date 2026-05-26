@@ -1641,7 +1641,7 @@ describe('AnalysisResults UI wiring', () => {
           },
           effectsDetail: {
             gatingDetected: true,
-            gatingRate: 8,
+            gatingRate: '8th',
             gatingRegularity: 0.67,
             gatingEventCount: 12,
           },

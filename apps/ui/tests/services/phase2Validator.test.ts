@@ -514,6 +514,32 @@ describe('validatePhase2Consistency', () => {
       );
       expect(workflowViolations).toHaveLength(1);
     });
+
+    it('treats trackLayout grounding phase1Fields as new-shape citations', () => {
+      const phase1 = createBasePhase1();
+      const phase2 = createBasePhase2({
+        mixAndMasterChain: [],
+        abletonRecommendations: [],
+        trackLayout: [
+          {
+            order: 1,
+            name: 'Bass',
+            type: 'instrument',
+            purpose: 'Carry the low-end motion.',
+            grounding: {
+              phase1Fields: ['kickDetail.madeUpField'],
+            },
+          },
+        ],
+      });
+
+      const result = validatePhase2Consistency(phase1, phase2);
+      const trackLayoutViolations = result.violations.filter(
+        v => v.type === 'MISSING_CITATION' && v.field.startsWith('trackLayout[0].grounding'),
+      );
+      expect(trackLayoutViolations).toHaveLength(1);
+      expect(trackLayoutViolations[0].phase2Value).toBe('kickDetail.madeUpField');
+    });
   });
 
   describe('Citation diversity (TRIVIAL_CITATIONS)', () => {
@@ -723,7 +749,7 @@ describe('validatePhase2Consistency', () => {
           {
             device: 'Reverb',
             category: 'EFFECTS',
-            parameter: 'PreDelay',
+            parameter: 'Predelay',
             value: '80 ms',
             reason: 'Bass-bus reverb pre-delay matches measured stem value.',
             phase1Fields: ['stemAnalysis.bass.reverbDetail.preDelayMs'],
@@ -1061,6 +1087,83 @@ describe('validatePhase2Consistency', () => {
         v => v.type === 'LOW_CONFIDENCE_NOT_HEDGED',
       );
       expect(violations).toHaveLength(0);
+    });
+
+    it('uses bpmConfidence < 1.0 as the low-confidence tempo threshold', () => {
+      const phase1 = createBasePhase1({ bpm: 126, bpmConfidence: 0.82 });
+      const phase2 = createBasePhase2({
+        abletonRecommendations: [
+          {
+            device: 'Arpeggiator',
+            category: 'MIDI',
+            parameter: 'Rate',
+            value: '1/16',
+            reason: 'You must set the project tempo from this BPM reading.',
+            phase1Fields: ['bpm'],
+          },
+        ],
+      });
+
+      const result = validatePhase2Consistency(phase1, phase2);
+      const violations = result.violations.filter(
+        v => v.type === 'LOW_CONFIDENCE_NOT_HEDGED',
+      );
+      expect(violations).toHaveLength(1);
+      expect(violations[0].message).toContain('bpmConfidence < 1');
+    });
+
+    it('does not apply the normalized 0.4 threshold to reliable bpmConfidence values', () => {
+      const phase1 = createBasePhase1({ bpm: 126, bpmConfidence: 1.2 });
+      const phase2 = createBasePhase2({
+        abletonRecommendations: [
+          {
+            device: 'Arpeggiator',
+            category: 'MIDI',
+            parameter: 'Rate',
+            value: '1/16',
+            reason: 'You must set the project tempo from this BPM reading.',
+            phase1Fields: ['bpm'],
+          },
+        ],
+      });
+
+      const result = validatePhase2Consistency(phase1, phase2);
+      const violations = result.violations.filter(
+        v => v.type === 'LOW_CONFIDENCE_NOT_HEDGED',
+      );
+      expect(violations).toHaveLength(0);
+    });
+
+    it('uses reverbDetail.measured=false as a low-confidence reverb rule', () => {
+      const phase1 = createBasePhase1({
+        reverbDetail: {
+          measured: false,
+          rt60: 0,
+          isWet: false,
+          tailEnergyRatio: 0,
+          perBandRt60: { low: 0, lowMids: 0, highMids: 0, highs: 0 },
+          preDelayMs: 0,
+        },
+      } as Partial<Phase1Result>);
+      const phase2 = createBasePhase2({
+        abletonRecommendations: [
+          {
+            device: 'Reverb',
+            category: 'EFFECTS',
+            parameter: 'Predelay',
+            value: '80 ms',
+            reason: 'You must set Reverb Predelay to 80 ms.',
+            phase1Fields: ['reverbDetail.preDelayMs'],
+          },
+        ],
+      });
+
+      const result = validatePhase2Consistency(phase1, phase2);
+      const violations = result.violations.filter(
+        v => v.type === 'LOW_CONFIDENCE_NOT_HEDGED',
+      );
+      expect(violations).toHaveLength(1);
+      expect(violations[0].message).toContain('reverbDetail.measured === false');
     });
 
     it('flags imperative chord recommendations grounded in low chordStrength', () => {
