@@ -67,7 +67,9 @@ cp .env.example .env
 
 | Variable | Meaning | Current behavior |
 | --- | --- | --- |
-| `VITE_API_BASE_URL` | Base URL for the backend API. | `src/config.ts` falls back to `http://127.0.0.1:8100` when unset. The checked-in `.env.example` uses `http://127.0.0.1:8100`. If another FastAPI app is answering on your configured URL, the UI now reports that it found the wrong service and disables `Run Analysis`. |
+| `VITE_RUNTIME_PROFILE` | Frontend runtime profile (`local` \| `hosted`). | Defaults to `local`. In `hosted` mode, `VITE_API_BASE_URL` falls back to the current `window.location.origin` instead of `http://127.0.0.1:8100`. |
+| `VITE_API_BASE_URL` | Base URL for the backend API. | `src/config.ts` falls back to `http://127.0.0.1:8100` when unset (in `local` profile). The checked-in `.env.example` uses `http://127.0.0.1:8100`. If another FastAPI app is answering on your configured URL, the UI now reports that it found the wrong service and disables `Run Analysis`. |
+| `VITE_API_REQUEST_HEADERS_JSON` | Optional JSON object of headers injected on every API request. | Empty by default. Example: `{"X-ASA-User-Id":"beta-user-123"}` for hosted-mode beta access. Invalid JSON is silently treated as no extra headers. |
 | `VITE_ENABLE_PHASE2_GEMINI` | Hard kill-switch for the optional Gemini interpretation pass. | Defaults to `"true"` when unset. Set it to `"false"` only when you want to disable AI interpretation for the whole build. |
 | `RUN_GEMINI_LIVE_SMOKE` | Enables the opt-in live Playwright proof for the Gemini Files API path. | Must be `"true"` to run `npm run test:smoke:live-gemini`; default smoke coverage keeps Gemini mocked. |
 | `DISABLE_HMR` | Vite dev-server knob. | `vite.config.ts` disables HMR only when this is `"true"`. |

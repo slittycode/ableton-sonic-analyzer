@@ -22,7 +22,9 @@
 - Install dependencies: `npm install`
 - Create a local env file when needed: `cp .env.example .env`
 - Key env vars:
+  - `VITE_RUNTIME_PROFILE` (`local` | `hosted`; controls API-URL fallback when `VITE_API_BASE_URL` is omitted)
   - `VITE_API_BASE_URL`
+  - `VITE_API_REQUEST_HEADERS_JSON` (optional JSON object of headers injected on every API request, e.g. hosted-mode `X-ASA-User-Id`)
   - `VITE_ENABLE_PHASE2_GEMINI`
   - `RUN_GEMINI_LIVE_SMOKE`
   - `DISABLE_HMR`
