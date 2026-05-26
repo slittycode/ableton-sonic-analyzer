@@ -101,12 +101,12 @@ Supported shell-based overrides:
 
 ```bash
 export GEMINI_API_KEY="your_real_key_here"
-cd /Users/christiansmith/code/projects/asa
+cd /path/to/asa
 ./scripts/dev.sh
 ```
 
 ```bash
-cd /Users/christiansmith/code/projects/asa
+cd /path/to/asa
 GEMINI_API_KEY="your_real_key_here" ./scripts/dev.sh
 ```
 
