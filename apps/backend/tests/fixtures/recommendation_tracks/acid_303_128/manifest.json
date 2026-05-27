@@ -1,0 +1,133 @@
+{
+  "schemaVersion": "recommendation-fixture.v1",
+  "id": "acid_303_128",
+  "title": "Acid — resonant 303-style line, filter sweep, distortion",
+  "genre": "acid techno",
+  "audioPath": "audio.flac",
+  "phase1FingerprintPath": "phase1_fingerprint.json",
+  "phase1Fingerprint": null,
+  "render": {
+    "sampleRateHz": 48000,
+    "bitDepth": 24,
+    "lengthSeconds": 16,
+    "bpm": 128,
+    "key": "A minor",
+    "notes": "8-bar loop. A 303-style acid line: sawtooth through a high-resonance lowpass with glide, swept by Auto Filter, distorted by Saturator. This fixture exercises the acidDetail detector. Render the full loop to one stereo file, no export normalization."
+  },
+  "deviceSpec": {
+    "kick": [
+      {
+        "device": "Operator",
+        "family": "NATIVE",
+        "role": "Sine kick",
+        "parameters": [
+          { "name": "Oscillator A Waveform", "value": "Sine" },
+          { "name": "Filter Type", "value": "Lowpass" },
+          { "name": "Filter Frequency", "value": "110 Hz" },
+          { "name": "Amp Envelope Decay", "value": "220 ms" }
+        ]
+      }
+    ],
+    "bass": [
+      {
+        "device": "Operator",
+        "family": "NATIVE",
+        "role": "303-style acid line",
+        "parameters": [
+          { "name": "Oscillator A Waveform", "value": "Saw" },
+          { "name": "Filter Type", "value": "Lowpass" },
+          { "name": "Filter Frequency", "value": "600 Hz" },
+          { "name": "Filter Resonance", "value": "70%" },
+          { "name": "Amp Envelope Decay", "value": "150 ms" },
+          { "name": "Glide Time", "value": "60 ms" }
+        ]
+      }
+    ],
+    "melody": [
+      {
+        "device": "Wavetable",
+        "family": "NATIVE",
+        "role": "Supporting stab",
+        "parameters": [
+          { "name": "Oscillator 1 Wavetable", "value": "Basic Shapes" },
+          { "name": "Filter Type", "value": "Lowpass" },
+          { "name": "Filter Frequency", "value": "1500 Hz" },
+          { "name": "Amp Envelope Decay", "value": "180 ms" },
+          { "name": "Amp Envelope Sustain", "value": "0%" }
+        ]
+      }
+    ],
+    "groove": [
+      {
+        "device": "Drum Rack",
+        "family": "NATIVE",
+        "role": "Hats + clap",
+        "parameters": [
+          { "name": "Pad Volume", "value": "-8 dB" }
+        ]
+      }
+    ],
+    "fx": [
+      {
+        "device": "Auto Filter",
+        "family": "NATIVE",
+        "role": "Acid filter sweep on the line",
+        "parameters": [
+          { "name": "Filter Type", "value": "Lowpass" },
+          { "name": "Frequency", "value": "800 Hz" },
+          { "name": "Resonance", "value": "60%" },
+          { "name": "Envelope Amount", "value": "40%" }
+        ]
+      },
+      {
+        "device": "Saturator",
+        "family": "NATIVE",
+        "role": "Acid distortion",
+        "parameters": [
+          { "name": "Drive", "value": "15 dB" },
+          { "name": "Type", "value": "Soft Sine" },
+          { "name": "Dry/Wet", "value": "100%" }
+        ]
+      }
+    ],
+    "stereo": [
+      {
+        "device": "Utility",
+        "family": "NATIVE",
+        "role": "Mild width",
+        "parameters": [
+          { "name": "Stereo Width", "value": "105%" }
+        ]
+      }
+    ],
+    "master": [
+      {
+        "device": "Glue Compressor",
+        "family": "NATIVE",
+        "role": "Bus glue",
+        "parameters": [
+          { "name": "Threshold", "value": "-16 dB" },
+          { "name": "Ratio", "value": "2:1" },
+          { "name": "Attack", "value": "3 ms" },
+          { "name": "Release", "value": "Auto" },
+          { "name": "Makeup", "value": "2 dB" }
+        ]
+      },
+      {
+        "device": "Limiter",
+        "family": "NATIVE",
+        "role": "Master ceiling",
+        "parameters": [
+          { "name": "Ceiling", "value": "-0.3 dB" }
+        ]
+      }
+    ]
+  },
+  "measurableIntent": {
+    "bpm": { "target": 128, "tolerance": 1, "direction": "exact" },
+    "key": { "target": "A minor" },
+    "acidDetail.isAcid": { "equals": true, "intent": "resonant sawtooth + filter sweep should trigger the acid detector" },
+    "acidDetail.confidence": { "target": 0.5, "tolerance": 0.25, "direction": "min" },
+    "lufsIntegrated": { "target": -8, "tolerance": 2, "unit": "LUFS" }
+  }
+}

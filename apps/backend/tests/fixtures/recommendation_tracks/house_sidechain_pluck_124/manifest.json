@@ -1,0 +1,139 @@
+{
+  "schemaVersion": "recommendation-fixture.v1",
+  "id": "house_sidechain_pluck_124",
+  "title": "House — sine sub, saw pluck, pumped sidechain",
+  "genre": "house",
+  "audioPath": "audio.flac",
+  "phase1FingerprintPath": "phase1_fingerprint.json",
+  "phase1Fingerprint": null,
+  "render": {
+    "sampleRateHz": 48000,
+    "bitDepth": 24,
+    "lengthSeconds": 16,
+    "bpm": 124,
+    "key": "A minor",
+    "notes": "8-bar loop. Render the full arrangement (kick + sub + pluck + hats) to one stereo file. Do NOT normalize on export — the measured LUFS/true-peak is part of the answer key."
+  },
+  "deviceSpec": {
+    "kick": [
+      {
+        "device": "Operator",
+        "family": "NATIVE",
+        "role": "Kick body",
+        "parameters": [
+          { "name": "Oscillator A Waveform", "value": "Sine", "intent": "pure-sine kick body, no inharmonic content" },
+          { "name": "Amp Envelope Decay", "value": "250 ms", "intent": "medium punchy tail" },
+          { "name": "Amp Envelope Release", "value": "60 ms" },
+          { "name": "Volume", "value": "-6 dB" }
+        ]
+      }
+    ],
+    "bass": [
+      {
+        "device": "Operator",
+        "family": "NATIVE",
+        "role": "Sub bass",
+        "parameters": [
+          { "name": "Oscillator A Waveform", "value": "Sine", "intent": "clean sub fundamental" },
+          { "name": "Filter Type", "value": "Lowpass" },
+          { "name": "Filter Frequency", "value": "200 Hz" },
+          { "name": "Amp Envelope Decay", "value": "400 ms" }
+        ]
+      }
+    ],
+    "melody": [
+      {
+        "device": "Wavetable",
+        "family": "NATIVE",
+        "role": "Saw pluck lead",
+        "parameters": [
+          { "name": "Oscillator 1 Wavetable", "value": "Basic Shapes", "intent": "bright sawtooth source" },
+          { "name": "Filter Type", "value": "Lowpass" },
+          { "name": "Filter Frequency", "value": "3500 Hz" },
+          { "name": "Filter Resonance", "value": "30%" },
+          { "name": "Amp Envelope Attack", "value": "1 ms" },
+          { "name": "Amp Envelope Decay", "value": "300 ms" },
+          { "name": "Amp Envelope Sustain", "value": "20%" },
+          { "name": "Amp Envelope Release", "value": "150 ms" }
+        ]
+      }
+    ],
+    "groove": [
+      {
+        "device": "Drum Rack",
+        "family": "NATIVE",
+        "role": "Closed hats",
+        "parameters": [
+          { "name": "Pad Volume", "value": "-8 dB" },
+          { "name": "Pad Pan", "value": "0" }
+        ]
+      }
+    ],
+    "fx": [
+      {
+        "device": "Compressor",
+        "family": "NATIVE",
+        "role": "Sidechain pump on bass (keyed off kick)",
+        "parameters": [
+          { "name": "Threshold", "value": "-20 dB" },
+          { "name": "Ratio", "value": "4:1" },
+          { "name": "Attack", "value": "1 ms", "intent": "fast attack for hard duck" },
+          { "name": "Release", "value": "120 ms", "intent": "release timed to the 1/4-note pump" },
+          { "name": "Sidechain", "value": "On" }
+        ]
+      },
+      {
+        "device": "Reverb",
+        "family": "NATIVE",
+        "role": "Pluck space",
+        "parameters": [
+          { "name": "Decay Time", "value": "1.8 s" },
+          { "name": "Predelay", "value": "20 ms" },
+          { "name": "Dry/Wet", "value": "25%" }
+        ]
+      }
+    ],
+    "stereo": [
+      {
+        "device": "Utility",
+        "family": "NATIVE",
+        "role": "Pluck widener",
+        "parameters": [
+          { "name": "Stereo Width", "value": "130%" }
+        ]
+      }
+    ],
+    "master": [
+      {
+        "device": "Glue Compressor",
+        "family": "NATIVE",
+        "role": "Bus glue",
+        "parameters": [
+          { "name": "Threshold", "value": "-18 dB" },
+          { "name": "Ratio", "value": "2:1" },
+          { "name": "Attack", "value": "10 ms" },
+          { "name": "Release", "value": "Auto" },
+          { "name": "Makeup", "value": "3 dB" }
+        ]
+      },
+      {
+        "device": "Limiter",
+        "family": "NATIVE",
+        "role": "Master ceiling",
+        "parameters": [
+          { "name": "Ceiling", "value": "-0.3 dB" },
+          { "name": "Release", "value": "100 ms" }
+        ]
+      }
+    ]
+  },
+  "measurableIntent": {
+    "bpm": { "target": 124, "tolerance": 1, "direction": "exact" },
+    "key": { "target": "A minor" },
+    "kickDetail.fundamentalHz": { "target": 55, "tolerance": 15, "unit": "Hz" },
+    "sidechainDetail.pumpingStrength": { "target": 0.5, "tolerance": 0.25, "direction": "min" },
+    "sidechainDetail.pumpingRate": { "target": 2.07, "tolerance": 0.3, "unit": "Hz", "intent": "1/4-note pump at 124 BPM = 2.07 Hz" },
+    "lufsIntegrated": { "target": -9, "tolerance": 2, "unit": "LUFS" },
+    "truePeak": { "target": 1.0, "tolerance": 0.05, "intent": "limiter ceiling -0.3 dBFS rounds to ~1.0 linear" }
+  }
+}

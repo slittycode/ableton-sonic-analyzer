@@ -1,0 +1,8 @@
+# Rendered audio is never committed (see README.md) — only manifests + fingerprints.
+*.flac
+*.wav
+*.aif
+*.aiff
+*.mp3
+*.ogg
+*.m4a

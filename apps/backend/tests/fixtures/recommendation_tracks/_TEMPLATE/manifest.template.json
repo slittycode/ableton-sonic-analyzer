@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "recommendation-fixture.v1",
+  "id": "REPLACE_WITH_SLUG",
+  "title": "Short human description",
+  "genre": "house",
+  "audioPath": "audio.flac",
+  "phase1FingerprintPath": "phase1_fingerprint.json",
+  "phase1Fingerprint": null,
+  "render": {
+    "sampleRateHz": 48000,
+    "bitDepth": 24,
+    "lengthSeconds": 16,
+    "bpm": 0,
+    "key": "C minor",
+    "notes": "Build exactly this spec. Render the full loop to one stereo file, no export normalization."
+  },
+  "deviceSpec": {
+    "kick": [
+      {
+        "device": "Operator",
+        "family": "NATIVE",
+        "role": "Kick body",
+        "parameters": [
+          { "name": "Oscillator A Waveform", "value": "Sine", "intent": "why this value matters" }
+        ]
+      }
+    ],
+    "bass": [],
+    "melody": [],
+    "groove": [],
+    "fx": [],
+    "stereo": [],
+    "master": []
+  },
+  "measurableIntent": {
+    "bpm": { "target": 0, "tolerance": 1, "direction": "exact" },
+    "key": { "target": "C minor" }
+  }
+}

@@ -1,0 +1,145 @@
+{
+  "schemaVersion": "recommendation-fixture.v1",
+  "id": "melodic_techno_arp_124",
+  "title": "Melodic techno — arpeggiated pluck, sub, reverb-heavy",
+  "genre": "melodic techno",
+  "audioPath": "audio.flac",
+  "phase1FingerprintPath": "phase1_fingerprint.json",
+  "phase1Fingerprint": null,
+  "render": {
+    "sampleRateHz": 48000,
+    "bitDepth": 24,
+    "lengthSeconds": 16,
+    "bpm": 124,
+    "key": "D minor",
+    "notes": "8-bar loop. Arpeggiated Wavetable pluck over a sine sub, kick, offbeat hats. Reverb-forward. Render the full loop to one stereo file, no export normalization."
+  },
+  "deviceSpec": {
+    "kick": [
+      {
+        "device": "Operator",
+        "family": "NATIVE",
+        "role": "Sine kick",
+        "parameters": [
+          { "name": "Oscillator A Waveform", "value": "Sine" },
+          { "name": "Filter Type", "value": "Lowpass" },
+          { "name": "Filter Frequency", "value": "140 Hz" },
+          { "name": "Amp Envelope Decay", "value": "280 ms" }
+        ]
+      }
+    ],
+    "bass": [
+      {
+        "device": "Operator",
+        "family": "NATIVE",
+        "role": "Sub bass",
+        "parameters": [
+          { "name": "Oscillator A Waveform", "value": "Sine" },
+          { "name": "Filter Frequency", "value": "180 Hz" },
+          { "name": "Amp Envelope Sustain", "value": "100%" }
+        ]
+      }
+    ],
+    "melody": [
+      {
+        "device": "Wavetable",
+        "family": "NATIVE",
+        "role": "Arp pluck",
+        "parameters": [
+          { "name": "Oscillator 1 Wavetable", "value": "Basic Shapes" },
+          { "name": "Filter Type", "value": "Lowpass" },
+          { "name": "Filter Frequency", "value": "2500 Hz" },
+          { "name": "Filter Resonance", "value": "25%" },
+          { "name": "Amp Envelope Attack", "value": "2 ms" },
+          { "name": "Amp Envelope Decay", "value": "250 ms" },
+          { "name": "Amp Envelope Sustain", "value": "10%" },
+          { "name": "Amp Envelope Release", "value": "200 ms" }
+        ]
+      },
+      {
+        "device": "Arpeggiator",
+        "family": "NATIVE",
+        "role": "Arp engine on the pluck",
+        "parameters": [
+          { "name": "Style", "value": "Up" },
+          { "name": "Rate", "value": "1/16" },
+          { "name": "Gate", "value": "50%" }
+        ]
+      }
+    ],
+    "groove": [
+      {
+        "device": "Drum Rack",
+        "family": "NATIVE",
+        "role": "Offbeat hats",
+        "parameters": [
+          { "name": "Pad Volume", "value": "-9 dB" }
+        ]
+      }
+    ],
+    "fx": [
+      {
+        "device": "Compressor",
+        "family": "NATIVE",
+        "role": "Sidechain pump on bass (keyed off kick)",
+        "parameters": [
+          { "name": "Threshold", "value": "-18 dB" },
+          { "name": "Ratio", "value": "4:1" },
+          { "name": "Attack", "value": "1 ms" },
+          { "name": "Release", "value": "130 ms" },
+          { "name": "Sidechain", "value": "On" }
+        ]
+      },
+      {
+        "device": "Reverb",
+        "family": "NATIVE",
+        "role": "Pluck space (the genre signature)",
+        "parameters": [
+          { "name": "Decay Time", "value": "2.5 s" },
+          { "name": "Predelay", "value": "25 ms" },
+          { "name": "Dry/Wet", "value": "35%" }
+        ]
+      }
+    ],
+    "stereo": [
+      {
+        "device": "Utility",
+        "family": "NATIVE",
+        "role": "Pluck widener",
+        "parameters": [
+          { "name": "Stereo Width", "value": "120%" }
+        ]
+      }
+    ],
+    "master": [
+      {
+        "device": "Glue Compressor",
+        "family": "NATIVE",
+        "role": "Bus glue",
+        "parameters": [
+          { "name": "Threshold", "value": "-16 dB" },
+          { "name": "Ratio", "value": "2:1" },
+          { "name": "Attack", "value": "10 ms" },
+          { "name": "Release", "value": "Auto" },
+          { "name": "Makeup", "value": "2 dB" }
+        ]
+      },
+      {
+        "device": "Limiter",
+        "family": "NATIVE",
+        "role": "Master ceiling",
+        "parameters": [
+          { "name": "Ceiling", "value": "-0.3 dB" }
+        ]
+      }
+    ]
+  },
+  "measurableIntent": {
+    "bpm": { "target": 124, "tolerance": 1, "direction": "exact" },
+    "key": { "target": "D minor" },
+    "kickDetail.fundamentalHz": { "target": 52, "tolerance": 15, "unit": "Hz" },
+    "sidechainDetail.pumpingStrength": { "target": 0.5, "tolerance": 0.25, "direction": "min" },
+    "reverbDetail.isWet": { "equals": true },
+    "lufsIntegrated": { "target": -9, "tolerance": 2, "unit": "LUFS" }
+  }
+}

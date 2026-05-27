@@ -1,0 +1,4729 @@
+{
+  "_synthetic": true,
+  "_note": "Phase 1 of a numpy PROXY render, NOT an Ableton render. Replace with a real Live render's fingerprint for an authoritative verdict.",
+  "bpm": 130.0,
+  "bpmConfidence": 3.71,
+  "bpmPercival": 130.0,
+  "bpmAgreement": true,
+  "bpmDoubletime": false,
+  "bpmSource": "rhythm_extractor_confirmed",
+  "bpmRawOriginal": 130.0,
+  "key": "F Minor",
+  "keyConfidence": 0.59,
+  "keyProfile": "edma",
+  "tuningFrequency": 432.44,
+  "tuningCents": -30.0,
+  "timeSignature": "4/4",
+  "timeSignatureSource": "onset_autocorrelation_low_margin",
+  "timeSignatureConfidence": 0.0,
+  "durationSeconds": 14.8,
+  "sampleRate": 44100,
+  "lufsIntegrated": -9.0,
+  "lufsRange": 0.1,
+  "lufsMomentaryMax": -8.3,
+  "lufsShortTermMax": -8.9,
+  "lufsCurve": {
+    "shortTerm": [
+      {
+        "t": 0.0,
+        "lufs": -8.9
+      },
+      {
+        "t": 0.1,
+        "lufs": -9.0
+      },
+      {
+        "t": 0.2,
+        "lufs": -9.0
+      },
+      {
+        "t": 0.3,
+        "lufs": -9.1
+      },
+      {
+        "t": 0.4,
+        "lufs": -9.1
+      },
+      {
+        "t": 0.5,
+        "lufs": -9.0
+      },
+      {
+        "t": 0.6,
+        "lufs": -9.0
+      },
+      {
+        "t": 0.7,
+        "lufs": -9.0
+      },
+      {
+        "t": 0.8,
+        "lufs": -9.1
+      },
+      {
+        "t": 0.9,
+        "lufs": -9.0
+      },
+      {
+        "t": 1.0,
+        "lufs": -9.0
+      },
+      {
+        "t": 1.1,
+        "lufs": -9.0
+      },
+      {
+        "t": 1.2,
+        "lufs": -9.0
+      },
+      {
+        "t": 1.3,
+        "lufs": -9.0
+      },
+      {
+        "t": 1.4,
+        "lufs": -8.9
+      },
+      {
+        "t": 1.5,
+        "lufs": -9.0
+      },
+      {
+        "t": 1.6,
+        "lufs": -9.0
+      },
+      {
+        "t": 1.7,
+        "lufs": -9.1
+      },
+      {
+        "t": 1.8,
+        "lufs": -9.1
+      },
+      {
+        "t": 1.9,
+        "lufs": -9.0
+      },
+      {
+        "t": 2.0,
+        "lufs": -9.0
+      },
+      {
+        "t": 2.1,
+        "lufs": -9.1
+      },
+      {
+        "t": 2.2,
+        "lufs": -9.1
+      },
+      {
+        "t": 2.3,
+        "lufs": -9.0
+      },
+      {
+        "t": 2.4,
+        "lufs": -9.0
+      },
+      {
+        "t": 2.5,
+        "lufs": -9.0
+      },
+      {
+        "t": 2.6,
+        "lufs": -9.0
+      },
+      {
+        "t": 2.7,
+        "lufs": -9.0
+      },
+      {
+        "t": 2.8,
+        "lufs": -8.9
+      },
+      {
+        "t": 2.9,
+        "lufs": -9.0
+      },
+      {
+        "t": 3.0,
+        "lufs": -9.0
+      },
+      {
+        "t": 3.1,
+        "lufs": -9.1
+      },
+      {
+        "t": 3.2,
+        "lufs": -9.1
+      },
+      {
+        "t": 3.3,
+        "lufs": -9.0
+      },
+      {
+        "t": 3.4,
+        "lufs": -9.0
+      },
+      {
+        "t": 3.5,
+        "lufs": -9.1
+      },
+      {
+        "t": 3.6,
+        "lufs": -9.1
+      },
+      {
+        "t": 3.7,
+        "lufs": -9.0
+      },
+      {
+        "t": 3.8,
+        "lufs": -9.0
+      },
+      {
+        "t": 3.9,
+        "lufs": -9.0
+      },
+      {
+        "t": 4.0,
+        "lufs": -9.0
+      },
+      {
+        "t": 4.1,
+        "lufs": -9.0
+      },
+      {
+        "t": 4.2,
+        "lufs": -9.0
+      },
+      {
+        "t": 4.3,
+        "lufs": -9.0
+      },
+      {
+        "t": 4.4,
+        "lufs": -9.1
+      },
+      {
+        "t": 4.5,
+        "lufs": -9.1
+      },
+      {
+        "t": 4.6,
+        "lufs": -9.1
+      },
+      {
+        "t": 4.7,
+        "lufs": -9.0
+      },
+      {
+        "t": 4.8,
+        "lufs": -9.0
+      },
+      {
+        "t": 4.9,
+        "lufs": -9.1
+      },
+      {
+        "t": 5.0,
+        "lufs": -9.1
+      },
+      {
+        "t": 5.1,
+        "lufs": -9.0
+      },
+      {
+        "t": 5.2,
+        "lufs": -9.0
+      },
+      {
+        "t": 5.3,
+        "lufs": -9.0
+      },
+      {
+        "t": 5.4,
+        "lufs": -9.0
+      },
+      {
+        "t": 5.5,
+        "lufs": -9.0
+      },
+      {
+        "t": 5.6,
+        "lufs": -9.0
+      },
+      {
+        "t": 5.7,
+        "lufs": -9.0
+      },
+      {
+        "t": 5.8,
+        "lufs": -9.1
+      },
+      {
+        "t": 5.9,
+        "lufs": -9.1
+      },
+      {
+        "t": 6.0,
+        "lufs": -9.0
+      },
+      {
+        "t": 6.1,
+        "lufs": -9.0
+      },
+      {
+        "t": 6.2,
+        "lufs": -9.0
+      },
+      {
+        "t": 6.3,
+        "lufs": -9.1
+      },
+      {
+        "t": 6.4,
+        "lufs": -9.1
+      },
+      {
+        "t": 6.5,
+        "lufs": -9.0
+      },
+      {
+        "t": 6.6,
+        "lufs": -9.0
+      },
+      {
+        "t": 6.7,
+        "lufs": -9.1
+      },
+      {
+        "t": 6.8,
+        "lufs": -9.0
+      },
+      {
+        "t": 6.9,
+        "lufs": -9.0
+      },
+      {
+        "t": 7.0,
+        "lufs": -9.0
+      },
+      {
+        "t": 7.1,
+        "lufs": -9.0
+      },
+      {
+        "t": 7.2,
+        "lufs": -9.1
+      },
+      {
+        "t": 7.3,
+        "lufs": -9.1
+      },
+      {
+        "t": 7.4,
+        "lufs": -9.0
+      },
+      {
+        "t": 7.5,
+        "lufs": -9.0
+      },
+      {
+        "t": 7.6,
+        "lufs": -9.1
+      },
+      {
+        "t": 7.7,
+        "lufs": -9.1
+      },
+      {
+        "t": 7.8,
+        "lufs": -9.1
+      },
+      {
+        "t": 7.9,
+        "lufs": -9.0
+      },
+      {
+        "t": 8.0,
+        "lufs": -9.0
+      },
+      {
+        "t": 8.1,
+        "lufs": -9.1
+      },
+      {
+        "t": 8.2,
+        "lufs": -9.0
+      },
+      {
+        "t": 8.3,
+        "lufs": -9.0
+      },
+      {
+        "t": 8.4,
+        "lufs": -9.0
+      },
+      {
+        "t": 8.5,
+        "lufs": -9.0
+      },
+      {
+        "t": 8.6,
+        "lufs": -9.1
+      },
+      {
+        "t": 8.7,
+        "lufs": -9.1
+      },
+      {
+        "t": 8.8,
+        "lufs": -9.0
+      },
+      {
+        "t": 8.9,
+        "lufs": -9.0
+      },
+      {
+        "t": 9.0,
+        "lufs": -9.1
+      },
+      {
+        "t": 9.1,
+        "lufs": -9.1
+      },
+      {
+        "t": 9.2,
+        "lufs": -9.1
+      },
+      {
+        "t": 9.3,
+        "lufs": -9.0
+      },
+      {
+        "t": 9.4,
+        "lufs": -9.0
+      },
+      {
+        "t": 9.5,
+        "lufs": -9.1
+      },
+      {
+        "t": 9.6,
+        "lufs": -9.0
+      },
+      {
+        "t": 9.7,
+        "lufs": -9.0
+      },
+      {
+        "t": 9.8,
+        "lufs": -9.0
+      },
+      {
+        "t": 9.9,
+        "lufs": -9.0
+      },
+      {
+        "t": 10.0,
+        "lufs": -9.1
+      },
+      {
+        "t": 10.1,
+        "lufs": -9.1
+      },
+      {
+        "t": 10.2,
+        "lufs": -9.0
+      },
+      {
+        "t": 10.3,
+        "lufs": -9.0
+      },
+      {
+        "t": 10.4,
+        "lufs": -9.1
+      },
+      {
+        "t": 10.5,
+        "lufs": -9.1
+      },
+      {
+        "t": 10.6,
+        "lufs": -9.1
+      },
+      {
+        "t": 10.7,
+        "lufs": -9.0
+      },
+      {
+        "t": 10.8,
+        "lufs": -9.0
+      },
+      {
+        "t": 10.9,
+        "lufs": -9.0
+      },
+      {
+        "t": 11.0,
+        "lufs": -9.0
+      },
+      {
+        "t": 11.1,
+        "lufs": -8.9
+      },
+      {
+        "t": 11.2,
+        "lufs": -9.0
+      },
+      {
+        "t": 11.3,
+        "lufs": -9.1
+      },
+      {
+        "t": 11.4,
+        "lufs": -9.1
+      },
+      {
+        "t": 11.5,
+        "lufs": -9.1
+      },
+      {
+        "t": 11.6,
+        "lufs": -9.0
+      },
+      {
+        "t": 11.7,
+        "lufs": -9.0
+      },
+      {
+        "t": 11.8,
+        "lufs": -9.2
+      }
+    ],
+    "momentary": [
+      {
+        "t": 0.0,
+        "lufs": -8.3
+      },
+      {
+        "t": 0.1,
+        "lufs": -9.6
+      },
+      {
+        "t": 0.2,
+        "lufs": -9.2
+      },
+      {
+        "t": 0.3,
+        "lufs": -9.7
+      },
+      {
+        "t": 0.4,
+        "lufs": -9.1
+      },
+      {
+        "t": 0.5,
+        "lufs": -9.2
+      },
+      {
+        "t": 0.6,
+        "lufs": -9.1
+      },
+      {
+        "t": 0.7,
+        "lufs": -9.2
+      },
+      {
+        "t": 0.8,
+        "lufs": -9.0
+      },
+      {
+        "t": 0.9,
+        "lufs": -8.8
+      },
+      {
+        "t": 1.0,
+        "lufs": -9.3
+      },
+      {
+        "t": 1.1,
+        "lufs": -8.5
+      },
+      {
+        "t": 1.2,
+        "lufs": -9.1
+      },
+      {
+        "t": 1.3,
+        "lufs": -8.4
+      },
+      {
+        "t": 1.4,
+        "lufs": -8.5
+      },
+      {
+        "t": 1.5,
+        "lufs": -9.5
+      },
+      {
+        "t": 1.6,
+        "lufs": -9.1
+      },
+      {
+        "t": 1.7,
+        "lufs": -9.4
+      },
+      {
+        "t": 1.8,
+        "lufs": -9.0
+      },
+      {
+        "t": 1.9,
+        "lufs": -9.3
+      },
+      {
+        "t": 2.0,
+        "lufs": -9.1
+      },
+      {
+        "t": 2.1,
+        "lufs": -9.5
+      },
+      {
+        "t": 2.2,
+        "lufs": -9.0
+      },
+      {
+        "t": 2.3,
+        "lufs": -8.8
+      },
+      {
+        "t": 2.4,
+        "lufs": -9.0
+      },
+      {
+        "t": 2.5,
+        "lufs": -8.4
+      },
+      {
+        "t": 2.6,
+        "lufs": -9.2
+      },
+      {
+        "t": 2.7,
+        "lufs": -8.4
+      },
+      {
+        "t": 2.8,
+        "lufs": -8.9
+      },
+      {
+        "t": 2.9,
+        "lufs": -9.4
+      },
+      {
+        "t": 3.0,
+        "lufs": -9.1
+      },
+      {
+        "t": 3.1,
+        "lufs": -9.3
+      },
+      {
+        "t": 3.2,
+        "lufs": -9.1
+      },
+      {
+        "t": 3.3,
+        "lufs": -9.3
+      },
+      {
+        "t": 3.4,
+        "lufs": -9.1
+      },
+      {
+        "t": 3.5,
+        "lufs": -9.7
+      },
+      {
+        "t": 3.6,
+        "lufs": -8.9
+      },
+      {
+        "t": 3.7,
+        "lufs": -8.9
+      },
+      {
+        "t": 3.8,
+        "lufs": -8.7
+      },
+      {
+        "t": 3.9,
+        "lufs": -8.4
+      },
+      {
+        "t": 4.0,
+        "lufs": -8.8
+      },
+      {
+        "t": 4.1,
+        "lufs": -8.4
+      },
+      {
+        "t": 4.2,
+        "lufs": -9.2
+      },
+      {
+        "t": 4.3,
+        "lufs": -9.3
+      },
+      {
+        "t": 4.4,
+        "lufs": -9.5
+      },
+      {
+        "t": 4.5,
+        "lufs": -9.1
+      },
+      {
+        "t": 4.6,
+        "lufs": -9.0
+      },
+      {
+        "t": 4.7,
+        "lufs": -9.4
+      },
+      {
+        "t": 4.8,
+        "lufs": -9.1
+      },
+      {
+        "t": 4.9,
+        "lufs": -9.9
+      },
+      {
+        "t": 5.0,
+        "lufs": -9.0
+      },
+      {
+        "t": 5.1,
+        "lufs": -9.0
+      },
+      {
+        "t": 5.2,
+        "lufs": -8.5
+      },
+      {
+        "t": 5.3,
+        "lufs": -8.4
+      },
+      {
+        "t": 5.4,
+        "lufs": -8.6
+      },
+      {
+        "t": 5.5,
+        "lufs": -8.4
+      },
+      {
+        "t": 5.6,
+        "lufs": -9.6
+      },
+      {
+        "t": 5.7,
+        "lufs": -9.2
+      },
+      {
+        "t": 5.8,
+        "lufs": -9.7
+      },
+      {
+        "t": 5.9,
+        "lufs": -9.1
+      },
+      {
+        "t": 6.0,
+        "lufs": -9.0
+      },
+      {
+        "t": 6.1,
+        "lufs": -9.3
+      },
+      {
+        "t": 6.2,
+        "lufs": -9.0
+      },
+      {
+        "t": 6.3,
+        "lufs": -9.7
+      },
+      {
+        "t": 6.4,
+        "lufs": -8.9
+      },
+      {
+        "t": 6.5,
+        "lufs": -9.3
+      },
+      {
+        "t": 6.6,
+        "lufs": -8.6
+      },
+      {
+        "t": 6.7,
+        "lufs": -8.5
+      },
+      {
+        "t": 6.8,
+        "lufs": -8.5
+      },
+      {
+        "t": 6.9,
+        "lufs": -8.3
+      },
+      {
+        "t": 7.0,
+        "lufs": -9.3
+      },
+      {
+        "t": 7.1,
+        "lufs": -9.2
+      },
+      {
+        "t": 7.2,
+        "lufs": -9.9
+      },
+      {
+        "t": 7.3,
+        "lufs": -9.1
+      },
+      {
+        "t": 7.4,
+        "lufs": -9.2
+      },
+      {
+        "t": 7.5,
+        "lufs": -9.4
+      },
+      {
+        "t": 7.6,
+        "lufs": -9.1
+      },
+      {
+        "t": 7.7,
+        "lufs": -9.3
+      },
+      {
+        "t": 7.8,
+        "lufs": -8.9
+      },
+      {
+        "t": 7.9,
+        "lufs": -9.2
+      },
+      {
+        "t": 8.0,
+        "lufs": -8.5
+      },
+      {
+        "t": 8.1,
+        "lufs": -8.9
+      },
+      {
+        "t": 8.2,
+        "lufs": -8.4
+      },
+      {
+        "t": 8.3,
+        "lufs": -8.3
+      },
+      {
+        "t": 8.4,
+        "lufs": -9.5
+      },
+      {
+        "t": 8.5,
+        "lufs": -9.1
+      },
+      {
+        "t": 8.6,
+        "lufs": -10.0
+      },
+      {
+        "t": 8.7,
+        "lufs": -9.1
+      },
+      {
+        "t": 8.8,
+        "lufs": -9.1
+      },
+      {
+        "t": 8.9,
+        "lufs": -9.2
+      },
+      {
+        "t": 9.0,
+        "lufs": -9.1
+      },
+      {
+        "t": 9.1,
+        "lufs": -9.2
+      },
+      {
+        "t": 9.2,
+        "lufs": -8.9
+      },
+      {
+        "t": 9.3,
+        "lufs": -9.4
+      },
+      {
+        "t": 9.4,
+        "lufs": -8.5
+      },
+      {
+        "t": 9.5,
+        "lufs": -9.1
+      },
+      {
+        "t": 9.6,
+        "lufs": -8.4
+      },
+      {
+        "t": 9.7,
+        "lufs": -8.5
+      },
+      {
+        "t": 9.8,
+        "lufs": -9.5
+      },
+      {
+        "t": 9.9,
+        "lufs": -9.1
+      },
+      {
+        "t": 10.0,
+        "lufs": -9.5
+      },
+      {
+        "t": 10.1,
+        "lufs": -9.1
+      },
+      {
+        "t": 10.2,
+        "lufs": -9.2
+      },
+      {
+        "t": 10.3,
+        "lufs": -9.3
+      },
+      {
+        "t": 10.4,
+        "lufs": -9.5
+      },
+      {
+        "t": 10.5,
+        "lufs": -9.1
+      },
+      {
+        "t": 10.6,
+        "lufs": -8.9
+      },
+      {
+        "t": 10.7,
+        "lufs": -9.1
+      },
+      {
+        "t": 10.8,
+        "lufs": -8.4
+      },
+      {
+        "t": 10.9,
+        "lufs": -9.2
+      },
+      {
+        "t": 11.0,
+        "lufs": -8.4
+      },
+      {
+        "t": 11.1,
+        "lufs": -8.7
+      },
+      {
+        "t": 11.2,
+        "lufs": -9.3
+      },
+      {
+        "t": 11.3,
+        "lufs": -9.0
+      },
+      {
+        "t": 11.4,
+        "lufs": -9.2
+      },
+      {
+        "t": 11.5,
+        "lufs": -9.0
+      },
+      {
+        "t": 11.6,
+        "lufs": -9.5
+      },
+      {
+        "t": 11.7,
+        "lufs": -9.2
+      },
+      {
+        "t": 11.8,
+        "lufs": -9.8
+      },
+      {
+        "t": 11.9,
+        "lufs": -9.0
+      },
+      {
+        "t": 12.0,
+        "lufs": -8.9
+      },
+      {
+        "t": 12.1,
+        "lufs": -8.9
+      },
+      {
+        "t": 12.2,
+        "lufs": -8.5
+      },
+      {
+        "t": 12.3,
+        "lufs": -9.0
+      },
+      {
+        "t": 12.4,
+        "lufs": -8.5
+      },
+      {
+        "t": 12.5,
+        "lufs": -9.1
+      },
+      {
+        "t": 12.6,
+        "lufs": -9.2
+      },
+      {
+        "t": 12.7,
+        "lufs": -9.2
+      },
+      {
+        "t": 12.8,
+        "lufs": -9.1
+      },
+      {
+        "t": 12.9,
+        "lufs": -8.9
+      },
+      {
+        "t": 13.0,
+        "lufs": -9.3
+      },
+      {
+        "t": 13.1,
+        "lufs": -9.2
+      },
+      {
+        "t": 13.2,
+        "lufs": -9.9
+      },
+      {
+        "t": 13.3,
+        "lufs": -9.1
+      },
+      {
+        "t": 13.4,
+        "lufs": -9.1
+      },
+      {
+        "t": 13.5,
+        "lufs": -8.6
+      },
+      {
+        "t": 13.6,
+        "lufs": -8.4
+      },
+      {
+        "t": 13.7,
+        "lufs": -8.7
+      },
+      {
+        "t": 13.8,
+        "lufs": -8.4
+      },
+      {
+        "t": 13.9,
+        "lufs": -9.5
+      },
+      {
+        "t": 14.0,
+        "lufs": -9.2
+      },
+      {
+        "t": 14.1,
+        "lufs": -9.5
+      },
+      {
+        "t": 14.2,
+        "lufs": -9.1
+      },
+      {
+        "t": 14.3,
+        "lufs": -8.9
+      },
+      {
+        "t": 14.4,
+        "lufs": -9.9
+      }
+    ]
+  },
+  "truePeak": 1.0,
+  "plr": 10.0,
+  "crestFactor": 10.0,
+  "dynamicSpread": 30.86,
+  "dynamicCharacter": {
+    "dynamicComplexity": 1.3119,
+    "loudnessDb": -17.3562,
+    "loudnessVariation": -17.3562,
+    "spectralFlatness": 0.1075,
+    "logAttackTime": -3.9723,
+    "attackTimeStdDev": 0.0109
+  },
+  "textureCharacter": {
+    "textureScore": 0.3283,
+    "lowBandFlatness": 0.3501,
+    "midBandFlatness": 0.3357,
+    "highBandFlatness": 0.3217,
+    "inharmonicity": 0.0781
+  },
+  "stereoDetail": {
+    "stereoWidth": 0.0,
+    "stereoCorrelation": 1.0,
+    "subBassCorrelation": 1.0,
+    "subBassMono": true,
+    "correlationCurve": [
+      {
+        "t": 0.5,
+        "full": 1.0,
+        "sub": 1.0
+      },
+      {
+        "t": 1.5,
+        "full": 1.0,
+        "sub": 1.0
+      },
+      {
+        "t": 2.5,
+        "full": 1.0,
+        "sub": 1.0
+      },
+      {
+        "t": 3.5,
+        "full": 1.0,
+        "sub": 1.0
+      },
+      {
+        "t": 4.5,
+        "full": 1.0,
+        "sub": 1.0
+      },
+      {
+        "t": 5.5,
+        "full": 1.0,
+        "sub": 1.0
+      },
+      {
+        "t": 6.5,
+        "full": 1.0,
+        "sub": 1.0
+      },
+      {
+        "t": 7.5,
+        "full": 1.0,
+        "sub": 1.0
+      },
+      {
+        "t": 8.5,
+        "full": 1.0,
+        "sub": 1.0
+      },
+      {
+        "t": 9.5,
+        "full": 1.0,
+        "sub": 1.0
+      },
+      {
+        "t": 10.5,
+        "full": 1.0,
+        "sub": 1.0
+      },
+      {
+        "t": 11.5,
+        "full": 1.0,
+        "sub": 1.0
+      },
+      {
+        "t": 12.5,
+        "full": 1.0,
+        "sub": 1.0
+      },
+      {
+        "t": 13.5,
+        "full": 1.0,
+        "sub": 1.0
+      },
+      {
+        "t": 14.5,
+        "full": 1.0,
+        "sub": 1.0
+      },
+      {
+        "t": 15.5,
+        "full": 1.0,
+        "sub": 1.0
+      }
+    ],
+    "bandCorrelations": {
+      "subBass": 1.0,
+      "lowBass": 1.0,
+      "lowMids": 1.0,
+      "mids": 1.0,
+      "upperMids": 1.0,
+      "highs": 1.0,
+      "brilliance": 1.0
+    }
+  },
+  "monoCompatible": true,
+  "spectralBalance": {
+    "subBass": -7.4,
+    "lowBass": -7.9,
+    "lowMids": -24.3,
+    "mids": -24.0,
+    "upperMids": -34.9,
+    "highs": -29.1,
+    "brilliance": -21.4
+  },
+  "spectralBalanceTimeSeries": [
+    {
+      "t": 0.03,
+      "subBass": -4.6,
+      "lowBass": -4.3,
+      "lowMids": -22.0,
+      "mids": -26.4,
+      "upperMids": -39.3,
+      "highs": -55.6,
+      "brilliance": -79.6
+    },
+    {
+      "t": 0.13,
+      "subBass": -4.5,
+      "lowBass": -8.9,
+      "lowMids": -22.3,
+      "mids": -26.8,
+      "upperMids": -38.9,
+      "highs": -55.1,
+      "brilliance": -73.4
+    },
+    {
+      "t": 0.22,
+      "subBass": -8.0,
+      "lowBass": -9.3,
+      "lowMids": -26.3,
+      "mids": -22.8,
+      "upperMids": -30.2,
+      "highs": -22.5,
+      "brilliance": -14.7
+    },
+    {
+      "t": 0.31,
+      "subBass": -8.5,
+      "lowBass": -7.7,
+      "lowMids": -41.5,
+      "mids": -22.3,
+      "upperMids": -35.5,
+      "highs": -30.8,
+      "brilliance": -23.2
+    },
+    {
+      "t": 0.41,
+      "subBass": -11.5,
+      "lowBass": -9.0,
+      "lowMids": -40.0,
+      "mids": -22.0,
+      "upperMids": -38.2,
+      "highs": -49.1,
+      "brilliance": -56.2
+    },
+    {
+      "t": 0.5,
+      "subBass": -6.5,
+      "lowBass": -6.5,
+      "lowMids": -21.0,
+      "mids": -25.7,
+      "upperMids": -38.1,
+      "highs": -50.8,
+      "brilliance": -53.1
+    },
+    {
+      "t": 0.59,
+      "subBass": -6.4,
+      "lowBass": -8.6,
+      "lowMids": -21.7,
+      "mids": -26.8,
+      "upperMids": -39.7,
+      "highs": -70.7,
+      "brilliance": -73.7
+    },
+    {
+      "t": 0.68,
+      "subBass": -8.1,
+      "lowBass": -8.9,
+      "lowMids": -27.8,
+      "mids": -22.4,
+      "upperMids": -29.9,
+      "highs": -22.1,
+      "brilliance": -14.5
+    },
+    {
+      "t": 0.78,
+      "subBass": -6.9,
+      "lowBass": -8.4,
+      "lowMids": -44.3,
+      "mids": -22.3,
+      "upperMids": -35.9,
+      "highs": -31.6,
+      "brilliance": -24.1
+    },
+    {
+      "t": 0.87,
+      "subBass": -8.8,
+      "lowBass": -9.4,
+      "lowMids": -40.5,
+      "mids": -22.4,
+      "upperMids": -38.5,
+      "highs": -49.1,
+      "brilliance": -56.0
+    },
+    {
+      "t": 0.96,
+      "subBass": -6.6,
+      "lowBass": -6.0,
+      "lowMids": -21.1,
+      "mids": -25.9,
+      "upperMids": -38.4,
+      "highs": -51.2,
+      "brilliance": -54.0
+    },
+    {
+      "t": 1.06,
+      "subBass": -6.5,
+      "lowBass": -9.1,
+      "lowMids": -21.6,
+      "mids": -27.0,
+      "upperMids": -37.7,
+      "highs": -74.6,
+      "brilliance": -79.6
+    },
+    {
+      "t": 1.15,
+      "subBass": -8.1,
+      "lowBass": -8.6,
+      "lowMids": -28.5,
+      "mids": -22.5,
+      "upperMids": -30.1,
+      "highs": -22.1,
+      "brilliance": -14.5
+    },
+    {
+      "t": 1.24,
+      "subBass": -10.0,
+      "lowBass": -7.8,
+      "lowMids": -25.3,
+      "mids": -24.3,
+      "upperMids": -36.4,
+      "highs": -32.7,
+      "brilliance": -25.0
+    },
+    {
+      "t": 1.34,
+      "subBass": -13.8,
+      "lowBass": -9.1,
+      "lowMids": -22.7,
+      "mids": -27.9,
+      "upperMids": -38.3,
+      "highs": -52.8,
+      "brilliance": -54.9
+    },
+    {
+      "t": 1.43,
+      "subBass": -3.7,
+      "lowBass": -4.1,
+      "lowMids": -21.5,
+      "mids": -27.3,
+      "upperMids": -40.3,
+      "highs": -59.9,
+      "brilliance": -63.1
+    },
+    {
+      "t": 1.52,
+      "subBass": -5.9,
+      "lowBass": -9.6,
+      "lowMids": -33.8,
+      "mids": -21.4,
+      "upperMids": -36.8,
+      "highs": -50.4,
+      "brilliance": -79.5
+    },
+    {
+      "t": 1.61,
+      "subBass": -6.6,
+      "lowBass": -8.6,
+      "lowMids": -23.2,
+      "mids": -25.4,
+      "upperMids": -30.4,
+      "highs": -22.3,
+      "brilliance": -14.6
+    },
+    {
+      "t": 1.71,
+      "subBass": -9.0,
+      "lowBass": -7.9,
+      "lowMids": -22.4,
+      "mids": -27.6,
+      "upperMids": -37.3,
+      "highs": -34.2,
+      "brilliance": -26.4
+    },
+    {
+      "t": 1.8,
+      "subBass": -11.4,
+      "lowBass": -9.1,
+      "lowMids": -22.8,
+      "mids": -27.9,
+      "upperMids": -38.2,
+      "highs": -51.7,
+      "brilliance": -53.9
+    },
+    {
+      "t": 1.89,
+      "subBass": -6.7,
+      "lowBass": -7.2,
+      "lowMids": -30.0,
+      "mids": -20.9,
+      "upperMids": -36.1,
+      "highs": -50.3,
+      "brilliance": -58.8
+    },
+    {
+      "t": 1.99,
+      "subBass": -6.8,
+      "lowBass": -8.8,
+      "lowMids": -21.9,
+      "mids": -26.2,
+      "upperMids": -38.4,
+      "highs": -54.5,
+      "brilliance": -74.5
+    },
+    {
+      "t": 2.08,
+      "subBass": -7.3,
+      "lowBass": -8.8,
+      "lowMids": -22.3,
+      "mids": -27.0,
+      "upperMids": -30.5,
+      "highs": -22.6,
+      "brilliance": -14.8
+    },
+    {
+      "t": 2.17,
+      "subBass": -8.2,
+      "lowBass": -8.6,
+      "lowMids": -22.2,
+      "mids": -27.2,
+      "upperMids": -37.8,
+      "highs": -35.0,
+      "brilliance": -27.4
+    },
+    {
+      "t": 2.26,
+      "subBass": -9.1,
+      "lowBass": -9.1,
+      "lowMids": -22.8,
+      "mids": -27.2,
+      "upperMids": -39.2,
+      "highs": -50.4,
+      "brilliance": -52.6
+    },
+    {
+      "t": 2.36,
+      "subBass": -5.5,
+      "lowBass": -6.0,
+      "lowMids": -33.9,
+      "mids": -21.7,
+      "upperMids": -37.8,
+      "highs": -49.3,
+      "brilliance": -61.1
+    },
+    {
+      "t": 2.45,
+      "subBass": -5.9,
+      "lowBass": -8.6,
+      "lowMids": -37.9,
+      "mids": -21.4,
+      "upperMids": -37.0,
+      "highs": -50.3,
+      "brilliance": -76.8
+    },
+    {
+      "t": 2.54,
+      "subBass": -9.2,
+      "lowBass": -8.7,
+      "lowMids": -37.6,
+      "mids": -21.6,
+      "upperMids": -30.2,
+      "highs": -22.8,
+      "brilliance": -14.8
+    },
+    {
+      "t": 2.64,
+      "subBass": -10.2,
+      "lowBass": -7.9,
+      "lowMids": -24.6,
+      "mids": -24.4,
+      "upperMids": -37.7,
+      "highs": -36.9,
+      "brilliance": -29.3
+    },
+    {
+      "t": 2.73,
+      "subBass": -13.3,
+      "lowBass": -8.4,
+      "lowMids": -23.4,
+      "mids": -27.3,
+      "upperMids": -39.2,
+      "highs": -51.6,
+      "brilliance": -55.9
+    },
+    {
+      "t": 2.82,
+      "subBass": -3.6,
+      "lowBass": -4.2,
+      "lowMids": -30.5,
+      "mids": -22.6,
+      "upperMids": -38.1,
+      "highs": -51.5,
+      "brilliance": -75.6
+    },
+    {
+      "t": 2.91,
+      "subBass": -6.0,
+      "lowBass": -9.7,
+      "lowMids": -21.8,
+      "mids": -26.8,
+      "upperMids": -37.6,
+      "highs": -65.7,
+      "brilliance": -81.9
+    },
+    {
+      "t": 3.01,
+      "subBass": -7.9,
+      "lowBass": -8.7,
+      "lowMids": -22.3,
+      "mids": -26.7,
+      "upperMids": -30.2,
+      "highs": -22.6,
+      "brilliance": -14.7
+    },
+    {
+      "t": 3.1,
+      "subBass": -8.9,
+      "lowBass": -7.9,
+      "lowMids": -27.2,
+      "mids": -22.9,
+      "upperMids": -37.5,
+      "highs": -40.0,
+      "brilliance": -32.3
+    },
+    {
+      "t": 3.19,
+      "subBass": -11.1,
+      "lowBass": -8.4,
+      "lowMids": -27.5,
+      "mids": -23.0,
+      "upperMids": -37.7,
+      "highs": -48.2,
+      "brilliance": -52.1
+    },
+    {
+      "t": 3.29,
+      "subBass": -6.8,
+      "lowBass": -8.0,
+      "lowMids": -21.9,
+      "mids": -26.8,
+      "upperMids": -39.2,
+      "highs": -78.7,
+      "brilliance": -81.2
+    },
+    {
+      "t": 3.38,
+      "subBass": -6.8,
+      "lowBass": -8.8,
+      "lowMids": -21.7,
+      "mids": -27.1,
+      "upperMids": -37.8,
+      "highs": -70.1,
+      "brilliance": -73.3
+    },
+    {
+      "t": 3.47,
+      "subBass": -7.1,
+      "lowBass": -8.5,
+      "lowMids": -22.3,
+      "mids": -26.9,
+      "upperMids": -30.1,
+      "highs": -22.3,
+      "brilliance": -14.6
+    },
+    {
+      "t": 3.56,
+      "subBass": -6.8,
+      "lowBass": -8.5,
+      "lowMids": -22.4,
+      "mids": -26.8,
+      "upperMids": -38.8,
+      "highs": -42.3,
+      "brilliance": -34.6
+    },
+    {
+      "t": 3.66,
+      "subBass": -9.6,
+      "lowBass": -8.3,
+      "lowMids": -23.0,
+      "mids": -25.6,
+      "upperMids": -38.3,
+      "highs": -48.2,
+      "brilliance": -51.4
+    },
+    {
+      "t": 3.75,
+      "subBass": -6.0,
+      "lowBass": -6.7,
+      "lowMids": -35.9,
+      "mids": -22.4,
+      "upperMids": -38.6,
+      "highs": -50.5,
+      "brilliance": -101.2
+    },
+    {
+      "t": 3.84,
+      "subBass": -6.7,
+      "lowBass": -9.1,
+      "lowMids": -21.4,
+      "mids": -26.1,
+      "upperMids": -38.7,
+      "highs": -66.5,
+      "brilliance": -74.5
+    },
+    {
+      "t": 3.94,
+      "subBass": -9.1,
+      "lowBass": -8.4,
+      "lowMids": -22.0,
+      "mids": -27.1,
+      "upperMids": -29.9,
+      "highs": -21.9,
+      "brilliance": -14.2
+    },
+    {
+      "t": 4.03,
+      "subBass": -10.3,
+      "lowBass": -8.0,
+      "lowMids": -22.0,
+      "mids": -27.5,
+      "upperMids": -37.9,
+      "highs": -46.6,
+      "brilliance": -38.6
+    },
+    {
+      "t": 4.12,
+      "subBass": -12.9,
+      "lowBass": -7.8,
+      "lowMids": -24.3,
+      "mids": -25.4,
+      "upperMids": -38.3,
+      "highs": -50.3,
+      "brilliance": -54.8
+    },
+    {
+      "t": 4.21,
+      "subBass": -3.8,
+      "lowBass": -4.5,
+      "lowMids": -30.1,
+      "mids": -23.7,
+      "upperMids": -39.8,
+      "highs": -51.7,
+      "brilliance": -96.3
+    },
+    {
+      "t": 4.31,
+      "subBass": -5.0,
+      "lowBass": -9.3,
+      "lowMids": -21.6,
+      "mids": -26.6,
+      "upperMids": -39.5,
+      "highs": -67.2,
+      "brilliance": -73.9
+    },
+    {
+      "t": 4.4,
+      "subBass": -7.9,
+      "lowBass": -8.4,
+      "lowMids": -22.0,
+      "mids": -25.8,
+      "upperMids": -29.6,
+      "highs": -21.7,
+      "brilliance": -14.0
+    },
+    {
+      "t": 4.49,
+      "subBass": -9.1,
+      "lowBass": -8.0,
+      "lowMids": -21.7,
+      "mids": -26.9,
+      "upperMids": -39.4,
+      "highs": -52.3,
+      "brilliance": -44.5
+    },
+    {
+      "t": 4.59,
+      "subBass": -12.2,
+      "lowBass": -7.9,
+      "lowMids": -22.0,
+      "mids": -27.0,
+      "upperMids": -39.0,
+      "highs": -50.4,
+      "brilliance": -52.4
+    },
+    {
+      "t": 4.68,
+      "subBass": -5.4,
+      "lowBass": -6.9,
+      "lowMids": -22.6,
+      "mids": -27.7,
+      "upperMids": -40.2,
+      "highs": -79.4,
+      "brilliance": -88.0
+    },
+    {
+      "t": 4.77,
+      "subBass": -7.1,
+      "lowBass": -9.0,
+      "lowMids": -37.2,
+      "mids": -20.9,
+      "upperMids": -36.5,
+      "highs": -49.9,
+      "brilliance": -74.8
+    },
+    {
+      "t": 4.86,
+      "subBass": -8.1,
+      "lowBass": -8.7,
+      "lowMids": -22.0,
+      "mids": -25.8,
+      "upperMids": -29.7,
+      "highs": -21.7,
+      "brilliance": -14.1
+    },
+    {
+      "t": 4.96,
+      "subBass": -7.5,
+      "lowBass": -8.7,
+      "lowMids": -21.8,
+      "mids": -26.9,
+      "upperMids": -39.6,
+      "highs": -60.3,
+      "brilliance": -51.6
+    },
+    {
+      "t": 5.05,
+      "subBass": -9.5,
+      "lowBass": -8.0,
+      "lowMids": -22.2,
+      "mids": -25.7,
+      "upperMids": -38.7,
+      "highs": -48.9,
+      "brilliance": -51.5
+    },
+    {
+      "t": 5.14,
+      "subBass": -5.6,
+      "lowBass": -7.0,
+      "lowMids": -23.4,
+      "mids": -28.6,
+      "upperMids": -40.3,
+      "highs": -56.5,
+      "brilliance": -83.2
+    },
+    {
+      "t": 5.24,
+      "subBass": -6.5,
+      "lowBass": -9.0,
+      "lowMids": -21.5,
+      "mids": -26.3,
+      "upperMids": -38.2,
+      "highs": -54.4,
+      "brilliance": -77.9
+    },
+    {
+      "t": 5.33,
+      "subBass": -8.9,
+      "lowBass": -8.1,
+      "lowMids": -21.7,
+      "mids": -26.4,
+      "upperMids": -30.1,
+      "highs": -22.1,
+      "brilliance": -14.3
+    },
+    {
+      "t": 5.42,
+      "subBass": -10.5,
+      "lowBass": -8.1,
+      "lowMids": -29.0,
+      "mids": -22.1,
+      "upperMids": -37.9,
+      "highs": -50.3,
+      "brilliance": -63.9
+    },
+    {
+      "t": 5.51,
+      "subBass": -11.6,
+      "lowBass": -6.9,
+      "lowMids": -33.8,
+      "mids": -22.4,
+      "upperMids": -38.0,
+      "highs": -48.9,
+      "brilliance": -55.2
+    },
+    {
+      "t": 5.61,
+      "subBass": -3.4,
+      "lowBass": -5.2,
+      "lowMids": -31.5,
+      "mids": -24.1,
+      "upperMids": -39.7,
+      "highs": -53.1,
+      "brilliance": -86.1
+    },
+    {
+      "t": 5.7,
+      "subBass": -6.4,
+      "lowBass": -9.8,
+      "lowMids": -46.5,
+      "mids": -21.2,
+      "upperMids": -37.4,
+      "highs": -49.2,
+      "brilliance": -87.6
+    },
+    {
+      "t": 5.79,
+      "subBass": -7.4,
+      "lowBass": -8.1,
+      "lowMids": -22.0,
+      "mids": -25.9,
+      "upperMids": -30.3,
+      "highs": -22.5,
+      "brilliance": -14.6
+    },
+    {
+      "t": 5.89,
+      "subBass": -9.4,
+      "lowBass": -8.2,
+      "lowMids": -29.5,
+      "mids": -21.8,
+      "upperMids": -37.1,
+      "highs": -50.9,
+      "brilliance": -71.2
+    },
+    {
+      "t": 5.98,
+      "subBass": -12.4,
+      "lowBass": -8.5,
+      "lowMids": -23.8,
+      "mids": -24.0,
+      "upperMids": -37.3,
+      "highs": -49.5,
+      "brilliance": -53.1
+    },
+    {
+      "t": 6.07,
+      "subBass": -6.1,
+      "lowBass": -8.2,
+      "lowMids": -23.5,
+      "mids": -28.8,
+      "upperMids": -39.5,
+      "highs": -68.5,
+      "brilliance": -80.6
+    },
+    {
+      "t": 6.16,
+      "subBass": -7.3,
+      "lowBass": -9.1,
+      "lowMids": -21.8,
+      "mids": -26.8,
+      "upperMids": -38.5,
+      "highs": -54.7,
+      "brilliance": -89.3
+    },
+    {
+      "t": 6.26,
+      "subBass": -6.6,
+      "lowBass": -8.3,
+      "lowMids": -35.4,
+      "mids": -21.7,
+      "upperMids": -30.1,
+      "highs": -22.6,
+      "brilliance": -14.8
+    },
+    {
+      "t": 6.35,
+      "subBass": -8.5,
+      "lowBass": -8.9,
+      "lowMids": -22.3,
+      "mids": -25.6,
+      "upperMids": -39.4,
+      "highs": -57.1,
+      "brilliance": -65.4
+    },
+    {
+      "t": 6.44,
+      "subBass": -9.4,
+      "lowBass": -7.5,
+      "lowMids": -24.9,
+      "mids": -23.5,
+      "upperMids": -37.6,
+      "highs": -47.9,
+      "brilliance": -51.5
+    },
+    {
+      "t": 6.54,
+      "subBass": -4.9,
+      "lowBass": -7.3,
+      "lowMids": -30.4,
+      "mids": -23.6,
+      "upperMids": -39.0,
+      "highs": -52.9,
+      "brilliance": -82.7
+    },
+    {
+      "t": 6.63,
+      "subBass": -6.9,
+      "lowBass": -9.2,
+      "lowMids": -21.8,
+      "mids": -27.2,
+      "upperMids": -40.0,
+      "highs": -80.1,
+      "brilliance": -100.2
+    },
+    {
+      "t": 6.72,
+      "subBass": -9.8,
+      "lowBass": -8.1,
+      "lowMids": -21.8,
+      "mids": -27.0,
+      "upperMids": -30.2,
+      "highs": -22.5,
+      "brilliance": -14.6
+    },
+    {
+      "t": 6.82,
+      "subBass": -10.7,
+      "lowBass": -8.2,
+      "lowMids": -30.8,
+      "mids": -21.9,
+      "upperMids": -37.7,
+      "highs": -49.8,
+      "brilliance": -61.9
+    },
+    {
+      "t": 6.91,
+      "subBass": -9.5,
+      "lowBass": -5.3,
+      "lowMids": -24.4,
+      "mids": -24.9,
+      "upperMids": -38.7,
+      "highs": -51.9,
+      "brilliance": -57.3
+    },
+    {
+      "t": 7.0,
+      "subBass": -3.5,
+      "lowBass": -6.3,
+      "lowMids": -23.6,
+      "mids": -28.8,
+      "upperMids": -40.2,
+      "highs": -63.1,
+      "brilliance": -78.6
+    },
+    {
+      "t": 7.09,
+      "subBass": -6.5,
+      "lowBass": -9.9,
+      "lowMids": -22.2,
+      "mids": -27.3,
+      "upperMids": -38.9,
+      "highs": -55.1,
+      "brilliance": -110.6
+    },
+    {
+      "t": 7.19,
+      "subBass": -8.5,
+      "lowBass": -8.1,
+      "lowMids": -21.7,
+      "mids": -26.6,
+      "upperMids": -29.9,
+      "highs": -22.2,
+      "brilliance": -14.4
+    },
+    {
+      "t": 7.28,
+      "subBass": -9.3,
+      "lowBass": -8.3,
+      "lowMids": -21.3,
+      "mids": -26.4,
+      "upperMids": -38.5,
+      "highs": -57.0,
+      "brilliance": -59.1
+    },
+    {
+      "t": 7.37,
+      "subBass": -12.2,
+      "lowBass": -8.2,
+      "lowMids": -21.7,
+      "mids": -27.0,
+      "upperMids": -37.9,
+      "highs": -51.9,
+      "brilliance": -53.9
+    },
+    {
+      "t": 7.47,
+      "subBass": -5.2,
+      "lowBass": -7.1,
+      "lowMids": -24.5,
+      "mids": -25.9,
+      "upperMids": -38.8,
+      "highs": -58.0,
+      "brilliance": -77.9
+    },
+    {
+      "t": 7.56,
+      "subBass": -7.5,
+      "lowBass": -9.1,
+      "lowMids": -33.9,
+      "mids": -21.8,
+      "upperMids": -37.2,
+      "highs": -52.5,
+      "brilliance": -75.4
+    },
+    {
+      "t": 7.65,
+      "subBass": -7.1,
+      "lowBass": -8.3,
+      "lowMids": -21.8,
+      "mids": -26.4,
+      "upperMids": -29.5,
+      "highs": -21.9,
+      "brilliance": -14.2
+    },
+    {
+      "t": 7.74,
+      "subBass": -7.3,
+      "lowBass": -8.8,
+      "lowMids": -32.4,
+      "mids": -21.2,
+      "upperMids": -36.5,
+      "highs": -49.2,
+      "brilliance": -57.1
+    },
+    {
+      "t": 7.84,
+      "subBass": -9.1,
+      "lowBass": -6.6,
+      "lowMids": -22.5,
+      "mids": -24.6,
+      "upperMids": -37.4,
+      "highs": -49.1,
+      "brilliance": -52.2
+    },
+    {
+      "t": 7.93,
+      "subBass": -6.1,
+      "lowBass": -9.0,
+      "lowMids": -24.5,
+      "mids": -24.7,
+      "upperMids": -38.1,
+      "highs": -56.5,
+      "brilliance": -79.8
+    },
+    {
+      "t": 8.02,
+      "subBass": -7.0,
+      "lowBass": -9.3,
+      "lowMids": -34.1,
+      "mids": -22.1,
+      "upperMids": -37.4,
+      "highs": -51.5,
+      "brilliance": -50.0
+    },
+    {
+      "t": 8.12,
+      "subBass": -9.5,
+      "lowBass": -7.9,
+      "lowMids": -34.5,
+      "mids": -20.9,
+      "upperMids": -29.5,
+      "highs": -21.8,
+      "brilliance": -14.1
+    },
+    {
+      "t": 8.21,
+      "subBass": -11.2,
+      "lowBass": -8.4,
+      "lowMids": -38.7,
+      "mids": -21.0,
+      "upperMids": -37.0,
+      "highs": -48.0,
+      "brilliance": -56.3
+    },
+    {
+      "t": 8.3,
+      "subBass": -7.4,
+      "lowBass": -4.7,
+      "lowMids": -23.3,
+      "mids": -25.5,
+      "upperMids": -38.7,
+      "highs": -53.9,
+      "brilliance": -60.1
+    },
+    {
+      "t": 8.39,
+      "subBass": -4.5,
+      "lowBass": -7.6,
+      "lowMids": -22.8,
+      "mids": -28.1,
+      "upperMids": -39.6,
+      "highs": -76.2,
+      "brilliance": -79.9
+    },
+    {
+      "t": 8.49,
+      "subBass": -5.4,
+      "lowBass": -9.6,
+      "lowMids": -23.0,
+      "mids": -27.9,
+      "upperMids": -40.1,
+      "highs": -45.8,
+      "brilliance": -38.7
+    },
+    {
+      "t": 8.58,
+      "subBass": -8.0,
+      "lowBass": -7.7,
+      "lowMids": -32.0,
+      "mids": -21.1,
+      "upperMids": -29.6,
+      "highs": -21.8,
+      "brilliance": -14.1
+    },
+    {
+      "t": 8.67,
+      "subBass": -10.2,
+      "lowBass": -8.6,
+      "lowMids": -21.6,
+      "mids": -25.3,
+      "upperMids": -37.3,
+      "highs": -50.9,
+      "brilliance": -55.4
+    },
+    {
+      "t": 8.77,
+      "subBass": -11.9,
+      "lowBass": -8.0,
+      "lowMids": -27.6,
+      "mids": -22.2,
+      "upperMids": -37.6,
+      "highs": -48.1,
+      "brilliance": -54.9
+    },
+    {
+      "t": 8.86,
+      "subBass": -5.1,
+      "lowBass": -6.9,
+      "lowMids": -25.2,
+      "mids": -24.7,
+      "upperMids": -39.4,
+      "highs": -53.0,
+      "brilliance": -75.4
+    },
+    {
+      "t": 8.95,
+      "subBass": -7.8,
+      "lowBass": -9.3,
+      "lowMids": -23.2,
+      "mids": -28.4,
+      "upperMids": -39.2,
+      "highs": -38.7,
+      "brilliance": -31.6
+    },
+    {
+      "t": 9.04,
+      "subBass": -7.5,
+      "lowBass": -8.3,
+      "lowMids": -21.5,
+      "mids": -26.9,
+      "upperMids": -29.9,
+      "highs": -22.1,
+      "brilliance": -14.3
+    },
+    {
+      "t": 9.14,
+      "subBass": -8.2,
+      "lowBass": -8.9,
+      "lowMids": -21.0,
+      "mids": -26.2,
+      "upperMids": -38.2,
+      "highs": -54.1,
+      "brilliance": -56.2
+    },
+    {
+      "t": 9.23,
+      "subBass": -9.3,
+      "lowBass": -7.4,
+      "lowMids": -21.9,
+      "mids": -26.2,
+      "upperMids": -38.4,
+      "highs": -50.4,
+      "brilliance": -54.0
+    },
+    {
+      "t": 9.32,
+      "subBass": -4.8,
+      "lowBass": -7.5,
+      "lowMids": -26.1,
+      "mids": -23.9,
+      "upperMids": -38.4,
+      "highs": -53.9,
+      "brilliance": -76.9
+    },
+    {
+      "t": 9.42,
+      "subBass": -7.3,
+      "lowBass": -9.4,
+      "lowMids": -34.0,
+      "mids": -22.8,
+      "upperMids": -36.6,
+      "highs": -33.8,
+      "brilliance": -26.7
+    },
+    {
+      "t": 9.51,
+      "subBass": -9.3,
+      "lowBass": -7.6,
+      "lowMids": -38.4,
+      "mids": -21.2,
+      "upperMids": -30.3,
+      "highs": -22.7,
+      "brilliance": -14.8
+    },
+    {
+      "t": 9.6,
+      "subBass": -11.3,
+      "lowBass": -8.4,
+      "lowMids": -38.4,
+      "mids": -20.8,
+      "upperMids": -36.3,
+      "highs": -48.5,
+      "brilliance": -56.7
+    },
+    {
+      "t": 9.69,
+      "subBass": -6.2,
+      "lowBass": -4.4,
+      "lowMids": -23.3,
+      "mids": -26.1,
+      "upperMids": -40.0,
+      "highs": -56.4,
+      "brilliance": -62.4
+    },
+    {
+      "t": 9.79,
+      "subBass": -4.7,
+      "lowBass": -8.6,
+      "lowMids": -26.2,
+      "mids": -23.7,
+      "upperMids": -38.4,
+      "highs": -54.8,
+      "brilliance": -78.7
+    },
+    {
+      "t": 9.88,
+      "subBass": -7.0,
+      "lowBass": -10.2,
+      "lowMids": -31.8,
+      "mids": -22.6,
+      "upperMids": -35.1,
+      "highs": -30.1,
+      "brilliance": -23.1
+    },
+    {
+      "t": 9.97,
+      "subBass": -8.4,
+      "lowBass": -7.6,
+      "lowMids": -38.9,
+      "mids": -21.4,
+      "upperMids": -30.7,
+      "highs": -23.6,
+      "brilliance": -15.4
+    },
+    {
+      "t": 10.07,
+      "subBass": -9.7,
+      "lowBass": -8.4,
+      "lowMids": -21.5,
+      "mids": -26.1,
+      "upperMids": -38.9,
+      "highs": -55.3,
+      "brilliance": -57.8
+    },
+    {
+      "t": 10.16,
+      "subBass": -9.8,
+      "lowBass": -7.8,
+      "lowMids": -21.8,
+      "mids": -27.2,
+      "upperMids": -37.7,
+      "highs": -53.2,
+      "brilliance": -55.2
+    },
+    {
+      "t": 10.25,
+      "subBass": -6.2,
+      "lowBass": -8.8,
+      "lowMids": -26.9,
+      "mids": -23.7,
+      "upperMids": -38.2,
+      "highs": -53.3,
+      "brilliance": -79.0
+    },
+    {
+      "t": 10.34,
+      "subBass": -7.9,
+      "lowBass": -9.2,
+      "lowMids": -34.2,
+      "mids": -22.9,
+      "upperMids": -34.2,
+      "highs": -27.5,
+      "brilliance": -20.4
+    },
+    {
+      "t": 10.44,
+      "subBass": -6.0,
+      "lowBass": -8.1,
+      "lowMids": -35.0,
+      "mids": -21.7,
+      "upperMids": -31.4,
+      "highs": -24.3,
+      "brilliance": -16.2
+    },
+    {
+      "t": 10.53,
+      "subBass": -8.7,
+      "lowBass": -9.1,
+      "lowMids": -21.6,
+      "mids": -26.0,
+      "upperMids": -38.0,
+      "highs": -52.2,
+      "brilliance": -58.3
+    },
+    {
+      "t": 10.62,
+      "subBass": -9.3,
+      "lowBass": -7.7,
+      "lowMids": -25.6,
+      "mids": -22.0,
+      "upperMids": -36.4,
+      "highs": -48.2,
+      "brilliance": -52.7
+    },
+    {
+      "t": 10.72,
+      "subBass": -4.9,
+      "lowBass": -7.6,
+      "lowMids": -24.0,
+      "mids": -25.1,
+      "upperMids": -38.8,
+      "highs": -54.6,
+      "brilliance": -72.9
+    },
+    {
+      "t": 10.81,
+      "subBass": -8.2,
+      "lowBass": -9.7,
+      "lowMids": -24.5,
+      "mids": -25.5,
+      "upperMids": -33.3,
+      "highs": -25.6,
+      "brilliance": -18.6
+    },
+    {
+      "t": 10.9,
+      "subBass": -9.5,
+      "lowBass": -7.6,
+      "lowMids": -40.7,
+      "mids": -22.0,
+      "upperMids": -31.7,
+      "highs": -24.9,
+      "brilliance": -16.5
+    },
+    {
+      "t": 10.99,
+      "subBass": -11.7,
+      "lowBass": -8.5,
+      "lowMids": -37.8,
+      "mids": -20.8,
+      "upperMids": -36.3,
+      "highs": -48.8,
+      "brilliance": -58.0
+    },
+    {
+      "t": 11.09,
+      "subBass": -5.3,
+      "lowBass": -3.9,
+      "lowMids": -22.2,
+      "mids": -26.3,
+      "upperMids": -39.7,
+      "highs": -55.9,
+      "brilliance": -60.0
+    },
+    {
+      "t": 11.18,
+      "subBass": -4.9,
+      "lowBass": -9.4,
+      "lowMids": -22.5,
+      "mids": -27.4,
+      "upperMids": -40.2,
+      "highs": -70.5,
+      "brilliance": -73.4
+    },
+    {
+      "t": 11.27,
+      "subBass": -6.9,
+      "lowBass": -9.9,
+      "lowMids": -23.0,
+      "mids": -26.6,
+      "upperMids": -32.9,
+      "highs": -24.4,
+      "brilliance": -17.2
+    },
+    {
+      "t": 11.37,
+      "subBass": -8.3,
+      "lowBass": -7.6,
+      "lowMids": -22.6,
+      "mids": -27.8,
+      "upperMids": -32.0,
+      "highs": -25.4,
+      "brilliance": -17.2
+    },
+    {
+      "t": 11.46,
+      "subBass": -10.7,
+      "lowBass": -8.7,
+      "lowMids": -37.7,
+      "mids": -20.5,
+      "upperMids": -36.0,
+      "highs": -48.3,
+      "brilliance": -57.0
+    },
+    {
+      "t": 11.55,
+      "subBass": -8.0,
+      "lowBass": -6.3,
+      "lowMids": -21.6,
+      "mids": -25.4,
+      "upperMids": -38.1,
+      "highs": -50.8,
+      "brilliance": -53.2
+    },
+    {
+      "t": 11.64,
+      "subBass": -5.7,
+      "lowBass": -8.2,
+      "lowMids": -26.9,
+      "mids": -22.5,
+      "upperMids": -37.5,
+      "highs": -53.4,
+      "brilliance": -73.5
+    },
+    {
+      "t": 11.74,
+      "subBass": -8.0,
+      "lowBass": -9.1,
+      "lowMids": -33.1,
+      "mids": -22.3,
+      "upperMids": -31.8,
+      "highs": -23.8,
+      "brilliance": -16.4
+    },
+    {
+      "t": 11.83,
+      "subBass": -7.3,
+      "lowBass": -8.3,
+      "lowMids": -44.7,
+      "mids": -22.2,
+      "upperMids": -32.0,
+      "highs": -25.8,
+      "brilliance": -17.7
+    },
+    {
+      "t": 11.92,
+      "subBass": -7.9,
+      "lowBass": -9.0,
+      "lowMids": -39.3,
+      "mids": -20.7,
+      "upperMids": -36.0,
+      "highs": -48.3,
+      "brilliance": -55.9
+    },
+    {
+      "t": 12.02,
+      "subBass": -7.7,
+      "lowBass": -6.5,
+      "lowMids": -27.3,
+      "mids": -21.5,
+      "upperMids": -37.0,
+      "highs": -47.5,
+      "brilliance": -53.1
+    },
+    {
+      "t": 12.11,
+      "subBass": -6.3,
+      "lowBass": -9.2,
+      "lowMids": -22.9,
+      "mids": -25.4,
+      "upperMids": -39.6,
+      "highs": -56.8,
+      "brilliance": -75.3
+    },
+    {
+      "t": 12.2,
+      "subBass": -7.4,
+      "lowBass": -9.1,
+      "lowMids": -22.8,
+      "mids": -27.4,
+      "upperMids": -32.1,
+      "highs": -23.6,
+      "brilliance": -16.1
+    },
+    {
+      "t": 12.29,
+      "subBass": -9.5,
+      "lowBass": -7.6,
+      "lowMids": -23.2,
+      "mids": -28.2,
+      "upperMids": -33.1,
+      "highs": -26.4,
+      "brilliance": -18.4
+    },
+    {
+      "t": 12.39,
+      "subBass": -12.3,
+      "lowBass": -8.7,
+      "lowMids": -38.3,
+      "mids": -20.5,
+      "upperMids": -35.7,
+      "highs": -48.5,
+      "brilliance": -55.5
+    },
+    {
+      "t": 12.48,
+      "subBass": -5.1,
+      "lowBass": -4.2,
+      "lowMids": -22.3,
+      "mids": -27.1,
+      "upperMids": -38.3,
+      "highs": -58.3,
+      "brilliance": -62.4
+    },
+    {
+      "t": 12.57,
+      "subBass": -5.4,
+      "lowBass": -9.4,
+      "lowMids": -22.0,
+      "mids": -27.2,
+      "upperMids": -39.5,
+      "highs": -76.0,
+      "brilliance": -80.8
+    },
+    {
+      "t": 12.67,
+      "subBass": -6.1,
+      "lowBass": -9.3,
+      "lowMids": -23.0,
+      "mids": -27.1,
+      "upperMids": -32.1,
+      "highs": -23.7,
+      "brilliance": -16.1
+    },
+    {
+      "t": 12.76,
+      "subBass": -8.5,
+      "lowBass": -7.7,
+      "lowMids": -23.4,
+      "mids": -28.6,
+      "upperMids": -33.6,
+      "highs": -27.1,
+      "brilliance": -19.2
+    },
+    {
+      "t": 12.85,
+      "subBass": -10.6,
+      "lowBass": -8.8,
+      "lowMids": -20.7,
+      "mids": -25.8,
+      "upperMids": -38.0,
+      "highs": -54.0,
+      "brilliance": -56.1
+    },
+    {
+      "t": 12.95,
+      "subBass": -8.4,
+      "lowBass": -6.9,
+      "lowMids": -21.3,
+      "mids": -26.8,
+      "upperMids": -39.4,
+      "highs": -55.1,
+      "brilliance": -57.2
+    },
+    {
+      "t": 13.04,
+      "subBass": -6.2,
+      "lowBass": -8.5,
+      "lowMids": -29.5,
+      "mids": -22.2,
+      "upperMids": -37.6,
+      "highs": -51.4,
+      "brilliance": -79.1
+    },
+    {
+      "t": 13.13,
+      "subBass": -7.5,
+      "lowBass": -9.0,
+      "lowMids": -34.4,
+      "mids": -22.4,
+      "upperMids": -31.8,
+      "highs": -24.0,
+      "brilliance": -16.2
+    },
+    {
+      "t": 13.22,
+      "subBass": -7.4,
+      "lowBass": -8.4,
+      "lowMids": -35.3,
+      "mids": -22.8,
+      "upperMids": -33.8,
+      "highs": -27.5,
+      "brilliance": -19.8
+    },
+    {
+      "t": 13.32,
+      "subBass": -9.0,
+      "lowBass": -9.2,
+      "lowMids": -41.5,
+      "mids": -20.9,
+      "upperMids": -36.9,
+      "highs": -48.0,
+      "brilliance": -56.6
+    },
+    {
+      "t": 13.41,
+      "subBass": -6.9,
+      "lowBass": -6.9,
+      "lowMids": -29.2,
+      "mids": -21.3,
+      "upperMids": -36.4,
+      "highs": -48.3,
+      "brilliance": -54.8
+    },
+    {
+      "t": 13.5,
+      "subBass": -5.3,
+      "lowBass": -8.2,
+      "lowMids": -39.5,
+      "mids": -22.0,
+      "upperMids": -38.2,
+      "highs": -50.3,
+      "brilliance": -83.4
+    },
+    {
+      "t": 13.6,
+      "subBass": -8.5,
+      "lowBass": -9.2,
+      "lowMids": -25.1,
+      "mids": -24.8,
+      "upperMids": -31.5,
+      "highs": -24.0,
+      "brilliance": -15.9
+    },
+    {
+      "t": 13.69,
+      "subBass": -9.8,
+      "lowBass": -7.7,
+      "lowMids": -23.4,
+      "mids": -28.6,
+      "upperMids": -35.1,
+      "highs": -28.3,
+      "brilliance": -20.7
+    },
+    {
+      "t": 13.78,
+      "subBass": -12.2,
+      "lowBass": -8.7,
+      "lowMids": -21.6,
+      "mids": -26.7,
+      "upperMids": -38.0,
+      "highs": -52.4,
+      "brilliance": -58.7
+    },
+    {
+      "t": 13.87,
+      "subBass": -5.3,
+      "lowBass": -4.5,
+      "lowMids": -27.2,
+      "mids": -22.0,
+      "upperMids": -37.1,
+      "highs": -51.7,
+      "brilliance": -60.2
+    },
+    {
+      "t": 13.97,
+      "subBass": -4.6,
+      "lowBass": -8.8,
+      "lowMids": -22.6,
+      "mids": -26.2,
+      "upperMids": -39.6,
+      "highs": -61.3,
+      "brilliance": -72.7
+    },
+    {
+      "t": 14.06,
+      "subBass": -7.9,
+      "lowBass": -9.5,
+      "lowMids": -25.9,
+      "mids": -23.6,
+      "upperMids": -31.0,
+      "highs": -23.6,
+      "brilliance": -15.7
+    },
+    {
+      "t": 14.15,
+      "subBass": -8.7,
+      "lowBass": -7.7,
+      "lowMids": -29.7,
+      "mids": -23.5,
+      "upperMids": -35.2,
+      "highs": -29.2,
+      "brilliance": -21.6
+    },
+    {
+      "t": 14.25,
+      "subBass": -10.7,
+      "lowBass": -8.8,
+      "lowMids": -21.5,
+      "mids": -26.5,
+      "upperMids": -38.8,
+      "highs": -56.8,
+      "brilliance": -58.8
+    },
+    {
+      "t": 14.34,
+      "subBass": -7.5,
+      "lowBass": -6.9,
+      "lowMids": -31.3,
+      "mids": -21.1,
+      "upperMids": -36.5,
+      "highs": -48.4,
+      "brilliance": -54.6
+    },
+    {
+      "t": 14.43,
+      "subBass": -6.4,
+      "lowBass": -8.7,
+      "lowMids": -32.2,
+      "mids": -21.6,
+      "upperMids": -36.9,
+      "highs": -52.0,
+      "brilliance": -80.4
+    },
+    {
+      "t": 14.52,
+      "subBass": -7.7,
+      "lowBass": -8.9,
+      "lowMids": -24.4,
+      "mids": -24.9,
+      "upperMids": -30.4,
+      "highs": -23.1,
+      "brilliance": -15.3
+    },
+    {
+      "t": 14.62,
+      "subBass": -6.3,
+      "lowBass": -8.2,
+      "lowMids": -24.5,
+      "mids": -26.0,
+      "upperMids": -36.4,
+      "highs": -30.0,
+      "brilliance": -22.6
+    },
+    {
+      "t": 14.71,
+      "subBass": -9.1,
+      "lowBass": -9.3,
+      "lowMids": -42.4,
+      "mids": -21.5,
+      "upperMids": -37.1,
+      "highs": -49.7,
+      "brilliance": -58.1
+    },
+    {
+      "t": 14.78,
+      "subBass": -18.2,
+      "lowBass": -17.5,
+      "lowMids": -32.3,
+      "mids": -33.3,
+      "upperMids": -41.9,
+      "highs": -46.7,
+      "brilliance": -48.9
+    }
+  ],
+  "spectralDetail": {
+    "spectralCentroid": 1027.5,
+    "spectralRolloff": 1264.3,
+    "spectralBandwidth": 2782.5,
+    "spectralFlatness": 0.107547,
+    "mfcc": [
+      -738.4915,
+      205.4349,
+      -1.7101,
+      63.088,
+      23.7295,
+      18.8658,
+      28.7747,
+      15.4407,
+      18.4548,
+      16.4652,
+      17.9787,
+      15.473,
+      14.9618
+    ],
+    "chroma": [
+      0.0415,
+      0.1756,
+      0.0429,
+      0.191,
+      0.2523,
+      0.0628,
+      0.1971,
+      0.1162,
+      0.3132,
+      0.115,
+      0.3503,
+      0.3631
+    ],
+    "barkBands": [
+      -22.8842,
+      -7.4646,
+      -11.1697,
+      -22.5971,
+      -29.5628,
+      -28.2235,
+      -26.9773,
+      -27.5063,
+      -31.3593,
+      -34.783,
+      -35.2757,
+      -33.9973,
+      -40.001,
+      -39.0523,
+      -41.015,
+      -42.4412,
+      -42.5889,
+      -42.9875,
+      -43.6306,
+      -42.7086,
+      -40.038,
+      -36.4273,
+      -36.4679,
+      -32.6915
+    ],
+    "erbBands": [
+      10.152,
+      18.3137,
+      19.4526,
+      13.6596,
+      7.9028,
+      4.2215,
+      6.8201,
+      13.4461,
+      14.6268,
+      15.5112,
+      15.0926,
+      10.5209,
+      10.7066,
+      10.0596,
+      11.7062,
+      10.9949,
+      7.8507,
+      7.6491,
+      6.9768,
+      5.4952,
+      5.2941,
+      4.8399,
+      4.1877,
+      3.9394,
+      2.9865,
+      4.2631,
+      5.4792,
+      6.5138,
+      8.3693,
+      9.2006,
+      8.5376,
+      10.2364,
+      9.5018,
+      9.9721,
+      9.2391,
+      9.0305,
+      6.9922,
+      3.2646,
+      -2.7205,
+      -12.195
+    ],
+    "spectralContrast": [
+      -0.2417,
+      -0.5634,
+      -0.6369,
+      -0.6994,
+      -0.73,
+      -0.7587
+    ],
+    "spectralValley": [
+      -5.5818,
+      -6.7781,
+      -7.7405,
+      -8.4542,
+      -9.3325,
+      -12.0928
+    ]
+  },
+  "stemAnalysis": null,
+  "transientDensityDetail": {
+    "subBass": {
+      "onsetRatePerSecond": 13.27,
+      "meanOnsetStrength": 0.261,
+      "peakOnsetStrength": 0.69,
+      "eventCount": 196
+    },
+    "lowBass": {
+      "onsetRatePerSecond": 8.19,
+      "meanOnsetStrength": 0.494,
+      "peakOnsetStrength": 1.38,
+      "eventCount": 121
+    },
+    "lowMids": {
+      "onsetRatePerSecond": 10.43,
+      "meanOnsetStrength": 0.955,
+      "peakOnsetStrength": 2.394,
+      "eventCount": 154
+    },
+    "mids": {
+      "onsetRatePerSecond": 10.77,
+      "meanOnsetStrength": 3.868,
+      "peakOnsetStrength": 8.442,
+      "eventCount": 159
+    },
+    "upperMids": {
+      "onsetRatePerSecond": 10.83,
+      "meanOnsetStrength": 4.141,
+      "peakOnsetStrength": 10.024,
+      "eventCount": 160
+    },
+    "highs": {
+      "onsetRatePerSecond": 10.77,
+      "meanOnsetStrength": 5.194,
+      "peakOnsetStrength": 13.839,
+      "eventCount": 159
+    },
+    "brilliance": {
+      "onsetRatePerSecond": 10.29,
+      "meanOnsetStrength": 5.116,
+      "peakOnsetStrength": 14.557,
+      "eventCount": 152
+    }
+  },
+  "saturationDetail": {
+    "clippedSampleCount": 0,
+    "clippedSamplePercent": 0.0,
+    "nearClippedSampleCount": 0,
+    "nearClippedSamplePercent": 0.0,
+    "peakRatio95to50": 2.491,
+    "rmsToPeakRatioDb": 9.98,
+    "saturationLikely": false
+  },
+  "snareDetail": {
+    "hitCount": 61,
+    "hitsPerSecond": 4.13,
+    "meanAttackSharpness": 0.003,
+    "meanBodyEnergyRatio": 0.977,
+    "meanSnapEnergyRatio": 0.023,
+    "meanCentroidHz": 439.6,
+    "meanDecayFrames": 54.9,
+    "meanDecaySeconds": 0.319,
+    "bandHz": [
+      120.0,
+      2000.0
+    ]
+  },
+  "hihatDetail": {
+    "hitCount": 32,
+    "hitsPerSecond": 2.17,
+    "meanAttackSharpness": 0.003,
+    "meanBodyEnergyRatio": 0.162,
+    "meanSnapEnergyRatio": 0.838,
+    "meanCentroidHz": 7961.1,
+    "meanDecayFrames": 8.3,
+    "meanDecaySeconds": 0.048,
+    "bandHz": [
+      2000.0,
+      12000.0
+    ]
+  },
+  "rhythmDetail": {
+    "onsetRate": 2.17,
+    "beatGrid": [
+      0.348,
+      0.72,
+      1.149,
+      1.614,
+      2.067,
+      2.531,
+      2.995,
+      3.46,
+      3.913,
+      4.377,
+      4.841,
+      5.306,
+      5.759,
+      6.223,
+      6.687,
+      7.152,
+      7.605,
+      8.069,
+      8.533,
+      8.998,
+      9.451,
+      9.915,
+      10.379,
+      10.844,
+      11.297,
+      11.761,
+      12.225,
+      12.69,
+      13.142,
+      13.607,
+      14.071,
+      14.536
+    ],
+    "downbeats": [
+      0.72,
+      2.531,
+      4.377,
+      6.223,
+      8.069,
+      9.915,
+      11.761,
+      13.607
+    ],
+    "beatPositions": [
+      4,
+      1,
+      2,
+      3,
+      4,
+      1,
+      2,
+      3,
+      4,
+      1,
+      2,
+      3,
+      4,
+      1,
+      2,
+      3,
+      4,
+      1,
+      2,
+      3,
+      4,
+      1,
+      2,
+      3,
+      4,
+      1,
+      2,
+      3,
+      4,
+      1,
+      2,
+      3
+    ],
+    "downbeatSource": "kick_accent",
+    "downbeatConfidence": 0.0163,
+    "grooveAmount": 0.038,
+    "tempoStability": 0.962,
+    "phraseGrid": {
+      "phrases4Bar": [
+        0.72,
+        8.069
+      ],
+      "phrases8Bar": [
+        0.72
+      ],
+      "phrases16Bar": [
+        0.72
+      ],
+      "totalBars": 8,
+      "totalPhrases8Bar": 1
+    },
+    "tempoCurve": [
+      {
+        "t": 0.53,
+        "bpm": 139.7
+      },
+      {
+        "t": 0.93,
+        "bpm": 136.1
+      },
+      {
+        "t": 1.38,
+        "bpm": 132.5
+      },
+      {
+        "t": 1.84,
+        "bpm": 129.2
+      },
+      {
+        "t": 2.3,
+        "bpm": 129.2
+      },
+      {
+        "t": 2.76,
+        "bpm": 129.2
+      },
+      {
+        "t": 3.23,
+        "bpm": 129.2
+      },
+      {
+        "t": 3.69,
+        "bpm": 129.2
+      },
+      {
+        "t": 4.14,
+        "bpm": 129.2
+      },
+      {
+        "t": 4.61,
+        "bpm": 129.2
+      },
+      {
+        "t": 5.07,
+        "bpm": 129.2
+      },
+      {
+        "t": 5.53,
+        "bpm": 129.2
+      },
+      {
+        "t": 5.99,
+        "bpm": 129.2
+      },
+      {
+        "t": 6.46,
+        "bpm": 129.2
+      },
+      {
+        "t": 6.92,
+        "bpm": 129.2
+      },
+      {
+        "t": 7.38,
+        "bpm": 129.2
+      },
+      {
+        "t": 7.84,
+        "bpm": 129.2
+      },
+      {
+        "t": 8.3,
+        "bpm": 129.2
+      },
+      {
+        "t": 8.77,
+        "bpm": 129.2
+      },
+      {
+        "t": 9.22,
+        "bpm": 129.2
+      },
+      {
+        "t": 9.68,
+        "bpm": 129.2
+      },
+      {
+        "t": 10.15,
+        "bpm": 129.2
+      },
+      {
+        "t": 10.61,
+        "bpm": 129.2
+      },
+      {
+        "t": 11.07,
+        "bpm": 129.2
+      },
+      {
+        "t": 11.53,
+        "bpm": 129.2
+      },
+      {
+        "t": 11.99,
+        "bpm": 129.2
+      },
+      {
+        "t": 12.46,
+        "bpm": 129.2
+      },
+      {
+        "t": 12.92,
+        "bpm": 129.2
+      },
+      {
+        "t": 13.37,
+        "bpm": 129.2
+      },
+      {
+        "t": 13.84,
+        "bpm": 129.2
+      },
+      {
+        "t": 14.3,
+        "bpm": 129.2
+      }
+    ]
+  },
+  "melodyDetail": {
+    "noteCount": 53,
+    "notes": [
+      {
+        "midi": 43,
+        "onset": 0.232,
+        "duration": 0.215
+      },
+      {
+        "midi": 44,
+        "onset": 0.511,
+        "duration": 0.18
+      },
+      {
+        "midi": 41,
+        "onset": 0.697,
+        "duration": 0.221
+      },
+      {
+        "midi": 43,
+        "onset": 0.984,
+        "duration": 0.16
+      },
+      {
+        "midi": 44,
+        "onset": 1.149,
+        "duration": 0.229
+      },
+      {
+        "midi": 41,
+        "onset": 1.469,
+        "duration": 0.134
+      },
+      {
+        "midi": 43,
+        "onset": 1.608,
+        "duration": 0.223
+      },
+      {
+        "midi": 44,
+        "onset": 1.895,
+        "duration": 0.18
+      },
+      {
+        "midi": 41,
+        "onset": 2.081,
+        "duration": 0.223
+      },
+      {
+        "midi": 44,
+        "onset": 2.531,
+        "duration": 0.232
+      },
+      {
+        "midi": 41,
+        "onset": 2.853,
+        "duration": 0.134
+      },
+      {
+        "midi": 43,
+        "onset": 2.992,
+        "duration": 0.221
+      },
+      {
+        "midi": 44,
+        "onset": 3.28,
+        "duration": 0.18
+      },
+      {
+        "midi": 41,
+        "onset": 3.466,
+        "duration": 0.223
+      },
+      {
+        "midi": 43,
+        "onset": 3.75,
+        "duration": 0.16
+      },
+      {
+        "midi": 44,
+        "onset": 3.918,
+        "duration": 0.258
+      },
+      {
+        "midi": 43,
+        "onset": 4.386,
+        "duration": 0.218
+      },
+      {
+        "midi": 42,
+        "onset": 4.609,
+        "duration": 0.093
+      },
+      {
+        "midi": 44,
+        "onset": 4.708,
+        "duration": 0.136
+      },
+      {
+        "midi": 41,
+        "onset": 4.85,
+        "duration": 0.218
+      },
+      {
+        "midi": 43,
+        "onset": 5.135,
+        "duration": 0.16
+      },
+      {
+        "midi": 44,
+        "onset": 5.303,
+        "duration": 0.229
+      },
+      {
+        "midi": 44,
+        "onset": 6.06,
+        "duration": 0.165
+      },
+      {
+        "midi": 41,
+        "onset": 6.232,
+        "duration": 0.223
+      },
+      {
+        "midi": 43,
+        "onset": 6.519,
+        "duration": 0.157
+      },
+      {
+        "midi": 44,
+        "onset": 6.684,
+        "duration": 0.261
+      },
+      {
+        "midi": 43,
+        "onset": 7.155,
+        "duration": 0.215
+      },
+      {
+        "midi": 44,
+        "onset": 7.43,
+        "duration": 0.183
+      },
+      {
+        "midi": 41,
+        "onset": 7.619,
+        "duration": 0.223
+      },
+      {
+        "midi": 44,
+        "onset": 7.874,
+        "duration": 0.102
+      },
+      {
+        "midi": 43,
+        "onset": 7.982,
+        "duration": 0.093
+      },
+      {
+        "midi": 44,
+        "onset": 8.081,
+        "duration": 0.25
+      },
+      {
+        "midi": 44,
+        "onset": 8.815,
+        "duration": 0.183
+      },
+      {
+        "midi": 41,
+        "onset": 9.004,
+        "duration": 0.223
+      },
+      {
+        "midi": 43,
+        "onset": 9.288,
+        "duration": 0.157
+      },
+      {
+        "midi": 44,
+        "onset": 9.451,
+        "duration": 0.238
+      },
+      {
+        "midi": 44,
+        "onset": 10.199,
+        "duration": 0.183
+      },
+      {
+        "midi": 41,
+        "onset": 10.388,
+        "duration": 0.223
+      },
+      {
+        "midi": 43,
+        "onset": 10.672,
+        "duration": 0.16
+      },
+      {
+        "midi": 44,
+        "onset": 10.841,
+        "duration": 0.232
+      },
+      {
+        "midi": 43,
+        "onset": 11.308,
+        "duration": 0.215
+      },
+      {
+        "midi": 44,
+        "onset": 11.578,
+        "duration": 0.189
+      },
+      {
+        "midi": 41,
+        "onset": 11.773,
+        "duration": 0.223
+      },
+      {
+        "midi": 43,
+        "onset": 12.054,
+        "duration": 0.163
+      },
+      {
+        "midi": 44,
+        "onset": 12.225,
+        "duration": 0.232
+      },
+      {
+        "midi": 43,
+        "onset": 12.693,
+        "duration": 0.215
+      },
+      {
+        "midi": 44,
+        "onset": 12.963,
+        "duration": 0.189
+      },
+      {
+        "midi": 41,
+        "onset": 13.157,
+        "duration": 0.223
+      },
+      {
+        "midi": 43,
+        "onset": 13.439,
+        "duration": 0.165
+      },
+      {
+        "midi": 44,
+        "onset": 13.613,
+        "duration": 0.229
+      },
+      {
+        "midi": 43,
+        "onset": 14.1,
+        "duration": 0.192
+      },
+      {
+        "midi": 44,
+        "onset": 14.364,
+        "duration": 0.168
+      },
+      {
+        "midi": 41,
+        "onset": 14.539,
+        "duration": 0.177
+      }
+    ],
+    "dominantNotes": [
+      44,
+      43,
+      41,
+      42
+    ],
+    "pitchRange": {
+      "min": 41,
+      "max": 44
+    },
+    "pitchConfidence": 0.0408,
+    "midiFile": "/Users/christiansmith/code/projects/asa/.claude/worktrees/goal-doc/apps/backend/tests/fixtures/recommendation_tracks/techno_rumble_130/audio_melody.mid",
+    "sourceSeparated": false,
+    "vibratoPresent": false,
+    "vibratoExtent": 0.0,
+    "vibratoRate": 0.0,
+    "vibratoConfidence": 0.0
+  },
+  "transcriptionDetail": null,
+  "pitchDetail": null,
+  "grooveDetail": {
+    "kickSwing": 0.2177,
+    "hihatSwing": 0.1902,
+    "kickAccent": [
+      0.1629,
+      0.2912,
+      0.3235,
+      0.2699,
+      0.2839,
+      0.3133,
+      0.2989,
+      0.2833,
+      0.3164,
+      0.3002,
+      0.2831,
+      0.3199,
+      0.2612,
+      0.2821,
+      0.3229,
+      0.2324
+    ],
+    "hihatAccent": [
+      0.0,
+      0.0585,
+      0.0343,
+      0.038,
+      0.0513,
+      0.0371,
+      0.0518,
+      0.0512,
+      0.0374,
+      0.0516,
+      0.0515,
+      0.0373,
+      0.0375,
+      0.0515,
+      0.0372,
+      0.0534
+    ],
+    "perDrumSwing": {
+      "kick": 0.2177,
+      "snare": 0.1897,
+      "hihat": 0.1902
+    }
+  },
+  "beatsLoudness": {
+    "kickDominantRatio": 0.8378,
+    "midDominantRatio": 0.0001,
+    "highDominantRatio": 0.1261,
+    "patternBeatsPerBar": 4,
+    "lowBandAccentPattern": [
+      0.9528,
+      1.0,
+      0.9837,
+      0.9664
+    ],
+    "midBandAccentPattern": [
+      1.0,
+      0.8492,
+      0.8231,
+      0.7917
+    ],
+    "highBandAccentPattern": [
+      0.8219,
+      0.9758,
+      0.9943,
+      1.0
+    ],
+    "overallAccentPattern": [
+      0.9409,
+      1.0,
+      0.9899,
+      0.9784
+    ],
+    "accentPattern": [
+      0.9409,
+      1.0,
+      0.9899,
+      0.9784
+    ],
+    "meanBeatLoudness": 0.3442,
+    "beatLoudnessVariation": 0.1104,
+    "beatCount": 32
+  },
+  "rhythmTimeline": {
+    "beatsPerBar": 4,
+    "stepsPerBeat": 4,
+    "availableBars": 8,
+    "selectionMethod": "representative_dsp_window",
+    "windows": [
+      {
+        "bars": 8,
+        "startBar": 1,
+        "endBar": 8,
+        "lowBandSteps": [
+          0.1498,
+          0.2199,
+          0.3454,
+          0.2289,
+          0.3118,
+          0.1847,
+          0.552,
+          0.3656,
+          0.3921,
+          0.2272,
+          0.9106,
+          0.4305,
+          0.3708,
+          0.2172,
+          0.5781,
+          0.4217,
+          0.3957,
+          0.2546,
+          0.6056,
+          0.4417,
+          0.3945,
+          0.2336,
+          0.9553,
+          0.4359,
+          0.3914,
+          0.2273,
+          0.6365,
+          0.4303,
+          0.371,
+          0.2367,
+          0.5699,
+          0.4218,
+          0.3963,
+          0.2404,
+          1.0,
+          0.4415,
+          0.3937,
+          0.2335,
+          0.6179,
+          0.4361,
+          0.3914,
+          0.2483,
+          0.6076,
+          0.4309,
+          0.3716,
+          0.2206,
+          0.9252,
+          0.4229,
+          0.3952,
+          0.2406,
+          0.5943,
+          0.4416,
+          0.3942,
+          0.2548,
+          0.5911,
+          0.4369,
+          0.3922,
+          0.2306,
+          0.8944,
+          0.4309,
+          0.3711,
+          0.2205,
+          0.5845,
+          0.4225,
+          0.3963,
+          0.2609,
+          0.569,
+          0.4426,
+          0.3947,
+          0.2373,
+          0.9368,
+          0.4366,
+          0.3918,
+          0.2314,
+          0.6477,
+          0.4313,
+          0.3714,
+          0.2431,
+          0.5421,
+          0.4236,
+          0.3969,
+          0.244,
+          0.9775,
+          0.4425,
+          0.3941,
+          0.238,
+          0.6299,
+          0.4369,
+          0.392,
+          0.255,
+          0.5918,
+          0.4318,
+          0.3722,
+          0.2246,
+          0.9005,
+          0.4231,
+          0.3959,
+          0.245,
+          0.6121,
+          0.4425,
+          0.3945,
+          0.2612,
+          0.5682,
+          0.4377,
+          0.3922,
+          0.2353,
+          0.8678,
+          0.4313,
+          0.3714,
+          0.2251,
+          0.6031,
+          0.4234,
+          0.3966,
+          0.2669,
+          0.5412,
+          0.4436,
+          0.3948,
+          0.2419,
+          0.9053,
+          0.4372,
+          0.3921,
+          0.2359,
+          0.6658,
+          0.432,
+          0.0956,
+          0.0906,
+          0.0784,
+          0.0497
+        ],
+        "midBandSteps": [
+          0.4798,
+          0.9208,
+          0.619,
+          0.2355,
+          0.3051,
+          0.3663,
+          0.5164,
+          0.6006,
+          0.6484,
+          0.8311,
+          0.7537,
+          0.6421,
+          0.7244,
+          0.8078,
+          0.7216,
+          0.7756,
+          0.9115,
+          1.0,
+          0.6932,
+          0.7218,
+          0.7302,
+          0.8873,
+          0.657,
+          0.7695,
+          0.7361,
+          0.7728,
+          0.7996,
+          0.733,
+          0.7533,
+          0.7944,
+          0.6427,
+          0.8336,
+          0.8646,
+          0.8928,
+          0.6767,
+          0.8315,
+          0.7812,
+          0.936,
+          0.8578,
+          0.6847,
+          0.8163,
+          0.8608,
+          0.7135,
+          0.6937,
+          0.7587,
+          0.6862,
+          0.641,
+          0.6643,
+          0.9109,
+          0.86,
+          0.8293,
+          0.7906,
+          0.6836,
+          0.9004,
+          0.701,
+          0.7966,
+          0.7734,
+          0.7098,
+          0.7465,
+          0.6952,
+          0.7094,
+          0.9085,
+          0.7582,
+          0.7319,
+          0.831,
+          0.839,
+          0.838,
+          0.7418,
+          0.7311,
+          0.7582,
+          0.7843,
+          0.8213,
+          0.6829,
+          0.7875,
+          0.632,
+          0.7024,
+          0.7134,
+          0.8968,
+          0.7458,
+          0.7262,
+          0.7735,
+          0.8474,
+          0.8307,
+          0.7436,
+          0.7243,
+          0.8853,
+          0.7734,
+          0.6847,
+          0.7025,
+          0.7472,
+          0.6907,
+          0.6939,
+          0.5987,
+          0.7339,
+          0.7422,
+          0.8117,
+          0.8285,
+          0.8314,
+          0.9189,
+          0.7461,
+          0.7309,
+          0.769,
+          0.6771,
+          0.798,
+          0.7312,
+          0.7351,
+          0.7179,
+          0.7398,
+          0.6797,
+          0.902,
+          0.7799,
+          0.7118,
+          0.7849,
+          0.7917,
+          0.7678,
+          0.6789,
+          0.819,
+          0.8179,
+          0.679,
+          0.7848,
+          0.6508,
+          0.9159,
+          0.6716,
+          0.6633,
+          0.3101,
+          0.0853,
+          0.2807,
+          0.0728
+        ],
+        "highBandSteps": [
+          0.001,
+          0.0001,
+          0.0001,
+          0.3016,
+          0.0455,
+          0.0007,
+          0.0001,
+          0.0003,
+          0.7182,
+          0.001,
+          0.0001,
+          0.0006,
+          0.6042,
+          0.0008,
+          0.0007,
+          0.0005,
+          0.9796,
+          0.0004,
+          0.0009,
+          0.0007,
+          0.8509,
+          0.0011,
+          0.0005,
+          0.0003,
+          0.7059,
+          0.0012,
+          0.0,
+          0.0003,
+          0.6058,
+          0.001,
+          0.0008,
+          0.0,
+          0.9922,
+          0.001,
+          0.0007,
+          0.0002,
+          0.8394,
+          0.0007,
+          0.0,
+          0.0006,
+          0.7078,
+          0.0007,
+          0.0005,
+          0.0005,
+          0.6137,
+          0.0014,
+          0.0005,
+          0.0009,
+          0.991,
+          0.0013,
+          0.0004,
+          0.0005,
+          0.8423,
+          0.0007,
+          0.0006,
+          0.0002,
+          0.7128,
+          0.0015,
+          0.0002,
+          0.0005,
+          0.6034,
+          0.0005,
+          0.0003,
+          0.0007,
+          0.9916,
+          0.0013,
+          0.0004,
+          0.0008,
+          0.8515,
+          0.0015,
+          0.0003,
+          0.0,
+          0.709,
+          0.001,
+          0.0008,
+          0.0005,
+          0.6122,
+          0.0005,
+          0.0005,
+          0.0007,
+          1.0,
+          0.0013,
+          0.0001,
+          0.0008,
+          0.8428,
+          0.0007,
+          0.0003,
+          0.0006,
+          0.7148,
+          0.001,
+          0.0007,
+          0.0005,
+          0.6151,
+          0.0013,
+          0.0,
+          0.0002,
+          0.988,
+          0.0013,
+          0.0,
+          0.0008,
+          0.8491,
+          0.0012,
+          0.0009,
+          0.0002,
+          0.7178,
+          0.0011,
+          0.0002,
+          0.0001,
+          0.6036,
+          0.0005,
+          0.0001,
+          0.0007,
+          0.9924,
+          0.0016,
+          0.0007,
+          0.0009,
+          0.846,
+          0.0009,
+          0.0006,
+          0.0002,
+          0.7114,
+          0.0005,
+          0.0006,
+          0.0007,
+          0.5496,
+          0.0,
+          0.0003,
+          0.0001
+        ],
+        "overallSteps": [
+          0.1562,
+          0.2328,
+          0.3518,
+          0.2434,
+          0.3154,
+          0.1887,
+          0.5544,
+          0.3714,
+          0.4298,
+          0.2385,
+          0.9128,
+          0.4363,
+          0.405,
+          0.2283,
+          0.5836,
+          0.4299,
+          0.449,
+          0.2684,
+          0.6103,
+          0.4488,
+          0.4392,
+          0.2457,
+          0.9555,
+          0.4438,
+          0.4299,
+          0.2376,
+          0.6426,
+          0.4377,
+          0.4057,
+          0.2473,
+          0.5742,
+          0.4309,
+          0.4495,
+          0.2525,
+          1.0,
+          0.4503,
+          0.4388,
+          0.2465,
+          0.6252,
+          0.4426,
+          0.4314,
+          0.2599,
+          0.6127,
+          0.4376,
+          0.4068,
+          0.2296,
+          0.9255,
+          0.4293,
+          0.4491,
+          0.2523,
+          0.6014,
+          0.4498,
+          0.4378,
+          0.2669,
+          0.5961,
+          0.4452,
+          0.4317,
+          0.2399,
+          0.8967,
+          0.4377,
+          0.405,
+          0.2331,
+          0.5905,
+          0.43,
+          0.4488,
+          0.272,
+          0.5765,
+          0.45,
+          0.4395,
+          0.2473,
+          0.9393,
+          0.4454,
+          0.4296,
+          0.242,
+          0.651,
+          0.4381,
+          0.4058,
+          0.2553,
+          0.5484,
+          0.4309,
+          0.4488,
+          0.2554,
+          0.9803,
+          0.4499,
+          0.4384,
+          0.25,
+          0.6357,
+          0.4434,
+          0.4304,
+          0.2646,
+          0.5967,
+          0.4385,
+          0.4048,
+          0.2344,
+          0.9027,
+          0.4318,
+          0.4483,
+          0.2561,
+          0.6205,
+          0.45,
+          0.4392,
+          0.2711,
+          0.5731,
+          0.4461,
+          0.4312,
+          0.2449,
+          0.8699,
+          0.4388,
+          0.4048,
+          0.2376,
+          0.6093,
+          0.4305,
+          0.4484,
+          0.2771,
+          0.5479,
+          0.4499,
+          0.4408,
+          0.2528,
+          0.9064,
+          0.4453,
+          0.4295,
+          0.2485,
+          0.6695,
+          0.4382,
+          0.1236,
+          0.091,
+          0.0822,
+          0.0504
+        ]
+      }
+    ]
+  },
+  "sidechainDetail": {
+    "pumpingStrength": 0.1677,
+    "pumpingRegularity": 0.0,
+    "pumpingRate": null,
+    "pumpingConfidence": 0.1384,
+    "envelopeShape": [
+      0.863,
+      0.693,
+      0.99,
+      0.91,
+      0.883,
+      0.7,
+      0.959,
+      0.887,
+      0.893,
+      0.687,
+      0.978,
+      0.897,
+      0.902,
+      0.689,
+      1.0,
+      0.911
+    ],
+    "envelopeShape32": [
+      0.863,
+      0.768,
+      0.693,
+      0.573,
+      0.904,
+      0.99,
+      0.91,
+      0.786,
+      0.883,
+      0.76,
+      0.7,
+      0.571,
+      0.881,
+      0.959,
+      0.887,
+      0.798,
+      0.893,
+      0.737,
+      0.687,
+      0.566,
+      0.894,
+      0.978,
+      0.897,
+      0.749,
+      0.902,
+      0.739,
+      0.689,
+      0.579,
+      0.878,
+      1.0,
+      0.911,
+      0.795
+    ]
+  },
+  "acidDetail": {
+    "isAcid": true,
+    "confidence": 0.6,
+    "resonanceLevel": 1.0,
+    "centroidOscillationHz": 27,
+    "bassRhythmDensity": 2.0
+  },
+  "reverbDetail": {
+    "rt60": null,
+    "isWet": false,
+    "tailEnergyRatio": null,
+    "measured": false,
+    "perBandRt60": null,
+    "preDelayMs": null
+  },
+  "vocalDetail": {
+    "hasVocals": false,
+    "confidence": 0.35,
+    "vocalEnergyRatio": 0.05,
+    "formantStrength": 0.27,
+    "mfccLikelihood": 0.86,
+    "stemEnergyRatio": null,
+    "stemOtherCorrelation": null
+  },
+  "supersawDetail": {
+    "isSupersaw": true,
+    "confidence": 0.86,
+    "voiceCount": 7,
+    "avgDetuneCents": 28.1,
+    "spectralComplexity": 7.1
+  },
+  "bassDetail": {
+    "averageDecayMs": 1000,
+    "type": "sustained",
+    "transientRatio": 0.2,
+    "fundamentalHz": 90,
+    "transientCount": 0,
+    "swingPercent": 0,
+    "grooveType": "straight"
+  },
+  "kickDetail": {
+    "isDistorted": true,
+    "thd": 0.27,
+    "harmonicRatio": 0.91,
+    "fundamentalHz": 81,
+    "kickCount": 117
+  },
+  "genreDetail": {
+    "genre": "dub-techno",
+    "confidence": 0.8882,
+    "secondaryGenre": "ambient",
+    "genreFamily": "techno",
+    "topScores": [
+      {
+        "genre": "dub-techno",
+        "score": 0.8087
+      },
+      {
+        "genre": "ambient",
+        "score": 0.7104
+      },
+      {
+        "genre": "dubstep",
+        "score": 0.6902
+      },
+      {
+        "genre": "ambient-techno",
+        "score": 0.6647
+      },
+      {
+        "genre": "pop",
+        "score": 0.6644
+      }
+    ]
+  },
+  "effectsDetail": {
+    "gatingDetected": false,
+    "gatingRate": null,
+    "gatingRegularity": 0.0,
+    "gatingEventCount": 1
+  },
+  "synthesisCharacter": {
+    "inharmonicity": 0.0781,
+    "oddToEvenRatio": 1.5557
+  },
+  "danceability": {
+    "danceability": 3.9118,
+    "dfa": 0.2556
+  },
+  "structure": {
+    "segments": [
+      {
+        "start": 0.0,
+        "end": 14.769,
+        "index": 0
+      }
+    ],
+    "segmentCount": 1
+  },
+  "arrangementDetail": {
+    "noveltyCurve": [
+      0.0,
+      0.0,
+      0.0002,
+      0.0009,
+      0.1443,
+      0.7084,
+      0.3775,
+      0.0026,
+      0.0043,
+      0.011,
+      0.0064,
+      0.0019,
+      0.1551,
+      0.6325,
+      0.3194,
+      0.0038,
+      0.009,
+      0.028,
+      0.0156,
+      0.0042,
+      0.2341,
+      0.9672,
+      0.4902,
+      0.0061,
+      0.0062,
+      0.011,
+      0.0073,
+      0.0066,
+      0.1728,
+      0.6795,
+      0.3403,
+      0.0053,
+      0.0079,
+      0.0215,
+      0.0145,
+      0.006,
+      0.0575,
+      0.2256,
+      0.1137,
+      0.0022,
+      0.005,
+      0.0137,
+      0.0072,
+      0.003,
+      0.0472,
+      0.1493,
+      0.0587,
+      0.0031,
+      0.0034,
+      0.0061,
+      0.0032,
+      0.0023,
+      0.0683,
+      0.1862,
+      0.064,
+      0.0018,
+      0.0032,
+      0.0079,
+      0.0036,
+      0.0012,
+      0.0653,
+      0.1252,
+      0.0425,
+      0.0016,
+      0.0082,
+      0.0153,
+      0.0063,
+      0.0005,
+      0.1856,
+      0.3247,
+      0.1085,
+      0.0009,
+      0.0087,
+      0.0152,
+      0.0062,
+      0.0013,
+      0.3606,
+      0.5821,
+      0.1963,
+      0.0036,
+      0.0076,
+      0.0116,
+      0.008,
+      0.0036,
+      0.2925,
+      0.4441,
+      0.1508,
+      0.0051,
+      0.0137,
+      0.0254,
+      0.0095,
+      0.0043,
+      0.2533,
+      0.4974,
+      0.12,
+      0.0084,
+      0.0095,
+      0.0134,
+      0.0065,
+      0.0069,
+      0.1474,
+      0.279,
+      0.0618,
+      0.0054,
+      0.0081,
+      0.0126,
+      0.0036,
+      0.0034,
+      0.0793,
+      0.1322,
+      0.0156,
+      0.0029,
+      0.0076,
+      0.0118,
+      0.0018,
+      0.0017,
+      0.1105,
+      0.1614,
+      0.0033,
+      0.0018,
+      0.0029,
+      0.004,
+      0.0009,
+      0.0012,
+      0.2272,
+      0.2864,
+      0.0006,
+      0.0006,
+      0.0087,
+      0.0118,
+      0.0014,
+      0.0013,
+      0.2311,
+      0.2607,
+      0.0014,
+      0.0016,
+      0.0176,
+      0.0184,
+      0.0033,
+      0.0029,
+      0.5383,
+      0.5559,
+      0.0028,
+      0.0031,
+      0.0115,
+      0.0117,
+      0.0022,
+      0.002,
+      0.7473,
+      0.7581,
+      0.0059,
+      0.0066,
+      0.0229,
+      0.0249,
+      0.0062,
+      0.0042,
+      0.3851,
+      0.3877,
+      0.0027,
+      0.0029,
+      0.0131,
+      0.0126,
+      0.0047,
+      0.0039,
+      0.2404,
+      0.2194,
+      0.0026,
+      0.0028,
+      0.0056,
+      0.0047,
+      0.0052,
+      0.0052,
+      0.1354,
+      0.1482,
+      0.016,
+      0.0018,
+      0.0065,
+      0.0083,
+      0.0021,
+      0.0049,
+      0.0619,
+      0.0586,
+      0.0017,
+      0.0016,
+      0.0098,
+      0.0117,
+      0.0018,
+      0.0657,
+      0.3089,
+      0.2441,
+      0.0009,
+      0.002,
+      0.0041,
+      0.0032,
+      0.0009,
+      0.0994,
+      0.4012,
+      0.3042,
+      0.0019,
+      0.0053,
+      0.0134,
+      0.0142,
+      0.0042,
+      0.139,
+      0.4193,
+      0.283,
+      0.0015,
+      0.0115,
+      0.0279,
+      0.0209,
+      0.0035,
+      0.172,
+      0.5373,
+      0.3659,
+      0.005,
+      0.0078,
+      0.0108,
+      0.0088,
+      0.0042,
+      0.1566,
+      0.467,
+      0.3097,
+      0.002,
+      0.0053,
+      0.0126,
+      0.0111,
+      0.0048,
+      0.0638,
+      0.1854,
+      0.122,
+      0.0046,
+      0.0094,
+      0.0173,
+      0.0099,
+      0.0023,
+      0.0673,
+      0.1988,
+      0.0892,
+      0.0018,
+      0.0034,
+      0.0067,
+      0.0038,
+      0.0023,
+      0.0828,
+      0.2177,
+      0.0688,
+      0.0006,
+      0.0059,
+      0.0208,
+      0.0087,
+      0.0011,
+      0.0779,
+      0.1887,
+      0.056,
+      0.0014,
+      0.0005
+    ],
+    "noveltyPeaks": [
+      {
+        "time": 1.207,
+        "strength": 0.9672
+      },
+      {
+        "time": 4.435,
+        "strength": 0.7484
+      },
+      {
+        "time": 8.591,
+        "strength": 1.0
+      },
+      {
+        "time": 12.283,
+        "strength": 0.7182
+      },
+      {
+        "time": 14.582,
+        "strength": 0.1887
+      }
+    ],
+    "noveltyMean": 0.0909,
+    "noveltyStdDev": 0.1622
+  },
+  "segmentLoudness": [
+    {
+      "segmentIndex": 0,
+      "start": 0.0,
+      "end": 14.769,
+      "lufs": -9.5,
+      "lra": 0.0
+    }
+  ],
+  "segmentSpectral": [
+    {
+      "segmentIndex": 0,
+      "barkBands": [
+        -22.8842,
+        -7.4646,
+        -11.1697,
+        -22.5971,
+        -29.5628,
+        -28.2235,
+        -26.9773,
+        -27.5063,
+        -31.3593,
+        -34.783,
+        -35.2757,
+        -33.9973,
+        -40.001,
+        -39.0523,
+        -41.015,
+        -42.4412,
+        -42.5889,
+        -42.9875,
+        -43.6306,
+        -42.7086,
+        -40.038,
+        -36.4273,
+        -36.4679,
+        -32.6915
+      ],
+      "spectralCentroid": 1027.5,
+      "spectralRolloff": 1264.3,
+      "stereoWidth": 0.0,
+      "stereoCorrelation": 1.0
+    }
+  ],
+  "segmentStereo": [
+    {
+      "segmentIndex": 0,
+      "stereoWidth": 0.0,
+      "stereoCorrelation": 1.0
+    }
+  ],
+  "segmentKey": [
+    {
+      "segmentIndex": 0,
+      "key": "F Minor",
+      "keyConfidence": 0.59
+    }
+  ],
+  "chordDetail": {
+    "chordSequence": [
+      "Bbm",
+      "C#",
+      "C#",
+      "C#",
+      "C#",
+      "C#",
+      "C#",
+      "C#",
+      "C#",
+      "Fm",
+      "C#",
+      "C#",
+      "C#",
+      "C#",
+      "C#",
+      "Fm",
+      "Fm",
+      "C#",
+      "C#",
+      "C#",
+      "C#",
+      "Fm",
+      "C#",
+      "C#",
+      "C#",
+      "C#",
+      "C#",
+      "C#",
+      "C#",
+      "C#",
+      "C#",
+      "C#"
+    ],
+    "chordStrength": 0.641,
+    "progression": [
+      "Bbm",
+      "C#",
+      "Fm",
+      "C#",
+      "Fm",
+      "C#",
+      "Fm",
+      "C#",
+      "Fm",
+      "C#",
+      "Fm",
+      "C#",
+      "Fm",
+      "C#",
+      "Fm",
+      "C#"
+    ],
+    "dominantChords": [
+      "C#",
+      "Fm",
+      "Cm",
+      "Bbm"
+    ],
+    "chordTimeline": [
+      {
+        "startSec": 0.0,
+        "endSec": 14.814,
+        "label": "Fm",
+        "labelLong": "F minor",
+        "confidence": 0.5423
+      }
+    ],
+    "chordChangeCount": 0,
+    "chordTimelineSource": "librosa_viterbi",
+    "chordTimelineAgreement": false
+  },
+  "perceptual": {
+    "sharpness": 0.0614,
+    "roughness": 0.0
+  },
+  "essentiaFeatures": {
+    "zeroCrossingRate": 0.0327,
+    "hfc": 155.3578,
+    "spectralComplexity": 8.1144,
+    "dissonance": 0.0
+  }
+}

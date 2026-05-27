@@ -46,6 +46,7 @@ import { PhaseSourceBadge } from './PhaseSourceBadge';
 import { StickyNav, type StickyNavSection } from './StickyNav';
 import { CitationBlock, CitationHeadline } from './CitationBlock';
 import { ConfidenceBandBadge } from './sessionMusician/ConfidenceBandBadge';
+import { RecommendationVerificationBadge } from './RecommendationVerificationBadge';
 import { toConfidenceBand } from '../services/sessionMusician/confidenceBand';
 import { loadAppliedIds, toggleAppliedId } from '../services/appliedRecommendations';
 import {
@@ -2139,6 +2140,10 @@ export function AnalysisResults({
                                 <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-border text-text-secondary whitespace-nowrap">
                                   {card.category}
                                 </span>
+                                <RecommendationVerificationBadge
+                                  trackContext={card.trackContext}
+                                  category={card.category}
+                                />
                               </div>
                               {/* Audit Finding #3: primary citation visible in
                                 the collapsed header so the chain-of-custody
@@ -2308,6 +2313,10 @@ export function AnalysisResults({
                                 <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-border text-text-secondary whitespace-nowrap">
                                   {patch.category}
                                 </span>
+                                <RecommendationVerificationBadge
+                                  trackContext={patch.trackContext}
+                                  category={patch.category}
+                                />
                               </div>
                               {/* Audit Finding #3: primary citation in the
                                 collapsed header so the chain-of-custody
