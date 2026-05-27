@@ -218,6 +218,7 @@ The interface between apps is `Phase1Result` (in [src/types/measurement.ts](apps
 # apps/ui/.env (copy from .env.example)
 VITE_RUNTIME_PROFILE="local"             # frontend profile; controls API-URL fallback when VITE_API_BASE_URL is omitted
 VITE_API_BASE_URL="http://127.0.0.1:8100"
+VITE_API_REQUEST_HEADERS_JSON=""         # optional JSON object of headers injected on every API request (e.g. `{"X-ASA-User-Id":"beta-user-123"}` for hosted-mode beta access). Empty = no extra headers.
 VITE_ENABLE_PHASE2_GEMINI="true"
 RUN_GEMINI_LIVE_SMOKE="false"    # set "true" to run live Playwright tests against real Gemini Files API
 DISABLE_HMR="false"              # set "true" for dev environments that need HMR disabled
