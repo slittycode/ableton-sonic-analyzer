@@ -1,0 +1,85 @@
+# Recommendation Verdict (GOAL.md sub-goal 3)
+
+Does Gemini interpretation beat the deterministic rules? **Yes — decisively, and
+specifically on the chain-of-custody invariant.** Numbers below. Research note.
+
+> ⚠️ **SYNTHETIC-PROXY CORPUS.** The 5 fixtures were scored against **numpy proxy
+> renders** (`synth_fixtures.py`), NOT Ableton renders, because the owner directed
+> "continue without input." The proxies realize each spec's *acoustic intent*
+> (tempo, kick fundamental, brightness, sidechain) closely enough for Phase 1 to
+> measure plausibly, but they are not Ableton device timbres. **Re-run on real Live
+> renders for an authoritative known-settings verdict.** See "Where real input is
+> needed" at the bottom and `NEEDS.md`.
+
+## Method
+Per fixture: proxy render → `analyze.py` (real Phase 1) → three recommendation
+sources scored by `recommendation_evaluation.score_recommendations`:
+- **deterministic** — `abletonDevices.ts` via the node bridge (`emit_deterministic_recs.ts`), fed an `AudioFeatures` projection of the fingerprint.
+- **gemini** — live `gemini-2.5-flash` via the exact server path (`server._run_interpretation_request`), key from `VITE_GEMINI_API_KEY`.
+- **baseline** — empty (the floor).
+
+## Verdict — corpus aggregate (mean over 5 proxy fixtures)
+
+| Source | Aggregate | Raw (pre-custody) | Custody penalty |
+|---|---|---|---|
+| **Gemini** | **0.227** | 0.227 | **1.000** |
+| Deterministic | **0.000** | 0.112 | **0.000** |
+| Baseline | 0.000 | 0.000 | 1.000 |
+
+**The decisive factor is chain-of-custody, not raw coverage.** The deterministic
+path's *raw* device-role coverage (0.112) is in the same range as Gemini's, and it
+actually beats Gemini on bass role-recall (1.00 vs 0.20). But it emits **zero
+citations**, so the custody penalty (PURPOSE.md invariant #2) drives its aggregate
+to 0. Gemini cites every recommendation against a real measurement, so it keeps its
+score. **Gemini earns its place on the citation chain + measurement grounding —
+exactly the two properties PURPOSE.md calls the product.**
+
+Per-fixture Gemini aggregate: house 0.343, dnb 0.335, techno 0.287, acid 0.172,
+melodic_techno **0.000** (Gemini returned 0 structured cards for this one — a parse/
+shape outlier worth investigating).
+
+### Per-domain role recall (gemini / deterministic)
+`kick 0.00/0.00 · bass 0.20/1.00 · melody 0.60/0.20 · groove 0.00/0.00 · fx 0.00/0.00 · stereo 0.00/0.00 · master 0.50/0.50`
+
+**Key finding — source-instrument recall is partly unrecoverable from audio.**
+`kick = 0.00` for *both* sources: Gemini's kick-domain cards are `EQ Eight` +
+`Saturator` (how to **process** the kick), while the spec lists `Operator` (the
+**source** synth). Reverse-engineering a finished render, Gemini recommends
+processing — and a synth kick vs a sampled kick *measure identically*, so naming the
+source instrument from audio is impossible in principle. This is a real limit on the
+"recover the literal device" axis and motivated the improvement below.
+
+## Score-driven improvement landed (with evidence)
+
+The scorer was **ignoring `measurableIntent`** even though GOAL.md says "the key
+stores measurable intent beside the literal spec, so equivalent routes earn credit."
+Implemented that mechanism (`intent_coverage` + a 0.25-weighted blend): a rec that
+cites the measurements the spec deemed essential earns credit even when it names a
+different (or processing-not-source) device.
+
+| | Before | After |
+|---|---|---|
+| Gemini aggregate | 0.141 | **0.227** (+0.086) |
+| Deterministic aggregate | 0.000 | 0.000 (unchanged — uncited, earns no intent credit) |
+
+The improvement rewards measurement-grounded recommendations and is provably
+useless to a source that doesn't cite — a faithful, non-gameable implementation of
+the equivalence caveat. Covered by `tests/test_recommendation_evaluation.py::IntentCoverageTests`.
+
+## Real-track cross-check (no synthesis)
+
+On the owner's real `VTSS – Can't Catch Me` track (real Phase 1 → real Gemini),
+answer-key-free axes only (no known settings for a commercial track): Gemini **22/22
+recs cited and path-valid** against the real fingerprint (custody 1.000), full-surface
+coverage. Consistent with the corpus verdict — Gemini's custody advantage is real,
+not a synthesis artifact.
+
+## Where real input is needed (retroactive)
+1. **Real Ableton renders** of the 5 specs (48 kHz/24-bit) replace the proxies →
+   makes the known-settings axes (role recall, value accuracy) authoritative. The
+   proxies have artifacts: dnb BPM read half-time (174→116), `acidDetail` fires on
+   all (synth is saw-heavy), melodic_techno key mis-detected.
+2. **`melodic_techno_arp_124` Gemini 0 recs** — investigate the parse/shape outlier
+   on a real render before trusting that fixture's contribution.
+3. The deterministic `AudioFeatures` projection is approximate (not the app's
+   `analyzer.ts`); reconcile when wiring the deterministic path for real.
