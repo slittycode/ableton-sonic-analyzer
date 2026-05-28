@@ -7,7 +7,7 @@
 - The repo is a local Python audio-analysis service with two entry points:
   - `analyze.py`: raw CLI analyzer
   - `server.py`: FastAPI wrapper around the CLI
-- There are no repo-local Cursor rules, `.cursorrules`, or Copilot instruction files in this repo as of 2026-05-17.
+- There are no repo-local Cursor rules, `.cursorrules`, or Copilot instruction files in this repo as of 2026-05-27.
 
 ## Working Style For Agents
 

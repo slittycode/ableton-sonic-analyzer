@@ -5,7 +5,7 @@
 - This file applies to `apps/ui` inside the `asa` monorepo.
 - Stack: React 19, TypeScript, Vite 6, Tailwind CSS v4, Vitest, Playwright.
 - The app talks to the local `sonic-analyzer` backend. Gemini is backend-mediated; the UI does **not** import an AI SDK.
-- No repo-local `.cursorrules`, `.cursor/rules/`, or `.github/copilot-instructions.md` exist here as of 2026-05-17.
+- No repo-local `.cursorrules`, `.cursor/rules/`, or `.github/copilot-instructions.md` exist here as of 2026-05-27.
 
 ## Working Style For Agents
 
