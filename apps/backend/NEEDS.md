@@ -35,9 +35,6 @@ not Ableton renders), so their *data* is provisional pending real renders.
    melodic_techno key mis-detected AND Gemini returned 0 structured cards there.
 4. **Genre confirmation** — house/techno/melodic-techno/dnb/acid were chosen as
    owner-plausible; confirm or swap.
-5. **Branch convergence** — rebase `chore/phase2-surface-audit-and-claude-md`
-   (audit + Tier-1/2 prompt fixes) under this branch before further sub-goal-3
-   prompt iteration.
 
 ---
 
@@ -84,7 +81,8 @@ citations**, so the chain-of-custody penalty drives its adjusted aggregate to
    #2). The rules **are** feature-triggered, so attaching the triggering measurement
    as a citation is a concrete, harness-rewarded improvement — a candidate
    sub-goal-3 "score-driven change" (frontend edit to `abletonDevices.ts` →
-   `npm run verify`; coordinate with the branch convergence below).
+   `npm run verify`). But see the dead-code finding under NEEDS-WIRING before
+   investing in this path.
 
 This is the first real signal toward the Gemini verdict — likely Gemini earns its
 place on citation + full-surface coverage. Confirm on real renders; the synthetic
@@ -206,14 +204,13 @@ corpus. To deliver the **full** verdict:
    *does Gemini raise the score, on which domains, by how much?* Feed a surprising
    answer back into `PURPOSE.md` / the `asa-next-work-priorities` memory.
 
-**Branch convergence needed for 3.2:** GOAL.md references
+**Phase 2 audit context for 3.2:** GOAL.md references
 `audits/phase2-recommendation-surface-2026-05-24.md` for the Tier-2/3 backlog. That
 audit — **and the Tier-1/2 phase2 prompt/catalog fixes it drove** (commits
-`bd975ab0`, `dc8daa02`) — live on branch `chore/phase2-surface-audit-and-claude-md`,
-which is **not** an ancestor of this campaign branch (`worktree-goal-doc`) and not
-yet on `main`. Before working sub-goal 3, rebase/merge so the campaign sits on top
-of that phase2 work (otherwise you'd iterate against a stale prompt and miss the
-audit's backlog). Confirm with `git log --oneline | grep -E 'bd975ab0|dc8daa02'`.
+`bd975ab0`, `dc8daa02`, `5610ca5`, `ade2ae5`) — is on `main` and the campaign sits
+on top of it (PR #114 / commit `348498d` merged after). Iterate against the
+current prompt; the audit backlog is the source for next-round score-driven
+changes. Confirm with `git log --oneline | grep -E 'bd975ab|dc8daa0|5610ca5|ade2ae5'`.
 
 ---
 
