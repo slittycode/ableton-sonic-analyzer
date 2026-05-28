@@ -1,16 +1,23 @@
 """Tests for the MIDI-plan → WAV/MIDI synthesis layer.
 
-The sine fallback path is the one exercised by these tests; the FluidSynth
-path requires a system library and a soundfont, which we don't assume are
-present in CI. The fallback is the everywhere-available backstop and must
-stay correct.
+The sine fallback path is the one exercised by audio-level tests; the
+FluidSynth and symusic.Synthesizer paths require a system soundfont, which
+we don't assume is present in CI. The fallback is the everywhere-available
+backstop and must stay correct.
+
+BackendResolutionTests covers the env-flag dispatch logic in pure isolation —
+no synthesis, no soundfont, just verifying that
+``_resolve_backend`` picks the right path under each combination of env
+override + soundfont availability + ``allow_soundfont_backends`` flag.
 """
 
+import os
 import sys
 import tempfile
 import unittest
 import wave
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 
@@ -109,6 +116,83 @@ class WriteMidiTests(unittest.TestCase):
             self.assertEqual(len(pm.instruments[0].notes), 2)
             pitches = sorted(n.pitch for n in pm.instruments[0].notes)
             self.assertEqual(pitches, [60, 64])
+
+
+class BackendResolutionTests(unittest.TestCase):
+    """Pure-logic tests for `_resolve_backend` — no synthesis, no soundfont."""
+
+    def _resolve(
+        self,
+        *,
+        env: str | None = None,
+        soundfont_path: Path | None = None,
+        allow_soundfont_backends: bool = True,
+    ) -> str:
+        env_dict = {} if env is None else {sample_synthesis._BACKEND_ENV_VAR: env}
+        with patch.dict(os.environ, env_dict, clear=False):
+            if env is None:
+                os.environ.pop(sample_synthesis._BACKEND_ENV_VAR, None)
+            return sample_synthesis._resolve_backend(
+                soundfont_path=soundfont_path,
+                allow_soundfont_backends=allow_soundfont_backends,
+            )
+
+    def test_auto_with_soundfont_prefers_symusic(self) -> None:
+        # symusic outranks FluidSynth in auto mode — same MIDI library used
+        # everywhere else on the backend.
+        result = self._resolve(env="auto", soundfont_path=Path("/tmp/fake.sf2"))
+        self.assertEqual(result, "symusic")
+
+    def test_auto_without_soundfont_falls_through_to_sine(self) -> None:
+        result = self._resolve(env="auto", soundfont_path=None)
+        self.assertEqual(result, "sine_fallback")
+
+    def test_explicit_sine_always_wins(self) -> None:
+        # Even with a soundfont, ``ASA_SAMPLE_SYNTH_BACKEND=sine`` forces the
+        # deterministic path — the documented escape hatch.
+        result = self._resolve(env="sine", soundfont_path=Path("/tmp/fake.sf2"))
+        self.assertEqual(result, "sine_fallback")
+
+    def test_explicit_symusic_with_soundfont(self) -> None:
+        result = self._resolve(env="symusic", soundfont_path=Path("/tmp/fake.sf2"))
+        self.assertEqual(result, "symusic")
+
+    def test_explicit_symusic_without_soundfont_degrades(self) -> None:
+        # Refusing to auto-download a built-in SF3 is deliberate — that's a
+        # network call on the request path and could silently fail in
+        # hosted-mode workers.
+        result = self._resolve(env="symusic", soundfont_path=None)
+        self.assertEqual(result, "sine_fallback")
+
+    def test_explicit_fluidsynth_requires_both_binding_and_soundfont(self) -> None:
+        with patch.object(sample_synthesis, "_FLUIDSYNTH_IMPORTABLE", False):
+            result = self._resolve(
+                env="fluidsynth", soundfont_path=Path("/tmp/fake.sf2")
+            )
+        self.assertEqual(result, "sine_fallback")
+
+        with patch.object(sample_synthesis, "_FLUIDSYNTH_IMPORTABLE", True):
+            result = self._resolve(
+                env="fluidsynth", soundfont_path=Path("/tmp/fake.sf2")
+            )
+            self.assertEqual(result, "fluidsynth")
+
+    def test_allow_soundfont_false_forces_sine(self) -> None:
+        # The ``prefer_fluidsynth=False`` kwarg path that the existing tests
+        # rely on — even with a soundfont and a hardcoded env override, the
+        # caller can force the deterministic sine backend.
+        result = self._resolve(
+            env="symusic",
+            soundfont_path=Path("/tmp/fake.sf2"),
+            allow_soundfont_backends=False,
+        )
+        self.assertEqual(result, "sine_fallback")
+
+    def test_unknown_env_value_falls_back_to_auto(self) -> None:
+        # Robustness: a typo or misconfiguration shouldn't break rendering.
+        # The module logs a warning and treats the value as "auto".
+        result = self._resolve(env="bogus", soundfont_path=Path("/tmp/fake.sf2"))
+        self.assertEqual(result, "symusic")
 
 
 if __name__ == "__main__":  # pragma: no cover
