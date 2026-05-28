@@ -1,13 +1,16 @@
 """MIDI plan → WAV rendering for audition samples.
 
-Three render backends, picked in this order under the default ``auto`` policy:
+Three render backends, picked under the default ``auto`` policy in this order
+(conservative — operators with a working FluidSynth keep getting FluidSynth
+output, since the cross-backend parity has not been measured):
 
-1. **symusic Synthesizer** (Prestosynth + SF2/SF3 soundfont) — fastest of the
-   soundfont options; the same MIDI library used everywhere else on the
-   backend.
-2. **FluidSynth** (``pyfluidsynth`` + soundfont) — kept as a fallback because
-   it's the historically-shipped path and remains the reference rendering for
-   users with a tuned `SONIC_ANALYZER_SOUNDFONT`.
+1. **FluidSynth** (``pyfluidsynth`` + SF2/SF3 soundfont) — the historically
+   shipping path and the reference rendering for users with a tuned
+   ``SONIC_ANALYZER_SOUNDFONT``. Preferred under ``auto`` when both the
+   binding and a soundfont are reachable.
+2. **symusic Synthesizer** (Prestosynth + SF2/SF3 soundfont) — only reached
+   under ``auto`` when FluidSynth is *not* importable but a soundfont is
+   still locatable. Otherwise opt in via ``ASA_SAMPLE_SYNTH_BACKEND=symusic``.
 3. **Sine-additive fallback** — pure NumPy. Always available; in-tune; raw.
 
 All three produce the same float32 mono 44.1 kHz numpy array, so callers
@@ -17,10 +20,9 @@ on ``RenderResult.backend`` so it can flow into the citation manifest
 audition surface).
 
 The ``ASA_SAMPLE_SYNTH_BACKEND`` env var (values: ``auto``, ``symusic``,
-``fluidsynth``, ``sine``) overrides the default precedence. ``auto`` is the
-shipping default. Pinning an explicit backend is the escape hatch if a
-regression surfaces in the wild — flip back to ``fluidsynth`` without a code
-change.
+``fluidsynth``, ``sine``) overrides the precedence. ``auto`` is the shipping
+default. An operator who's measured symusic parity locally can pin
+``symusic`` to take advantage of the faster Prestosynth path.
 
 MIDI artifacts are emitted via ``symusic`` (fast C++ core), so the user can
 drop a ``.mid`` into Ableton even if the audio render is rough. The MIDI file
@@ -118,10 +120,11 @@ def _resolve_backend(
 ) -> Backend:
     """Pick the backend the next render should use.
 
-    ``allow_soundfont_backends=False`` is the test escape hatch — same role
-    that ``prefer_fluidsynth=False`` played pre-PR-F: force the deterministic
-    sine path regardless of what's installed. The env var still wins when
-    set, so an operator can explicitly pin a backend.
+    ``allow_soundfont_backends=False`` is the test/escape-hatch flag: force
+    the deterministic sine path regardless of what's installed. The env var
+    still wins when set, so an operator can explicitly pin a backend even
+    while passing ``allow_soundfont_backends=False`` — that combination is
+    treated as the operator's deliberate choice.
     """
     override = _read_backend_override()
     if override == "sine" or not allow_soundfont_backends:
@@ -134,12 +137,16 @@ def _resolve_backend(
             return "fluidsynth"
         return "sine_fallback"
 
-    # ``auto`` — symusic > fluidsynth > sine, gated on a soundfont being
-    # locatable. Symusic outranks FluidSynth because it's the same MIDI
-    # library used elsewhere on the backend; FluidSynth stays available as
-    # the documented fallback for operators who tuned their setup against it.
+    # ``auto`` — conservative precedence. FluidSynth keeps its long-standing
+    # default role for operators who tuned their setup against it; symusic
+    # only takes over when FluidSynth isn't importable but a soundfont is
+    # still reachable. Cross-backend audio parity has not been measured, so
+    # silently switching the rendering engine for working installs is the
+    # specific regression risk we're avoiding here.
     if soundfont_path is None:
         return "sine_fallback"
+    if _FLUIDSYNTH_IMPORTABLE:
+        return "fluidsynth"
     return "symusic"
 
 
@@ -147,44 +154,36 @@ def render_clip(
     plan: ClipPlan,
     *,
     soundfont: Path | str | None = None,
-    prefer_fluidsynth: bool = True,
+    allow_soundfont_backends: bool = True,
 ) -> RenderResult:
     """Render a ClipPlan to an in-memory float32 audio buffer.
 
-    Picks the best available backend using :func:`_resolve_backend`. The
-    ``prefer_fluidsynth`` kwarg is historical — its actual semantics are
-    "allow soundfont-based backends." Pass ``False`` to force the sine path
-    (tests do this to keep coverage deterministic).
+    Picks the best available backend using :func:`_resolve_backend`. Pass
+    ``allow_soundfont_backends=False`` to force the sine path (tests do this
+    to keep coverage deterministic regardless of what's installed locally).
+    Each soundfont backend has the sine path as its own backstop — if the
+    selected backend raises at runtime, the call still returns a buffer.
     """
     sf_path = locate_soundfont(soundfont)
     backend = _resolve_backend(
         soundfont_path=sf_path,
-        allow_soundfont_backends=prefer_fluidsynth,
+        allow_soundfont_backends=allow_soundfont_backends,
     )
-
-    if backend == "symusic" and sf_path is not None:
-        try:
-            return _render_with_symusic_synth(plan, sf_path)
-        except Exception as exc:  # pragma: no cover - hard to trigger in CI
-            logger.warning(
-                "symusic render failed (%s); falling back to FluidSynth or sine.",
-                exc,
-            )
-            if _FLUIDSYNTH_IMPORTABLE:
-                try:
-                    return _render_with_fluidsynth(plan, sf_path)
-                except Exception as inner_exc:  # pragma: no cover
-                    logger.warning(
-                        "FluidSynth fallback also failed (%s); using sine.",
-                        inner_exc,
-                    )
 
     if backend == "fluidsynth" and sf_path is not None and _FLUIDSYNTH_IMPORTABLE:
         try:
             return _render_with_fluidsynth(plan, sf_path)
         except Exception as exc:  # pragma: no cover - hard to trigger in CI
             logger.warning(
-                "FluidSynth render failed (%s); falling back to sine synth.", exc
+                "FluidSynth render failed (%s); falling back to sine.", exc
+            )
+
+    if backend == "symusic" and sf_path is not None:
+        try:
+            return _render_with_symusic_synth(plan, sf_path)
+        except Exception as exc:  # pragma: no cover - hard to trigger in CI
+            logger.warning(
+                "symusic render failed (%s); falling back to sine.", exc
             )
 
     return _render_with_sine_fallback(plan)
@@ -449,9 +448,4 @@ def fluidsynth_available() -> bool:
     """True iff both the python binding and a soundfont file are reachable."""
     if not _FLUIDSYNTH_IMPORTABLE:
         return False
-    return locate_soundfont() is not None
-
-
-def symusic_synth_available() -> bool:
-    """True iff a soundfont file is reachable (symusic itself is a hard dep)."""
     return locate_soundfont() is not None
