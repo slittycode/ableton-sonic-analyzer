@@ -13,7 +13,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import pretty_midi
+from symusic import Note, Score, Tempo, Track
 
 from phase1_evaluation import (
     DEFAULT_MANIFEST_PATH,
@@ -272,14 +272,22 @@ class TranscriptionTrackHarnessTests(unittest.TestCase):
 
 class ImportMidiScriptTests(unittest.TestCase):
     def _write_midi(self, path: Path, notes: list[tuple[int, float, float]]) -> None:
-        midi = pretty_midi.PrettyMIDI()
-        instrument = pretty_midi.Instrument(program=0)
+        score = Score(480, ttype="Second")
+        score.tempos.append(Tempo(time=0.0, qpm=120.0, ttype="Second"))
+        track = Track(name="ref", program=0, ttype="Second")
         for pitch, start, end in notes:
-            instrument.notes.append(
-                pretty_midi.Note(velocity=90, pitch=pitch, start=start, end=end)
+            duration = max(0.0, end - start)
+            track.notes.append(
+                Note(
+                    time=float(start),
+                    duration=float(duration),
+                    pitch=int(pitch),
+                    velocity=90,
+                    ttype="Second",
+                )
             )
-        midi.instruments.append(instrument)
-        midi.write(str(path))
+        score.tracks.append(track)
+        score.dump_midi(str(path))
 
     def _invoke(self, midi_path: Path, *extra_args: str) -> subprocess.CompletedProcess:
         return subprocess.run(

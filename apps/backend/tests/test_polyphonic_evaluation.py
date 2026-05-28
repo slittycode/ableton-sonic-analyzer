@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 
 import numpy as np
-import pretty_midi
 import soundfile as sf
+from symusic import Note, Score, Tempo, Track
 
 from polyphonic_evaluation import (
     build_manual_scorecard,
@@ -28,19 +28,27 @@ def _write_wav(path: Path, duration_seconds: float = 1.0, sample_rate: int = 220
 
 
 def _write_midi(path: Path, note_specs: list[tuple[int, float, float]]) -> None:
-    midi = pretty_midi.PrettyMIDI()
-    instrument = pretty_midi.Instrument(program=0)
+    """Build a tiny seconds-unit Score and dump as MIDI.
+
+    Mirrors the polyphonic-eval candidate output shape: one track, one
+    program, notes at `(start, end)` in seconds with constant velocity 90.
+    """
+    score = Score(480, ttype="Second")
+    score.tempos.append(Tempo(time=0.0, qpm=120.0, ttype="Second"))
+    track = Track(name="candidate", program=0, ttype="Second")
     for pitch, start, end in note_specs:
-        instrument.notes.append(
-            pretty_midi.Note(
+        duration = max(0.0, end - start)
+        track.notes.append(
+            Note(
+                time=float(start),
+                duration=float(duration),
+                pitch=int(pitch),
                 velocity=90,
-                pitch=pitch,
-                start=start,
-                end=end,
+                ttype="Second",
             )
         )
-    midi.instruments.append(instrument)
-    midi.write(str(path))
+    score.tracks.append(track)
+    score.dump_midi(str(path))
 
 
 class PolyphonicEvaluationTests(unittest.TestCase):

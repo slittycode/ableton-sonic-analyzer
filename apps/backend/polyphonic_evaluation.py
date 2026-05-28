@@ -17,8 +17,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-import pretty_midi
 import soundfile as sf
+from symusic import Score
 
 REPO_DIR = Path(__file__).resolve().parent
 DEFAULT_OUTPUT_DIR = REPO_DIR / ".runtime" / "polyphonic_eval"
@@ -53,8 +53,10 @@ def build_manual_scorecard(existing: dict[str, Any] | None = None) -> dict[str, 
 
 
 def summarize_midi_file(midi_path: Path, audio_duration_seconds: float) -> dict[str, Any]:
-    midi_data = pretty_midi.PrettyMIDI(str(midi_path))
-    notes = [note for instrument in midi_data.instruments for note in instrument.notes]
+    # Loaded scores arrive in Tick units; convert to Second so note.time and
+    # note.duration are seconds, matching the metric definitions below.
+    score = Score(midi_path).to("Second")
+    notes = [note for track in score.tracks for note in track.notes]
     if len(notes) == 0:
         return {
             "noteCount": 0,
@@ -72,11 +74,13 @@ def summarize_midi_file(midi_path: Path, audio_duration_seconds: float) -> dict[
     pitch_values: list[int] = []
     events: list[tuple[float, int]] = []
     for note in notes:
-        duration = max(0.0, float(note.end) - float(note.start))
+        start = float(note.time)
+        duration = max(0.0, float(note.duration))
+        end = start + duration
         total_note_duration += duration
         pitch_values.append(int(note.pitch))
-        events.append((float(note.start), 1))
-        events.append((float(note.end), -1))
+        events.append((start, 1))
+        events.append((end, -1))
 
     events.sort(key=lambda item: (item[0], item[1]))
     max_polyphony = 0
