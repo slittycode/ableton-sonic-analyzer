@@ -96,7 +96,11 @@ class WriteWavTests(unittest.TestCase):
 
 class WriteMidiTests(unittest.TestCase):
     def test_write_midi_emits_expected_note(self) -> None:
-        import pretty_midi  # local import — only test needs it
+        # Round-trips via symusic itself (pretty_midi was dropped in PR-G).
+        # The parity contract here is weaker than cross-library — it proves
+        # symusic can read its own output — but it still verifies the file
+        # is a valid Standard MIDI file and the notes survive the trip.
+        from symusic import Score
 
         plan = sample_theory.ClipPlan(
             tempo_bpm=120.0,
@@ -111,11 +115,17 @@ class WriteMidiTests(unittest.TestCase):
             mid_path = Path(tmp) / "out.mid"
             sample_synthesis.write_midi(plan, path=mid_path)
             self.assertTrue(mid_path.is_file())
-            pm = pretty_midi.PrettyMIDI(str(mid_path))
-            self.assertEqual(len(pm.instruments), 1)
-            self.assertEqual(len(pm.instruments[0].notes), 2)
-            pitches = sorted(n.pitch for n in pm.instruments[0].notes)
-            self.assertEqual(pitches, [60, 64])
+            loaded = Score(mid_path).to("Second")
+            self.assertEqual(len(loaded.tracks), 1)
+            notes = sorted(loaded.tracks[0].notes, key=lambda n: n.time)
+            self.assertEqual(len(notes), 2)
+            self.assertEqual([int(n.pitch) for n in notes], [60, 64])
+            # Onsets at beats 0 and 2 → 0.0 s and 1.0 s at 120 BPM.
+            self.assertAlmostEqual(float(notes[0].time), 0.0, places=3)
+            self.assertAlmostEqual(float(notes[1].time), 1.0, places=3)
+            # Both notes last 2 beats → 1.0 s at 120 BPM.
+            self.assertAlmostEqual(float(notes[0].duration), 1.0, places=3)
+            self.assertAlmostEqual(float(notes[1].duration), 1.0, places=3)
 
 
 class BackendResolutionTests(unittest.TestCase):
