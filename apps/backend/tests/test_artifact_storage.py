@@ -164,17 +164,31 @@ class DeleteTests(unittest.TestCase):
             storage.delete(stored.storage_ref)
             self.assertFalse(resolved.exists())
 
-    def test_delete_is_idempotent(self):
-        """Deleting twice or deleting a missing ref must not raise."""
+    def test_delete_is_idempotent_for_same_ref(self):
+        """Deleting the same storage_ref twice must not raise. The second call
+        finds the file already gone — the local impl swallows the missing-file
+        case via ``unlink(missing_ok=True)``, but the Protocol contract is the
+        no-raise behavior, not the specific implementation."""
+        with tempfile.TemporaryDirectory() as tmp:
+            storage = artifact_storage.FilesystemArtifactStorage(Path(tmp))
+            stored = storage.store_bytes(
+                artifact_id="d", filename="x.bin", content=b"x",
+            )
+            storage.delete(stored.storage_ref)
+            storage.delete(stored.storage_ref)  # must not raise
+
+    def test_delete_missing_ref_is_safe(self):
+        """Deleting a ref that never existed must not raise — protects against
+        races where a caller deletes a ref that another caller already cleaned up."""
         with tempfile.TemporaryDirectory() as tmp:
             storage = artifact_storage.FilesystemArtifactStorage(Path(tmp))
             storage.delete(str(Path(tmp) / "nonexistent.bin"))
-            storage.delete("")
 
     def test_delete_empty_ref_is_safe(self):
+        """Empty string is the canonical 'no artifact' value — must not raise."""
         with tempfile.TemporaryDirectory() as tmp:
             storage = artifact_storage.FilesystemArtifactStorage(Path(tmp))
-            storage.delete("")  # must not raise
+            storage.delete("")
 
 
 class ResolveLocalPathTests(unittest.TestCase):

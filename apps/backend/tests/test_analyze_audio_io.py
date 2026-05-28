@@ -58,7 +58,7 @@ class WriteWavPcm16Tests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "mono.wav")
             sr = 44100
-            sig = 0.3 * np.sin(2 * np.pi * 440 * np.arange(sr) / sr).astype(np.float32)
+            sig = (0.3 * np.sin(2 * np.pi * 440 * np.arange(sr) / sr)).astype(np.float32)
             analyze_audio_io._write_wav_pcm16(path, sig, sr)
             with wave.open(path, "rb") as wf:
                 self.assertEqual(wf.getnchannels(), 1)
@@ -72,8 +72,8 @@ class WriteWavPcm16Tests(unittest.TestCase):
             sr = 44100
             n = sr // 2
             t = np.arange(n) / sr
-            left = 0.3 * np.sin(2 * np.pi * 220 * t).astype(np.float32)
-            right = 0.3 * np.sin(2 * np.pi * 440 * t).astype(np.float32)
+            left = (0.3 * np.sin(2 * np.pi * 220 * t)).astype(np.float32)
+            right = (0.3 * np.sin(2 * np.pi * 440 * t)).astype(np.float32)
             stereo = np.stack([left, right])  # shape (2, N)
             analyze_audio_io._write_wav_pcm16(path, stereo, sr)
             with wave.open(path, "rb") as wf:

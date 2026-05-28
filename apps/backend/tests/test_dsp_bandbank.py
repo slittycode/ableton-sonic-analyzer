@@ -43,7 +43,9 @@ def _rms(signal: np.ndarray) -> float:
 
 
 def _db(ratio: float) -> float:
-    """Power-ratio → dB, with a floor to keep ``-inf`` out of the log."""
+    """Amplitude-ratio → dB (20·log10), with a floor to keep ``-inf`` out of
+    the log. RMS is an amplitude measure, not a power measure, so the gain
+    of ``RMS_out / RMS_in`` is 20·log10, not 10·log10."""
     return 20.0 * np.log10(max(ratio, 1e-12))
 
 

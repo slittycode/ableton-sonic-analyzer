@@ -72,11 +72,14 @@ def _valid_phase2_response() -> dict:
 
 
 def _build_mock_genai(response_payload: dict):
-    """Build a (mock_client, mock_genai_module, mock_genai_types) triple that
-    matches what server.py expects: ``_genai.Client(api_key=...)`` returning
-    a client whose ``.models.generate_content(...)`` returns a response with
-    ``.text`` set to the JSON payload, and ``.files.upload(...)`` returning a
-    file handle with ``.uri`` and ``.mime_type``."""
+    """Build the ``mock_client`` that ``_genai.Client(...)`` should return.
+
+    Wires up the call surface server.py touches:
+    - ``client.models.generate_content(...)`` returns a response with
+      ``.text`` set to the JSON-encoded ``response_payload`` (covers both
+      inline and Files-API generate calls).
+    - ``client.files.upload(...)`` returns a file handle with ``.uri`` and
+      ``.mime_type`` (covers the Files-API branch only)."""
     mock_response = MagicMock()
     mock_response.text = json.dumps(response_payload)
 

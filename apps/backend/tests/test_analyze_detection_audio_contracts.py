@@ -60,8 +60,11 @@ if _ESSENTIA_AVAILABLE:
         # ``analyze`` module — simpler and more robust than
         # ``spec_from_file_location`` + ``exec_module``, which creates a
         # second, partially-initialised copy.
+        # ``Exception`` covers ImportError; ``SystemExit`` is listed
+        # separately because it's not an Exception subclass — analyze.py
+        # ``sys.exit(1)``s on a missing essentia.
         import analyze as analyze_module  # type: ignore[import-not-found]
-    except (ImportError, SystemExit, Exception):
+    except (SystemExit, Exception):
         analyze_module = None
 
 

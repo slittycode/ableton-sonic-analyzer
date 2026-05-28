@@ -98,15 +98,19 @@ class AbstentionTests(unittest.TestCase):
     def test_returns_null_when_result_is_completely_empty(self):
         self.assertEqual(analyze_detection.analyze_genre_detail({}), {"genreDetail": None})
 
-    def test_returns_null_when_best_score_below_quarter_threshold(self):
+    def test_extreme_outlier_inputs_yield_low_confidence_or_abstain(self):
         """Inputs that don't match any signature (extreme outliers) — the
-        classifier must abstain rather than force a label."""
+        classifier should either abstain or return low confidence. We can't
+        force the < 0.25 abstention path deterministically because the
+        ``_phase1_result`` defaults give some mid-band features that score
+        well (e.g. crestFactor=8 fits many signatures); the assertion is
+        therefore that the *result confidence* is low, not that the
+        classifier abstains."""
         result = analyze_detection.analyze_genre_detail(_phase1_result(
             bpm=999.0,  # No genre signature has a 999 BPM range.
             spectralBalance={"subBass": 50.0},  # Way above any signature.
             spectralDetail={"spectralCentroid": 50000.0},
         ))
-        # Either abstains entirely, or returns a result with very low confidence.
         if result["genreDetail"] is not None:
             self.assertLess(result["genreDetail"]["confidence"], 0.5)
 

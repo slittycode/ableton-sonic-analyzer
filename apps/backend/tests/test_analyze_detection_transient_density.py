@@ -2,11 +2,18 @@
 
 The detector computes onset density per spectral-balance band (sub-bass →
 brilliance) via librosa. Phase 2 cites these per-band rates to anchor hi-hat
-bus recommendations and percussion suggestions, so the shape and the
-band-specificity of the output are part of the cross-boundary contract.
+bus recommendations and percussion suggestions, so the shape of the output
+is part of the cross-boundary contract.
 
-Tests synthesize signals with known transient density in known bands and
-assert the detector concentrates events in the right band.
+Tests:
+- null/empty/zero-SR input → ``transientDensityDetail: None`` (graceful).
+- with librosa available, output has one entry per spectral-balance band,
+  each with the documented fields and non-negative event counts.
+- a low-band click train produces at least one onset in a low band — the
+  detector is not silently dropping the signal. Strict band exclusivity is
+  not asserted because a click's broadband attack leaks into higher bands.
+- a 120 BPM click train produces an onset rate in the right order of
+  magnitude (1–5/s) — loose because librosa can merge or miss clicks.
 """
 
 import importlib.util
@@ -162,12 +169,14 @@ class BandSpecificityTests(unittest.TestCase):
 
 
 @unittest.skipUnless(_LIBROSA_AVAILABLE, "librosa not installed")
-class RateMatchesBpmTests(unittest.TestCase):
-    """A click train at 120 BPM → 2 events/sec. Even with bandpass leakage
-    and the conservative librosa onset detector, the matching-band rate
-    should be in the right ballpark."""
+class RateOrderOfMagnitudeTests(unittest.TestCase):
+    """A click train at 120 BPM has a true onset rate of 2/s. Bandpass
+    leakage and librosa's onset-detector heuristics can merge or split
+    events, so we only assert order-of-magnitude (1–5/s) rather than
+    pinning to 2. If the rate drops below 1/s the detector is silently
+    losing the signal; above 5/s it's hallucinating extra events."""
 
-    def test_120_bpm_low_clicks_produce_roughly_two_per_second(self):
+    def test_120_bpm_clicks_yield_rate_in_correct_order_of_magnitude(self):
         sr = 22050
         sig = _click_train(sr, duration_s=6.0, bpm=120.0, freq_hz=80.0)
         result = analyze_detection.analyze_per_band_transient_density(sig, sample_rate=sr)
@@ -175,8 +184,6 @@ class RateMatchesBpmTests(unittest.TestCase):
         # Pick whichever low band saw the most action.
         best = max(("subBass", "lowBass"), key=lambda b: detail[b]["eventCount"])
         rate = detail[best]["onsetRatePerSecond"]
-        # Loose bounds — librosa can merge consecutive clicks or miss some.
-        # We just want to confirm it's in the right order of magnitude (1–5/s).
         self.assertGreater(rate, 1.0, f"Best band {best} rate {rate} below 1/s")
         self.assertLess(rate, 5.0, f"Best band {best} rate {rate} above 5/s")
 
