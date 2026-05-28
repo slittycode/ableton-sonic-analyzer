@@ -56,6 +56,11 @@ soundfile==0.13.1
 soxr==1.0.0
 starlette==0.52.1
 submitit==1.5.4
+# Symbolic music library — fast MIDI/Score primitives with a C++ core. Used by
+# transcription_pianoroll.py to convert transcriptionDetail.notes into a
+# velocity-encoded matrix for the UI heatmap. Ships cp311 wheels for darwin-arm64
+# and manylinux_x86_64 — no compile step.
+symusic==0.6.0
 sympy==1.14.0
 threadpoolctl==3.6.0
 torch==2.10.0
