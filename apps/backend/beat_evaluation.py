@@ -16,6 +16,15 @@ Three downbeat methods are compared per clip:
 beat_this and mir_eval are OPTIONAL: imported lazily/guarded so stride-vs-kick_accent
 runs in the product venv with zero new dependencies (metrics fall back to a
 hand-rolled F-measure when mir_eval is absent).
+
+Note on symusic (post-PR-A/D investigation): symusic's ``Score.get_beats`` /
+``get_downbeats`` derive beats from a symbolic score's *tempo map and time
+signatures*, not from audio. This harness operates on audio inputs, so symusic
+has nothing to offer as an additional method here. The original consolidation
+plan (PR-E) called for adding ``symusic-beat`` as an observational fourth
+method — it was dropped after the probe confirmed symusic is not an
+audio-analysis library. The pre-registered ``beat_this`` vs ``kick_accent``
+gate is unaffected.
 """
 
 import json
