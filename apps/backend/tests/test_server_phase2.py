@@ -139,10 +139,16 @@ class InlineVsFilesApiBranchTests(unittest.TestCase):
 
             return execution, mock_client
 
+    def _flags(self, execution: dict) -> list[str]:
+        """``flags_used`` is nested under ``diagnostics.timings.flagsUsed`` —
+        see ``_build_timings`` in ``server_phase1.py``. The existing
+        ``test_server.py`` asserts use the same path."""
+        return execution["diagnostics"]["timings"]["flagsUsed"]
+
     def test_small_file_uses_inline_branch(self):
         """A 1 MiB upload must route through the inline-base64 path."""
         execution, mock_client = self._run_interpretation(file_size_bytes=1024 * 1024)
-        flags = execution["diagnostics"].get("flagsUsed", [])
+        flags = self._flags(execution)
         self.assertIn("inline", flags)
         self.assertNotIn("files-api", flags)
         # Inline path uses ``client.models.generate_content`` directly,
@@ -153,7 +159,7 @@ class InlineVsFilesApiBranchTests(unittest.TestCase):
         """At the 100 MiB boundary the comparison is ``<=`` — equal-size
         uploads stay inline."""
         execution, mock_client = self._run_interpretation(file_size_bytes=server.INLINE_SIZE_LIMIT)
-        flags = execution["diagnostics"].get("flagsUsed", [])
+        flags = self._flags(execution)
         self.assertIn("inline", flags)
         mock_client.files.upload.assert_not_called()
 
@@ -163,7 +169,7 @@ class InlineVsFilesApiBranchTests(unittest.TestCase):
         execution, mock_client = self._run_interpretation(
             file_size_bytes=server.INLINE_SIZE_LIMIT + 1,
         )
-        flags = execution["diagnostics"].get("flagsUsed", [])
+        flags = self._flags(execution)
         self.assertIn("files-api", flags)
         self.assertNotIn("inline", flags)
         mock_client.files.upload.assert_called_once()

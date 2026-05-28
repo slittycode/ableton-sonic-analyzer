@@ -58,10 +58,17 @@ def _click_train(
     return signal
 
 
-@unittest.skipUnless(_LIBROSA_AVAILABLE, "librosa not installed")
 class NullInputTests(unittest.TestCase):
     """Graceful-degradation contract — downstream Phase 1 emits
-    ``transientDensityDetail: None`` rather than crashing on bad input."""
+    ``transientDensityDetail: None`` rather than crashing on bad input.
+
+    These paths short-circuit *before* any librosa call (the early-return
+    guards in ``analyze_per_band_transient_density`` cover ``mono is None``,
+    ``size == 0``, ``sample_rate <= 0``, and ``librosa is None`` itself).
+    They must hold even when librosa is absent — that's the entire point of
+    the graceful-degradation contract — so this class is NOT gated on
+    librosa availability.
+    """
 
     def test_empty_array_returns_null_detail(self):
         result = analyze_detection.analyze_per_band_transient_density(

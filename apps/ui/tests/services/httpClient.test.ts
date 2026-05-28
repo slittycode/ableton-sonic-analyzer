@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fetchJson } from '../../src/services/httpClient';
 import { BackendClientError } from '../../src/services/backendPhase1Client';
 
