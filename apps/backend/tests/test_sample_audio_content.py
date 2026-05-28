@@ -14,8 +14,8 @@ proves the generator is *responsive* to its input rather than emitting a
 canned clip. If sample generation ever regresses to fixed output — or stops
 threading the measured key through to the render — that test fails.
 
-Runs against the sine-additive fallback (`prefer_fluidsynth=False`) so the
-assertions are deterministic and don't depend on a system soundfont.
+Runs against the sine-additive fallback (`allow_soundfont_backends=False`) so
+the assertions are deterministic and don't depend on a system soundfont.
 """
 
 import sys
@@ -95,7 +95,7 @@ def _generate(tmp: str, phase1: dict, **kwargs) -> Path:
         phase1=phase1,
         phase2=None,
         output_dir=Path(tmp),
-        prefer_fluidsynth=False,
+        allow_soundfont_backends=False,
         **kwargs,
     )
     return Path(tmp)

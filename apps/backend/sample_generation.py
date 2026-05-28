@@ -50,15 +50,15 @@ def generate_samples(
     phase2: dict[str, Any] | None,
     output_dir: Path,
     pitch_note_hints: list[int] | None = None,
-    prefer_fluidsynth: bool = True,
+    allow_soundfont_backends: bool = True,
 ) -> GenerationResult:
     """Build the full audition set for a single run.
 
     `pitch_note_hints` may carry scale degrees pulled from the stem-summary
     pitch/note translation output. When absent we render the default ascent.
 
-    `prefer_fluidsynth` is plumbed through so tests can force the fallback
-    even if FluidSynth is installed on the dev machine.
+    `allow_soundfont_backends` is plumbed through so tests can force the
+    sine fallback even if FluidSynth (or symusic) could otherwise run.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     artifact_paths: dict[str, Path] = {}
@@ -86,7 +86,7 @@ def generate_samples(
 
         chord_plan = sample_theory.plan_chord_progression(ctx, bars=8)
         chord_result = sample_synthesis.render_clip(
-            chord_plan, prefer_fluidsynth=prefer_fluidsynth
+            chord_plan, allow_soundfont_backends=allow_soundfont_backends
         )
         selected_backend = chord_result.backend
         selected_soundfont = chord_result.soundfont_path
@@ -118,7 +118,7 @@ def generate_samples(
 
         bass_plan = sample_theory.plan_bass_root(ctx, bars=8)
         bass_result = sample_synthesis.render_clip(
-            bass_plan, prefer_fluidsynth=prefer_fluidsynth
+            bass_plan, allow_soundfont_backends=allow_soundfont_backends
         )
         # `selected_backend` is already pinned by the chord render above —
         # `render_clip` always returns a concrete backend string, so the bass
@@ -242,7 +242,7 @@ def generate_samples(
         )
         if melody_plan is not None:
             melody_result = sample_synthesis.render_clip(
-                melody_plan, prefer_fluidsynth=prefer_fluidsynth
+                melody_plan, allow_soundfont_backends=allow_soundfont_backends
             )
             # See bass-render note above — `selected_backend` is pinned at the
             # first chord render and `render_clip` never returns falsy.
