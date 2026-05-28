@@ -1,0 +1,40 @@
+{
+  "schema_version": "1",
+  "source_commit": "0000000000000000000000000000000000000000",
+  "source_url": "https://example.invalid/three-device-fixture",
+  "source_files": ["tests/fixtures/live12_catalogue/three_device_catalogue.json"],
+  "license_note": "Synthetic test fixture; not derived from upstream.",
+  "generated_at": "2026-05-28T00:00:00Z",
+  "extraction_notes": "Three hand-authored device entries: Saturator (audio_effect, no ranges — exercises name-only path), Eq8 (audio_effect, displayName alias exercises case-insensitive UI-name lookup), Operator (instrument, one parameter carries a synthetic range to exercise the range gate).",
+  "devices": [
+    {
+      "class": "Saturator",
+      "category": "audio_effect",
+      "displayName": "Saturator",
+      "parameters": [
+        {"name": "Drive"},
+        {"name": "Output"},
+        {"name": "Dry/Wet"}
+      ]
+    },
+    {
+      "class": "Eq8",
+      "category": "audio_effect",
+      "displayName": "EQ Eight",
+      "parameters": [
+        {"name": "1 Frequency A"},
+        {"name": "1 Gain A"},
+        {"name": "1 Resonance A"}
+      ]
+    },
+    {
+      "class": "Operator",
+      "category": "instrument",
+      "displayName": "Operator",
+      "parameters": [
+        {"name": "Volume", "type": "float", "min": -36.0, "max": 6.0, "unit": "dB", "default": 0.0},
+        {"name": "Algorithm"}
+      ]
+    }
+  ]
+}

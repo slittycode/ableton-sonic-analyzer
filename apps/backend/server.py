@@ -142,6 +142,7 @@ from server_phase2 import (  # noqa: F401 — re-exported for test backward comp
     _validate_phase2_catalog_entry,
     _validate_phase2_citation_paths,
     _validate_phase2_semantics,
+    apply_live12_catalogue_gates,
 )
 
 import server_samples
@@ -1620,11 +1621,26 @@ def _run_interpretation_request_with_profile_config(
             if profile_id == "producer_summary" and interpretation_result is not None
             else []
         )
+        # Live 12 source-catalogue gates run last so they see (a) the salvaged
+        # / coerced shape, (b) the post-rename measurement field names that
+        # the citation walker uses. They MUTATE `interpretation_result` by
+        # dropping recommendations that fail device/parameter/range/citation
+        # checks; the events surface as warning-shaped validationWarnings so
+        # the operator-facing diagnostic log keeps a complete trail.
+        catalogue_gate_warnings = (
+            apply_live12_catalogue_gates(
+                interpretation_result,
+                request_id=request_id,
+            )
+            if profile_id == "producer_summary" and interpretation_result is not None
+            else []
+        )
         validation_warnings = (
             parse_validation_warnings
             + style_profile_warnings
             + semantic_validation_warnings
             + citation_path_warnings
+            + catalogue_gate_warnings
         )
         diagnostics = _build_diagnostics(
             response_ready_at=_current_time(),

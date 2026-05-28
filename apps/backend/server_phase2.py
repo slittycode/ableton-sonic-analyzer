@@ -9,6 +9,7 @@ from typing import Any, Callable
 
 from analysis_runtime import AnalysisRuntime, UnsupportedPitchNoteModeError
 from audio_mime import canonical_audio_mime
+from phase2_catalogue_gates import apply_live12_catalogue_gates  # re-exported
 from server_phase1 import (
     _coerce_nullable_number,
     _coerce_nullable_string,
