@@ -33,6 +33,7 @@ import { Phase2ConsistencyReport } from './Phase2ConsistencyReport';
 import { MeasurementDashboard } from './MeasurementDashboard';
 import { SamplePlayback } from './SamplePlayback';
 import { SessionMusicianPanel } from './SessionMusicianPanel';
+import { TranscriptionPianorollBlock } from './TranscriptionPianorollBlock';
 import { StemListeningNotesPanel } from './StemListeningNotesPanel';
 import { hasStemListeningNotesContent } from '../services/sessionMusician';
 import {
@@ -1910,6 +1911,15 @@ export function AnalysisResults({
             onReanalyzeWithStemAware={onReanalyzeWithStemAware}
           />
         </div>
+
+        {apiBaseUrl &&
+          runId &&
+          phase1.transcriptionDetail &&
+          phase1.transcriptionDetail.noteCount > 0 && (
+            <div id="section-pianoroll" className="scroll-mt-24">
+              <TranscriptionPianorollBlock apiBaseUrl={apiBaseUrl} runId={runId} />
+            </div>
+          )}
 
         {hasStemSummaryContent && (
           <div id="section-stem-summary" className="scroll-mt-24">
