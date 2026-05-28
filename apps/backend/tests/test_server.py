@@ -4984,6 +4984,301 @@ class CsvExportRouteTests(unittest.TestCase):
         self.assertEqual(payload["error"]["code"], "RUN_NOT_FOUND")
 
 
+class TranscriptionPianorollRouteTests(unittest.TestCase):
+    """Route tests for GET /api/analysis-runs/{run_id}/transcription/pianoroll.
+
+    The pure pianoroll rasterization is covered by
+    tests/test_transcription_pianoroll.py. These tests verify only the HTTP
+    shell — status codes, error envelopes, and that the route correctly
+    threads transcriptionDetail out of the pitch-note translation stage
+    (not measurement, which strips it at analysis_runtime.py:685).
+    """
+
+    def _decode_json_response(self, response) -> dict:
+        return json.loads(response.body.decode("utf-8"))
+
+    def _call_route(
+        self,
+        run_id: str,
+        *,
+        mode: str = "frame",
+        pitch_low: int = 21,
+        pitch_high: int = 109,
+        tpq: int = 4,
+    ):
+        # FastAPI's ``Query(...)`` defaults are sentinel objects, not the
+        # resolved values, so a direct unit-test call has to pass explicit
+        # ints/strings or the validation block sees the sentinel and bails
+        # with ``INVALID_MODE``. Tests opt-in via this wrapper.
+        return asyncio.run(
+            server.get_transcription_pianoroll(
+                run_id,
+                mode=mode,
+                pitch_low=pitch_low,
+                pitch_high=pitch_high,
+                tpq=tpq,
+            )
+        )
+
+    def _make_run(
+        self,
+        runtime,
+        *,
+        measurement_payload: dict | None = None,
+        complete_measurement: bool = True,
+        pitch_note_mode: str = "auto",
+        translation_status: str | None = None,
+        translation_result: dict | None = None,
+    ) -> str:
+        created = runtime.create_run(
+            filename="track.mp3",
+            content=b"fake-audio",
+            mime_type="audio/mpeg",
+            pitch_note_mode=pitch_note_mode,
+            pitch_note_backend="auto",
+            interpretation_mode="off",
+            interpretation_profile="producer_summary",
+            interpretation_model=None,
+        )
+        run_id = created["runId"]
+        if complete_measurement:
+            runtime.complete_measurement(
+                run_id,
+                payload=(
+                    measurement_payload
+                    if measurement_payload is not None
+                    else {"bpm": 128, "timeSignature": "4/4"}
+                ),
+                provenance={
+                    "schemaVersion": "measurement.v1",
+                    "engineVersion": "analyze.py",
+                },
+                diagnostics={"backendDurationMs": 1000},
+            )
+        if translation_status is not None:
+            runtime.create_pitch_note_attempt(
+                run_id,
+                backend_id="torchcrepe-viterbi",
+                mode="auto",
+                status=translation_status,
+                result=translation_result,
+                provenance={"engineVersion": "torchcrepe-viterbi"},
+            )
+        return run_id
+
+    @staticmethod
+    def _transcription_result(notes: list[dict]) -> dict:
+        return {
+            "transcriptionDetail": {
+                "transcriptionMethod": "torchcrepe-viterbi",
+                "noteCount": len(notes),
+                "averageConfidence": 0.85,
+                "dominantPitches": [],
+                "pitchRange": {
+                    "minMidi": 60,
+                    "maxMidi": 67,
+                    "minName": "C4",
+                    "maxName": "G4",
+                },
+                "stemSeparationUsed": False,
+                "fullMixFallback": True,
+                "stemsTranscribed": ["full_mix"],
+                "perStemAverageConfidence": {},
+                "notes": notes,
+            }
+        }
+
+    @staticmethod
+    def _note(
+        pitch: int = 60,
+        onset: float = 0.0,
+        duration: float = 0.5,
+        confidence: float = 0.9,
+    ) -> dict:
+        return {
+            "pitchMidi": pitch,
+            "pitchName": "C4",
+            "onsetSeconds": onset,
+            "durationSeconds": duration,
+            "confidence": confidence,
+            "stemSource": "full_mix",
+        }
+
+    def test_returns_payload_on_happy_path(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_pianoroll_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            run_id = self._make_run(
+                runtime,
+                translation_status="completed",
+                translation_result=self._transcription_result([self._note()]),
+            )
+
+            with patch.object(server, "get_analysis_runtime", return_value=runtime):
+                response = self._call_route(run_id)
+
+        self.assertEqual(response.status_code, 200)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["mode"], "frame")
+        self.assertEqual(payload["pitchLow"], 21)
+        self.assertEqual(payload["pitchHigh"], 109)
+        self.assertEqual(payload["ticksPerQuarter"], 4)
+        self.assertEqual(payload["quartersPerMinute"], 128.0)
+        self.assertEqual(payload["timeSignature"], "4/4")
+        self.assertEqual(payload["noteCount"], 1)
+        # 88 pitch rows (21..109 exclusive); pitch 60 lands at index 60-21=39.
+        self.assertEqual(len(payload["frames"]), 88)
+        target_row = payload["frames"][60 - 21]
+        self.assertGreater(sum(target_row), 0)
+
+    def test_unknown_run_returns_404(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_pianoroll_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            with patch.object(server, "get_analysis_runtime", return_value=runtime):
+                response = self._call_route("does-not-exist")
+
+        self.assertEqual(response.status_code, 404)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["error"]["code"], "RUN_NOT_FOUND")
+
+    def test_measurement_not_completed_returns_409(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_pianoroll_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            run_id = self._make_run(runtime, complete_measurement=False)
+
+            with patch.object(server, "get_analysis_runtime", return_value=runtime):
+                response = self._call_route(run_id)
+
+        self.assertEqual(response.status_code, 409)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["error"]["code"], "MEASUREMENT_NOT_COMPLETED")
+
+    def test_transcription_not_requested_returns_404(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_pianoroll_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            run_id = self._make_run(runtime, pitch_note_mode="off")
+
+            with patch.object(server, "get_analysis_runtime", return_value=runtime):
+                response = self._call_route(run_id)
+
+        self.assertEqual(response.status_code, 404)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["error"]["code"], "TRANSCRIPTION_NOT_REQUESTED")
+
+    def test_transcription_running_returns_409(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_pianoroll_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            run_id = self._make_run(runtime, translation_status="running")
+
+            with patch.object(server, "get_analysis_runtime", return_value=runtime):
+                response = self._call_route(run_id)
+
+        self.assertEqual(response.status_code, 409)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["error"]["code"], "TRANSCRIPTION_NOT_COMPLETED")
+
+    def test_transcription_failed_returns_404_not_available(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_pianoroll_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            run_id = self._make_run(
+                runtime,
+                translation_status="failed",
+                translation_result=None,
+            )
+
+            with patch.object(server, "get_analysis_runtime", return_value=runtime):
+                response = self._call_route(run_id)
+
+        self.assertEqual(response.status_code, 404)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["error"]["code"], "TRANSCRIPTION_NOT_AVAILABLE")
+
+    def test_transcription_completed_with_null_detail_returns_404(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_pianoroll_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            run_id = self._make_run(
+                runtime,
+                translation_status="completed",
+                translation_result={"transcriptionDetail": None},
+            )
+
+            with patch.object(server, "get_analysis_runtime", return_value=runtime):
+                response = self._call_route(run_id)
+
+        self.assertEqual(response.status_code, 404)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["error"]["code"], "TRANSCRIPTION_NOT_AVAILABLE")
+
+    def test_invalid_mode_returns_400(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_pianoroll_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            run_id = self._make_run(
+                runtime,
+                translation_status="completed",
+                translation_result=self._transcription_result([]),
+            )
+
+            with patch.object(server, "get_analysis_runtime", return_value=runtime):
+                response = self._call_route(run_id, mode="garbage")
+
+        self.assertEqual(response.status_code, 400)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["error"]["code"], "INVALID_MODE")
+
+    def test_invalid_pitch_range_returns_400(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_pianoroll_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            run_id = self._make_run(
+                runtime,
+                translation_status="completed",
+                translation_result=self._transcription_result([]),
+            )
+
+            with patch.object(server, "get_analysis_runtime", return_value=runtime):
+                response = self._call_route(
+                    run_id, pitch_low=100, pitch_high=50
+                )
+
+        self.assertEqual(response.status_code, 400)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["error"]["code"], "INVALID_PITCH_RANGE")
+
+    def test_invalid_tpq_returns_400(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_pianoroll_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            run_id = self._make_run(
+                runtime,
+                translation_status="completed",
+                translation_result=self._transcription_result([]),
+            )
+
+            with patch.object(server, "get_analysis_runtime", return_value=runtime):
+                response = self._call_route(run_id, tpq=0)
+
+        self.assertEqual(response.status_code, 400)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["error"]["code"], "INVALID_TPQ")
+
+
 class AudioMimeTypeTests(unittest.TestCase):
     """The Gemini-upload labeling path must resolve canonical, host-stable types.
 
