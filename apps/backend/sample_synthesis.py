@@ -10,8 +10,12 @@ Both paths produce the same float32 mono 44.1 kHz numpy array, so callers
 don't need to branch on which backend was selected. The selected backend is
 recorded on `RenderResult.backend` so it can flow into the manifest.
 
-MIDI artifacts are emitted via `pretty_midi`, which is already a hard dep, so
-the user can drop a `.mid` into Ableton even if the audio render is rough.
+MIDI artifacts are emitted via `symusic` (fast C++ core), so the user can drop
+a `.mid` into Ableton even if the audio render is rough. The MIDI file is a
+spec-conformant artifact that DAWs read as a fixed format — switching writers
+is a non-audible change, but the test in
+`tests/test_sample_synthesis.WriteMidiTests` round-trips via `pretty_midi` to
+keep the parity contract honest.
 """
 
 from __future__ import annotations
@@ -23,8 +27,8 @@ from pathlib import Path
 from typing import Literal
 
 import numpy as np
-import pretty_midi  # type: ignore[import-untyped]
 import soundfile as sf
+from symusic import Note, Score, Tempo, Track
 
 from sample_theory import ClipPlan
 
@@ -111,24 +115,35 @@ def write_wav(samples: np.ndarray, *, path: Path, sample_rate: int = SAMPLE_RATE
 
 
 def write_midi(plan: ClipPlan, *, path: Path) -> None:
-    """Emit a MIDI file from a ClipPlan so users can audition in Ableton."""
-    pm = pretty_midi.PrettyMIDI(initial_tempo=plan.tempo_bpm)
-    inst = pretty_midi.Instrument(program=plan.program)
+    """Emit a MIDI file from a ClipPlan so users can audition in Ableton.
+
+    Uses ``symusic`` (C++ core) so the backend has a single canonical MIDI
+    library; the output is a spec-conformant Standard MIDI file that any DAW
+    parses identically. Tempo is emitted at ``t=0`` to match the static plan,
+    and the GM program is set on the track header so Ableton picks the right
+    default sound.
+    """
+    score = Score(480, ttype="Second")
+    score.tempos.append(Tempo(time=0.0, qpm=float(plan.tempo_bpm), ttype="Second"))
+    track = Track(
+        name="audition", program=int(plan.program), is_drum=False, ttype="Second"
+    )
     beats_per_second = plan.tempo_bpm / 60.0
     for note in plan.notes:
         start_seconds = note.start_beat / beats_per_second
-        end_seconds = (note.start_beat + note.duration_beats) / beats_per_second
-        inst.notes.append(
-            pretty_midi.Note(
-                velocity=int(np.clip(note.velocity, 1, 127)),
+        duration_seconds = max(0.0, note.duration_beats / beats_per_second)
+        track.notes.append(
+            Note(
+                time=float(start_seconds),
+                duration=float(duration_seconds),
                 pitch=int(np.clip(note.pitch_midi, 0, 127)),
-                start=float(start_seconds),
-                end=float(end_seconds),
+                velocity=int(np.clip(note.velocity, 1, 127)),
+                ttype="Second",
             )
         )
-    pm.instruments.append(inst)
+    score.tracks.append(track)
     path.parent.mkdir(parents=True, exist_ok=True)
-    pm.write(str(path))
+    score.dump_midi(str(path))
 
 
 # --- FluidSynth path -------------------------------------------------------- #
