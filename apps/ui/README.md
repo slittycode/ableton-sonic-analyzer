@@ -23,8 +23,11 @@ The app uploads a track to the local DSP backend, shows the estimate and executi
   - confidence threshold slider (pitch/note mode only; disabled in melody-guide mode with tooltip)
   - quantize grid and swing controls
   - browser preview and `.mid` download
+- transcription pianoroll heatmap (velocity-encoded `pitch × time`) fetched from the backend; rendered when `transcriptionDetail.noteCount > 0` and grounded in the Phase 1 `bpm` + `timeSignature` so each cell traces back to a measurement
 - JSON export and markdown report export
 - Phase 3 audition-sample playback panel — on-demand heuristic WAV/MIDI clips with citation metadata, requested after interpretation completes
+- chain-of-custody report (`Phase2ConsistencyReport`) that surfaces `phase2Validator` violations directly under the Phase 2 results
+- per-recommendation corpus-verification badge (`RecommendationVerificationBadge`) — renders the confidence band that backs each recommendation domain; hidden when the corpus has no scored fixtures yet (`GOAL.md` sub-goal 4)
 - collapsible diagnostic log with request IDs, durations, estimate ranges, and backend or Gemini status
 - semantic theme token system for status colors and surface backgrounds
 - mobile-responsive layouts across header, results grid, and upload flow

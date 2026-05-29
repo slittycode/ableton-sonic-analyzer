@@ -46,8 +46,13 @@ FastAPI also serves the usual generated endpoints at `/openapi.json`, `/docs`, a
 - librosa (spectrogram / spectral time-series artifacts)
 - mido / pretty_midi
 - pytheory + pyfluidsynth (Phase 3 audition-sample generation)
+- symusic (transcription pianoroll rendering; optional alternate synth backend)
 - FastAPI
 - Uvicorn
+
+Companion runtime data:
+
+- `data/live12_catalogue.json` (at the repo root) — source-extracted Live 12 device/parameter catalogue consumed by [`live12_catalogue.py`](live12_catalogue.py) and used by [`phase2_catalogue_gates.py`](phase2_catalogue_gates.py) to annotate Phase 2 recommendations. Regenerated via repo-root `scripts/build_live12_catalogue.py` from the upstream `gluon/AbletonLive12_MIDIRemoteScripts` checkout; the published `data/live12_catalogue.schema.json` validates the output. Distinct from the *prompt-injected* `prompts/live12_device_catalog.json`.
 
 ## Installation
 
