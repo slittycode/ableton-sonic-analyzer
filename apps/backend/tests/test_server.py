@@ -5071,24 +5071,27 @@ class TranscriptionPianorollRouteTests(unittest.TestCase):
 
     @staticmethod
     def _transcription_result(notes: list[dict]) -> dict:
+        # Mirrors production: the pitch-note worker stores the
+        # transcriptionDetail dict *directly* as the stage result (unwrapped),
+        # so the route reads these fields off ``pn_stage["result"]`` itself.
+        # See test_pitch_note_worker_runs_as_subprocess, which asserts
+        # result["transcriptionMethod"] is readable at the top level.
         return {
-            "transcriptionDetail": {
-                "transcriptionMethod": "torchcrepe-viterbi",
-                "noteCount": len(notes),
-                "averageConfidence": 0.85,
-                "dominantPitches": [],
-                "pitchRange": {
-                    "minMidi": 60,
-                    "maxMidi": 67,
-                    "minName": "C4",
-                    "maxName": "G4",
-                },
-                "stemSeparationUsed": False,
-                "fullMixFallback": True,
-                "stemsTranscribed": ["full_mix"],
-                "perStemAverageConfidence": {},
-                "notes": notes,
-            }
+            "transcriptionMethod": "torchcrepe-viterbi",
+            "noteCount": len(notes),
+            "averageConfidence": 0.85,
+            "dominantPitches": [],
+            "pitchRange": {
+                "minMidi": 60,
+                "maxMidi": 67,
+                "minName": "C4",
+                "maxName": "G4",
+            },
+            "stemSeparationUsed": False,
+            "fullMixFallback": True,
+            "stemsTranscribed": ["full_mix"],
+            "perStemAverageConfidence": {},
+            "notes": notes,
         }
 
     @staticmethod

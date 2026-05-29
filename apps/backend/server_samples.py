@@ -68,7 +68,7 @@ def generate_and_register_samples(
     run_id: str,
     snapshot: dict[str, Any],
     force: bool = False,
-    prefer_fluidsynth: bool = True,
+    allow_soundfont_backends: bool = True,
 ) -> dict[str, Any]:
     """Run the orchestrator, persist artifacts, return a decorated manifest.
 
@@ -109,7 +109,7 @@ def generate_and_register_samples(
             phase2=phase2,
             output_dir=tmp_dir,
             pitch_note_hints=None,  # Pitch/note translation hints are a follow-up.
-            prefer_fluidsynth=prefer_fluidsynth,
+            allow_soundfont_backends=allow_soundfont_backends,
         )
 
         # Persist each WAV/MIDI as a run artifact. The artifact kind names the
