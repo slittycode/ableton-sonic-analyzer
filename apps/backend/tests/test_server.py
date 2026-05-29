@@ -343,6 +343,50 @@ class ServerContractTests(unittest.TestCase):
         self.assertIn("styleProfile", prompt)
         self.assertIn("authoritativeMeasurements", prompt)
         self.assertIn("category must be exactly one of", prompt)
+
+    def test_build_phase2_prompt_renders_mt3_grounding_when_present(self) -> None:
+        # End-to-end proof of the F3 chain + the interpretation-ordering gate's
+        # payoff: when an MT3 result is supplied (which the gate now ensures has
+        # actually completed before interpretation runs), it must surface in the
+        # prompt under OPTIONAL_MT3_TRANSCRIPTION_RESULT_JSON so Gemini can cite
+        # transcription.mt3.* paths. The other prompt tests pass mt3_result=None.
+        mt3_result = {
+            "version": "magenta-mt3-base",
+            "stemsUsed": ["bass", "other"],
+            "tracks": [
+                {
+                    "instrument": "bass",
+                    "midiArtifactId": "artifact-1",
+                    "midiSizeBytes": 256,
+                    "noteCount": 42,
+                    "pitchRange": [28, 52],
+                }
+            ],
+        }
+        prompt = server._build_phase2_prompt(
+            measurement_result={"bpm": 128},
+            pitch_note_result=None,
+            grounding_metadata={"profileId": "producer_summary"},
+            descriptor_hooks=None,
+            mt3_result=mt3_result,
+        )
+
+        self.assertIn("OPTIONAL_MT3_TRANSCRIPTION_RESULT_JSON", prompt)
+        self.assertIn("magenta-mt3-base", prompt)
+        self.assertIn('"instrument": "bass"', prompt)
+
+    def test_build_phase2_prompt_mt3_section_renders_null_when_absent(self) -> None:
+        # When no MT3 stage ran, the section is still declared (the prompt tells
+        # Gemini to ignore a null) rather than silently omitted — guards against
+        # a regression that drops the section and confuses the input contract.
+        prompt = server._build_phase2_prompt(
+            measurement_result={"bpm": 128},
+            pitch_note_result=None,
+            grounding_metadata={"profileId": "producer_summary"},
+            descriptor_hooks=None,
+        )
+
+        self.assertIn("OPTIONAL_MT3_TRANSCRIPTION_RESULT_JSON:\nnull", prompt)
         self.assertIn("workflowStage = the project phase", prompt)
         self.assertIn('"workflowStage":"SOUND_DESIGN","category":"SYNTHESIS"', prompt)
         self.assertIn("Return:<name> with no space after the colon", prompt)
@@ -5595,6 +5639,68 @@ class Mt3ExecutorTests(unittest.TestCase):
             self.assertIsNotNone(error)
             self.assertEqual(error["code"], "MT3_TRANSCRIPTION_FAILED")
             self.assertTrue(error["retryable"])
+
+    def test_mt3_timeout_expired_terminalizes_attempt(self) -> None:
+        """subprocess.run(timeout=1800) raises subprocess.TimeoutExpired, which
+        the executor's catch-all must terminalize to a 'failed' attempt rather
+        than leaving it 'running'. This is the linchpin of the no-deadlock claim
+        for the interpretation-ordering gate: a hung MT3 must not block a queued
+        interpretation forever — a 'failed' (terminal) mt3 unblocks it."""
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_mt3_timeout_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            run_id, attempt_id = self._create_queued_mt3_run(runtime)
+
+            with patch.object(
+                server.subprocess, "run", side_effect=_make_timeout_expired()
+            ):
+                server._execute_mt3_attempt(
+                    runtime,
+                    {
+                        "attemptId": attempt_id,
+                        "runId": run_id,
+                        "checkpointId": "magenta-mt3-base",
+                    },
+                )
+
+            snapshot = runtime.get_run(run_id)
+            mt3_stage = snapshot["stages"]["mt3"]
+            self.assertEqual(mt3_stage["status"], "failed")
+            error = mt3_stage["error"]
+            self.assertIsNotNone(error)
+            self.assertEqual(error["code"], "MT3_TRANSCRIPTION_FAILED")
+
+    def test_source_artifact_failure_terminalizes_attempt(self) -> None:
+        """If get_source_artifact raises (e.g. a missing artifact row), the
+        executor must terminalize the attempt to 'failed' rather than leave it
+        stuck 'running'. get_source_artifact runs inside the try precisely so
+        this can't escape: with the interpretation-ordering gate, a stuck-'running'
+        mt3 would block this run's interpretation indefinitely. The except
+        diagnostics are null-safe (source_artifact is None on this path)."""
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_mt3_src_fail_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            run_id, attempt_id = self._create_queued_mt3_run(runtime)
+
+            with patch.object(
+                runtime, "get_source_artifact", side_effect=KeyError("missing source artifact")
+            ):
+                server._execute_mt3_attempt(
+                    runtime,
+                    {
+                        "attemptId": attempt_id,
+                        "runId": run_id,
+                        "checkpointId": "magenta-mt3-base",
+                    },
+                )
+
+            snapshot = runtime.get_run(run_id)
+            mt3_stage = snapshot["stages"]["mt3"]
+            # The key assertion: terminal, NOT stuck 'running'.
+            self.assertEqual(mt3_stage["status"], "failed")
+            self.assertEqual(mt3_stage["error"]["code"], "MT3_TRANSCRIPTION_FAILED")
 
     def test_mt3_stage_public_status_present_when_not_requested(self) -> None:
         """Sanity check for the snapshot contract: stages.mt3.publicStatus

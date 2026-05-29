@@ -378,6 +378,17 @@ class AnalysisRuntimeTests(unittest.TestCase):
             1,
         )
 
+        # reserve_next_interpretation_attempt now blocks while a pitch_note (or
+        # mt3) attempt is in-flight, so settle the reserved pitch_note attempt
+        # before reserving interpretation. This test asserts interpretation
+        # PROGRESS visibility, not the cross-stage gate (covered by the
+        # InterpretationGatingTests class below).
+        runtime.complete_pitch_note_attempt(
+            pitch_note_attempt_id,
+            result={"transcriptionMethod": "stub", "noteCount": 0, "notes": []},
+            provenance={"backendId": "auto"},
+        )
+
         interpretation_attempt = runtime.reserve_next_interpretation_attempt()
         self.assertIsNotNone(interpretation_attempt)
         interpretation_attempt_id = str(interpretation_attempt["attemptId"])
@@ -680,6 +691,171 @@ class AnalysisRuntimeTests(unittest.TestCase):
         self.assertEqual(grounding_after["mt3Result"], mt3_result)
         self.assertEqual(grounding_after["mt3AttemptId"], mt3_attempt_id)
         self.assertEqual(grounding_after["mt3Status"], "completed")
+
+
+class InterpretationGatingTests(unittest.TestCase):
+    """The interpretation stage must wait for the additive grounding peers
+    (mt3 + pitch_note) to settle before it runs, so Gemini Phase 2 actually
+    sees mt3Result / pitchNoteResult instead of None. reserve_next_interpretation_attempt
+    blocks while either peer is in-flight ('queued'/'running'); terminal states
+    (completed/failed/interrupted) unblock it.
+    """
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory(prefix="asa_interp_gate_test_")
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def _runtime(self):
+        from analysis_runtime import AnalysisRuntime
+
+        return AnalysisRuntime(Path(self.temp_dir.name) / "runtime", max_pending_per_stage=4)
+
+    def _run_ready_for_interpretation(self, runtime, *, mt3_mode="off", pitch_note_mode="off"):
+        """Create a run that requests interpretation (+ optionally mt3/pitch_note)
+        and complete its measurement, which enqueues the requested followups as
+        'queued' via _enqueue_requested_followups (the real production path)."""
+        created = runtime.create_run(
+            filename="track.mp3",
+            content=b"fake-audio",
+            mime_type="audio/mpeg",
+            pitch_note_mode=pitch_note_mode,
+            pitch_note_backend="auto",
+            interpretation_mode="async",
+            interpretation_profile="producer_summary",
+            interpretation_model="gemini-2.5-flash",
+            mt3_mode=mt3_mode,
+        )
+        run_id = created["runId"]
+        runtime.complete_measurement(
+            run_id,
+            payload={"bpm": 128, "durationSeconds": 60.0},
+            provenance={"schemaVersion": "measurement.v1"},
+            diagnostics={"backendDurationMs": 1000},
+        )
+        return run_id
+
+    @staticmethod
+    def _mt3_result():
+        return {"version": "magenta-mt3-base", "stemsUsed": [], "tracks": []}
+
+    @staticmethod
+    def _pitch_note_result():
+        return {"transcriptionMethod": "stub", "noteCount": 0, "notes": []}
+
+    @staticmethod
+    def _stage_error(code):
+        return {"code": code, "message": "simulated", "retryable": False, "phase": "test"}
+
+    def test_interpretation_blocked_while_mt3_in_flight(self) -> None:
+        # pitch_note off → isolate the mt3 guard.
+        runtime = self._runtime()
+        run_id = self._run_ready_for_interpretation(runtime, mt3_mode="enabled", pitch_note_mode="off")
+        # mt3 attempt is 'queued' → interpretation must not reserve.
+        self.assertIsNone(runtime.reserve_next_interpretation_attempt())
+        mt3 = runtime.reserve_next_mt3_attempt()
+        self.assertIsNotNone(mt3)  # mt3 now 'running'
+        self.assertIsNone(runtime.reserve_next_interpretation_attempt())
+
+    def test_interpretation_blocked_while_pitch_note_in_flight(self) -> None:
+        # mt3 off → isolate the pitch_note guard.
+        runtime = self._runtime()
+        run_id = self._run_ready_for_interpretation(runtime, mt3_mode="off", pitch_note_mode="stem_notes")
+        self.assertIsNone(runtime.reserve_next_interpretation_attempt())
+        pn = runtime.reserve_next_pitch_note_attempt()
+        self.assertIsNotNone(pn)  # pitch_note now 'running'
+        self.assertIsNone(runtime.reserve_next_interpretation_attempt())
+
+    def test_interpretation_waits_for_both_then_unblocks(self) -> None:
+        runtime = self._runtime()
+        run_id = self._run_ready_for_interpretation(runtime, mt3_mode="enabled", pitch_note_mode="stem_notes")
+        self.assertIsNone(runtime.reserve_next_interpretation_attempt())  # both queued
+        pn = runtime.reserve_next_pitch_note_attempt()
+        runtime.complete_pitch_note_attempt(
+            str(pn["attemptId"]), result=self._pitch_note_result(), provenance={"backendId": "auto"}
+        )
+        # pitch_note done but mt3 still queued → still blocked.
+        self.assertIsNone(runtime.reserve_next_interpretation_attempt())
+        mt3 = runtime.reserve_next_mt3_attempt()
+        runtime.complete_mt3_attempt(
+            str(mt3["attemptId"]), result=self._mt3_result(), provenance={}
+        )
+        # both terminal → unblocks.
+        self.assertIsNotNone(runtime.reserve_next_interpretation_attempt())
+
+    def test_interpretation_reserved_after_grounding_failed(self) -> None:
+        runtime = self._runtime()
+        run_id = self._run_ready_for_interpretation(runtime, mt3_mode="enabled", pitch_note_mode="stem_notes")
+        pn = runtime.reserve_next_pitch_note_attempt()
+        runtime.fail_pitch_note_attempt(str(pn["attemptId"]), error=self._stage_error("PITCH_NOTE_TRANSLATION_FAILED"))
+        mt3 = runtime.reserve_next_mt3_attempt()
+        runtime.fail_mt3_attempt(str(mt3["attemptId"]), error=self._stage_error("MT3_TRANSCRIPTION_FAILED"))
+        # failed is terminal → interpretation unblocks (runs with grounding=None).
+        self.assertIsNotNone(runtime.reserve_next_interpretation_attempt())
+
+    def test_interpretation_reserved_immediately_without_grounding_stages(self) -> None:
+        # Regression guard: a run requesting neither grounding stage must not block.
+        runtime = self._runtime()
+        run_id = self._run_ready_for_interpretation(runtime, mt3_mode="off", pitch_note_mode="off")
+        self.assertIsNotNone(runtime.reserve_next_interpretation_attempt())
+
+    def test_interpretation_unblocks_after_recovery_clears_stale_running_grounding(self) -> None:
+        # A crash mid-grounding leaves rows 'running'; restart recovery interrupts
+        # them so interpretation can never deadlock forever.
+        runtime = self._runtime()
+        run_id = self._run_ready_for_interpretation(runtime, mt3_mode="enabled", pitch_note_mode="stem_notes")
+        runtime.reserve_next_pitch_note_attempt()  # → running
+        runtime.reserve_next_mt3_attempt()  # → running
+        self.assertIsNone(runtime.reserve_next_interpretation_attempt())
+        runtime.recover_incomplete_attempts()  # running → interrupted
+        self.assertIsNotNone(runtime.reserve_next_interpretation_attempt())
+
+    def test_enqueue_creates_interpretation_attempt_last(self) -> None:
+        # Regression guard for the enqueue-ordering fix: interpretation must be
+        # created AFTER mt3 and pitch_note so it can never be reserved in the
+        # window before a grounding row commits. Record the create order through
+        # the real _enqueue_requested_followups path (driven by complete_measurement).
+        runtime = self._runtime()
+        created = runtime.create_run(
+            filename="track.mp3",
+            content=b"fake-audio",
+            mime_type="audio/mpeg",
+            pitch_note_mode="stem_notes",
+            pitch_note_backend="auto",
+            interpretation_mode="async",
+            interpretation_profile="producer_summary",
+            interpretation_model="gemini-2.5-flash",
+            mt3_mode="enabled",
+        )
+        run_id = created["runId"]
+
+        call_order: list[str] = []
+        originals = {
+            "pitch_note": runtime.create_pitch_note_attempt,
+            "mt3": runtime.create_mt3_attempt,
+            "interpretation": runtime.create_interpretation_attempt,
+        }
+
+        def _recorder(name):
+            def _wrapped(*args, **kwargs):
+                call_order.append(name)
+                return originals[name](*args, **kwargs)
+
+            return _wrapped
+
+        runtime.create_pitch_note_attempt = _recorder("pitch_note")
+        runtime.create_mt3_attempt = _recorder("mt3")
+        runtime.create_interpretation_attempt = _recorder("interpretation")
+
+        runtime.complete_measurement(
+            run_id,
+            payload={"bpm": 128, "durationSeconds": 60.0},
+            provenance={"schemaVersion": "measurement.v1"},
+            diagnostics={"backendDurationMs": 1000},
+        )
+
+        self.assertEqual(call_order, ["pitch_note", "mt3", "interpretation"])
 
 
 class SpectralArtifactSnapshotTests(unittest.TestCase):
