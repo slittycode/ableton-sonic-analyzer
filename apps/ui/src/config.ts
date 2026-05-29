@@ -3,6 +3,13 @@ import uiPackage from '../package.json';
 export interface AppConfig {
   apiBaseUrl: string;
   enablePhase2Gemini: boolean;
+  /**
+   * Operator opt-in for the MT3 polyphonic-transcription UI control. Defaults
+   * OFF — MT3 needs a separate venv + ~4GB weights, so the toggle is hidden
+   * unless an operator sets VITE_ENABLE_MT3. Gates the control only; the
+   * results panel renders any MT3 result that exists regardless of this flag.
+   */
+  enableMt3: boolean;
   runtimeProfile: RuntimeProfile;
   requestHeaders: Record<string, string>;
 }
@@ -12,6 +19,7 @@ type AppConfigEnv = Partial<
     ImportMetaEnv,
     | 'VITE_API_BASE_URL'
     | 'VITE_ENABLE_PHASE2_GEMINI'
+    | 'VITE_ENABLE_MT3'
     | 'VITE_RUNTIME_PROFILE'
     | 'VITE_API_REQUEST_HEADERS_JSON'
   >
@@ -50,6 +58,7 @@ function readRuntimeEnvOverrides(runtimeWindow?: Window): AppConfigEnv {
   return {
     VITE_API_BASE_URL: runtimeWindow.__VITE_API_BASE_URL_OVERRIDE__,
     VITE_ENABLE_PHASE2_GEMINI: runtimeWindow.__VITE_ENABLE_PHASE2_GEMINI_OVERRIDE__,
+    VITE_ENABLE_MT3: runtimeWindow.__VITE_ENABLE_MT3_OVERRIDE__,
     ...(runtimeWindow.__ASA_REQUEST_HEADERS_OVERRIDE__ !== undefined
       ? {
           VITE_API_REQUEST_HEADERS_JSON:
@@ -97,6 +106,10 @@ export function resolveAppConfig(
       overrides.VITE_ENABLE_PHASE2_GEMINI ?? env.VITE_ENABLE_PHASE2_GEMINI,
       true,
     ),
+    enableMt3: parseBooleanFlag(
+      overrides.VITE_ENABLE_MT3 ?? env.VITE_ENABLE_MT3,
+      false,
+    ),
     requestHeaders: parseRequestHeaders(
       overrides.VITE_API_REQUEST_HEADERS_JSON ?? env.VITE_API_REQUEST_HEADERS_JSON,
     ),
@@ -115,6 +128,10 @@ export const appConfig: AppConfig = resolveAppConfig(
 
 export function isGeminiPhase2ConfigEnabled(config: AppConfig = appConfig): boolean {
   return config.enablePhase2Gemini;
+}
+
+export function isMt3ConfigEnabled(config: AppConfig = appConfig): boolean {
+  return config.enableMt3;
 }
 
 export function buildConfiguredRequestInit(

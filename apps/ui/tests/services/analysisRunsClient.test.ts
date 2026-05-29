@@ -271,6 +271,82 @@ describe('analysisRunsClient', () => {
     expect(body.get('interpretation_model')).toBe('gemini-2.5-flash');
   });
 
+  it('appends mt3_mode=enabled to the create-run request when opted in', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: () => Promise.resolve(baseRunSnapshot),
+    } as Response);
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const file = new File(['audio-data'], 'track.mp3', { type: 'audio/mpeg' });
+    await createAnalysisRun(file, {
+      apiBaseUrl: 'http://127.0.0.1:8100',
+      pitchNoteMode: 'stem_notes',
+      pitchNoteBackend: 'auto',
+      interpretationMode: 'off',
+      interpretationProfile: 'producer_summary',
+      mt3Mode: 'enabled',
+    });
+
+    const body = fetchSpy.mock.calls[0][1].body as FormData;
+    expect(body.get('mt3_mode')).toBe('enabled');
+  });
+
+  it('appends mt3_mode=enabled to the estimate request when opted in', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: () => Promise.resolve({
+        requestId: 'req_estimate_mt3',
+        estimate: {
+          durationSeconds: 210.6,
+          totalLowMs: 22000,
+          totalHighMs: 38000,
+          stages: [{ key: 'local_dsp', label: 'Local DSP analysis', lowMs: 22000, highMs: 38000 }],
+        },
+      }),
+    } as Response);
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const file = new File(['audio-data'], 'track.mp3', { type: 'audio/mpeg' });
+    await estimateAnalysisRun(file, {
+      apiBaseUrl: 'http://127.0.0.1:8100',
+      pitchNoteMode: 'off',
+      pitchNoteBackend: 'auto',
+      interpretationMode: 'off',
+      interpretationProfile: 'producer_summary',
+      mt3Mode: 'enabled',
+    });
+
+    const body = fetchSpy.mock.calls[0][1].body as FormData;
+    expect(body.get('mt3_mode')).toBe('enabled');
+  });
+
+  it('defaults mt3_mode to off when not opted in', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: () => Promise.resolve(baseRunSnapshot),
+    } as Response);
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const file = new File(['audio-data'], 'track.mp3', { type: 'audio/mpeg' });
+    await createAnalysisRun(file, {
+      apiBaseUrl: 'http://127.0.0.1:8100',
+      pitchNoteMode: 'off',
+      pitchNoteBackend: 'auto',
+      interpretationMode: 'off',
+      interpretationProfile: 'producer_summary',
+    });
+
+    const body = fetchSpy.mock.calls[0][1].body as FormData;
+    expect(body.get('mt3_mode')).toBe('off');
+  });
+
   it('fetches an analysis run snapshot', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
