@@ -15,6 +15,7 @@ import { useGlobalDrag } from './hooks/useGlobalDrag';
 import {
   appConfig,
   isGeminiPhase2ConfigEnabled,
+  isMt3ConfigEnabled,
 } from './config';
 import { getAudioMimeTypeOrDefault, isSupportedAudioFile } from './services/audioFile';
 import { analyzeAudio, monitorAnalysisRun } from './services/analyzer';
@@ -265,12 +266,14 @@ export default function App() {
   const [elapsedMs, setElapsedMs] = useState(0);
   const [analysisMode, setAnalysisMode] = useState<'full' | 'standard'>('full');
   const [pitchNoteTranslationRequested, setPitchNoteTranslationRequested] = useState(true);
+  const [mt3Requested, setMt3Requested] = useState(false);
 
   const analysisStartedAtRef = useRef<number | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const currentRunIdRef = useRef<string | null>(null);
   const ignoredRunIdsRef = useRef<Set<string>>(new Set());
   const phase2ConfigEnabled = isGeminiPhase2ConfigEnabled();
+  const mt3ConfigEnabled = isMt3ConfigEnabled();
   const interpretationWillRun = interpretationRequested && phase2ConfigEnabled;
   const phase2StatusBadge = getInterpretationStatusBadge(phase2ConfigEnabled, interpretationRequested);
   const phase2HelperCopy = getInterpretationHelperCopy(phase2ConfigEnabled, interpretationRequested);
@@ -333,6 +336,7 @@ export default function App() {
       interpretationMode: interpretationWillRun ? 'async' : 'off',
       interpretationProfile: 'producer_summary',
       interpretationModel: interpretationWillRun ? selectedModel : undefined,
+      mt3Mode: mt3Requested && mt3ConfigEnabled ? 'enabled' : 'off',
     })
       .then((result) => {
         if (isCancelled) return;
@@ -353,7 +357,7 @@ export default function App() {
     return () => {
       isCancelled = true;
     };
-  }, [analysisMode, audioFile, interpretationWillRun, pitchNoteTranslationRequested, selectedModel]);
+  }, [analysisMode, audioFile, interpretationWillRun, mt3Requested, mt3ConfigEnabled, pitchNoteTranslationRequested, selectedModel]);
 
   useEffect(() => {
     if (!isAnalyzing || analysisStartedAtRef.current === null) {
@@ -664,6 +668,7 @@ export default function App() {
         {
           analysisMode,
           pitchNoteRequested: activePitchNoteRequested,
+          mt3Requested,
           timeoutMs: activeTimeoutMs,
           signal: ac.signal,
           interpretationRequested,
@@ -1182,6 +1187,36 @@ export default function App() {
                         </div>
                       </div>
                     </label>
+                    {mt3ConfigEnabled && (
+                      <label
+                        className={`mt-3 rounded-sm border px-3 py-3 transition-colors cursor-pointer ${
+                          mt3Requested
+                            ? 'border-accent bg-accent/10 text-accent'
+                            : 'border-border bg-bg-panel text-text-secondary'
+                        } ${isAnalyzing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      >
+                        <div className="flex items-start gap-3">
+                          {/* Native input (not the Radix Checkbox) so the
+                              Playwright smoke test drives it via
+                              getByLabel().check() — same rationale as the
+                              PITCH/NOTE toggle above. */}
+                          <input
+                            type="checkbox"
+                            checked={mt3Requested}
+                            onChange={(e) => setMt3Requested(e.target.checked)}
+                            disabled={isAnalyzing}
+                            aria-label="MT3 POLYPHONIC TRANSCRIPTION"
+                            className="mt-0.5 h-4 w-4 accent-accent"
+                          />
+                          <div className="space-y-1">
+                            <p className="text-[10px] font-mono uppercase tracking-wider">MT3 POLYPHONIC TRANSCRIPTION</p>
+                            <p className="text-xs leading-snug opacity-80">
+                              Experimental and heavy (separate model + weights). Extracts per-instrument MIDI via MT3 — additive only, never overrides Phase 1 measurements. Best with PITCH/NOTE TRANSLATION on; without Demucs stems it falls back to a lower-quality full-mix pass.
+                            </p>
+                          </div>
+                        </div>
+                      </label>
+                    )}
                     <label
                       className={`mt-3 rounded-sm border px-3 py-3 transition-colors cursor-pointer ${
                         interpretationRequested && phase2ConfigEnabled

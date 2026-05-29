@@ -1,4 +1,4 @@
-import { appConfig, isGeminiPhase2ConfigEnabled } from '../config';
+import { appConfig, isGeminiPhase2ConfigEnabled, isMt3ConfigEnabled } from '../config';
 import { AnalysisRunSnapshot, DiagnosticLogEntry, Phase1Result, Phase2Result } from '../types';
 import { getAudioMimeTypeOrDefault } from './audioFile';
 import {
@@ -25,6 +25,7 @@ export interface AnalyzeAudioUpdate {
 export interface AnalyzeAudioOptions {
   analysisMode?: 'full' | 'standard';
   pitchNoteRequested?: boolean;
+  mt3Requested?: boolean;
   interpretationRequested?: boolean;
   interpretationConfigEnabled?: boolean;
   timeoutMs?: number;
@@ -147,8 +148,16 @@ function isRunTerminal(snapshot: AnalysisRunSnapshot): boolean {
   const interpretationDone = ['completed', 'failed', 'interrupted', 'not_requested'].includes(
     snapshot.stages.interpretation.status,
   );
+  // MT3 is an optional peer stage that can finish after interpretation (esp.
+  // when interpretation is off), so the loop must wait for it too or its
+  // result never surfaces. Optional chaining: some unit-test snapshots omit
+  // the mt3 stage entirely (the real transport always synthesizes a default),
+  // and absent == not requested == terminal.
+  const mt3Done = ['completed', 'failed', 'interrupted', 'not_requested'].includes(
+    snapshot.stages.mt3?.status ?? 'not_requested',
+  );
 
-  return pitchNoteDone && interpretationDone;
+  return pitchNoteDone && interpretationDone && mt3Done;
 }
 
 function hasInterpretationProfileAttempt(snapshot: AnalysisRunSnapshot, profileId: string): boolean {
@@ -197,6 +206,8 @@ export async function analyzeAudio(
       interpretationMode: resolveInterpretationMode(analysisOptions),
       interpretationProfile: 'producer_summary',
       interpretationModel: resolveInterpretationMode(analysisOptions) === 'off' ? null : modelName,
+      mt3Mode:
+        resolveMt3Requested(analysisOptions) && isMt3ConfigEnabled(appConfig) ? 'enabled' : 'off',
     });
 
     analysisOptions?.onRunUpdate?.({
@@ -350,6 +361,10 @@ export async function monitorAnalysisRun(
 
 function resolvePitchNoteRequested(options?: AnalyzeAudioOptions): boolean {
   return options?.pitchNoteRequested ?? options?.transcribe ?? false;
+}
+
+function resolveMt3Requested(options?: AnalyzeAudioOptions): boolean {
+  return options?.mt3Requested ?? false;
 }
 
 function resolveInterpretationRequested(options?: AnalyzeAudioOptions): boolean {
