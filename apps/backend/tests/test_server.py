@@ -1275,6 +1275,48 @@ class ServerContractTests(unittest.TestCase):
         self.assertEqual(payload["error"]["code"], "PITCH_NOTE_BACKEND_UNSUPPORTED")
         self.assertIn("mystery-backend", payload["error"]["message"])
 
+    def test_analysis_runs_estimate_rejects_unknown_mt3_mode(self) -> None:
+        """An invalid mt3_mode at the estimate route returns a typed 400 rather
+        than silently pricing the run with MT3 off."""
+        response = asyncio.run(
+            server.estimate_analysis_run(
+                track=self._upload_file(),
+                pitch_note_mode="off",
+                pitch_note_backend="auto",
+                interpretation_mode="off",
+                interpretation_profile="producer_summary",
+                interpretation_model=None,
+                mt3_mode="enable",
+            )
+        )
+
+        self.assertEqual(response.status_code, 400)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["error"]["code"], "MT3_MODE_UNSUPPORTED")
+        self.assertIn("enable", payload["error"]["message"])
+
+    def test_analysis_runs_endpoint_rejects_unknown_mt3_mode(self) -> None:
+        """An invalid mt3_mode at the create-run route returns a typed 400. This
+        path was previously dead: _coerce_mt3_mode silently coerced any unknown
+        value to 'off', so MT3_MODE_UNSUPPORTED could only fire via a direct
+        create_run() call, never over HTTP."""
+        response = asyncio.run(
+            server.create_analysis_run(
+                track=self._upload_file(),
+                pitch_note_mode="off",
+                pitch_note_backend="auto",
+                interpretation_mode="off",
+                interpretation_profile="producer_summary",
+                interpretation_model=None,
+                mt3_mode="enable",
+            )
+        )
+
+        self.assertEqual(response.status_code, 400)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["error"]["code"], "MT3_MODE_UNSUPPORTED")
+        self.assertIn("enable", payload["error"]["message"])
+
     def test_analysis_runs_estimate_rejects_unknown_interpretation_profile(self) -> None:
         response = asyncio.run(
             server.estimate_analysis_run(

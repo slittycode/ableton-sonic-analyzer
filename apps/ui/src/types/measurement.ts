@@ -67,10 +67,10 @@ export interface TranscriptionDetail {
  * the apps/backend/mt3_transcription.py module docstring).
  *
  * Purely additive to Phase 1 — does NOT override Essentia chord/key/beat/
- * melody outputs (PURPOSE.md invariant #1). The frontend does not currently
- * render this field; it lives in the type tree only to keep the
- * backend↔frontend contract honest (CLAUDE.md tripwire #3 — no conversion
- * layer between camelCase JSON and TS).
+ * melody outputs (PURPOSE.md invariant #1). Rendered by `Mt3TranscriptionPanel`
+ * (mounted from `AnalysisResults`) when the MT3 stage completed with at least
+ * one track; the camelCase field names mirror the backend JSON verbatim
+ * (CLAUDE.md tripwire #3 — no conversion layer between camelCase JSON and TS).
  */
 /**
  * One per-instrument track in the MT3 stage result.

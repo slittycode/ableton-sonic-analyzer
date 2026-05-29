@@ -543,23 +543,28 @@ def _run_streamed_subprocess(
 
 
 def _coerce_mt3_mode(value: Any) -> str:
-    """Coerce a route-form mt3_mode to a runtime-safe value.
+    """Validate/normalize a route-form mt3_mode.
 
-    The HTTP route declares ``mt3_mode: str = Form("off")``. When the
-    route is invoked directly (not via HTTP dispatch — e.g. the unit
-    tests that call ``server.create_analysis_run(...)`` to bypass
-    multipart parsing), FastAPI leaves the default as its internal
-    ``Form(...)`` sentinel object rather than the string ``"off"``.
+    The HTTP route declares ``mt3_mode: str = Form("off")``. When the route
+    function is invoked directly (not via HTTP dispatch — e.g. the unit tests
+    that call ``server.create_analysis_run(...)`` to bypass multipart parsing),
+    FastAPI leaves the default as its internal ``Form(...)`` sentinel object
+    rather than the string ``"off"``. That sentinel — and the empty string,
+    which is how an absent multipart field can arrive — normalize to the
+    conservative ``"off"`` default (the "absent unless requested" contract).
 
-    This helper normalizes that case so the runtime's strict
-    ``mt3_mode in {"off", "enabled"}`` validator only sees real strings.
-    Anything that isn't a recognised string falls back to ``"off"`` —
-    the conservative default that matches the "absent unless requested"
-    contract.
+    A real, non-empty string is validated strictly: ``"off"`` / ``"enabled"``
+    pass through; anything else raises :class:`UnsupportedMt3ModeError` so a
+    client typo like ``"enable"`` surfaces as ``400 MT3_MODE_UNSUPPORTED``
+    rather than silently disabling MT3. This mirrors how ``pitch_note_mode`` is
+    rejected and keeps the typed error / catch / code machinery (and the
+    contract documented in ``analysisRunsClient.ts``) live rather than dead.
     """
-    if isinstance(value, str) and value in {"off", "enabled"}:
+    if not isinstance(value, str) or value == "":
+        return "off"
+    if value in {"off", "enabled"}:
         return value
-    return "off"
+    raise UnsupportedMt3ModeError(value)
 
 
 async def _create_analysis_run_record(
@@ -2434,6 +2439,19 @@ async def estimate_analysis_run(
             content={
                 "error": {
                     "code": "PITCH_NOTE_BACKEND_UNSUPPORTED",
+                    "message": str(exc),
+                }
+            },
+        )
+    except UnsupportedMt3ModeError as exc:
+        # Mirror the create-run route: an unrecognised mt3_mode (now raised by
+        # _coerce_mt3_mode) must surface as a typed MT3_MODE_UNSUPPORTED code,
+        # not the generic _value_error_code fall-through below.
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "code": "MT3_MODE_UNSUPPORTED",
                     "message": str(exc),
                 }
             },

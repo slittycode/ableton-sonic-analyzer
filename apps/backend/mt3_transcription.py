@@ -11,10 +11,14 @@ top-level ``transcription`` key in the analyze.py JSON envelope; that key is
 
 One-time setup (host machine, not CI):
 
-    # Install the MT3 / t5x / JAX extra into the product venv. ASA uses
-    # requirements-*.txt files in place of pyproject.toml extras (mirroring
-    # the existing requirements-eval.txt convention). See CLAUDE.md.
-    ./apps/backend/venv/bin/pip install -r apps/backend/requirements-mt3.txt
+    # Install the MT3 / t5x / JAX extra into a SEPARATE venv — never the
+    # product venv (its older numpy/protobuf transitive deps would break
+    # Essentia/torch on the request path). ASA uses requirements-*.txt files
+    # in place of pyproject.toml extras (mirroring requirements-eval.txt). See
+    # CLAUDE.md and the install note atop requirements-mt3.txt.
+    python3.11 -m venv apps/backend/venv-mt3
+    apps/backend/venv-mt3/bin/pip install -r apps/backend/requirements.txt \
+                                          -r apps/backend/requirements-mt3.txt
 
     # Download the MT3 checkpoint to the model cache (gitignored).
     mkdir -p apps/backend/models/mt3
@@ -233,10 +237,10 @@ def transcribe(audio_path: Path, *, stems_dir: Path | None) -> Mt3Result:
         from mt3 import inference_model  # type: ignore
     except ImportError as exc:
         raise Mt3NotAvailableError(
-            "MT3 backend not installed. Install via: "
-            "./apps/backend/venv/bin/pip install -r apps/backend/requirements-mt3.txt "
-            "(see apps/backend/mt3_transcription.py module docstring for the "
-            "weight-download command)."
+            "MT3 backend not installed. Install the extra into a SEPARATE venv "
+            "(never the product venv) per apps/backend/requirements-mt3.txt; see "
+            "the apps/backend/mt3_transcription.py module docstring for the full "
+            "setup including the weight-download command."
         ) from exc
 
     checkpoint_dir = _resolve_checkpoint_dir()

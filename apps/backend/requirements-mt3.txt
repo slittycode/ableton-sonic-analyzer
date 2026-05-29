@@ -9,18 +9,17 @@
 # extras (mirroring requirements-eval.txt for the beat-evaluation gate).
 # This file is the project-idiom equivalent of a "[mt3] extra".
 #
-# Install into a SEPARATE venv to avoid JAX/PyTorch ABI conflicts with the
-# product venv (torch 2.10 + JAX both want different CUDA stacks on some
-# hosts):
+# Install into a SEPARATE venv — never the product venv. JAX/t5x and note_seq
+# pull older numpy / protobuf transitively, while the product venv pins
+# numpy==2.4.3 and protobuf==7.34.0 (see requirements.txt); JAX and PyTorch
+# also want different CUDA stacks on some hosts. Installing this into the
+# product venv risks breaking Essentia/torch on the request path. The
+# lazy-import in mt3_transcription.transcribe() exists precisely so the
+# product install never needs any of these:
 #
 #   python3.11 -m venv apps/backend/venv-mt3
 #   apps/backend/venv-mt3/bin/pip install -r apps/backend/requirements.txt \
 #                                         -r apps/backend/requirements-mt3.txt
-#
-# OR install into the product venv on hosts where ABI conflicts are
-# acceptable (CPU-only inference works fine on macOS arm64):
-#
-#   ./apps/backend/venv/bin/pip install -r apps/backend/requirements-mt3.txt
 #
 # Then download the checkpoint:
 #
