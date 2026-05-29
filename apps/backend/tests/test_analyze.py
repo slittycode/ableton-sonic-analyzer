@@ -23,6 +23,19 @@ EXPECTED_SPECTRAL_BANDS = {
 }
 
 # Top-level keys emitted by both full and fast modes — the shared output contract.
+#
+# Deliberately NOT in this set: ``transcription``. That namespace is emitted
+# by the *direct CLI* path of MT3 polyphonic transcription
+# (``mt3_transcription.py``) when ``ASA_ENABLE_MT3=1`` is set in the
+# environment. The production path goes through the staged runtime
+# (``analysis_runtime.py``'s ``mt3`` stage; route
+# ``POST /api/analysis-runs/{id}/mt3-transcriptions``) and lives on
+# ``snapshot.stages.mt3``, not the analyze.py JSON envelope.
+#
+# Fast mode's test enforces exact equality against this set (see
+# ``test_output_schema_matches_full_mode``), so adding ``transcription``
+# here would force the field to always appear in CLI output and break the
+# "absent when off" contract. See JSON_SCHEMA.md "Optional MT3 Namespace".
 EXPECTED_TOP_LEVEL_KEYS = {
     "bpm", "bpmConfidence", "bpmPercival", "bpmAgreement",
     "bpmDoubletime", "bpmSource", "bpmRawOriginal",
@@ -2711,6 +2724,88 @@ class ChordTimelineViterbiTests(unittest.TestCase):
         # Row 24 = N — uniform across all 12 pitch classes.
         n_row = templates[24]
         np.testing.assert_allclose(n_row, np.full(12, 1.0 / 12.0), atol=1e-9)
+
+
+class BuildAnalysisEstimateMt3Tests(unittest.TestCase):
+    """Unit tests for the MT3 cost branch in build_analysis_estimate.
+
+    The estimate endpoint surfaces these stage entries to the frontend so
+    users see a realistic time-range before opting into the MT3 stage.
+    """
+
+    def _build(self, duration_seconds: float, *, run_mt3: bool) -> dict:
+        from analyze_estimate import build_analysis_estimate
+        return build_analysis_estimate(
+            duration_seconds,
+            run_separation=False,
+            run_transcribe=False,
+            run_mt3=run_mt3,
+        )
+
+    def test_mt3_off_does_not_emit_mt3_stage(self) -> None:
+        estimate = self._build(240.0, run_mt3=False)
+        keys = [stage["key"] for stage in estimate["stages"]]
+        self.assertNotIn(
+            "mt3_transcription",
+            keys,
+            "mt3_transcription must be absent when run_mt3=False",
+        )
+
+    def test_mt3_on_emits_mt3_stage_with_documented_shape(self) -> None:
+        estimate = self._build(240.0, run_mt3=True)
+        mt3_stages = [
+            stage for stage in estimate["stages"] if stage["key"] == "mt3_transcription"
+        ]
+        self.assertEqual(len(mt3_stages), 1)
+        mt3_stage = mt3_stages[0]
+        self.assertEqual(mt3_stage["label"], "MT3 polyphonic transcription")
+        self.assertIn("seconds", mt3_stage)
+        self.assertIn("min", mt3_stage["seconds"])
+        self.assertIn("max", mt3_stage["seconds"])
+        # Both bounds are non-negative integers and max >= min.
+        self.assertIsInstance(mt3_stage["seconds"]["min"], int)
+        self.assertIsInstance(mt3_stage["seconds"]["max"], int)
+        self.assertGreaterEqual(mt3_stage["seconds"]["min"], 0)
+        self.assertGreaterEqual(mt3_stage["seconds"]["max"], mt3_stage["seconds"]["min"])
+
+    def test_mt3_overhead_floor_dominates_short_clips(self) -> None:
+        """A 10s clip should hit the overhead floor (60s min, 180s max),
+        not the per-second ratio. Documents the cost model's high-fixed-cost
+        property — JAX/t5x warmup is the bottleneck for tiny clips."""
+        estimate = self._build(10.0, run_mt3=True)
+        mt3_stages = [
+            stage for stage in estimate["stages"] if stage["key"] == "mt3_transcription"
+        ]
+        self.assertEqual(len(mt3_stages), 1)
+        seconds = mt3_stages[0]["seconds"]
+        # 10s * 0.2 = 2 → overridden by 60s floor.
+        self.assertGreaterEqual(seconds["min"], 60)
+        # 10s * 0.8 = 8 → overridden by 180s floor.
+        self.assertGreaterEqual(seconds["max"], 180)
+
+    def test_mt3_stage_scales_with_duration_on_long_clips(self) -> None:
+        """A 5-minute clip should exceed the overhead floors via the
+        per-second ratio — documents the per-second growth."""
+        # 300s * 0.2 = 60 (== floor); 300s * 0.8 = 240 (> 180 floor).
+        estimate = self._build(300.0, run_mt3=True)
+        mt3_stages = [
+            stage for stage in estimate["stages"] if stage["key"] == "mt3_transcription"
+        ]
+        seconds = mt3_stages[0]["seconds"]
+        self.assertGreater(seconds["max"], 180)
+
+    def test_mt3_stage_contributes_to_total_seconds(self) -> None:
+        """Whatever the MT3 stage costs, it must roll up into the total."""
+        without_mt3 = self._build(240.0, run_mt3=False)
+        with_mt3 = self._build(240.0, run_mt3=True)
+        self.assertGreater(
+            with_mt3["totalSeconds"]["min"],
+            without_mt3["totalSeconds"]["min"],
+        )
+        self.assertGreater(
+            with_mt3["totalSeconds"]["max"],
+            without_mt3["totalSeconds"]["max"],
+        )
 
 
 if __name__ == "__main__":

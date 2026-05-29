@@ -10,7 +10,8 @@
       "mcp__726edc52-7fd8-4da5-944f-84f446a0ee01__hub_repo_details",
       "WebSearch",
       "WebFetch(domain:firebase.google.com)",
-      "WebFetch(domain:ai.google.dev)"
+      "WebFetch(domain:ai.google.dev)",
+      "Bash(git checkout *)"
     ]
   }
 }

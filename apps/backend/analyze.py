@@ -1178,6 +1178,65 @@ def _run_pitch_note_translation(
             shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+def _run_mt3_transcription(
+    audio_path: str,
+    stem_dir: str | None = None,
+    stem_output_dir: str | None = None,
+) -> None:
+    """Run MT3 polyphonic transcription only and print JSON to stdout.
+
+    Companion to :func:`_run_pitch_note_translation`. Used by the analyse
+    server's MT3 stage executor (`_execute_mt3_attempt` in server.py) so
+    JAX/t5x memory is freed when the subprocess exits.
+
+    Stems handover:
+        - If ``stem_dir`` is provided and contains canonical Demucs
+          stems (bass.wav / other.wav / vocals.wav), MT3 consumes those
+          directly — no Demucs invocation needed. This is the path taken
+          when pitch_note ran first and persisted its stems.
+        - If ``stem_dir`` is missing AND ``stem_output_dir`` is provided,
+          run Demucs into ``stem_output_dir`` so the caller can persist
+          the resulting stems back as artifacts. This is the path taken
+          when MT3 runs first and pitch_note may follow.
+        - If both are missing, MT3 falls back to running on the full mix
+          (via ``_resolve_sources`` inside ``mt3_transcription.transcribe``).
+
+    Errors propagate as non-zero exit + stderr text; the executor matches on
+    "MT3 backend not installed" / "MT3 checkpoint missing" to distinguish
+    MT3_NOT_AVAILABLE (retryable=false) from MT3_TRANSCRIPTION_FAILED.
+    """
+    # Lazy imports — keep JAX / t5x out of analyze.py's import graph for
+    # every code path other than --mt3-only. The pathlib import is also
+    # deferred for symmetry; nothing else in analyze.py needs Path today.
+    from pathlib import Path
+    from mt3_transcription import transcribe as mt3_transcribe
+
+    stems_dir_path: Path | None = None
+    if stem_dir is not None and os.path.isdir(stem_dir):
+        stems_dir_path = Path(stem_dir)
+
+    # If no pre-separated stems were provided but the caller asked us to
+    # write them somewhere, run Demucs into that directory. The caller
+    # (server.py::_execute_mt3_attempt) reads the resulting files and
+    # records them as stem_<name> artifacts so the next stage (pitch_note
+    # if it runs later) can reuse them. Mirrors --pitch-note-only's
+    # handover convention so both stages can short-circuit Demucs.
+    if stems_dir_path is None and stem_output_dir is not None:
+        os.makedirs(stem_output_dir, exist_ok=True)
+        separated = separate_stems(audio_path, output_dir=stem_output_dir)
+        if isinstance(separated, dict) and separated:
+            # separate_stems returns {"bass": "/path/...wav", ...}. Recover
+            # the shared parent — all stem files live in one directory.
+            for stem_path in separated.values():
+                if isinstance(stem_path, str) and os.path.isfile(stem_path):
+                    stems_dir_path = Path(stem_path).parent
+                    break
+
+    result = mt3_transcribe(audio_path, stems_dir=stems_dir_path)
+    json.dump(result.to_payload(), sys.stdout, indent=2)
+    sys.stdout.write("\n")
+
+
 def _run_per_stem_analyses(
     stems: dict | None,
     sample_rate: int,
@@ -1294,7 +1353,7 @@ def _run_per_stem_analyses(
 def main():
     if len(sys.argv) < 2:
         print(
-            "Usage: ./venv/bin/python analyze.py <audio_file> [--separate] [--fast] [--standard] [--transcribe] [--yes] [--pitch-note-only] [--stem-dir DIR] [--stem-output-dir DIR] [--pitch-note-backend BACKEND]",
+            "Usage: ./venv/bin/python analyze.py <audio_file> [--separate] [--fast] [--standard] [--transcribe] [--yes] [--pitch-note-only] [--mt3-only] [--stem-dir DIR] [--stem-output-dir DIR] [--pitch-note-backend BACKEND]",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -1308,6 +1367,7 @@ def main():
     run_transcribe = "--transcribe" in optional_args
     auto_yes = "--yes" in optional_args
     pitch_note_only = "--pitch-note-only" in optional_args
+    mt3_only = "--mt3-only" in optional_args
 
     # --pitch-note-only: run pitch/note translation, print JSON, exit
     if pitch_note_only:
@@ -1333,6 +1393,31 @@ def main():
             backend_id=backend_id,
         )
         sys.exit(0)
+
+    # --mt3-only: run MT3 polyphonic transcription, print JSON, exit.
+    # Companion to --pitch-note-only — used by the staged-runtime MT3
+    # stage executor (server.py::_execute_mt3_attempt). Stems handover
+    # is bidirectional: --stem-dir consumes stems pitch_note already
+    # wrote; --stem-output-dir writes new stems for pitch_note to pick
+    # up later. Falls back to full-mix MT3 when neither is supplied.
+    if mt3_only:
+        stem_dir = None
+        stem_output_dir = None
+        if "--stem-dir" in optional_args:
+            idx = optional_args.index("--stem-dir")
+            if idx + 1 < len(optional_args):
+                stem_dir = optional_args[idx + 1]
+        if "--stem-output-dir" in optional_args:
+            idx = optional_args.index("--stem-output-dir")
+            if idx + 1 < len(optional_args):
+                stem_output_dir = optional_args[idx + 1]
+        _run_mt3_transcription(
+            audio_path,
+            stem_dir=stem_dir,
+            stem_output_dir=stem_output_dir,
+        )
+        sys.exit(0)
+
     stems = None
 
     analysis_estimate = get_audio_duration_seconds(audio_path)
@@ -1756,6 +1841,35 @@ def main():
         print(f"[warn] stem-first overlay failed: {exc}", file=sys.stderr)
         result["stemAnalysis"] = None
 
+    # Optional MT3 polyphonic transcription pass. Gated on the ASA_ENABLE_MT3
+    # env var (default off) so the base ASA install + the standard request
+    # path never touch MT3 / t5x / JAX. The result lives in its own top-level
+    # ``transcription`` namespace and is *purely additive* to Phase 1 — it
+    # does not override or refine any Essentia chord/key/beat/melody output
+    # (PURPOSE.md invariant #1, "Phase 1 measurements are ground truth").
+    # Failures are caught, logged as [warn], and never block the Phase 1 JSON.
+    if os.getenv("ASA_ENABLE_MT3", "").strip() == "1":
+        # Lazy import — keeps the mt3_transcription module (and its lazy
+        # JAX import inside transcribe()) out of the import graph entirely
+        # when the flag is off. analyze.py itself doesn't need pathlib;
+        # transcribe() coerces audio_path internally so we can pass the
+        # raw string straight through.
+        try:
+            from mt3_transcription import (
+                discover_stems_dir as _mt3_discover_stems_dir,
+                transcribe as mt3_transcribe,
+            )
+            mt3_stems_dir = _mt3_discover_stems_dir(stems)
+            print("@@MT3_TRANSCRIPTION_START", file=sys.stderr)
+            mt3_result = mt3_transcribe(audio_path, stems_dir=mt3_stems_dir)
+            result["transcription"] = {"mt3": mt3_result.to_payload()}
+            print("@@MT3_TRANSCRIPTION_COMPLETE", file=sys.stderr)
+        except Exception as exc:  # noqa: BLE001 - MT3 must never block Phase 1
+            print(f"[warn] MT3 transcription failed: {exc}", file=sys.stderr)
+            # Intentionally do NOT set result["transcription"] = None — the
+            # JSON contract is "absent when the flag is off OR when MT3 fails."
+            # Adding a null key would make the field always-present.
+
     # Build final output in the exact requested key order
     output = {
         "bpm": result.get("bpm"),
@@ -1824,6 +1938,14 @@ def main():
         "perceptual": result.get("perceptual"),
         "essentiaFeatures": result.get("essentiaFeatures"),
     }
+
+    # Conditional MT3 namespace — *absent* (not null) by default. Only added
+    # when ASA_ENABLE_MT3=1 AND the transcribe() call succeeded. See the gate
+    # above. Placed after the literal output dict so the key never appears
+    # with a null value, which would silently change the contract for every
+    # caller that introspects `set(payload.keys())`.
+    if "transcription" in result:
+        output["transcription"] = result["transcription"]
 
     _emit_progress_marker("complete", "Analysis complete.", 1.0)
     print("Done.", file=sys.stderr)

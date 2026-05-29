@@ -1,0 +1,60 @@
+# Optional MT3 polyphonic-transcription extra.
+#
+# These deps are NOT part of the product baseline and must NOT be added to
+# requirements.txt or installed into the product venv by default. The base
+# ASA install runs without them; mt3_transcription.transcribe() lazy-imports
+# everything below and raises Mt3NotAvailableError if any are missing.
+#
+# ASA's backend uses requirements-*.txt files in place of pyproject.toml
+# extras (mirroring requirements-eval.txt for the beat-evaluation gate).
+# This file is the project-idiom equivalent of a "[mt3] extra".
+#
+# Install into a SEPARATE venv to avoid JAX/PyTorch ABI conflicts with the
+# product venv (torch 2.10 + JAX both want different CUDA stacks on some
+# hosts):
+#
+#   python3.11 -m venv apps/backend/venv-mt3
+#   apps/backend/venv-mt3/bin/pip install -r apps/backend/requirements.txt \
+#                                         -r apps/backend/requirements-mt3.txt
+#
+# OR install into the product venv on hosts where ABI conflicts are
+# acceptable (CPU-only inference works fine on macOS arm64):
+#
+#   ./apps/backend/venv/bin/pip install -r apps/backend/requirements-mt3.txt
+#
+# Then download the checkpoint:
+#
+#   mkdir -p apps/backend/models/mt3
+#   gsutil -m cp -r gs://mt3/checkpoints/mt3 apps/backend/models/mt3/
+#
+# Finally enable the gate for an analyze.py invocation:
+#
+#   export ASA_ENABLE_MT3=1
+#
+# MT3 itself is unmaintained upstream; we pin to a known-good commit rather
+# than chasing main. note_seq and pretty_midi are stable. JAX + t5x are the
+# fragile pieces — if upstream MT3 stops working with newer JAX, downgrade
+# both together. See apps/backend/mt3_transcription.py for the JSON
+# contract these deps satisfy.
+
+# MT3 itself. Upstream is unmaintained; the install command below pulls
+# whatever main is at install time. Pinning to a specific commit is
+# RECOMMENDED before sharing this file across machines — replace the URL
+# with ``@<commit-hash>`` once you've verified a working revision against
+# the checkpoint at gs://mt3/checkpoints/mt3. No hash is pinned here
+# because we can't verify upstream revisions from inside this repo.
+mt3 @ git+https://github.com/magenta/mt3.git
+
+# Symbolic-music primitives MT3 emits. pretty_midi is used in the test
+# suite to verify the base64-decoded MIDI parses cleanly.
+note_seq>=0.0.5,<0.1.0
+pretty_midi>=0.2.10,<0.3.0
+
+# JAX/t5x stack. MT3's gin configs are sensitive to t5x major version —
+# stay on the 0.0.x series that the pinned MT3 commit was tested against.
+jax[cpu]>=0.4.20,<0.5.0
+jaxlib>=0.4.20,<0.5.0
+flax>=0.7.0,<0.10.0
+t5x>=0.0.0,<0.1.0
+seqio>=0.0.18,<0.1.0
+gin-config>=0.5.0,<0.6.0

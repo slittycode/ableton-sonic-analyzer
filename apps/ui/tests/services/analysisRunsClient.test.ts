@@ -400,6 +400,71 @@ describe('analysisRunsClient', () => {
     expect(phase2?.trackCharacter).toBe('Tight modern electronic mix.');
   });
 
+  it('omits the transcription namespace from Phase1Result when stages.mt3.result is null', () => {
+    // Load-bearing contract: when MT3 has not run (or was not opted into),
+    // the `transcription` key must be ABSENT from the projected Phase1Result
+    // — not `null`, not `undefined`, simply not present. Mirrors the
+    // "absent when off" guarantee documented in JSON_SCHEMA.md.
+    const phase1 = projectPhase1FromRun(baseRunSnapshot);
+
+    expect(phase1).not.toBeNull();
+    expect('transcription' in (phase1 ?? {})).toBe(false);
+  });
+
+  it('composes transcription.mt3 from stages.mt3.result when present', () => {
+    // The mirror assertion: when MT3 has run and produced a result, the
+    // projected Phase1Result carries it under transcription.mt3. The
+    // shape uses artifact refs (midiArtifactId), not inline base64.
+    const snapshotWithMt3: AnalysisRunSnapshot = {
+      ...baseRunSnapshot,
+      stages: {
+        ...baseRunSnapshot.stages,
+        mt3: {
+          status: 'completed',
+          publicStatus: 'completed',
+          authoritative: false,
+          preferredAttemptId: 'mt3_1',
+          attemptsSummary: [
+            {
+              attemptId: 'mt3_1',
+              checkpointId: 'magenta-mt3-base',
+              status: 'completed',
+            },
+          ],
+          result: {
+            version: 'mt3-py-0.1.0+magenta-mt3-base',
+            stemsUsed: ['bass'],
+            tracks: [
+              {
+                instrument: 'bass',
+                midiArtifactId: 'artifact_mt3_bass',
+                midiSizeBytes: 512,
+                noteCount: 12,
+                pitchRange: [36, 60],
+              },
+            ],
+          },
+          provenance: null,
+          diagnostics: null,
+          error: null,
+        },
+      },
+    };
+
+    const phase1 = projectPhase1FromRun(snapshotWithMt3);
+    expect(phase1).not.toBeNull();
+    expect(phase1?.transcription).toBeDefined();
+    expect(phase1?.transcription?.mt3?.version).toBe('mt3-py-0.1.0+magenta-mt3-base');
+    expect(phase1?.transcription?.mt3?.tracks).toHaveLength(1);
+    const track = phase1?.transcription?.mt3?.tracks?.[0];
+    expect(track?.instrument).toBe('bass');
+    expect(track?.midiArtifactId).toBe('artifact_mt3_bass');
+    expect(track?.midiSizeBytes).toBe(512);
+    // Defense-in-depth: the inline base64 must NOT leak through the
+    // projection — that's the artifact-ref design contract.
+    expect(track).not.toHaveProperty('midiB64');
+  });
+
   it('projects interpretation.v2 producer-summary fields without breaking the run snapshot parser', async () => {
     const v2Snapshot = {
       ...baseRunSnapshot,

@@ -627,6 +627,60 @@ class AnalysisRuntimeTests(unittest.TestCase):
         self.assertEqual(row["grounded_measurement_output_id"], grounding["measurementOutputId"])
         self.assertEqual(row["grounded_pitch_note_attempt_id"], pitch_note_attempt_id)
 
+    def test_interpretation_grounding_exposes_mt3_result(self) -> None:
+        """F3: get_interpretation_grounding surfaces a completed MT3 attempt so
+        _execute_interpretation_attempt can forward it to Gemini. When no MT3
+        attempt exists the fields stay null / 'not_requested' (additive only)."""
+        runtime = self._runtime()
+        created = runtime.create_run(
+            filename="track.mp3",
+            content=b"fake-audio",
+            mime_type="audio/mpeg",
+            pitch_note_mode="off",
+            pitch_note_backend="auto",
+            interpretation_mode="async",
+            interpretation_profile="producer_summary",
+            interpretation_model="gemini-2.5-flash",
+        )
+        run_id = created["runId"]
+        runtime.complete_measurement(
+            run_id,
+            payload={"bpm": 128, "durationSeconds": 60.0},
+            provenance={"schemaVersion": "measurement.v1"},
+            diagnostics={"backendDurationMs": 1000},
+        )
+
+        # No MT3 attempt yet: grounding stays additive-null.
+        grounding_before = runtime.get_interpretation_grounding(run_id)
+        self.assertIsNone(grounding_before["mt3Result"])
+        self.assertIsNone(grounding_before["mt3AttemptId"])
+        self.assertEqual(grounding_before["mt3Status"], "not_requested")
+
+        mt3_result = {
+            "version": "magenta-mt3-base",
+            "stemsUsed": ["bass", "other"],
+            "tracks": [
+                {
+                    "instrument": "bass",
+                    "midiArtifactId": "artifact-1",
+                    "midiSizeBytes": 256,
+                    "noteCount": 42,
+                    "pitchRange": [28, 52],
+                }
+            ],
+        }
+        mt3_attempt_id = runtime.create_mt3_attempt(
+            run_id,
+            status="completed",
+            result=mt3_result,
+            provenance={"resolvedCheckpointId": "magenta-mt3-base"},
+        )
+
+        grounding_after = runtime.get_interpretation_grounding(run_id)
+        self.assertEqual(grounding_after["mt3Result"], mt3_result)
+        self.assertEqual(grounding_after["mt3AttemptId"], mt3_attempt_id)
+        self.assertEqual(grounding_after["mt3Status"], "completed")
+
 
 class SpectralArtifactSnapshotTests(unittest.TestCase):
     """Verifies the STFT-spectrogram sampleRate provenance is exposed on the

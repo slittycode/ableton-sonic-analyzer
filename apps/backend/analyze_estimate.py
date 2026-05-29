@@ -63,6 +63,7 @@ def build_analysis_estimate(
     run_transcribe: bool,
     run_fast: bool = False,
     run_standard: bool = False,
+    run_mt3: bool = False,
 ) -> dict:
     stages = []
 
@@ -117,6 +118,24 @@ def build_analysis_estimate(
                 "key": transcription_key,
                 "label": transcription_label,
                 "seconds": transcription_seconds,
+            }
+        )
+
+    if run_mt3:
+        # MT3 cost model: high fixed overhead from JAX/t5x model load
+        # (~30-60s on first call, multi-GB weights), then per-second
+        # inference ranging ~0.2-0.8x duration on CPU. On a 4-min track
+        # this lands around 60s-200s; on a 10s clip it's overhead-bound
+        # at ~60-180s. Numbers tuned to be conservative — operator-facing
+        # UIs should err high so users aren't surprised mid-run.
+        mt3_seconds = _estimate_stage_seconds(
+            duration_seconds, 0.20, 0.80, 60.0, 180.0
+        )
+        stages.append(
+            {
+                "key": "mt3_transcription",
+                "label": "MT3 polyphonic transcription",
+                "seconds": mt3_seconds,
             }
         )
 

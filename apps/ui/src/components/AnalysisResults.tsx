@@ -34,6 +34,7 @@ import { MeasurementDashboard } from './MeasurementDashboard';
 import { SamplePlayback } from './SamplePlayback';
 import { SessionMusicianPanel } from './SessionMusicianPanel';
 import { TranscriptionPianorollBlock } from './TranscriptionPianorollBlock';
+import { Mt3TranscriptionPanel } from './Mt3TranscriptionPanel';
 import { StemListeningNotesPanel } from './StemListeningNotesPanel';
 import { hasStemListeningNotesContent } from '../services/sessionMusician';
 import {
@@ -770,6 +771,14 @@ export function AnalysisResults({
         ? 'disabled'
         : 'pending';
   const hasStemSummaryContent = hasStemListeningNotesContent(stemSummary);
+  // Optional MT3 polyphonic-transcription result, projected onto
+  // `phase1.transcription.mt3` only when the MT3 stage completed with a
+  // non-null result (see projectPhase1FromRun in analysisRunsClient.ts).
+  // Additive to Phase 1 — never overrides a measured value (PURPOSE.md #1).
+  const mt3Transcription =
+    phase1.transcription?.mt3 && phase1.transcription.mt3.tracks.length > 0
+      ? phase1.transcription.mt3
+      : null;
   const warpTargets = warpGuide
     ? [
         { label: 'Full Track', target: warpGuide.fullTrack },
@@ -816,6 +825,7 @@ export function AnalysisResults({
     audioObservations ? { id: 'section-audio-observations', label: 'Audio' } : null,
     arrangement ? { id: 'section-arrangement', label: 'Arrangement' } : null,
     { id: 'section-session', label: 'Session' },
+    mt3Transcription ? { id: 'section-mt3', label: 'MT3 MIDI' } : null,
     hasStemSummaryContent ? { id: 'section-stem-summary', label: 'Stem Notes' } : null,
     // Audit N1 sibling + Finding #6 (streaming reveal): keep Phase 2 nav
     // entries visible even when their sections haven't populated yet.
@@ -1920,6 +1930,16 @@ export function AnalysisResults({
               <TranscriptionPianorollBlock apiBaseUrl={apiBaseUrl} runId={runId} />
             </div>
           )}
+
+        {apiBaseUrl && runId && mt3Transcription && (
+          <div id="section-mt3" className="scroll-mt-24">
+            <Mt3TranscriptionPanel
+              result={mt3Transcription}
+              apiBaseUrl={apiBaseUrl}
+              runId={runId}
+            />
+          </div>
+        )}
 
         {hasStemSummaryContent && (
           <div id="section-stem-summary" className="scroll-mt-24">
