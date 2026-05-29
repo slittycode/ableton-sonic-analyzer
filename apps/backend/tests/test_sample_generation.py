@@ -59,7 +59,7 @@ class OrchestratorTests(unittest.TestCase):
                 phase2=_baseline_phase2(),
                 output_dir=Path(tmp),
                 pitch_note_hints=[1, 2, 3, 5],
-                prefer_fluidsynth=False,
+                allow_soundfont_backends=False,
             )
 
             sample_ids = {s["id"] for s in result.manifest["samples"]}
@@ -92,7 +92,7 @@ class OrchestratorTests(unittest.TestCase):
                 phase1=phase1,
                 phase2=None,
                 output_dir=Path(tmp),
-                prefer_fluidsynth=False,
+                allow_soundfont_backends=False,
             )
         sample_ids = {s["id"] for s in result.manifest["samples"]}
         self.assertNotIn("tonal_chord_progression", sample_ids)
@@ -110,7 +110,7 @@ class OrchestratorTests(unittest.TestCase):
                 phase1=phase1,
                 phase2=None,
                 output_dir=Path(tmp),
-                prefer_fluidsynth=False,
+                allow_soundfont_backends=False,
             )
         tonal = [s for s in result.manifest["samples"] if s["category"] == "tonal"]
         self.assertTrue(tonal, "expected tonal samples even at low confidence")
@@ -130,7 +130,7 @@ class OrchestratorTests(unittest.TestCase):
                 phase1=_baseline_phase1(),
                 phase2=_baseline_phase2(),
                 output_dir=Path(tmp),
-                prefer_fluidsynth=False,
+                allow_soundfont_backends=False,
             )
         for sample in result.manifest["samples"]:
             cites = sample["cites"]
@@ -151,7 +151,7 @@ class OrchestratorTests(unittest.TestCase):
                 phase1=_baseline_phase1(),
                 phase2=None,
                 output_dir=Path(tmp),
-                prefer_fluidsynth=False,
+                allow_soundfont_backends=False,
             )
         kick = next(s for s in result.manifest["samples"] if s["id"] == "drum_kick")
         self.assertEqual(kick["cites"]["phase1Fields"], [
@@ -167,7 +167,7 @@ class OrchestratorTests(unittest.TestCase):
                 phase1=_baseline_phase1(),
                 phase2=None,
                 output_dir=Path(tmp),
-                prefer_fluidsynth=False,
+                allow_soundfont_backends=False,
             )
         self.assertIn(result.manifest["theoryBackend"], {"pytheory", "fallback"})
 

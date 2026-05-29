@@ -456,7 +456,11 @@ def analyze_melody(
 
         midi_file_path = None
         try:
-            import mido
+            # Symusic handles the tick math and event ordering — we just build
+            # a Score in seconds and dump. Failure (e.g. an unwritable output
+            # dir) is non-critical: melody MIDI is a nice-to-have artifact, so
+            # we swallow the exception and report no file.
+            from symusic import Note, Score, Tempo, Track
 
             bpm = 120.0
             if rhythm_data is not None and rhythm_data.get("bpm") is not None:
@@ -464,42 +468,25 @@ def analyze_melody(
             if not np.isfinite(bpm) or bpm <= 0:
                 bpm = 120.0
 
-            ppq = 96
-            ticks_per_second = (ppq * bpm) / 60.0
-            midi_out = mido.MidiFile(ticks_per_beat=ppq)
-            track = mido.MidiTrack()
-            midi_out.tracks.append(track)
-            track.append(
-                mido.MetaMessage("set_tempo", tempo=int(mido.bpm2tempo(bpm)), time=0)
-            )
-
-            events = []
+            score = Score(96, ttype="Second")
+            score.tempos.append(Tempo(time=0.0, qpm=float(bpm), ttype="Second"))
+            track = Track(name="melody", program=0, is_drum=False, ttype="Second")
             for onset, duration, midi_note in note_events:
-                start_tick = max(0, int(round(onset * ticks_per_second)))
-                end_tick = max(
-                    start_tick + 1, int(round((onset + duration) * ticks_per_second))
+                track.notes.append(
+                    Note(
+                        time=float(onset),
+                        duration=float(max(0.0, duration)),
+                        pitch=int(midi_note),
+                        velocity=90,
+                        ttype="Second",
+                    )
                 )
-                events.append((start_tick, 1, midi_note))
-                events.append((end_tick, 0, midi_note))
-            events.sort(key=lambda e: (e[0], e[1]))
-
-            prev_tick = 0
-            for tick, is_note_on, midi_note in events:
-                delta = max(0, tick - prev_tick)
-                if is_note_on == 1:
-                    track.append(
-                        mido.Message("note_on", note=midi_note, velocity=90, time=delta)
-                    )
-                else:
-                    track.append(
-                        mido.Message("note_off", note=midi_note, velocity=0, time=delta)
-                    )
-                prev_tick = tick
+            score.tracks.append(track)
 
             output_dir = os.path.dirname(audio_path)
             base_name = os.path.splitext(os.path.basename(audio_path))[0]
             midi_file_path = os.path.join(output_dir, f"{base_name}_melody.mid")
-            midi_out.save(midi_file_path)
+            score.dump_midi(midi_file_path)
         except Exception as e:
             print(f"[warn] Melody MIDI export failed: {e}", file=sys.stderr)
             midi_file_path = None

@@ -72,7 +72,7 @@ class ServerSamplesTests(unittest.TestCase):
             run_id=self.run_id,
             snapshot=snapshot,
             force=False,
-            prefer_fluidsynth=False,
+            allow_soundfont_backends=False,
         )
         self.assertEqual(manifest["schemaVersion"], "samples.v1")
         self.assertIn("manifestArtifactId", manifest)
@@ -92,7 +92,7 @@ class ServerSamplesTests(unittest.TestCase):
                 runtime=self.runtime,
                 run_id=self.run_id,
                 snapshot=snapshot,
-                prefer_fluidsynth=False,
+                allow_soundfont_backends=False,
             )
         self.assertEqual(ctx.exception.code, "MEASUREMENT_NOT_COMPLETED")
         self.assertEqual(ctx.exception.status_code, 409)
@@ -103,7 +103,7 @@ class ServerSamplesTests(unittest.TestCase):
             runtime=self.runtime,
             run_id=self.run_id,
             snapshot=snapshot,
-            prefer_fluidsynth=False,
+            allow_soundfont_backends=False,
         )
         with self.assertRaises(server_samples.SamplesPreconditionError) as ctx:
             server_samples.generate_and_register_samples(
@@ -111,7 +111,7 @@ class ServerSamplesTests(unittest.TestCase):
                 run_id=self.run_id,
                 snapshot=snapshot,
                 force=False,
-                prefer_fluidsynth=False,
+                allow_soundfont_backends=False,
             )
         self.assertEqual(ctx.exception.code, "SAMPLES_ALREADY_GENERATED")
 
@@ -121,14 +121,14 @@ class ServerSamplesTests(unittest.TestCase):
             runtime=self.runtime,
             run_id=self.run_id,
             snapshot=snapshot,
-            prefer_fluidsynth=False,
+            allow_soundfont_backends=False,
         )
         second = server_samples.generate_and_register_samples(
             runtime=self.runtime,
             run_id=self.run_id,
             snapshot=snapshot,
             force=True,
-            prefer_fluidsynth=False,
+            allow_soundfont_backends=False,
         )
         # New manifest artifact id; the SQLite ids are UUIDs so they will differ.
         self.assertNotEqual(first["manifestArtifactId"], second["manifestArtifactId"])
@@ -146,7 +146,7 @@ class ServerSamplesTests(unittest.TestCase):
             runtime=self.runtime,
             run_id=self.run_id,
             snapshot=snapshot,
-            prefer_fluidsynth=False,
+            allow_soundfont_backends=False,
         )
         fetched = server_samples.fetch_existing_manifest(
             runtime=self.runtime, run_id=self.run_id

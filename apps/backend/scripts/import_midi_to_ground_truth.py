@@ -13,16 +13,16 @@ import json
 import sys
 from pathlib import Path
 
-import pretty_midi
+from symusic import Score
 
 
-def _flatten_notes(midi: pretty_midi.PrettyMIDI, offset_seconds: float) -> list[dict]:
+def _flatten_notes(score: Score, offset_seconds: float) -> list[dict]:
+    """Flatten all notes in a Second-unit Score into the ground-truth shape."""
     notes: list[dict] = []
-    for instrument in midi.instruments:
-        for note in instrument.notes:
-            start = float(note.start) + offset_seconds
-            end = float(note.end) + offset_seconds
-            duration = max(0.0, end - start)
+    for track in score.tracks:
+        for note in track.notes:
+            start = float(note.time) + offset_seconds
+            duration = max(0.0, float(note.duration))
             notes.append(
                 {
                     "pitchMidi": int(note.pitch),
@@ -108,12 +108,14 @@ def main() -> None:
         raise SystemExit(2)
 
     try:
-        midi = pretty_midi.PrettyMIDI(str(args.midi_path))
+        # Score loads as Tick by default; convert so note.time / note.duration
+        # are in seconds for the ground-truth schema.
+        score = Score(args.midi_path).to("Second")
     except Exception as exc:
         print(f"error: failed to parse MIDI: {exc}", file=sys.stderr)
         raise SystemExit(2) from exc
 
-    notes = _flatten_notes(midi, args.offset_seconds)
+    notes = _flatten_notes(score, args.offset_seconds)
     overlaps = _detect_overlaps(notes)
 
     if len(overlaps) > 0:
