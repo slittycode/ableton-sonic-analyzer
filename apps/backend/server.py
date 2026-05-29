@@ -143,6 +143,7 @@ from server_phase2 import (  # noqa: F401 — re-exported for test backward comp
     _validate_phase2_catalog_entry,
     _validate_phase2_citation_paths,
     _validate_phase2_semantics,
+    apply_live12_catalogue_gates,
 )
 
 import server_samples
@@ -1621,11 +1622,45 @@ def _run_interpretation_request_with_profile_config(
             if profile_id == "producer_summary" and interpretation_result is not None
             else []
         )
+        # Live 12 source-catalogue checks run last so they see (a) the salvaged
+        # / coerced shape and (b) the post-rename measurement field names that
+        # the citation walker uses. They are ADVISORY (warn-and-keep): they
+        # never drop or rewrite a recommendation, only emit warning-shaped
+        # validationWarnings flagging devices/parameters/citations the source
+        # catalogue cannot confirm, so the operator-facing diagnostic log keeps
+        # a complete trail. Wrapped defensively: a catalogue load/parse error
+        # must NOT fail an otherwise-successful Gemini interpretation.
+        catalogue_gate_warnings: list[dict[str, Any]] = []
+        if profile_id == "producer_summary" and interpretation_result is not None:
+            try:
+                catalogue_gate_warnings = apply_live12_catalogue_gates(
+                    interpretation_result,
+                    request_id=request_id,
+                )
+            except Exception as exc:  # degrade, never fail the request on a gate error
+                logger.warning(
+                    "Live 12 catalogue checks skipped (request_id=%s): %s",
+                    request_id,
+                    exc,
+                )
+                catalogue_gate_warnings = [
+                    {
+                        "code": "CATALOGUE_CHECK_UNAVAILABLE",
+                        "path": "interpretationResult",
+                        "message": (
+                            "Live 12 catalogue checks were skipped due to an "
+                            f"internal error: {exc}. The interpretation is "
+                            "unaffected."
+                        ),
+                        "requestId": request_id,
+                    }
+                ]
         validation_warnings = (
             parse_validation_warnings
             + style_profile_warnings
             + semantic_validation_warnings
             + citation_path_warnings
+            + catalogue_gate_warnings
         )
         diagnostics = _build_diagnostics(
             response_ready_at=_current_time(),

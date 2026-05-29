@@ -144,6 +144,7 @@ def _valid_phase2_result() -> dict:
                 "parameter": "Band 1 Frequency",
                 "value": "-1.5 dB @ 35 Hz",
                 "reason": "Tighten sub energy.",
+                "phase1Fields": ["spectralBalance.subBass"],
             }
         ],
         "secretSauce": {
@@ -163,6 +164,7 @@ def _valid_phase2_result() -> dict:
                     "value": "3 ms",
                     "instruction": "Set up light bus glue before the build opens up.",
                     "measurementJustification": "The measured crest profile supports a controlled transient shape.",
+                    "phase1Fields": ["crestFactor"],
                 }
             ],
         },
@@ -184,6 +186,7 @@ def _valid_phase2_result() -> dict:
                 "value": "3 ms",
                 "reason": "Keep transients intact.",
                 "advancedTip": "Drive lightly.",
+                "phase1Fields": ["crestFactor"],
             }
         ],
     }

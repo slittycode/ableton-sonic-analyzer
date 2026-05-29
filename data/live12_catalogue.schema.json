@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ableton-sonic-analyzer.local/schemas/live12_catalogue.schema.json",
+  "title": "Live 12 Addressable-Target Catalogue",
+  "description": "Static-source extraction of Live 12 device classes and their addressable parameter names, taken from the upstream MIDI Remote Scripts. The catalogue is used by the Phase 2 Gemini-output validator to confirm that every recommended (device, parameter) pair names a real Live 12 target.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "source_commit",
+    "source_url",
+    "source_files",
+    "license_note",
+    "generated_at",
+    "extraction_notes",
+    "devices"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1"
+    },
+    "source_commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,40}$",
+      "description": "Upstream git commit SHA the catalogue was generated from."
+    },
+    "source_url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Upstream repository URL (gluon/AbletonLive12_MIDIRemoteScripts mirror)."
+    },
+    "source_files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Paths (within the upstream repo) that the AST extractor read. The first entry is the primary `BANK_DEFINITIONS` dict-literal file; subsequent entries contribute `CUSTOM_BANK_DEFINITIONS[<class>] = IndexedDict(...)` subscript assignments. Per-device parameter sets are the union across all listed files."
+    },
+    "license_note": {
+      "type": "string",
+      "description": "Attribution and licensing note for the upstream material. No upstream source is redistributed by ASA; only extracted device/parameter name metadata."
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC ISO-8601 timestamp when the catalogue was generated."
+    },
+    "extraction_notes": {
+      "type": "string",
+      "description": "Notes about what the static extraction can and cannot recover (e.g. min/max/unit/default live on runtime Live.DeviceParameter objects and are not present in static source)."
+    },
+    "devices": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/device"
+      }
+    }
+  },
+  "$defs": {
+    "device": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["class", "category", "displayName", "parameters"],
+      "properties": {
+        "class": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Live's internal device class name as exposed by the Live Object Model (e.g. `Saturator`, `Eq8`, `GlueCompressor`)."
+        },
+        "category": {
+          "type": "string",
+          "enum": ["instrument", "audio_effect", "midi_effect", "rack"],
+          "description": "Coarse device family. Hand-mapped per `class`; defaults to `audio_effect` when the class name does not indicate otherwise."
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "description": "User-visible Live 12 device name (e.g. `EQ Eight` for class `Eq8`). Hand-mapped; defaults to `class` when the UI label matches the class name."
+        },
+        "parameters": {
+          "type": "array",
+          "minItems": 0,
+          "items": {
+            "$ref": "#/$defs/parameter"
+          }
+        }
+      }
+    },
+    "parameter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Canonical Live parameter name as exposed by the Live Object Model. Catalogue uses these exact strings for `has_parameter` lookups."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["float", "int", "bool", "enum"],
+          "description": "Parameter datatype. Optional — not present in static source; reserved for future enrichment from runtime introspection."
+        },
+        "min": {
+          "type": "number",
+          "description": "Lower numeric bound. Optional — not present in static source."
+        },
+        "max": {
+          "type": "number",
+          "description": "Upper numeric bound. Optional — not present in static source."
+        },
+        "unit": {
+          "type": "string",
+          "description": "Parameter unit (`dB`, `Hz`, `ms`, ...). Optional — not present in static source."
+        },
+        "default": {
+          "description": "Default parameter value. Optional — not present in static source.",
+          "type": ["string", "number", "boolean", "null"]
+        },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          },
+          "description": "For `enum` parameters: the list of allowed string values. Optional — not present in static source."
+        }
+      }
+    }
+  }
+}

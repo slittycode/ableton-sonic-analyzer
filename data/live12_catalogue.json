@@ -1,0 +1,8144 @@
+{
+  "schema_version": "1",
+  "source_commit": "e83d5192f321b24eb9daab843ac49a2d95d862b1",
+  "source_url": "https://github.com/gluon/AbletonLive12_MIDIRemoteScripts",
+  "source_files": [
+    "Push2/custom_bank_definitions.py",
+    "Move/custom_bank_definitions.py"
+  ],
+  "license_note": "Upstream is a decompiled redistribution of Ableton's MIDI Remote Scripts. ASA does not ship any upstream source; this catalogue records only the device-class and parameter-name metadata extracted via static AST parsing, used as a Phase 2 output-validation gate.",
+  "generated_at": "2026-05-28T11:53:35Z",
+  "extraction_notes": "Generated from the upstream Live 12 MIDI Remote Scripts via stdlib ast. Push2/custom_bank_definitions.py contributes the BANK_DEFINITIONS dict literal; Move/custom_bank_definitions.py contributes additional CUSTOM_BANK_DEFINITIONS[<class>] = IndexedDict(...) subscript assignments (including Live 12-new devices like AutoShift). Per-class parameter sets are the union across all source files. Parameter names are taken from BANK_PARAMETERS_KEY and OPTIONS_KEY tuples and from use(...)/else_use(...)/if_parameter(...) call arguments. type/min/max/unit/default are intentionally omitted because they are not present in static source; they live on runtime Live.DeviceParameter objects.",
+  "devices": [
+    {
+      "class": "Amp",
+      "category": "audio_effect",
+      "displayName": "Amp",
+      "parameters": [
+        {
+          "name": "Amp Type"
+        },
+        {
+          "name": "Bass"
+        },
+        {
+          "name": "Dry/Wet"
+        },
+        {
+          "name": "Dual Mono"
+        },
+        {
+          "name": "Gain"
+        },
+        {
+          "name": "Middle"
+        },
+        {
+          "name": "Presence"
+        },
+        {
+          "name": "Treble"
+        },
+        {
+          "name": "Volume"
+        }
+      ]
+    },
+    {
+      "class": "AudioEffectGroupDevice",
+      "category": "rack",
+      "displayName": "Audio Effect Rack",
+      "parameters": [
+        {
+          "name": "Macro 1"
+        },
+        {
+          "name": "Macro 2"
+        },
+        {
+          "name": "Macro 3"
+        },
+        {
+          "name": "Macro 4"
+        },
+        {
+          "name": "Macro 5"
+        },
+        {
+          "name": "Macro 6"
+        },
+        {
+          "name": "Macro 7"
+        },
+        {
+          "name": "Macro 8"
+        }
+      ]
+    },
+    {
+      "class": "AutoFilter",
+      "category": "audio_effect",
+      "displayName": "Auto Filter",
+      "parameters": [
+        {
+          "name": "Drive"
+        },
+        {
+          "name": "Env. Attack"
+        },
+        {
+          "name": "Env. Modulation"
+        },
+        {
+          "name": "Env. Release"
+        },
+        {
+          "name": "Filter Circuit - BP/NO/Morph"
+        },
+        {
+          "name": "Filter Circuit - LP/HP"
+        },
+        {
+          "name": "Filter Type"
+        },
+        {
+          "name": "Filter Type (Legacy)"
+        },
+        {
+          "name": "Frequency"
+        },
+        {
+          "name": "LFO Amount"
+        },
+        {
+          "name": "LFO Frequency"
+        },
+        {
+          "name": "LFO Offset"
+        },
+        {
+          "name": "LFO Phase"
+        },
+        {
+          "name": "LFO Quantize On"
+        },
+        {
+          "name": "LFO Quantize Rate"
+        },
+        {
+          "name": "LFO Spin"
+        },
+        {
+          "name": "LFO Stereo Mode"
+        },
+        {
+          "name": "LFO Sync"
+        },
+        {
+          "name": "LFO Sync Rate"
+        },
+        {
+          "name": "LFO Waveform"
+        },
+        {
+          "name": "Morph"
+        },
+        {
+          "name": "Resonance"
+        },
+        {
+          "name": "Resonance (Legacy)"
+        },
+        {
+          "name": "S/C Gain"
+        },
+        {
+          "name": "S/C Mix"
+        },
+        {
+          "name": "S/C On"
+        },
+        {
+          "name": "Slope"
+        }
+      ]
+    },
+    {
+      "class": "AutoFilter2",
+      "category": "audio_effect",
+      "displayName": "Auto Filter (Move)",
+      "parameters": [
+        {
+          "name": "Control"
+        },
+        {
+          "name": "Drive"
+        },
+        {
+          "name": "Dry/Wet"
+        },
+        {
+          "name": "Filter Morph"
+        },
+        {
+          "name": "Filter Type"
+        },
+        {
+          "name": "Formant"
+        },
+        {
+          "name": "Frequency"
+        },
+        {
+          "name": "LFO 16th"
+        },
+        {
+          "name": "LFO Amount"
+        },
+        {
+          "name": "LFO Freq"
+        },
+        {
+          "name": "LFO Rate"
+        },
+        {
+          "name": "LFO T Mode"
+        },
+        {
+          "name": "LFO Time"
+        },
+        {
+          "name": "LFO Wave"
+        },
+        {
+          "name": "Pitch"
+        },
+        {
+          "name": "Resonance"
+        }
+      ]
+    },
+    {
+      "class": "AutoPan",
+      "category": "audio_effect",
+      "displayName": "Auto Pan-Tremolo",
+      "parameters": [
+        {
+          "name": "Amount"
+        },
+        {
+          "name": "Frequency"
+        },
+        {
+          "name": "Invert"
+        },
+        {
+          "name": "LFO Type"
+        },
+        {
+          "name": "Offset"
+        },
+        {
+          "name": "Phase"
+        },
+        {
+          "name": "Shape"
+        },
+        {
+          "name": "Spin"
+        },
+        {
+          "name": "Stereo Mode"
+        },
+        {
+          "name": "Sync Rate"
+        },
+        {
+          "name": "Waveform"
+        },
+        {
+          "name": "Width (Random)"
+        }
+      ]
+    },
+    {
+      "class": "AutoPan2",
+      "category": "audio_effect",
+      "displayName": "Auto Pan-Tremolo (Move)",
+      "parameters": [
+        {
+          "name": "16th"
+        },
+        {
+          "name": "Amount"
+        },
+        {
+          "name": "Attack Time"
+        },
+        {
+          "name": "Dyn Mod"
+        },
+        {
+          "name": "Frequency"
+        },
+        {
+          "name": "Harmonic"
+        },
+        {
+          "name": "Invert"
+        },
+        {
+          "name": "Mode"
+        },
+        {
+          "name": "Panning Shape"
+        },
+        {
+          "name": "Phase"
+        },
+        {
+          "name": "Rate"
+        },
+        {
+          "name": "Spin"
+        },
+        {
+          "name": "Stereo Mode"
+        },
+        {
+          "name": "Time"
+        },
+        {
+          "name": "Time Mode"
+        },
+        {
+          "name": "Tremolo Shape"
+        },
+        {
+          "name": "Waveform"
+        }
+      ]
+    },
+    {
+      "class": "AutoShift",
+      "category": "audio_effect",
+      "displayName": "Auto Shift",
+      "parameters": [
+        {
+          "name": "Dry/Wet"
+        },
+        {
+          "name": "Formant Follow"
+        },
+        {
+          "name": "Formant Shift"
+        },
+        {
+          "name": "Pitch Fine"
+        },
+        {
+          "name": "Pitch Scale Deg."
+        },
+        {
+          "name": "Pitch St."
+        },
+        {
+          "name": "Root"
+        },
+        {
+          "name": "Scale"
+        },
+        {
+          "name": "Smooth Time"
+        },
+        {
+          "name": "Strength"
+        },
+        {
+          "name": "Vibrato Amt"
+        },
+        {
+          "name": "Vibrato Rate"
+        }
+      ]
+    },
+    {
+      "class": "BeatRepeat",
+      "category": "audio_effect",
+      "displayName": "Beat Repeat",
+      "parameters": [
+        {
+          "name": "Chance"
+        },
+        {
+          "name": "Decay"
+        },
+        {
+          "name": "Filter"
+        },
+        {
+          "name": "Filter Freq"
+        },
+        {
+          "name": "Filter Width"
+        },
+        {
+          "name": "Gate"
+        },
+        {
+          "name": "Grid"
+        },
+        {
+          "name": "Interval"
+        },
+        {
+          "name": "Mix Type"
+        },
+        {
+          "name": "Offset"
+        },
+        {
+          "name": "Pitch"
+        },
+        {
+          "name": "Pitch Decay"
+        },
+        {
+          "name": "Repeat"
+        },
+        {
+          "name": "Triplets"
+        },
+        {
+          "name": "Variation"
+        },
+        {
+          "name": "Variation Type"
+        },
+        {
+          "name": "Volume"
+        }
+      ]
+    },
+    {
+      "class": "Cabinet",
+      "category": "audio_effect",
+      "displayName": "Cabinet",
+      "parameters": [
+        {
+          "name": "Cabinet Type"
+        },
+        {
+          "name": "Dry/Wet"
+        },
+        {
+          "name": "Dual Mono"
+        },
+        {
+          "name": "Microphone Position"
+        },
+        {
+          "name": "Microphone Type"
+        }
+      ]
+    },
+    {
+      "class": "ChannelEq",
+      "category": "audio_effect",
+      "displayName": "Channel EQ",
+      "parameters": [
+        {
+          "name": "Gain"
+        },
+        {
+          "name": "High Gain"
+        },
+        {
+          "name": "Highpass On"
+        },
+        {
+          "name": "Low Gain"
+        },
+        {
+          "name": "Mid Freq"
+        },
+        {
+          "name": "Mid Gain"
+        },
+        {
+          "name": "Output"
+        }
+      ]
+    },
+    {
+      "class": "Chorus",
+      "category": "audio_effect",
+      "displayName": "Chorus",
+      "parameters": [
+        {
+          "name": "Delay 1 HiPass"
+        },
+        {
+          "name": "Delay 1 Time"
+        },
+        {
+          "name": "Delay 2 Mode"
+        },
+        {
+          "name": "Delay 2 Time"
+        },
+        {
+          "name": "Dry/Wet"
+        },
+        {
+          "name": "Feedback"
+        },
+        {
+          "name": "LFO Amount"
+        },
+        {
+          "name": "LFO Extend On"
+        },
+        {
+          "name": "LFO Rate"
+        },
+        {
+          "name": "Link On"
+        },
+        {
+          "name": "Polarity"
+        }
+      ]
+    },
+    {
+      "class": "Chorus2",
+      "category": "audio_effect",
+      "displayName": "Chorus-Ensemble",
+      "parameters": [
+        {
+          "name": "Amount"
+        },
+        {
+          "name": "Dry/Wet"
+        },
+        {
+          "name": "FB Inv"
+        },
+        {
+          "name": "Feedback"
+        },
+        {
+          "name": "Gain"
+        },
+        {
+          "name": "HP Freq"
+        },
+        {
+          "name": "HPF Freq"
+        },
+        {
+          "name": "High Pass"
+        },
+        {
+          "name": "Mode"
+        },
+        {
+          "name": "Offset"
+        },
+        {
+          "name": "Rate"
+        },
+        {
+          "name": "Shape"
+        },
+        {
+          "name": "Warmth"
+        },
+        {
+          "name": "Width"
+        }
+      ]
+    },
+    {
+      "class": "Collision",
+      "category": "instrument",
+      "displayName": "Collision",
+      "parameters": [
+        {
+          "name": "LFO 1"
+        },
+        {
+          "name": "LFO 1 Amt A"
+        },
+        {
+          "name": "LFO 1 Amt B"
+        },
+        {
+          "name": "LFO 1 Depth"
+        },
+        {
+          "name": "LFO 1 Depth < Vel"
+        },
+        {
+          "name": "LFO 1 Dest A"
+        },
+        {
+          "name": "LFO 1 Dest B"
+        },
+        {
+          "name": "LFO 1 Offset"
+        },
+        {
+          "name": "LFO 1 Rate"
+        },
+        {
+          "name": "LFO 1 Rate < Key"
+        },
+        {
+          "name": "LFO 1 Retrig"
+        },
+        {
+          "name": "LFO 1 Shape"
+        },
+        {
+          "name": "LFO 1 Sync"
+        },
+        {
+          "name": "LFO 1 Sync Rate"
+        },
+        {
+          "name": "LFO 2"
+        },
+        {
+          "name": "LFO 2 Amt A"
+        },
+        {
+          "name": "LFO 2 Amt B"
+        },
+        {
+          "name": "LFO 2 Depth"
+        },
+        {
+          "name": "LFO 2 Depth < Vel"
+        },
+        {
+          "name": "LFO 2 Dest A"
+        },
+        {
+          "name": "LFO 2 Dest B"
+        },
+        {
+          "name": "LFO 2 Offset"
+        },
+        {
+          "name": "LFO 2 Rate"
+        },
+        {
+          "name": "LFO 2 Rate < Key"
+        },
+        {
+          "name": "LFO 2 Retrig"
+        },
+        {
+          "name": "LFO 2 Shape"
+        },
+        {
+          "name": "LFO 2 Sync"
+        },
+        {
+          "name": "LFO 2 Sync Rate"
+        },
+        {
+          "name": "LFO Select"
+        },
+        {
+          "name": "MW Amt A"
+        },
+        {
+          "name": "MW Amt B"
+        },
+        {
+          "name": "MW Dest A"
+        },
+        {
+          "name": "MW Dest B"
+        },
+        {
+          "name": "Mallet"
+        },
+        {
+          "name": "Mallet Noise Amount"
+        },
+        {
+          "name": "Mallet Noise Amount < Key"
+        },
+        {
+          "name": "Mallet Noise Amount < Vel"
+        },
+        {
+          "name": "Mallet Noise Color"
+        },
+        {
+          "name": "Mallet Stiffness"
+        },
+        {
+          "name": "Mallet Stiffness < Key"
+        },
+        {
+          "name": "Mallet Stiffness < Vel"
+        },
+        {
+          "name": "Mallet Volume"
+        },
+        {
+          "name": "Mallet Volume < Key"
+        },
+        {
+          "name": "Mallet Volume < Vel"
+        },
+        {
+          "name": "Mod Dest"
+        },
+        {
+          "name": "Mod Source"
+        },
+        {
+          "name": "Noise"
+        },
+        {
+          "name": "Noise Attack"
+        },
+        {
+          "name": "Noise Decay"
+        },
+        {
+          "name": "Noise Filter Freq"
+        },
+        {
+          "name": "Noise Filter Q"
+        },
+        {
+          "name": "Noise Filter Type"
+        },
+        {
+          "name": "Noise Freq < Key"
+        },
+        {
+          "name": "Noise Freq < Vel"
+        },
+        {
+          "name": "Noise Release"
+        },
+        {
+          "name": "Noise Sustain"
+        },
+        {
+          "name": "Noise Volume"
+        },
+        {
+          "name": "Noise Volume < Key"
+        },
+        {
+          "name": "Noise Volume < Vel"
+        },
+        {
+          "name": "Note PB Range"
+        },
+        {
+          "name": "PB Amt A"
+        },
+        {
+          "name": "PB Dest A"
+        },
+        {
+          "name": "PB Range"
+        },
+        {
+          "name": "Press Amt A"
+        },
+        {
+          "name": "Press Amt B"
+        },
+        {
+          "name": "Press Dest A"
+        },
+        {
+          "name": "Press Dest B"
+        },
+        {
+          "name": "Res 1"
+        },
+        {
+          "name": "Res 1 Bleed"
+        },
+        {
+          "name": "Res 1 Brightness"
+        },
+        {
+          "name": "Res 1 Decay"
+        },
+        {
+          "name": "Res 1 Decay < Key"
+        },
+        {
+          "name": "Res 1 Decay < Vel"
+        },
+        {
+          "name": "Res 1 Fine Tune"
+        },
+        {
+          "name": "Res 1 Hit"
+        },
+        {
+          "name": "Res 1 Hit < Random"
+        },
+        {
+          "name": "Res 1 Inharmonics"
+        },
+        {
+          "name": "Res 1 Inharmonics < Vel"
+        },
+        {
+          "name": "Res 1 Listening L"
+        },
+        {
+          "name": "Res 1 Listening R"
+        },
+        {
+          "name": "Res 1 Material"
+        },
+        {
+          "name": "Res 1 Material < Key"
+        },
+        {
+          "name": "Res 1 Material < Vel"
+        },
+        {
+          "name": "Res 1 Opening"
+        },
+        {
+          "name": "Res 1 Pan"
+        },
+        {
+          "name": "Res 1 Pan < Key"
+        },
+        {
+          "name": "Res 1 Pitch Env."
+        },
+        {
+          "name": "Res 1 Pitch Env. < Vel"
+        },
+        {
+          "name": "Res 1 Pitch Env. Time"
+        },
+        {
+          "name": "Res 1 Quality"
+        },
+        {
+          "name": "Res 1 Radius"
+        },
+        {
+          "name": "Res 1 Ratio"
+        },
+        {
+          "name": "Res 1 Tune"
+        },
+        {
+          "name": "Res 1 Tune < Key"
+        },
+        {
+          "name": "Res 1 Type"
+        },
+        {
+          "name": "Res 1 Volume"
+        },
+        {
+          "name": "Res 2"
+        },
+        {
+          "name": "Res 2 Bleed"
+        },
+        {
+          "name": "Res 2 Brightness"
+        },
+        {
+          "name": "Res 2 Decay"
+        },
+        {
+          "name": "Res 2 Decay < Key"
+        },
+        {
+          "name": "Res 2 Decay < Vel"
+        },
+        {
+          "name": "Res 2 Fine Tune"
+        },
+        {
+          "name": "Res 2 Hit"
+        },
+        {
+          "name": "Res 2 Hit < Random"
+        },
+        {
+          "name": "Res 2 Inharmonics"
+        },
+        {
+          "name": "Res 2 Inharmonics < Vel"
+        },
+        {
+          "name": "Res 2 Listening L"
+        },
+        {
+          "name": "Res 2 Listening R"
+        },
+        {
+          "name": "Res 2 Material"
+        },
+        {
+          "name": "Res 2 Material < Key"
+        },
+        {
+          "name": "Res 2 Material < Vel"
+        },
+        {
+          "name": "Res 2 Opening"
+        },
+        {
+          "name": "Res 2 Pan"
+        },
+        {
+          "name": "Res 2 Pan < Key"
+        },
+        {
+          "name": "Res 2 Pitch Env."
+        },
+        {
+          "name": "Res 2 Pitch Env. < Vel"
+        },
+        {
+          "name": "Res 2 Pitch Env. Time"
+        },
+        {
+          "name": "Res 2 Quality"
+        },
+        {
+          "name": "Res 2 Radius"
+        },
+        {
+          "name": "Res 2 Ratio"
+        },
+        {
+          "name": "Res 2 Tune"
+        },
+        {
+          "name": "Res 2 Tune < Key"
+        },
+        {
+          "name": "Res 2 Type"
+        },
+        {
+          "name": "Res 2 Volume"
+        },
+        {
+          "name": "Resonator"
+        },
+        {
+          "name": "Slide Amt A"
+        },
+        {
+          "name": "Slide Amt B"
+        },
+        {
+          "name": "Slide Dest A"
+        },
+        {
+          "name": "Slide Dest B"
+        },
+        {
+          "name": "Structure"
+        },
+        {
+          "name": "Volume"
+        }
+      ]
+    },
+    {
+      "class": "Compressor2",
+      "category": "audio_effect",
+      "displayName": "Compressor",
+      "parameters": [
+        {
+          "name": "Attack"
+        },
+        {
+          "name": "Auto Release"
+        },
+        {
+          "name": "Dry/Wet"
+        },
+        {
+          "name": "Expansion Ratio"
+        },
+        {
+          "name": "Input Channel"
+        },
+        {
+          "name": "Input Type"
+        },
+        {
+          "name": "Knee"
+        },
+        {
+          "name": "Listen"
+        },
+        {
+          "name": "Makeup"
+        },
+        {
+          "name": "Model"
+        },
+        {
+          "name": "Output Gain"
+        },
+        {
+          "name": "Position"
+        },
+        {
+          "name": "Ratio"
+        },
+        {
+          "name": "Release"
+        },
+        {
+          "name": "S/C EQ Freq"
+        },
+        {
+          "name": "S/C EQ Gain"
+        },
+        {
+          "name": "S/C EQ On"
+        },
+        {
+          "name": "S/C EQ Q"
+        },
+        {
+          "name": "S/C EQ Type"
+        },
+        {
+          "name": "S/C Gain"
+        },
+        {
+          "name": "S/C Mix"
+        },
+        {
+          "name": "Sidechain"
+        },
+        {
+          "name": "Threshold"
+        }
+      ]
+    },
+    {
+      "class": "Corpus",
+      "category": "audio_effect",
+      "displayName": "Corpus",
+      "parameters": [
+        {
+          "name": "Bleed"
+        },
+        {
+          "name": "Brightness"
+        },
+        {
+          "name": "Decay"
+        },
+        {
+          "name": "Dry Wet"
+        },
+        {
+          "name": "Filter On/Off"
+        },
+        {
+          "name": "Fine"
+        },
+        {
+          "name": "Gain"
+        },
+        {
+          "name": "Hit"
+        },
+        {
+          "name": "Inharmonics"
+        },
+        {
+          "name": "LFO Amount"
+        },
+        {
+          "name": "LFO On/Off"
+        },
+        {
+          "name": "LFO Rate"
+        },
+        {
+          "name": "LFO Shape"
+        },
+        {
+          "name": "LFO Stereo Mode"
+        },
+        {
+          "name": "LFO Sync"
+        },
+        {
+          "name": "LFO Sync Rate"
+        },
+        {
+          "name": "Listening L"
+        },
+        {
+          "name": "Listening R"
+        },
+        {
+          "name": "MIDI Frequency"
+        },
+        {
+          "name": "MIDI Mode"
+        },
+        {
+          "name": "Material"
+        },
+        {
+          "name": "Mid Freq"
+        },
+        {
+          "name": "Note Off"
+        },
+        {
+          "name": "Off Decay"
+        },
+        {
+          "name": "Offset"
+        },
+        {
+          "name": "Opening"
+        },
+        {
+          "name": "PB Range"
+        },
+        {
+          "name": "Phase"
+        },
+        {
+          "name": "Radius"
+        },
+        {
+          "name": "Ratio"
+        },
+        {
+          "name": "Resonance Type"
+        },
+        {
+          "name": "Resonator Quality"
+        },
+        {
+          "name": "Spin"
+        },
+        {
+          "name": "Spread"
+        },
+        {
+          "name": "Transpose"
+        },
+        {
+          "name": "Tune"
+        },
+        {
+          "name": "Width"
+        }
+      ]
+    },
+    {
+      "class": "Delay",
+      "category": "audio_effect",
+      "displayName": "Delay",
+      "parameters": [
+        {
+          "name": "Channel"
+        },
+        {
+          "name": "Delay Mode"
+        },
+        {
+          "name": "Dly < Mod"
+        },
+        {
+          "name": "Dry/Wet"
+        },
+        {
+          "name": "Feedback"
+        },
+        {
+          "name": "Filter"
+        },
+        {
+          "name": "Filter < Mod"
+        },
+        {
+          "name": "Filter Freq"
+        },
+        {
+          "name": "Filter Width"
+        },
+        {
+          "name": "Freeze"
+        },
+        {
+          "name": "L 16th"
+        },
+        {
+          "name": "L Delay Sync"
+        },
+        {
+          "name": "L Offset"
+        },
+        {
+          "name": "L Sync"
+        },
+        {
+          "name": "L Sync Enum"
+        },
+        {
+          "name": "L Time"
+        },
+        {
+          "name": "LFO > Delay"
+        },
+        {
+          "name": "LFO > Filter"
+        },
+        {
+          "name": "LFO Freq"
+        },
+        {
+          "name": "Link Switch"
+        },
+        {
+          "name": "Mod Freq"
+        },
+        {
+          "name": "Ping Pong"
+        },
+        {
+          "name": "R 16th"
+        },
+        {
+          "name": "R Delay Sync"
+        },
+        {
+          "name": "R Offset"
+        },
+        {
+          "name": "R Sync"
+        },
+        {
+          "name": "R Sync Enum"
+        },
+        {
+          "name": "R Time"
+        }
+      ]
+    },
+    {
+      "class": "Drift",
+      "category": "instrument",
+      "displayName": "Drift",
+      "parameters": [
+        {
+          "name": "Cyc Env Hold"
+        },
+        {
+          "name": "Cyc Env Rate"
+        },
+        {
+          "name": "Cyc Env Ratio"
+        },
+        {
+          "name": "Cyc Env Synced"
+        },
+        {
+          "name": "Cyc Env Tilt"
+        },
+        {
+          "name": "Cyc Env Time"
+        },
+        {
+          "name": "Cyc Env Time Mode"
+        },
+        {
+          "name": "Drift"
+        },
+        {
+          "name": "Env 1 Attack"
+        },
+        {
+          "name": "Env 1 Decay"
+        },
+        {
+          "name": "Env 1 Release"
+        },
+        {
+          "name": "Env 1 Sustain"
+        },
+        {
+          "name": "Env 2 Attack"
+        },
+        {
+          "name": "Env 2 Cyc On"
+        },
+        {
+          "name": "Env 2 Decay"
+        },
+        {
+          "name": "Env 2 Release"
+        },
+        {
+          "name": "Env 2 Sustain"
+        },
+        {
+          "name": "Glide Time"
+        },
+        {
+          "name": "HP Freq"
+        },
+        {
+          "name": "Key > LPF"
+        },
+        {
+          "name": "LFO Amt"
+        },
+        {
+          "name": "LFO Mod Amt"
+        },
+        {
+          "name": "LFO Mod Src"
+        },
+        {
+          "name": "LFO Rate"
+        },
+        {
+          "name": "LFO Ratio"
+        },
+        {
+          "name": "LFO Retrig"
+        },
+        {
+          "name": "LFO Retrig On"
+        },
+        {
+          "name": "LFO Synced"
+        },
+        {
+          "name": "LFO Time"
+        },
+        {
+          "name": "LFO Time Mode"
+        },
+        {
+          "name": "LFO Wave"
+        },
+        {
+          "name": "LP Freq"
+        },
+        {
+          "name": "LP Mod Amt 1"
+        },
+        {
+          "name": "LP Mod Amt 2"
+        },
+        {
+          "name": "LP Mod Src 1"
+        },
+        {
+          "name": "LP Mod Src 2"
+        },
+        {
+          "name": "LP Res"
+        },
+        {
+          "name": "LP Reso"
+        },
+        {
+          "name": "LP Type"
+        },
+        {
+          "name": "Legato"
+        },
+        {
+          "name": "Legato On"
+        },
+        {
+          "name": "Mod Dest"
+        },
+        {
+          "name": "Mod Dest 1"
+        },
+        {
+          "name": "Mod Dest 2"
+        },
+        {
+          "name": "Mod Dest 3"
+        },
+        {
+          "name": "Mod Matrix Amt 1"
+        },
+        {
+          "name": "Mod Matrix Amt 2"
+        },
+        {
+          "name": "Mod Matrix Amt 3"
+        },
+        {
+          "name": "Mod Slot"
+        },
+        {
+          "name": "Mod Source 1"
+        },
+        {
+          "name": "Mod Source 2"
+        },
+        {
+          "name": "Mod Source 3"
+        },
+        {
+          "name": "Noise"
+        },
+        {
+          "name": "Noise Flt"
+        },
+        {
+          "name": "Noise Gain"
+        },
+        {
+          "name": "Noise On"
+        },
+        {
+          "name": "Note PB"
+        },
+        {
+          "name": "Osc 1"
+        },
+        {
+          "name": "Osc 1 Flt"
+        },
+        {
+          "name": "Osc 1 Flt On"
+        },
+        {
+          "name": "Osc 1 Gain"
+        },
+        {
+          "name": "Osc 1 Oct"
+        },
+        {
+          "name": "Osc 1 Shape"
+        },
+        {
+          "name": "Osc 1 Shape Mod Amt"
+        },
+        {
+          "name": "Osc 1 Wave"
+        },
+        {
+          "name": "Osc 2"
+        },
+        {
+          "name": "Osc 2 Detune"
+        },
+        {
+          "name": "Osc 2 Flt"
+        },
+        {
+          "name": "Osc 2 Flt On"
+        },
+        {
+          "name": "Osc 2 Gain"
+        },
+        {
+          "name": "Osc 2 Oct"
+        },
+        {
+          "name": "Osc 2 Shape"
+        },
+        {
+          "name": "Osc 2 Wave"
+        },
+        {
+          "name": "Osc Retrig"
+        },
+        {
+          "name": "Osc Retrig On"
+        },
+        {
+          "name": "Osc Select"
+        },
+        {
+          "name": "PB Range"
+        },
+        {
+          "name": "Pitch Mod Amt 1"
+        },
+        {
+          "name": "Pitch Mod Amt 2"
+        },
+        {
+          "name": "Pitch Mod Src 1"
+        },
+        {
+          "name": "Pitch Mod Src 2"
+        },
+        {
+          "name": "Shape Mod Src"
+        },
+        {
+          "name": "Spread"
+        },
+        {
+          "name": "Strength"
+        },
+        {
+          "name": "Thickness"
+        },
+        {
+          "name": "Transpose"
+        },
+        {
+          "name": "Vel > Vol"
+        },
+        {
+          "name": "Voice Count"
+        },
+        {
+          "name": "Voice Mode"
+        },
+        {
+          "name": "Volume"
+        }
+      ]
+    },
+    {
+      "class": "DrumBuss",
+      "category": "audio_effect",
+      "displayName": "Drum Buss",
+      "parameters": [
+        {
+          "name": "Boom Amt"
+        },
+        {
+          "name": "Boom Audition"
+        },
+        {
+          "name": "Boom Decay"
+        },
+        {
+          "name": "Boom Freq"
+        },
+        {
+          "name": "Compressor"
+        },
+        {
+          "name": "Crunch"
+        },
+        {
+          "name": "Damping Freq"
+        },
+        {
+          "name": "Drive"
+        },
+        {
+          "name": "Drive Type"
+        },
+        {
+          "name": "Dry/Wet"
+        },
+        {
+          "name": "Output Gain"
+        },
+        {
+          "name": "Transients"
+        },
+        {
+          "name": "Trim"
+        }
+      ]
+    },
+    {
+      "class": "DrumCell",
+      "category": "instrument",
+      "displayName": "Drum Sampler",
+      "parameters": [
+        {
+          "name": "8-Bit Flt Decay"
+        },
+        {
+          "name": "8-Bit Rate"
+        },
+        {
+          "name": "Attack"
+        },
+        {
+          "name": "Decay"
+        },
+        {
+          "name": "Detune"
+        },
+        {
+          "name": "Env Mode"
+        },
+        {
+          "name": "FM Amt"
+        },
+        {
+          "name": "FM Freq"
+        },
+        {
+          "name": "FX Type"
+        },
+        {
+          "name": "Filter"
+        },
+        {
+          "name": "Filter Freq"
+        },
+        {
+          "name": "Filter Gain"
+        },
+        {
+          "name": "Filter Res"
+        },
+        {
+          "name": "Filter Type"
+        },
+        {
+          "name": "Flt Freq"
+        },
+        {
+          "name": "Flt Reso"
+        },
+        {
+          "name": "Flt Type"
+        },
+        {
+          "name": "Grain Size"
+        },
+        {
+          "name": "Hold"
+        },
+        {
+          "name": "Length"
+        },
+        {
+          "name": "Loop Length"
+        },
+        {
+          "name": "Loop Offset"
+        },
+        {
+          "name": "Mod Amt"
+        },
+        {
+          "name": "Mod Dest"
+        },
+        {
+          "name": "Noise Amt"
+        },
+        {
+          "name": "Noise Color"
+        },
+        {
+          "name": "Pan"
+        },
+        {
+          "name": "Pitch Env Amt"
+        },
+        {
+          "name": "Pitch Env Decay"
+        },
+        {
+          "name": "Punch Amt"
+        },
+        {
+          "name": "Punch Release"
+        },
+        {
+          "name": "RM Amt"
+        },
+        {
+          "name": "RM Freq"
+        },
+        {
+          "name": "Select"
+        },
+        {
+          "name": "Start"
+        },
+        {
+          "name": "Stretch Factor"
+        },
+        {
+          "name": "Sub Amt"
+        },
+        {
+          "name": "Sub Freq"
+        },
+        {
+          "name": "Transpose"
+        },
+        {
+          "name": "Vel > Vol"
+        },
+        {
+          "name": "Volume"
+        }
+      ]
+    },
+    {
+      "class": "DrumGroupDevice",
+      "category": "rack",
+      "displayName": "Drum Rack",
+      "parameters": [
+        {
+          "name": "Macro 1"
+        },
+        {
+          "name": "Macro 2"
+        },
+        {
+          "name": "Macro 3"
+        },
+        {
+          "name": "Macro 4"
+        },
+        {
+          "name": "Macro 5"
+        },
+        {
+          "name": "Macro 6"
+        },
+        {
+          "name": "Macro 7"
+        },
+        {
+          "name": "Macro 8"
+        }
+      ]
+    },
+    {
+      "class": "Echo",
+      "category": "audio_effect",
+      "displayName": "Echo",
+      "parameters": [
+        {
+          "name": "Channel Mode"
+        },
+        {
+          "name": "Channel Toggle"
+        },
+        {
+          "name": "Clip Dry"
+        },
+        {
+          "name": "Dly < Mod"
+        },
+        {
+          "name": "Dry Wet"
+        },
+        {
+          "name": "Duck"
+        },
+        {
+          "name": "Duck Release"
+        },
+        {
+          "name": "Duck Thr"
+        },
+        {
+          "name": "Env Mix"
+        },
+        {
+          "name": "Feedback"
+        },
+        {
+          "name": "Filter"
+        },
+        {
+          "name": "Filter On"
+        },
+        {
+          "name": "Flt < Mod"
+        },
+        {
+          "name": "Gate"
+        },
+        {
+          "name": "Gate Release"
+        },
+        {
+          "name": "Gate Thr"
+        },
+        {
+          "name": "HP Freq"
+        },
+        {
+          "name": "HP Res"
+        },
+        {
+          "name": "Input Gain"
+        },
+        {
+          "name": "Invert"
+        },
+        {
+          "name": "L 16th"
+        },
+        {
+          "name": "L Division"
+        },
+        {
+          "name": "L Offset"
+        },
+        {
+          "name": "L Sync"
+        },
+        {
+          "name": "L Sync Mode"
+        },
+        {
+          "name": "L Time"
+        },
+        {
+          "name": "L/R Switch"
+        },
+        {
+          "name": "LP Freq"
+        },
+        {
+          "name": "LP Res"
+        },
+        {
+          "name": "Link"
+        },
+        {
+          "name": "M Sync"
+        },
+        {
+          "name": "M/S Switch"
+        },
+        {
+          "name": "Mod 4x"
+        },
+        {
+          "name": "Mod Freq"
+        },
+        {
+          "name": "Mod Phase"
+        },
+        {
+          "name": "Mod Rate"
+        },
+        {
+          "name": "Mod Sync"
+        },
+        {
+          "name": "Mod Wave"
+        },
+        {
+          "name": "Noise"
+        },
+        {
+          "name": "Noise Amt"
+        },
+        {
+          "name": "Noise Mrph"
+        },
+        {
+          "name": "Output Gain"
+        },
+        {
+          "name": "R 16th"
+        },
+        {
+          "name": "R Division"
+        },
+        {
+          "name": "R Offset"
+        },
+        {
+          "name": "R Sync"
+        },
+        {
+          "name": "R Sync Mode"
+        },
+        {
+          "name": "R Time"
+        },
+        {
+          "name": "Repitch"
+        },
+        {
+          "name": "Reverb Decay"
+        },
+        {
+          "name": "Reverb Level"
+        },
+        {
+          "name": "Reverb Loc"
+        },
+        {
+          "name": "S Sync"
+        },
+        {
+          "name": "Stereo Width"
+        },
+        {
+          "name": "Wobble"
+        },
+        {
+          "name": "Wobble Amt"
+        },
+        {
+          "name": "Wobble Mrph"
+        }
+      ]
+    },
+    {
+      "class": "Eq8",
+      "category": "audio_effect",
+      "displayName": "EQ Eight",
+      "parameters": [
+        {
+          "name": "1 Filter On A"
+        },
+        {
+          "name": "1 Filter On B"
+        },
+        {
+          "name": "1 Filter Type A"
+        },
+        {
+          "name": "1 Filter Type B"
+        },
+        {
+          "name": "1 Frequency A"
+        },
+        {
+          "name": "1 Frequency B"
+        },
+        {
+          "name": "1 Gain A"
+        },
+        {
+          "name": "1 Gain B"
+        },
+        {
+          "name": "1 Resonance A"
+        },
+        {
+          "name": "1 Resonance B"
+        },
+        {
+          "name": "2 Filter On A"
+        },
+        {
+          "name": "2 Filter On B"
+        },
+        {
+          "name": "2 Filter Type A"
+        },
+        {
+          "name": "2 Filter Type B"
+        },
+        {
+          "name": "2 Frequency A"
+        },
+        {
+          "name": "2 Frequency B"
+        },
+        {
+          "name": "2 Gain A"
+        },
+        {
+          "name": "2 Gain B"
+        },
+        {
+          "name": "2 Resonance A"
+        },
+        {
+          "name": "2 Resonance B"
+        },
+        {
+          "name": "3 Filter On A"
+        },
+        {
+          "name": "3 Filter On B"
+        },
+        {
+          "name": "3 Filter Type A"
+        },
+        {
+          "name": "3 Filter Type B"
+        },
+        {
+          "name": "3 Frequency A"
+        },
+        {
+          "name": "3 Frequency B"
+        },
+        {
+          "name": "3 Gain A"
+        },
+        {
+          "name": "3 Gain B"
+        },
+        {
+          "name": "3 Resonance A"
+        },
+        {
+          "name": "3 Resonance B"
+        },
+        {
+          "name": "4 Filter On A"
+        },
+        {
+          "name": "4 Filter On B"
+        },
+        {
+          "name": "4 Filter Type A"
+        },
+        {
+          "name": "4 Filter Type B"
+        },
+        {
+          "name": "4 Frequency A"
+        },
+        {
+          "name": "4 Frequency B"
+        },
+        {
+          "name": "4 Gain A"
+        },
+        {
+          "name": "4 Gain B"
+        },
+        {
+          "name": "4 Resonance A"
+        },
+        {
+          "name": "4 Resonance B"
+        },
+        {
+          "name": "5 Filter On A"
+        },
+        {
+          "name": "5 Filter On B"
+        },
+        {
+          "name": "5 Filter Type A"
+        },
+        {
+          "name": "5 Filter Type B"
+        },
+        {
+          "name": "5 Frequency A"
+        },
+        {
+          "name": "5 Frequency B"
+        },
+        {
+          "name": "5 Gain A"
+        },
+        {
+          "name": "5 Gain B"
+        },
+        {
+          "name": "5 Resonance A"
+        },
+        {
+          "name": "5 Resonance B"
+        },
+        {
+          "name": "6 Filter On A"
+        },
+        {
+          "name": "6 Filter On B"
+        },
+        {
+          "name": "6 Filter Type A"
+        },
+        {
+          "name": "6 Filter Type B"
+        },
+        {
+          "name": "6 Frequency A"
+        },
+        {
+          "name": "6 Frequency B"
+        },
+        {
+          "name": "6 Gain A"
+        },
+        {
+          "name": "6 Gain B"
+        },
+        {
+          "name": "6 Resonance A"
+        },
+        {
+          "name": "6 Resonance B"
+        },
+        {
+          "name": "7 Filter On A"
+        },
+        {
+          "name": "7 Filter On B"
+        },
+        {
+          "name": "7 Filter Type A"
+        },
+        {
+          "name": "7 Filter Type B"
+        },
+        {
+          "name": "7 Frequency A"
+        },
+        {
+          "name": "7 Frequency B"
+        },
+        {
+          "name": "7 Gain A"
+        },
+        {
+          "name": "7 Gain B"
+        },
+        {
+          "name": "7 Resonance A"
+        },
+        {
+          "name": "7 Resonance B"
+        },
+        {
+          "name": "8 Filter On A"
+        },
+        {
+          "name": "8 Filter On B"
+        },
+        {
+          "name": "8 Filter Type A"
+        },
+        {
+          "name": "8 Filter Type B"
+        },
+        {
+          "name": "8 Frequency A"
+        },
+        {
+          "name": "8 Frequency B"
+        },
+        {
+          "name": "8 Gain A"
+        },
+        {
+          "name": "8 Gain B"
+        },
+        {
+          "name": "8 Resonance A"
+        },
+        {
+          "name": "8 Resonance B"
+        },
+        {
+          "name": "Adaptive Q"
+        },
+        {
+          "name": "Band"
+        },
+        {
+          "name": "Edit Mode"
+        },
+        {
+          "name": "Eq Mode"
+        },
+        {
+          "name": "Left/Right"
+        },
+        {
+          "name": "Mid/Side"
+        },
+        {
+          "name": "Output Gain"
+        },
+        {
+          "name": "Oversampling"
+        },
+        {
+          "name": "Scale"
+        }
+      ]
+    },
+    {
+      "class": "Erosion",
+      "category": "audio_effect",
+      "displayName": "Erosion",
+      "parameters": [
+        {
+          "name": "Amount"
+        },
+        {
+          "name": "Frequency"
+        },
+        {
+          "name": "Mode"
+        },
+        {
+          "name": "Width"
+        }
+      ]
+    },
+    {
+      "class": "Erosion2",
+      "category": "audio_effect",
+      "displayName": "Erosion (Move)",
+      "parameters": [
+        {
+          "name": "Amount"
+        },
+        {
+          "name": "Filter Width"
+        },
+        {
+          "name": "Frequency"
+        },
+        {
+          "name": "Noise Blend"
+        },
+        {
+          "name": "Stereo Width"
+        }
+      ]
+    },
+    {
+      "class": "FilterDelay",
+      "category": "audio_effect",
+      "displayName": "Filter Delay",
+      "parameters": [
+        {
+          "name": "1 Beat Delay"
+        },
+        {
+          "name": "1 Beat Swing"
+        },
+        {
+          "name": "1 Delay Mode"
+        },
+        {
+          "name": "1 Feedback"
+        },
+        {
+          "name": "1 Filter Freq"
+        },
+        {
+          "name": "1 Filter Width"
+        },
+        {
+          "name": "1 Pan"
+        },
+        {
+          "name": "1 Time Delay"
+        },
+        {
+          "name": "1 Volume"
+        },
+        {
+          "name": "2 Beat Delay"
+        },
+        {
+          "name": "2 Beat Swing"
+        },
+        {
+          "name": "2 Delay Mode"
+        },
+        {
+          "name": "2 Feedback"
+        },
+        {
+          "name": "2 Filter Freq"
+        },
+        {
+          "name": "2 Filter Width"
+        },
+        {
+          "name": "2 Pan"
+        },
+        {
+          "name": "2 Time Delay"
+        },
+        {
+          "name": "2 Volume"
+        },
+        {
+          "name": "3 Beat Delay"
+        },
+        {
+          "name": "3 Beat Swing"
+        },
+        {
+          "name": "3 Delay Mode"
+        },
+        {
+          "name": "3 Feedback"
+        },
+        {
+          "name": "3 Filter Freq"
+        },
+        {
+          "name": "3 Filter Width"
+        },
+        {
+          "name": "3 Pan"
+        },
+        {
+          "name": "3 Time Delay"
+        },
+        {
+          "name": "3 Volume"
+        },
+        {
+          "name": "Chan Select"
+        },
+        {
+          "name": "Dry"
+        },
+        {
+          "name": "L Channel"
+        },
+        {
+          "name": "L Filter"
+        },
+        {
+          "name": "L Sync"
+        },
+        {
+          "name": "L+R Channel"
+        },
+        {
+          "name": "L+R Filter"
+        },
+        {
+          "name": "L+R Sync"
+        },
+        {
+          "name": "R Channel"
+        },
+        {
+          "name": "R Filter"
+        },
+        {
+          "name": "R Sync"
+        }
+      ]
+    },
+    {
+      "class": "FilterEQ3",
+      "category": "audio_effect",
+      "displayName": "EQ Three",
+      "parameters": [
+        {
+          "name": "FreqHi"
+        },
+        {
+          "name": "FreqLo"
+        },
+        {
+          "name": "GainHi"
+        },
+        {
+          "name": "GainLo"
+        },
+        {
+          "name": "GainMid"
+        },
+        {
+          "name": "High"
+        },
+        {
+          "name": "Low"
+        },
+        {
+          "name": "Mid"
+        },
+        {
+          "name": "Slope"
+        }
+      ]
+    },
+    {
+      "class": "Flanger",
+      "category": "audio_effect",
+      "displayName": "Flanger",
+      "parameters": [
+        {
+          "name": "Delay Time"
+        },
+        {
+          "name": "Dry/Wet"
+        },
+        {
+          "name": "Env. Attack"
+        },
+        {
+          "name": "Env. Modulation"
+        },
+        {
+          "name": "Env. Release"
+        },
+        {
+          "name": "Feedback"
+        },
+        {
+          "name": "Frequency"
+        },
+        {
+          "name": "Hi Pass"
+        },
+        {
+          "name": "LFO Amount"
+        },
+        {
+          "name": "LFO Offset"
+        },
+        {
+          "name": "LFO Phase"
+        },
+        {
+          "name": "LFO Spin"
+        },
+        {
+          "name": "LFO Stereo Mode"
+        },
+        {
+          "name": "LFO Waveform"
+        },
+        {
+          "name": "LFO Width (Random)"
+        },
+        {
+          "name": "Polarity"
+        },
+        {
+          "name": "Sync"
+        },
+        {
+          "name": "Sync Rate"
+        }
+      ]
+    },
+    {
+      "class": "FrequencyShifter",
+      "category": "audio_effect",
+      "displayName": "Frequency Shifter",
+      "parameters": [
+        {
+          "name": "Coarse"
+        },
+        {
+          "name": "Drive"
+        },
+        {
+          "name": "Drive On/Off"
+        },
+        {
+          "name": "Dry/Wet"
+        },
+        {
+          "name": "Fine"
+        },
+        {
+          "name": "LFO Amount"
+        },
+        {
+          "name": "LFO Frequency"
+        },
+        {
+          "name": "LFO Offset"
+        },
+        {
+          "name": "LFO Phase"
+        },
+        {
+          "name": "LFO Spin"
+        },
+        {
+          "name": "LFO Stereo Mode"
+        },
+        {
+          "name": "LFO Waveform"
+        },
+        {
+          "name": "LFO Width (Random)"
+        },
+        {
+          "name": "Mode"
+        },
+        {
+          "name": "Ring Mod Frequency"
+        },
+        {
+          "name": "Sync"
+        },
+        {
+          "name": "Sync Rate"
+        },
+        {
+          "name": "Wide"
+        }
+      ]
+    },
+    {
+      "class": "Gate",
+      "category": "audio_effect",
+      "displayName": "Gate",
+      "parameters": [
+        {
+          "name": "Attack"
+        },
+        {
+          "name": "FlipMode"
+        },
+        {
+          "name": "Floor"
+        },
+        {
+          "name": "Hold"
+        },
+        {
+          "name": "LookAhead"
+        },
+        {
+          "name": "Release"
+        },
+        {
+          "name": "Return"
+        },
+        {
+          "name": "S/C EQ Freq"
+        },
+        {
+          "name": "S/C EQ Gain"
+        },
+        {
+          "name": "S/C EQ On"
+        },
+        {
+          "name": "S/C EQ Q"
+        },
+        {
+          "name": "S/C EQ Type"
+        },
+        {
+          "name": "S/C Gain"
+        },
+        {
+          "name": "S/C Listen"
+        },
+        {
+          "name": "S/C Mix"
+        },
+        {
+          "name": "S/C On"
+        },
+        {
+          "name": "Threshold"
+        }
+      ]
+    },
+    {
+      "class": "GlueCompressor",
+      "category": "audio_effect",
+      "displayName": "Glue Compressor",
+      "parameters": [
+        {
+          "name": "Attack"
+        },
+        {
+          "name": "Dry/Wet"
+        },
+        {
+          "name": "Makeup"
+        },
+        {
+          "name": "Peak Clip In"
+        },
+        {
+          "name": "Range"
+        },
+        {
+          "name": "Ratio"
+        },
+        {
+          "name": "Release"
+        },
+        {
+          "name": "S/C EQ Freq"
+        },
+        {
+          "name": "S/C EQ Gain"
+        },
+        {
+          "name": "S/C EQ On"
+        },
+        {
+          "name": "S/C EQ Q"
+        },
+        {
+          "name": "S/C EQ Type"
+        },
+        {
+          "name": "S/C Gain"
+        },
+        {
+          "name": "S/C Mix"
+        },
+        {
+          "name": "S/C On"
+        },
+        {
+          "name": "Threshold"
+        }
+      ]
+    },
+    {
+      "class": "GrainDelay",
+      "category": "audio_effect",
+      "displayName": "Grain Delay",
+      "parameters": [
+        {
+          "name": "Beat Delay"
+        },
+        {
+          "name": "Beat Swing"
+        },
+        {
+          "name": "Delay Mode"
+        },
+        {
+          "name": "DryWet"
+        },
+        {
+          "name": "Feedback"
+        },
+        {
+          "name": "Frequency"
+        },
+        {
+          "name": "Pitch"
+        },
+        {
+          "name": "Random"
+        },
+        {
+          "name": "Spray"
+        },
+        {
+          "name": "Sync"
+        },
+        {
+          "name": "Time Delay"
+        }
+      ]
+    },
+    {
+      "class": "Hybrid",
+      "category": "audio_effect",
+      "displayName": "Hybrid Reverb",
+      "parameters": [
+        {
+          "name": "Algo Delay"
+        },
+        {
+          "name": "Algo Type"
+        },
+        {
+          "name": "Band"
+        },
+        {
+          "name": "Bass Mono"
+        },
+        {
+          "name": "Blend"
+        },
+        {
+          "name": "DH Bass X"
+        },
+        {
+          "name": "DH BassMult"
+        },
+        {
+          "name": "DH Shape"
+        },
+        {
+          "name": "Damping"
+        },
+        {
+          "name": "Decay"
+        },
+        {
+          "name": "Diffusion"
+        },
+        {
+          "name": "Dry/Wet"
+        },
+        {
+          "name": "EQ"
+        },
+        {
+          "name": "EQ High Freq"
+        },
+        {
+          "name": "EQ High Gain"
+        },
+        {
+          "name": "EQ High Slope"
+        },
+        {
+          "name": "EQ High Type"
+        },
+        {
+          "name": "EQ Low Freq"
+        },
+        {
+          "name": "EQ Low Gain"
+        },
+        {
+          "name": "EQ Low Slope"
+        },
+        {
+          "name": "EQ Low Type"
+        },
+        {
+          "name": "EQ On"
+        },
+        {
+          "name": "EQ P1 Freq"
+        },
+        {
+          "name": "EQ P1 Gain"
+        },
+        {
+          "name": "EQ P1 Q"
+        },
+        {
+          "name": "EQ P2 Freq"
+        },
+        {
+          "name": "EQ P2 Gain"
+        },
+        {
+          "name": "EQ P2 Q"
+        },
+        {
+          "name": "EQ Pre Algo"
+        },
+        {
+          "name": "Freeze"
+        },
+        {
+          "name": "Freeze In"
+        },
+        {
+          "name": "High Type Switch"
+        },
+        {
+          "name": "IR"
+        },
+        {
+          "name": "IR Category"
+        },
+        {
+          "name": "Ir Attack Time"
+        },
+        {
+          "name": "Ir Decay Time"
+        },
+        {
+          "name": "Ir Size Factor"
+        },
+        {
+          "name": "Low Type Switch"
+        },
+        {
+          "name": "Modulation"
+        },
+        {
+          "name": "Ms Sync Switch"
+        },
+        {
+          "name": "P.Dly 16th"
+        },
+        {
+          "name": "P.Dly Fb 16th"
+        },
+        {
+          "name": "P.Dly Fb Time"
+        },
+        {
+          "name": "P.Dly Sync"
+        },
+        {
+          "name": "P.Dly Time"
+        },
+        {
+          "name": "Pr High Mult"
+        },
+        {
+          "name": "Pr Low Mult"
+        },
+        {
+          "name": "Pr X Over"
+        },
+        {
+          "name": "Pre Algo"
+        },
+        {
+          "name": "Qz Distance"
+        },
+        {
+          "name": "Qz Low Damp"
+        },
+        {
+          "name": "Routing Eq Off"
+        },
+        {
+          "name": "Routing Eq On PreAlgo Off"
+        },
+        {
+          "name": "Routing Eq On PreAlgo On"
+        },
+        {
+          "name": "Section"
+        },
+        {
+          "name": "Send Gain"
+        },
+        {
+          "name": "Sh Pitch Shift"
+        },
+        {
+          "name": "Sh Shimmer"
+        },
+        {
+          "name": "Shape"
+        },
+        {
+          "name": "Size"
+        },
+        {
+          "name": "Ti Phase"
+        },
+        {
+          "name": "Ti Rate"
+        },
+        {
+          "name": "Ti Tide"
+        },
+        {
+          "name": "Ti Waveform"
+        },
+        {
+          "name": "Vintage Copy"
+        },
+        {
+          "name": "Width"
+        }
+      ]
+    },
+    {
+      "class": "InstrumentGroupDevice",
+      "category": "rack",
+      "displayName": "Instrument Rack",
+      "parameters": [
+        {
+          "name": "Macro 1"
+        },
+        {
+          "name": "Macro 2"
+        },
+        {
+          "name": "Macro 3"
+        },
+        {
+          "name": "Macro 4"
+        },
+        {
+          "name": "Macro 5"
+        },
+        {
+          "name": "Macro 6"
+        },
+        {
+          "name": "Macro 7"
+        },
+        {
+          "name": "Macro 8"
+        }
+      ]
+    },
+    {
+      "class": "InstrumentImpulse",
+      "category": "instrument",
+      "displayName": "Impulse",
+      "parameters": [
+        {
+          "name": "1 Envelope Decay"
+        },
+        {
+          "name": "1 Envelope Type"
+        },
+        {
+          "name": "1 Filter <- Random"
+        },
+        {
+          "name": "1 Filter <- Vel"
+        },
+        {
+          "name": "1 Filter Freq"
+        },
+        {
+          "name": "1 Filter Res"
+        },
+        {
+          "name": "1 Filter Type"
+        },
+        {
+          "name": "1 Pan"
+        },
+        {
+          "name": "1 Pan <- Random"
+        },
+        {
+          "name": "1 Pan <- Vel"
+        },
+        {
+          "name": "1 Saturator Drive"
+        },
+        {
+          "name": "1 Start"
+        },
+        {
+          "name": "1 Stretch Factor"
+        },
+        {
+          "name": "1 Stretch Mode"
+        },
+        {
+          "name": "1 Transpose"
+        },
+        {
+          "name": "1 Volume"
+        },
+        {
+          "name": "1 Volume <- Vel"
+        },
+        {
+          "name": "2 Envelope Decay"
+        },
+        {
+          "name": "2 Envelope Type"
+        },
+        {
+          "name": "2 Filter <- Random"
+        },
+        {
+          "name": "2 Filter <- Vel"
+        },
+        {
+          "name": "2 Filter Freq"
+        },
+        {
+          "name": "2 Filter Res"
+        },
+        {
+          "name": "2 Filter Type"
+        },
+        {
+          "name": "2 Pan"
+        },
+        {
+          "name": "2 Pan <- Random"
+        },
+        {
+          "name": "2 Pan <- Vel"
+        },
+        {
+          "name": "2 Saturator Drive"
+        },
+        {
+          "name": "2 Start"
+        },
+        {
+          "name": "2 Stretch Factor"
+        },
+        {
+          "name": "2 Stretch Mode"
+        },
+        {
+          "name": "2 Transpose"
+        },
+        {
+          "name": "2 Volume"
+        },
+        {
+          "name": "2 Volume <- Vel"
+        },
+        {
+          "name": "3 Envelope Decay"
+        },
+        {
+          "name": "3 Envelope Type"
+        },
+        {
+          "name": "3 Filter <- Random"
+        },
+        {
+          "name": "3 Filter <- Vel"
+        },
+        {
+          "name": "3 Filter Freq"
+        },
+        {
+          "name": "3 Filter Res"
+        },
+        {
+          "name": "3 Filter Type"
+        },
+        {
+          "name": "3 Pan"
+        },
+        {
+          "name": "3 Pan <- Random"
+        },
+        {
+          "name": "3 Pan <- Vel"
+        },
+        {
+          "name": "3 Saturator Drive"
+        },
+        {
+          "name": "3 Start"
+        },
+        {
+          "name": "3 Stretch Factor"
+        },
+        {
+          "name": "3 Stretch Mode"
+        },
+        {
+          "name": "3 Transpose"
+        },
+        {
+          "name": "3 Volume"
+        },
+        {
+          "name": "3 Volume <- Vel"
+        },
+        {
+          "name": "4 Envelope Decay"
+        },
+        {
+          "name": "4 Envelope Type"
+        },
+        {
+          "name": "4 Filter <- Random"
+        },
+        {
+          "name": "4 Filter <- Vel"
+        },
+        {
+          "name": "4 Filter Freq"
+        },
+        {
+          "name": "4 Filter Res"
+        },
+        {
+          "name": "4 Filter Type"
+        },
+        {
+          "name": "4 Pan"
+        },
+        {
+          "name": "4 Pan <- Random"
+        },
+        {
+          "name": "4 Pan <- Vel"
+        },
+        {
+          "name": "4 Saturator Drive"
+        },
+        {
+          "name": "4 Start"
+        },
+        {
+          "name": "4 Stretch Factor"
+        },
+        {
+          "name": "4 Stretch Mode"
+        },
+        {
+          "name": "4 Transpose"
+        },
+        {
+          "name": "4 Volume"
+        },
+        {
+          "name": "4 Volume <- Vel"
+        },
+        {
+          "name": "5 Envelope Decay"
+        },
+        {
+          "name": "5 Envelope Type"
+        },
+        {
+          "name": "5 Filter <- Random"
+        },
+        {
+          "name": "5 Filter <- Vel"
+        },
+        {
+          "name": "5 Filter Freq"
+        },
+        {
+          "name": "5 Filter Res"
+        },
+        {
+          "name": "5 Filter Type"
+        },
+        {
+          "name": "5 Pan"
+        },
+        {
+          "name": "5 Pan <- Random"
+        },
+        {
+          "name": "5 Pan <- Vel"
+        },
+        {
+          "name": "5 Saturator Drive"
+        },
+        {
+          "name": "5 Start"
+        },
+        {
+          "name": "5 Stretch Factor"
+        },
+        {
+          "name": "5 Stretch Mode"
+        },
+        {
+          "name": "5 Transpose"
+        },
+        {
+          "name": "5 Volume"
+        },
+        {
+          "name": "5 Volume <- Vel"
+        },
+        {
+          "name": "6 Envelope Decay"
+        },
+        {
+          "name": "6 Envelope Type"
+        },
+        {
+          "name": "6 Filter <- Random"
+        },
+        {
+          "name": "6 Filter <- Vel"
+        },
+        {
+          "name": "6 Filter Freq"
+        },
+        {
+          "name": "6 Filter Res"
+        },
+        {
+          "name": "6 Filter Type"
+        },
+        {
+          "name": "6 Pan"
+        },
+        {
+          "name": "6 Pan <- Random"
+        },
+        {
+          "name": "6 Pan <- Vel"
+        },
+        {
+          "name": "6 Saturator Drive"
+        },
+        {
+          "name": "6 Start"
+        },
+        {
+          "name": "6 Stretch Factor"
+        },
+        {
+          "name": "6 Stretch Mode"
+        },
+        {
+          "name": "6 Transpose"
+        },
+        {
+          "name": "6 Volume"
+        },
+        {
+          "name": "6 Volume <- Vel"
+        },
+        {
+          "name": "7 Envelope Decay"
+        },
+        {
+          "name": "7 Envelope Type"
+        },
+        {
+          "name": "7 Filter <- Random"
+        },
+        {
+          "name": "7 Filter <- Vel"
+        },
+        {
+          "name": "7 Filter Freq"
+        },
+        {
+          "name": "7 Filter Res"
+        },
+        {
+          "name": "7 Filter Type"
+        },
+        {
+          "name": "7 Pan"
+        },
+        {
+          "name": "7 Pan <- Random"
+        },
+        {
+          "name": "7 Pan <- Vel"
+        },
+        {
+          "name": "7 Saturator Drive"
+        },
+        {
+          "name": "7 Start"
+        },
+        {
+          "name": "7 Stretch Factor"
+        },
+        {
+          "name": "7 Stretch Mode"
+        },
+        {
+          "name": "7 Transpose"
+        },
+        {
+          "name": "7 Volume"
+        },
+        {
+          "name": "7 Volume <- Vel"
+        },
+        {
+          "name": "8 Envelope Decay"
+        },
+        {
+          "name": "8 Envelope Type"
+        },
+        {
+          "name": "8 Filter <- Random"
+        },
+        {
+          "name": "8 Filter <- Vel"
+        },
+        {
+          "name": "8 Filter Freq"
+        },
+        {
+          "name": "8 Filter Res"
+        },
+        {
+          "name": "8 Filter Type"
+        },
+        {
+          "name": "8 Pan"
+        },
+        {
+          "name": "8 Pan <- Random"
+        },
+        {
+          "name": "8 Pan <- Vel"
+        },
+        {
+          "name": "8 Saturator Drive"
+        },
+        {
+          "name": "8 Start"
+        },
+        {
+          "name": "8 Stretch Factor"
+        },
+        {
+          "name": "8 Stretch Mode"
+        },
+        {
+          "name": "8 Transpose"
+        },
+        {
+          "name": "8 Volume"
+        },
+        {
+          "name": "8 Volume <- Vel"
+        },
+        {
+          "name": "Global Time"
+        },
+        {
+          "name": "Global Transpose"
+        },
+        {
+          "name": "Global Volume"
+        }
+      ]
+    },
+    {
+      "class": "InstrumentMeld",
+      "category": "instrument",
+      "displayName": "Meld",
+      "parameters": [
+        {
+          "name": "Envelope View"
+        },
+        {
+          "name": "Filter A"
+        },
+        {
+          "name": "Filter B"
+        },
+        {
+          "name": "Glide A"
+        },
+        {
+          "name": "Glide B"
+        },
+        {
+          "name": "LFO 1 A Retrigger"
+        },
+        {
+          "name": "LFO 1 A Sync"
+        },
+        {
+          "name": "LFO 1 B Retrigger"
+        },
+        {
+          "name": "LFO 1 B Sync"
+        },
+        {
+          "name": "LFO 2 A Sync"
+        },
+        {
+          "name": "LFO 2 B Sync"
+        },
+        {
+          "name": "LFO1 Effect"
+        },
+        {
+          "name": "Limiter"
+        },
+        {
+          "name": "Link Envelopes"
+        },
+        {
+          "name": "MeldVoice_Drive"
+        },
+        {
+          "name": "MeldVoice_EngineA_AmpEnvelope_LoopMode"
+        },
+        {
+          "name": "MeldVoice_EngineA_AmpEnvelope_Slopes_Attack"
+        },
+        {
+          "name": "MeldVoice_EngineA_AmpEnvelope_Slopes_Decay"
+        },
+        {
+          "name": "MeldVoice_EngineA_AmpEnvelope_Slopes_Release"
+        },
+        {
+          "name": "MeldVoice_EngineA_AmpEnvelope_Sustain"
+        },
+        {
+          "name": "MeldVoice_EngineA_AmpEnvelope_Times_Attack"
+        },
+        {
+          "name": "MeldVoice_EngineA_AmpEnvelope_Times_Decay"
+        },
+        {
+          "name": "MeldVoice_EngineA_AmpEnvelope_Times_Release"
+        },
+        {
+          "name": "MeldVoice_EngineA_FilterEnvelope_LoopMode"
+        },
+        {
+          "name": "MeldVoice_EngineA_FilterEnvelope_Slopes_Release"
+        },
+        {
+          "name": "MeldVoice_EngineA_FilterEnvelope_Times_Attack"
+        },
+        {
+          "name": "MeldVoice_EngineA_FilterEnvelope_Times_Decay"
+        },
+        {
+          "name": "MeldVoice_EngineA_FilterEnvelope_Times_Release"
+        },
+        {
+          "name": "MeldVoice_EngineA_FilterEnvelope_Values_Sustain"
+        },
+        {
+          "name": "MeldVoice_EngineA_Filter_FilterType"
+        },
+        {
+          "name": "MeldVoice_EngineA_Filter_Frequency"
+        },
+        {
+          "name": "MeldVoice_EngineA_Filter_Macro1"
+        },
+        {
+          "name": "MeldVoice_EngineA_Filter_Macro2"
+        },
+        {
+          "name": "MeldVoice_EngineA_GlideTime"
+        },
+        {
+          "name": "MeldVoice_EngineA_Lfo1_GeneratorMacro1"
+        },
+        {
+          "name": "MeldVoice_EngineA_Lfo1_GeneratorMacro2"
+        },
+        {
+          "name": "MeldVoice_EngineA_Lfo1_GeneratorType"
+        },
+        {
+          "name": "MeldVoice_EngineA_Lfo1_PhaseOffset"
+        },
+        {
+          "name": "MeldVoice_EngineA_Lfo1_Rate"
+        },
+        {
+          "name": "MeldVoice_EngineA_Lfo1_Sync"
+        },
+        {
+          "name": "MeldVoice_EngineA_Lfo1_SyncedRate"
+        },
+        {
+          "name": "MeldVoice_EngineA_Lfo1_Transformer1Macro"
+        },
+        {
+          "name": "MeldVoice_EngineA_Lfo1_Transformer1Type"
+        },
+        {
+          "name": "MeldVoice_EngineA_Lfo1_Transformer2Macro"
+        },
+        {
+          "name": "MeldVoice_EngineA_Lfo1_Transformer2Type"
+        },
+        {
+          "name": "MeldVoice_EngineA_Lfo2_Rate"
+        },
+        {
+          "name": "MeldVoice_EngineA_Lfo2_Sync"
+        },
+        {
+          "name": "MeldVoice_EngineA_Lfo2_SyncedRate"
+        },
+        {
+          "name": "MeldVoice_EngineA_Lfo2_Waveform"
+        },
+        {
+          "name": "MeldVoice_EngineA_Oscillator_Macro1"
+        },
+        {
+          "name": "MeldVoice_EngineA_Oscillator_Macro2"
+        },
+        {
+          "name": "MeldVoice_EngineA_Oscillator_OscillatorType"
+        },
+        {
+          "name": "MeldVoice_EngineA_Oscillator_Pitch_Detune"
+        },
+        {
+          "name": "MeldVoice_EngineA_Oscillator_Pitch_Transpose"
+        },
+        {
+          "name": "MeldVoice_EngineA_Pan"
+        },
+        {
+          "name": "MeldVoice_EngineA_ToneFilter"
+        },
+        {
+          "name": "MeldVoice_EngineA_Volume"
+        },
+        {
+          "name": "MeldVoice_EngineBDelay"
+        },
+        {
+          "name": "MeldVoice_EngineB_AmpEnvelope_LoopMode"
+        },
+        {
+          "name": "MeldVoice_EngineB_AmpEnvelope_Slopes_Attack"
+        },
+        {
+          "name": "MeldVoice_EngineB_AmpEnvelope_Slopes_Decay"
+        },
+        {
+          "name": "MeldVoice_EngineB_AmpEnvelope_Slopes_Release"
+        },
+        {
+          "name": "MeldVoice_EngineB_AmpEnvelope_Sustain"
+        },
+        {
+          "name": "MeldVoice_EngineB_AmpEnvelope_Times_Attack"
+        },
+        {
+          "name": "MeldVoice_EngineB_AmpEnvelope_Times_Decay"
+        },
+        {
+          "name": "MeldVoice_EngineB_AmpEnvelope_Times_Release"
+        },
+        {
+          "name": "MeldVoice_EngineB_FilterEnvelope_LoopMode"
+        },
+        {
+          "name": "MeldVoice_EngineB_FilterEnvelope_Slopes_Release"
+        },
+        {
+          "name": "MeldVoice_EngineB_FilterEnvelope_Times_Release"
+        },
+        {
+          "name": "MeldVoice_EngineB_FilterEnvelope_Values_Sustain"
+        },
+        {
+          "name": "MeldVoice_EngineB_Filter_FilterType"
+        },
+        {
+          "name": "MeldVoice_EngineB_Filter_Frequency"
+        },
+        {
+          "name": "MeldVoice_EngineB_Filter_Macro1"
+        },
+        {
+          "name": "MeldVoice_EngineB_Filter_Macro2"
+        },
+        {
+          "name": "MeldVoice_EngineB_GlideTime"
+        },
+        {
+          "name": "MeldVoice_EngineB_Lfo1_GeneratorMacro1"
+        },
+        {
+          "name": "MeldVoice_EngineB_Lfo1_GeneratorMacro2"
+        },
+        {
+          "name": "MeldVoice_EngineB_Lfo1_GeneratorType"
+        },
+        {
+          "name": "MeldVoice_EngineB_Lfo1_PhaseOffset"
+        },
+        {
+          "name": "MeldVoice_EngineB_Lfo1_Rate"
+        },
+        {
+          "name": "MeldVoice_EngineB_Lfo1_Sync"
+        },
+        {
+          "name": "MeldVoice_EngineB_Lfo1_SyncedRate"
+        },
+        {
+          "name": "MeldVoice_EngineB_Lfo1_Transformer1Macro"
+        },
+        {
+          "name": "MeldVoice_EngineB_Lfo1_Transformer1Type"
+        },
+        {
+          "name": "MeldVoice_EngineB_Lfo1_Transformer2Macro"
+        },
+        {
+          "name": "MeldVoice_EngineB_Lfo1_Transformer2Type"
+        },
+        {
+          "name": "MeldVoice_EngineB_Lfo2_Rate"
+        },
+        {
+          "name": "MeldVoice_EngineB_Lfo2_Sync"
+        },
+        {
+          "name": "MeldVoice_EngineB_Lfo2_SyncedRate"
+        },
+        {
+          "name": "MeldVoice_EngineB_Lfo2_Waveform"
+        },
+        {
+          "name": "MeldVoice_EngineB_Oscillator_Macro1"
+        },
+        {
+          "name": "MeldVoice_EngineB_Oscillator_Macro2"
+        },
+        {
+          "name": "MeldVoice_EngineB_Oscillator_OscillatorType"
+        },
+        {
+          "name": "MeldVoice_EngineB_Oscillator_Pitch_Detune"
+        },
+        {
+          "name": "MeldVoice_EngineB_Oscillator_Pitch_Transpose"
+        },
+        {
+          "name": "MeldVoice_EngineB_Pan"
+        },
+        {
+          "name": "MeldVoice_EngineB_ToneFilter"
+        },
+        {
+          "name": "MeldVoice_EngineB_Volume"
+        },
+        {
+          "name": "MeldVoice_VoiceSpreadAmount"
+        },
+        {
+          "name": "Mono Poly"
+        },
+        {
+          "name": "Osc A"
+        },
+        {
+          "name": "Osc B"
+        },
+        {
+          "name": "Poly Voices"
+        },
+        {
+          "name": "Selected Engine"
+        },
+        {
+          "name": "Selected Env"
+        },
+        {
+          "name": "Stack Voices"
+        },
+        {
+          "name": "Volume"
+        }
+      ]
+    },
+    {
+      "class": "InstrumentVector",
+      "category": "instrument",
+      "displayName": "Wavetable",
+      "parameters": [
+        {
+          "name": "Add to Matrix"
+        },
+        {
+          "name": "Amp A Slope"
+        },
+        {
+          "name": "Amp Attack"
+        },
+        {
+          "name": "Amp D Slope"
+        },
+        {
+          "name": "Amp Decay"
+        },
+        {
+          "name": "Amp Env Mod Amount"
+        },
+        {
+          "name": "Amp Env View"
+        },
+        {
+          "name": "Amp Loop Mode"
+        },
+        {
+          "name": "Amp R Slope"
+        },
+        {
+          "name": "Amp Release"
+        },
+        {
+          "name": "Amp Sustain"
+        },
+        {
+          "name": "Back"
+        },
+        {
+          "name": "Current Mod Target"
+        },
+        {
+          "name": "Env 2 A Slope"
+        },
+        {
+          "name": "Env 2 Attack"
+        },
+        {
+          "name": "Env 2 D Slope"
+        },
+        {
+          "name": "Env 2 Decay"
+        },
+        {
+          "name": "Env 2 Final"
+        },
+        {
+          "name": "Env 2 Initial"
+        },
+        {
+          "name": "Env 2 Loop Mode"
+        },
+        {
+          "name": "Env 2 Mod Amount"
+        },
+        {
+          "name": "Env 2 Peak"
+        },
+        {
+          "name": "Env 2 R Slope"
+        },
+        {
+          "name": "Env 2 Release"
+        },
+        {
+          "name": "Env 2 Sustain"
+        },
+        {
+          "name": "Env 3 A Slope"
+        },
+        {
+          "name": "Env 3 Attack"
+        },
+        {
+          "name": "Env 3 D Slope"
+        },
+        {
+          "name": "Env 3 Decay"
+        },
+        {
+          "name": "Env 3 Final"
+        },
+        {
+          "name": "Env 3 Initial"
+        },
+        {
+          "name": "Env 3 Loop Mode"
+        },
+        {
+          "name": "Env 3 Mod Amount"
+        },
+        {
+          "name": "Env 3 Peak"
+        },
+        {
+          "name": "Env 3 R Slope"
+        },
+        {
+          "name": "Env 3 Release"
+        },
+        {
+          "name": "Env 3 Sustain"
+        },
+        {
+          "name": "Envelopes"
+        },
+        {
+          "name": "Filter"
+        },
+        {
+          "name": "Filter 1 BP/NO/Morph"
+        },
+        {
+          "name": "Filter 1 Drive"
+        },
+        {
+          "name": "Filter 1 Freq"
+        },
+        {
+          "name": "Filter 1 LP/HP"
+        },
+        {
+          "name": "Filter 1 Morph"
+        },
+        {
+          "name": "Filter 1 On"
+        },
+        {
+          "name": "Filter 1 Res"
+        },
+        {
+          "name": "Filter 1 Slope"
+        },
+        {
+          "name": "Filter 1 Type"
+        },
+        {
+          "name": "Filter 2 BP/NO/Morph"
+        },
+        {
+          "name": "Filter 2 Drive"
+        },
+        {
+          "name": "Filter 2 Freq"
+        },
+        {
+          "name": "Filter 2 LP/HP"
+        },
+        {
+          "name": "Filter 2 Morph"
+        },
+        {
+          "name": "Filter 2 On"
+        },
+        {
+          "name": "Filter 2 Res"
+        },
+        {
+          "name": "Filter 2 Slope"
+        },
+        {
+          "name": "Filter 2 Type"
+        },
+        {
+          "name": "Filter Routing"
+        },
+        {
+          "name": "Filter Switch"
+        },
+        {
+          "name": "Glide"
+        },
+        {
+          "name": "Global Mod Amount"
+        },
+        {
+          "name": "Go to Amp Env"
+        },
+        {
+          "name": "Go to Env 2"
+        },
+        {
+          "name": "Go to Env 3"
+        },
+        {
+          "name": "Go to LFO 1"
+        },
+        {
+          "name": "Go to LFO 2"
+        },
+        {
+          "name": "Internal Filter"
+        },
+        {
+          "name": "LFO"
+        },
+        {
+          "name": "LFO 1 Amount"
+        },
+        {
+          "name": "LFO 1 Attack Time"
+        },
+        {
+          "name": "LFO 1 Phase Offset"
+        },
+        {
+          "name": "LFO 1 Rate"
+        },
+        {
+          "name": "LFO 1 Retrigger"
+        },
+        {
+          "name": "LFO 1 S. Rate"
+        },
+        {
+          "name": "LFO 1 Shape"
+        },
+        {
+          "name": "LFO 1 Shaping"
+        },
+        {
+          "name": "LFO 1 Sync"
+        },
+        {
+          "name": "LFO 2 Amount"
+        },
+        {
+          "name": "LFO 2 Attack Time"
+        },
+        {
+          "name": "LFO 2 Phase Offset"
+        },
+        {
+          "name": "LFO 2 Rate"
+        },
+        {
+          "name": "LFO 2 Retrigger"
+        },
+        {
+          "name": "LFO 2 S. Rate"
+        },
+        {
+          "name": "LFO 2 Shape"
+        },
+        {
+          "name": "LFO 2 Shaping"
+        },
+        {
+          "name": "LFO 2 Sync"
+        },
+        {
+          "name": "Lfo 1 Mod Amount"
+        },
+        {
+          "name": "Lfo 2 Mod Amount"
+        },
+        {
+          "name": "MIDI Aftertouch Mod Amount"
+        },
+        {
+          "name": "MIDI Mod Wheel Mod Amount"
+        },
+        {
+          "name": "MIDI Note Mod Amount"
+        },
+        {
+          "name": "MIDI Pitch Bend Mod Amount"
+        },
+        {
+          "name": "MIDI Random On Note On"
+        },
+        {
+          "name": "MIDI Velocity Mod Amount"
+        },
+        {
+          "name": "Mod Env View"
+        },
+        {
+          "name": "Modulation Target Names"
+        },
+        {
+          "name": "Mono On"
+        },
+        {
+          "name": "Osc"
+        },
+        {
+          "name": "Osc 1 Category"
+        },
+        {
+          "name": "Osc 1 Effect 1"
+        },
+        {
+          "name": "Osc 1 Effect 2"
+        },
+        {
+          "name": "Osc 1 Effect Type"
+        },
+        {
+          "name": "Osc 1 Gain"
+        },
+        {
+          "name": "Osc 1 Pitch"
+        },
+        {
+          "name": "Osc 1 Pos"
+        },
+        {
+          "name": "Osc 1 Table"
+        },
+        {
+          "name": "Osc 2 Category"
+        },
+        {
+          "name": "Osc 2 Effect 1"
+        },
+        {
+          "name": "Osc 2 Effect 2"
+        },
+        {
+          "name": "Osc 2 Effect Type"
+        },
+        {
+          "name": "Osc 2 Gain"
+        },
+        {
+          "name": "Osc 2 Pitch"
+        },
+        {
+          "name": "Osc 2 Pos"
+        },
+        {
+          "name": "Osc 2 Table"
+        },
+        {
+          "name": "Oscillator"
+        },
+        {
+          "name": "Poly Voices"
+        },
+        {
+          "name": "Sub"
+        },
+        {
+          "name": "Sub Gain"
+        },
+        {
+          "name": "Sub Tone"
+        },
+        {
+          "name": "Sub Transpose"
+        },
+        {
+          "name": "Time"
+        },
+        {
+          "name": "Transpose"
+        },
+        {
+          "name": "Unison Amount"
+        },
+        {
+          "name": "Unison Mode"
+        },
+        {
+          "name": "Unison Voices"
+        },
+        {
+          "name": "Volume"
+        }
+      ]
+    },
+    {
+      "class": "Limiter",
+      "category": "audio_effect",
+      "displayName": "Limiter",
+      "parameters": [
+        {
+          "name": "Auto"
+        },
+        {
+          "name": "Ceiling"
+        },
+        {
+          "name": "Gain"
+        },
+        {
+          "name": "Link Channels"
+        },
+        {
+          "name": "Lookahead"
+        },
+        {
+          "name": "Release time"
+        }
+      ]
+    },
+    {
+      "class": "Looper",
+      "category": "audio_effect",
+      "displayName": "Looper",
+      "parameters": [
+        {
+          "name": "Feedback"
+        },
+        {
+          "name": "Monitor"
+        },
+        {
+          "name": "Quantization"
+        },
+        {
+          "name": "Reverse"
+        },
+        {
+          "name": "Song Control"
+        },
+        {
+          "name": "Speed"
+        },
+        {
+          "name": "State"
+        },
+        {
+          "name": "Tempo Control"
+        }
+      ]
+    },
+    {
+      "class": "LoungeLizard",
+      "category": "instrument",
+      "displayName": "Electric",
+      "parameters": [
+        {
+          "name": "Damp Amount"
+        },
+        {
+          "name": "Damp Balance"
+        },
+        {
+          "name": "Damp Tone"
+        },
+        {
+          "name": "Detune"
+        },
+        {
+          "name": "F Release"
+        },
+        {
+          "name": "F Tine < Key"
+        },
+        {
+          "name": "F Tine Color"
+        },
+        {
+          "name": "F Tine Decay"
+        },
+        {
+          "name": "F Tine Vol"
+        },
+        {
+          "name": "F Tone Decay"
+        },
+        {
+          "name": "F Tone Vol"
+        },
+        {
+          "name": "KB Stretch"
+        },
+        {
+          "name": "M Force"
+        },
+        {
+          "name": "M Force < Key"
+        },
+        {
+          "name": "M Force < Vel"
+        },
+        {
+          "name": "M Stiff < Key"
+        },
+        {
+          "name": "M Stiff < Vel"
+        },
+        {
+          "name": "M Stiffness"
+        },
+        {
+          "name": "Noise < Key"
+        },
+        {
+          "name": "Noise Amount"
+        },
+        {
+          "name": "Noise Decay"
+        },
+        {
+          "name": "Noise Pitch"
+        },
+        {
+          "name": "Note PB Range"
+        },
+        {
+          "name": "P Amp < Key"
+        },
+        {
+          "name": "P Amp In"
+        },
+        {
+          "name": "P Amp Out"
+        },
+        {
+          "name": "P Distance"
+        },
+        {
+          "name": "P Symmetry"
+        },
+        {
+          "name": "PB Range"
+        },
+        {
+          "name": "Pickup Model"
+        },
+        {
+          "name": "Semitone"
+        },
+        {
+          "name": "Voices"
+        },
+        {
+          "name": "Volume"
+        }
+      ]
+    },
+    {
+      "class": "MidiArpeggiator",
+      "category": "midi_effect",
+      "displayName": "Arpeggiator",
+      "parameters": [
+        {
+          "name": "Free Rate"
+        },
+        {
+          "name": "Gate"
+        },
+        {
+          "name": "Groove"
+        },
+        {
+          "name": "Hold On"
+        },
+        {
+          "name": "Offset"
+        },
+        {
+          "name": "Repeats"
+        },
+        {
+          "name": "Ret. Interval"
+        },
+        {
+          "name": "Retrigger Mode"
+        },
+        {
+          "name": "Style"
+        },
+        {
+          "name": "Sync On"
+        },
+        {
+          "name": "Synced Rate"
+        },
+        {
+          "name": "Tranpose Key"
+        },
+        {
+          "name": "Tranpose Mode"
+        },
+        {
+          "name": "Transp. Dist."
+        },
+        {
+          "name": "Transp. Steps"
+        },
+        {
+          "name": "Vel. Retrigger"
+        },
+        {
+          "name": "Velocity Decay"
+        },
+        {
+          "name": "Velocity On"
+        },
+        {
+          "name": "Velocity Target"
+        }
+      ]
+    },
+    {
+      "class": "MidiCcControl",
+      "category": "midi_effect",
+      "displayName": "MIDI CC Control",
+      "parameters": [
+        {
+          "name": "Button"
+        },
+        {
+          "name": "Custom A"
+        },
+        {
+          "name": "Custom B"
+        },
+        {
+          "name": "Custom Button Target"
+        },
+        {
+          "name": "Custom C"
+        },
+        {
+          "name": "Custom D"
+        },
+        {
+          "name": "Custom E"
+        },
+        {
+          "name": "Custom F"
+        },
+        {
+          "name": "Custom G"
+        },
+        {
+          "name": "Custom H"
+        },
+        {
+          "name": "Custom I"
+        },
+        {
+          "name": "Custom J"
+        },
+        {
+          "name": "Custom K"
+        },
+        {
+          "name": "Custom L"
+        },
+        {
+          "name": "Custom M"
+        },
+        {
+          "name": "Custom Target 1"
+        },
+        {
+          "name": "Custom Target 10"
+        },
+        {
+          "name": "Custom Target 11"
+        },
+        {
+          "name": "Custom Target 12"
+        },
+        {
+          "name": "Custom Target 2"
+        },
+        {
+          "name": "Custom Target 3"
+        },
+        {
+          "name": "Custom Target 4"
+        },
+        {
+          "name": "Custom Target 5"
+        },
+        {
+          "name": "Custom Target 6"
+        },
+        {
+          "name": "Custom Target 7"
+        },
+        {
+          "name": "Custom Target 8"
+        },
+        {
+          "name": "Custom Target 9"
+        },
+        {
+          "name": "Mod Wheel"
+        },
+        {
+          "name": "Pitch Bend"
+        },
+        {
+          "name": "Pressure"
+        },
+        {
+          "name": "Resend"
+        }
+      ]
+    },
+    {
+      "class": "MidiChord",
+      "category": "midi_effect",
+      "displayName": "Chord",
+      "parameters": [
+        {
+          "name": "Shift1"
+        },
+        {
+          "name": "Shift2"
+        },
+        {
+          "name": "Shift3"
+        },
+        {
+          "name": "Shift4"
+        },
+        {
+          "name": "Shift5"
+        },
+        {
+          "name": "Shift6"
+        },
+        {
+          "name": "Velocity1"
+        },
+        {
+          "name": "Velocity2"
+        },
+        {
+          "name": "Velocity3"
+        },
+        {
+          "name": "Velocity4"
+        },
+        {
+          "name": "Velocity5"
+        },
+        {
+          "name": "Velocity6"
+        }
+      ]
+    },
+    {
+      "class": "MidiEffectGroupDevice",
+      "category": "rack",
+      "displayName": "MIDI Effect Rack",
+      "parameters": [
+        {
+          "name": "Macro 1"
+        },
+        {
+          "name": "Macro 2"
+        },
+        {
+          "name": "Macro 3"
+        },
+        {
+          "name": "Macro 4"
+        },
+        {
+          "name": "Macro 5"
+        },
+        {
+          "name": "Macro 6"
+        },
+        {
+          "name": "Macro 7"
+        },
+        {
+          "name": "Macro 8"
+        }
+      ]
+    },
+    {
+      "class": "MidiNoteLength",
+      "category": "midi_effect",
+      "displayName": "Note Length",
+      "parameters": [
+        {
+          "name": "Decay Key Scale"
+        },
+        {
+          "name": "Decay Time"
+        },
+        {
+          "name": "Gate"
+        },
+        {
+          "name": "Latch"
+        },
+        {
+          "name": "Release Velocity"
+        },
+        {
+          "name": "Sync On"
+        },
+        {
+          "name": "Synced Length"
+        },
+        {
+          "name": "Time Length"
+        },
+        {
+          "name": "Trigger Source"
+        }
+      ]
+    },
+    {
+      "class": "MidiPitcher",
+      "category": "midi_effect",
+      "displayName": "Pitch",
+      "parameters": [
+        {
+          "name": "Lowest"
+        },
+        {
+          "name": "Pitch"
+        },
+        {
+          "name": "Range"
+        }
+      ]
+    },
+    {
+      "class": "MidiRandom",
+      "category": "midi_effect",
+      "displayName": "Random",
+      "parameters": [
+        {
+          "name": "Chance"
+        },
+        {
+          "name": "Choices"
+        },
+        {
+          "name": "Interval"
+        },
+        {
+          "name": "Mode"
+        },
+        {
+          "name": "Sign"
+        }
+      ]
+    },
+    {
+      "class": "MidiScale",
+      "category": "midi_effect",
+      "displayName": "Scale",
+      "parameters": [
+        {
+          "name": "Base"
+        },
+        {
+          "name": "Fold"
+        },
+        {
+          "name": "Lowest"
+        },
+        {
+          "name": "Range"
+        },
+        {
+          "name": "Transpose"
+        }
+      ]
+    },
+    {
+      "class": "MidiVelocity",
+      "category": "midi_effect",
+      "displayName": "Velocity",
+      "parameters": [
+        {
+          "name": "Compand"
+        },
+        {
+          "name": "Drive"
+        },
+        {
+          "name": "Lowest"
+        },
+        {
+          "name": "Mode"
+        },
+        {
+          "name": "Out Hi"
+        },
+        {
+          "name": "Out Low"
+        },
+        {
+          "name": "Random"
+        },
+        {
+          "name": "Range"
+        }
+      ]
+    },
+    {
+      "class": "MultiSampler",
+      "category": "instrument",
+      "displayName": "Sampler",
+      "parameters": [
+        {
+          "name": "Ae A Slope"
+        },
+        {
+          "name": "Ae Attack"
+        },
+        {
+          "name": "Ae D Slope"
+        },
+        {
+          "name": "Ae Decay"
+        },
+        {
+          "name": "Ae End"
+        },
+        {
+          "name": "Ae Init"
+        },
+        {
+          "name": "Ae Loop"
+        },
+        {
+          "name": "Ae Mode"
+        },
+        {
+          "name": "Ae On"
+        },
+        {
+          "name": "Ae Peak"
+        },
+        {
+          "name": "Ae R Slope"
+        },
+        {
+          "name": "Ae Release"
+        },
+        {
+          "name": "Ae Retrig"
+        },
+        {
+          "name": "Ae Sustain"
+        },
+        {
+          "name": "Detune"
+        },
+        {
+          "name": "F On"
+        },
+        {
+          "name": "Fe < Env"
+        },
+        {
+          "name": "Fe Attack"
+        },
+        {
+          "name": "Fe Decay"
+        },
+        {
+          "name": "Fe End"
+        },
+        {
+          "name": "Fe Init"
+        },
+        {
+          "name": "Fe Loop"
+        },
+        {
+          "name": "Fe Mode"
+        },
+        {
+          "name": "Fe On"
+        },
+        {
+          "name": "Fe Peak"
+        },
+        {
+          "name": "Fe R < Vel"
+        },
+        {
+          "name": "Fe Release"
+        },
+        {
+          "name": "Fe Retrig"
+        },
+        {
+          "name": "Fe Sustain"
+        },
+        {
+          "name": "Filt < Key"
+        },
+        {
+          "name": "Filt < LFO"
+        },
+        {
+          "name": "Filt < Vel"
+        },
+        {
+          "name": "Filter Circuit - BP/NO/Morph"
+        },
+        {
+          "name": "Filter Circuit - LP/HP"
+        },
+        {
+          "name": "Filter Drive"
+        },
+        {
+          "name": "Filter Freq"
+        },
+        {
+          "name": "Filter Morph"
+        },
+        {
+          "name": "Filter Res"
+        },
+        {
+          "name": "Filter Res (Legacy)"
+        },
+        {
+          "name": "Filter Slope"
+        },
+        {
+          "name": "Filter Type"
+        },
+        {
+          "name": "Filter Type (Legacy)"
+        },
+        {
+          "name": "Glide Mode"
+        },
+        {
+          "name": "Glide Time"
+        },
+        {
+          "name": "Key Zone Shift"
+        },
+        {
+          "name": "L 1 Attack"
+        },
+        {
+          "name": "L 1 Offset"
+        },
+        {
+          "name": "L 1 On"
+        },
+        {
+          "name": "L 1 Rate"
+        },
+        {
+          "name": "L 1 Retrig"
+        },
+        {
+          "name": "L 1 Sync"
+        },
+        {
+          "name": "L 1 Sync Rate"
+        },
+        {
+          "name": "L 1 Wave"
+        },
+        {
+          "name": "L 2 Attack"
+        },
+        {
+          "name": "L 2 Offset"
+        },
+        {
+          "name": "L 2 On"
+        },
+        {
+          "name": "L 2 Phase"
+        },
+        {
+          "name": "L 2 Rate"
+        },
+        {
+          "name": "L 2 Retrig"
+        },
+        {
+          "name": "L 2 Spin"
+        },
+        {
+          "name": "L 2 St Mode"
+        },
+        {
+          "name": "L 2 Sync"
+        },
+        {
+          "name": "L 2 Sync Rate"
+        },
+        {
+          "name": "L 2 Wave"
+        },
+        {
+          "name": "L 3 Attack"
+        },
+        {
+          "name": "L 3 Offset"
+        },
+        {
+          "name": "L 3 On"
+        },
+        {
+          "name": "L 3 Phase"
+        },
+        {
+          "name": "L 3 Rate"
+        },
+        {
+          "name": "L 3 Retrig"
+        },
+        {
+          "name": "L 3 Spin"
+        },
+        {
+          "name": "L 3 St Mode"
+        },
+        {
+          "name": "L 3 Sync"
+        },
+        {
+          "name": "L 3 Sync Rate"
+        },
+        {
+          "name": "L 3 Wave"
+        },
+        {
+          "name": "O Coarse"
+        },
+        {
+          "name": "O Fine"
+        },
+        {
+          "name": "O Fix Freq"
+        },
+        {
+          "name": "O Fix Freq Mul"
+        },
+        {
+          "name": "O Fix On"
+        },
+        {
+          "name": "O Mode"
+        },
+        {
+          "name": "O Type"
+        },
+        {
+          "name": "O Volume"
+        },
+        {
+          "name": "Oe Attack"
+        },
+        {
+          "name": "Oe Decay"
+        },
+        {
+          "name": "Oe End"
+        },
+        {
+          "name": "Oe Init"
+        },
+        {
+          "name": "Oe Loop"
+        },
+        {
+          "name": "Oe Mode"
+        },
+        {
+          "name": "Oe Peak"
+        },
+        {
+          "name": "Oe Release"
+        },
+        {
+          "name": "Oe Retrig"
+        },
+        {
+          "name": "Oe Sustain"
+        },
+        {
+          "name": "Osc On"
+        },
+        {
+          "name": "Pan"
+        },
+        {
+          "name": "Pan < LFO"
+        },
+        {
+          "name": "Pan < Rnd"
+        },
+        {
+          "name": "Pe < Env"
+        },
+        {
+          "name": "Pe Attack"
+        },
+        {
+          "name": "Pe Decay"
+        },
+        {
+          "name": "Pe End"
+        },
+        {
+          "name": "Pe Init"
+        },
+        {
+          "name": "Pe Loop"
+        },
+        {
+          "name": "Pe Mode"
+        },
+        {
+          "name": "Pe On"
+        },
+        {
+          "name": "Pe Peak"
+        },
+        {
+          "name": "Pe R < Vel"
+        },
+        {
+          "name": "Pe Release"
+        },
+        {
+          "name": "Pe Retrig"
+        },
+        {
+          "name": "Pe Sustain"
+        },
+        {
+          "name": "Pitch < LFO"
+        },
+        {
+          "name": "Shaper Amt"
+        },
+        {
+          "name": "Shaper On"
+        },
+        {
+          "name": "Shaper Type"
+        },
+        {
+          "name": "Spread"
+        },
+        {
+          "name": "Time"
+        },
+        {
+          "name": "Time < Key"
+        },
+        {
+          "name": "Transpose"
+        },
+        {
+          "name": "Ve Attack"
+        },
+        {
+          "name": "Ve Decay"
+        },
+        {
+          "name": "Ve Init"
+        },
+        {
+          "name": "Ve Loop"
+        },
+        {
+          "name": "Ve Mode"
+        },
+        {
+          "name": "Ve Peak"
+        },
+        {
+          "name": "Ve R < Vel"
+        },
+        {
+          "name": "Ve Release"
+        },
+        {
+          "name": "Ve Retrig"
+        },
+        {
+          "name": "Ve Sustain"
+        },
+        {
+          "name": "Vol < LFO"
+        },
+        {
+          "name": "Vol < Vel"
+        },
+        {
+          "name": "Volume"
+        }
+      ]
+    },
+    {
+      "class": "MultibandDynamics",
+      "category": "audio_effect",
+      "displayName": "Multiband Dynamics",
+      "parameters": [
+        {
+          "name": "Above Ratio (High)"
+        },
+        {
+          "name": "Above Ratio (Low)"
+        },
+        {
+          "name": "Above Ratio (Mid)"
+        },
+        {
+          "name": "Above Threshold (High)"
+        },
+        {
+          "name": "Above Threshold (Low)"
+        },
+        {
+          "name": "Above Threshold (Mid)"
+        },
+        {
+          "name": "Amount"
+        },
+        {
+          "name": "Attack Time (High)"
+        },
+        {
+          "name": "Attack Time (Low)"
+        },
+        {
+          "name": "Attack Time (Mid)"
+        },
+        {
+          "name": "Band Activator (High)"
+        },
+        {
+          "name": "Band Activator (Low)"
+        },
+        {
+          "name": "Band Activator (Mid)"
+        },
+        {
+          "name": "Below Ratio (High)"
+        },
+        {
+          "name": "Below Ratio (Low)"
+        },
+        {
+          "name": "Below Ratio (Mid)"
+        },
+        {
+          "name": "Below Threshold (High)"
+        },
+        {
+          "name": "Below Threshold (Low)"
+        },
+        {
+          "name": "Below Threshold (Mid)"
+        },
+        {
+          "name": "Input Gain (High)"
+        },
+        {
+          "name": "Input Gain (Low)"
+        },
+        {
+          "name": "Input Gain (Mid)"
+        },
+        {
+          "name": "Low-Mid Crossover"
+        },
+        {
+          "name": "Master Output"
+        },
+        {
+          "name": "Mid-High Crossover"
+        },
+        {
+          "name": "Output Gain (High)"
+        },
+        {
+          "name": "Output Gain (Low)"
+        },
+        {
+          "name": "Output Gain (Mid)"
+        },
+        {
+          "name": "Peak/RMS Mode"
+        },
+        {
+          "name": "Release Time (High)"
+        },
+        {
+          "name": "Release Time (Low)"
+        },
+        {
+          "name": "Release Time (Mid)"
+        },
+        {
+          "name": "S/C Gain"
+        },
+        {
+          "name": "S/C Mix"
+        },
+        {
+          "name": "S/C On"
+        },
+        {
+          "name": "Soft Knee On/Off"
+        },
+        {
+          "name": "Time Scaling"
+        }
+      ]
+    },
+    {
+      "class": "Operator",
+      "category": "instrument",
+      "displayName": "Operator",
+      "parameters": [
+        {
+          "name": "A Coarse"
+        },
+        {
+          "name": "A Fine"
+        },
+        {
+          "name": "A Fix Freq"
+        },
+        {
+          "name": "A Fix Freq Mul"
+        },
+        {
+          "name": "A Fix On "
+        },
+        {
+          "name": "A Freq<Vel"
+        },
+        {
+          "name": "A Quantize"
+        },
+        {
+          "name": "Ae Attack"
+        },
+        {
+          "name": "Ae Decay"
+        },
+        {
+          "name": "Ae Init"
+        },
+        {
+          "name": "Ae Loop"
+        },
+        {
+          "name": "Ae Mode"
+        },
+        {
+          "name": "Ae Peak"
+        },
+        {
+          "name": "Ae R < Vel"
+        },
+        {
+          "name": "Ae Release"
+        },
+        {
+          "name": "Ae Retrig"
+        },
+        {
+          "name": "Ae Sustain"
+        },
+        {
+          "name": "Algorithm"
+        },
+        {
+          "name": "B Coarse"
+        },
+        {
+          "name": "B Fine"
+        },
+        {
+          "name": "B Fix Freq"
+        },
+        {
+          "name": "B Fix Freq Mul"
+        },
+        {
+          "name": "B Fix On "
+        },
+        {
+          "name": "B Freq<Vel"
+        },
+        {
+          "name": "B Quantize"
+        },
+        {
+          "name": "Be Attack"
+        },
+        {
+          "name": "Be Decay"
+        },
+        {
+          "name": "Be Init"
+        },
+        {
+          "name": "Be Loop"
+        },
+        {
+          "name": "Be Mode"
+        },
+        {
+          "name": "Be Peak"
+        },
+        {
+          "name": "Be R < Vel"
+        },
+        {
+          "name": "Be Release"
+        },
+        {
+          "name": "Be Retrig"
+        },
+        {
+          "name": "Be Sustain"
+        },
+        {
+          "name": "C Coarse"
+        },
+        {
+          "name": "C Fine"
+        },
+        {
+          "name": "C Fix Freq"
+        },
+        {
+          "name": "C Fix Freq Mul"
+        },
+        {
+          "name": "C Fix On "
+        },
+        {
+          "name": "C Freq<Vel"
+        },
+        {
+          "name": "C Quantize"
+        },
+        {
+          "name": "Ce Attack"
+        },
+        {
+          "name": "Ce Decay"
+        },
+        {
+          "name": "Ce Init"
+        },
+        {
+          "name": "Ce Loop"
+        },
+        {
+          "name": "Ce Mode"
+        },
+        {
+          "name": "Ce Peak"
+        },
+        {
+          "name": "Ce R < Vel"
+        },
+        {
+          "name": "Ce Release"
+        },
+        {
+          "name": "Ce Retrig"
+        },
+        {
+          "name": "Ce Sustain"
+        },
+        {
+          "name": "D Coarse"
+        },
+        {
+          "name": "D Fine"
+        },
+        {
+          "name": "D Fix Freq"
+        },
+        {
+          "name": "D Fix Freq Mul"
+        },
+        {
+          "name": "D Fix On "
+        },
+        {
+          "name": "D Freq<Vel"
+        },
+        {
+          "name": "D Quantize"
+        },
+        {
+          "name": "De Attack"
+        },
+        {
+          "name": "De Decay"
+        },
+        {
+          "name": "De Init"
+        },
+        {
+          "name": "De Loop"
+        },
+        {
+          "name": "De Mode"
+        },
+        {
+          "name": "De Peak"
+        },
+        {
+          "name": "De R < Vel"
+        },
+        {
+          "name": "De Release"
+        },
+        {
+          "name": "De Retrig"
+        },
+        {
+          "name": "De Sustain"
+        },
+        {
+          "name": "Envelope Feature Time/Level"
+        },
+        {
+          "name": "Envelope Feature Time/Slope/Level"
+        },
+        {
+          "name": "Fe A Slope"
+        },
+        {
+          "name": "Fe Amount"
+        },
+        {
+          "name": "Fe Attack"
+        },
+        {
+          "name": "Fe D Slope"
+        },
+        {
+          "name": "Fe Decay"
+        },
+        {
+          "name": "Fe End"
+        },
+        {
+          "name": "Fe Init"
+        },
+        {
+          "name": "Fe Loop"
+        },
+        {
+          "name": "Fe Mode"
+        },
+        {
+          "name": "Fe Peak"
+        },
+        {
+          "name": "Fe R < Vel"
+        },
+        {
+          "name": "Fe R Slope"
+        },
+        {
+          "name": "Fe Release"
+        },
+        {
+          "name": "Fe Retrig"
+        },
+        {
+          "name": "Fe Sustain"
+        },
+        {
+          "name": "Filt < Key"
+        },
+        {
+          "name": "Filt < LFO"
+        },
+        {
+          "name": "Filt < Vel"
+        },
+        {
+          "name": "Filter Circuit - BP/NO/Morph"
+        },
+        {
+          "name": "Filter Circuit - LP/HP"
+        },
+        {
+          "name": "Filter Drive"
+        },
+        {
+          "name": "Filter Freq"
+        },
+        {
+          "name": "Filter Morph"
+        },
+        {
+          "name": "Filter On"
+        },
+        {
+          "name": "Filter Res"
+        },
+        {
+          "name": "Filter Res (Legacy)"
+        },
+        {
+          "name": "Filter Slope"
+        },
+        {
+          "name": "Filter Type"
+        },
+        {
+          "name": "Filter Type (Legacy)"
+        },
+        {
+          "name": "Glide On"
+        },
+        {
+          "name": "Glide Time"
+        },
+        {
+          "name": "LFO < Pe"
+        },
+        {
+          "name": "LFO < Vel"
+        },
+        {
+          "name": "LFO Amt"
+        },
+        {
+          "name": "LFO Amt A"
+        },
+        {
+          "name": "LFO Amt B"
+        },
+        {
+          "name": "LFO Dst B"
+        },
+        {
+          "name": "LFO On"
+        },
+        {
+          "name": "LFO R < K"
+        },
+        {
+          "name": "LFO Range"
+        },
+        {
+          "name": "LFO Rate"
+        },
+        {
+          "name": "LFO Retrigger"
+        },
+        {
+          "name": "LFO Sync"
+        },
+        {
+          "name": "LFO Type"
+        },
+        {
+          "name": "Le Attack"
+        },
+        {
+          "name": "Le Decay"
+        },
+        {
+          "name": "Le End"
+        },
+        {
+          "name": "Le Init"
+        },
+        {
+          "name": "Le Loop"
+        },
+        {
+          "name": "Le Mode"
+        },
+        {
+          "name": "Le Peak"
+        },
+        {
+          "name": "Le R < Vel"
+        },
+        {
+          "name": "Le Release"
+        },
+        {
+          "name": "Le Retrig"
+        },
+        {
+          "name": "Le Sustain"
+        },
+        {
+          "name": "Osc-A < LFO"
+        },
+        {
+          "name": "Osc-A < Pe"
+        },
+        {
+          "name": "Osc-A Lev < Key"
+        },
+        {
+          "name": "Osc-A Lev < Vel"
+        },
+        {
+          "name": "Osc-A Level"
+        },
+        {
+          "name": "Osc-A On"
+        },
+        {
+          "name": "Osc-A Phase"
+        },
+        {
+          "name": "Osc-A Retrig"
+        },
+        {
+          "name": "Osc-A Wave"
+        },
+        {
+          "name": "Osc-B < LFO"
+        },
+        {
+          "name": "Osc-B < Pe"
+        },
+        {
+          "name": "Osc-B Lev < Key"
+        },
+        {
+          "name": "Osc-B Lev < Vel"
+        },
+        {
+          "name": "Osc-B Level"
+        },
+        {
+          "name": "Osc-B On"
+        },
+        {
+          "name": "Osc-B Phase"
+        },
+        {
+          "name": "Osc-B Retrig"
+        },
+        {
+          "name": "Osc-B Wave"
+        },
+        {
+          "name": "Osc-C < LFO"
+        },
+        {
+          "name": "Osc-C < Pe"
+        },
+        {
+          "name": "Osc-C Lev < Key"
+        },
+        {
+          "name": "Osc-C Lev < Vel"
+        },
+        {
+          "name": "Osc-C Level"
+        },
+        {
+          "name": "Osc-C On"
+        },
+        {
+          "name": "Osc-C Phase"
+        },
+        {
+          "name": "Osc-C Retrig"
+        },
+        {
+          "name": "Osc-C Wave"
+        },
+        {
+          "name": "Osc-D < LFO"
+        },
+        {
+          "name": "Osc-D < Pe"
+        },
+        {
+          "name": "Osc-D Lev < Key"
+        },
+        {
+          "name": "Osc-D Lev < Vel"
+        },
+        {
+          "name": "Osc-D Level"
+        },
+        {
+          "name": "Osc-D On"
+        },
+        {
+          "name": "Osc-D Phase"
+        },
+        {
+          "name": "Osc-D Retrig"
+        },
+        {
+          "name": "Osc-D Wave"
+        },
+        {
+          "name": "Oscillator"
+        },
+        {
+          "name": "Pan < Key"
+        },
+        {
+          "name": "Pan < Rnd"
+        },
+        {
+          "name": "Panorama"
+        },
+        {
+          "name": "Pe A Slope"
+        },
+        {
+          "name": "Pe Amount"
+        },
+        {
+          "name": "Pe Amt A"
+        },
+        {
+          "name": "Pe Amt B"
+        },
+        {
+          "name": "Pe Attack"
+        },
+        {
+          "name": "Pe D Slope"
+        },
+        {
+          "name": "Pe Decay"
+        },
+        {
+          "name": "Pe Dst B"
+        },
+        {
+          "name": "Pe End"
+        },
+        {
+          "name": "Pe Init"
+        },
+        {
+          "name": "Pe On"
+        },
+        {
+          "name": "Pe Peak"
+        },
+        {
+          "name": "Pe R < Vel"
+        },
+        {
+          "name": "Pe R Slope"
+        },
+        {
+          "name": "Pe Release"
+        },
+        {
+          "name": "Pe Sustain"
+        },
+        {
+          "name": "Shaper Drive"
+        },
+        {
+          "name": "Shaper Mix"
+        },
+        {
+          "name": "Shaper Type"
+        },
+        {
+          "name": "Spread"
+        },
+        {
+          "name": "Time"
+        },
+        {
+          "name": "Time < Key"
+        },
+        {
+          "name": "Tone"
+        },
+        {
+          "name": "Transpose"
+        },
+        {
+          "name": "Volume"
+        }
+      ]
+    },
+    {
+      "class": "OriginalSimpler",
+      "category": "instrument",
+      "displayName": "Simpler",
+      "parameters": [
+        {
+          "name": ":2"
+        },
+        {
+          "name": "Clear Slices"
+        },
+        {
+          "name": "Crop"
+        },
+        {
+          "name": "Detune"
+        },
+        {
+          "name": "Division"
+        },
+        {
+          "name": "End"
+        },
+        {
+          "name": "Env. Type"
+        },
+        {
+          "name": "Envelope"
+        },
+        {
+          "name": "Envelope Complex Pro"
+        },
+        {
+          "name": "F On"
+        },
+        {
+          "name": "Fade In"
+        },
+        {
+          "name": "Fade Out"
+        },
+        {
+          "name": "Fe < Env"
+        },
+        {
+          "name": "Fe Attack"
+        },
+        {
+          "name": "Fe Decay"
+        },
+        {
+          "name": "Fe On"
+        },
+        {
+          "name": "Fe Release"
+        },
+        {
+          "name": "Fe Sustain"
+        },
+        {
+          "name": "Filt < LFO"
+        },
+        {
+          "name": "Filt < Vel"
+        },
+        {
+          "name": "Filter Circuit - BP/NO/Morph"
+        },
+        {
+          "name": "Filter Circuit - LP/HP"
+        },
+        {
+          "name": "Filter Drive"
+        },
+        {
+          "name": "Filter Freq"
+        },
+        {
+          "name": "Filter Morph"
+        },
+        {
+          "name": "Filter Res"
+        },
+        {
+          "name": "Filter Res (Legacy)"
+        },
+        {
+          "name": "Filter Slope"
+        },
+        {
+          "name": "Filter Type"
+        },
+        {
+          "name": "Filter Type (Legacy)"
+        },
+        {
+          "name": "Flux"
+        },
+        {
+          "name": "Formants"
+        },
+        {
+          "name": "Gain"
+        },
+        {
+          "name": "Glide Mode"
+        },
+        {
+          "name": "Glide Time"
+        },
+        {
+          "name": "Grain Size Texture"
+        },
+        {
+          "name": "Grain Size Tones"
+        },
+        {
+          "name": "L Attack"
+        },
+        {
+          "name": "L Offset"
+        },
+        {
+          "name": "L On"
+        },
+        {
+          "name": "L R < Key"
+        },
+        {
+          "name": "L Rate"
+        },
+        {
+          "name": "L Retrig"
+        },
+        {
+          "name": "L Sync"
+        },
+        {
+          "name": "L Sync Rate"
+        },
+        {
+          "name": "L Wave"
+        },
+        {
+          "name": "LFO Sync Type"
+        },
+        {
+          "name": "Loop"
+        },
+        {
+          "name": "Loop Mode"
+        },
+        {
+          "name": "Mode"
+        },
+        {
+          "name": "Multi Sample"
+        },
+        {
+          "name": "Note PB"
+        },
+        {
+          "name": "Nudge"
+        },
+        {
+          "name": "PB Range"
+        },
+        {
+          "name": "Pad Slicing"
+        },
+        {
+          "name": "Pan"
+        },
+        {
+          "name": "Pan < LFO"
+        },
+        {
+          "name": "Pan < Rnd"
+        },
+        {
+          "name": "Pe < Env"
+        },
+        {
+          "name": "Pe Attack"
+        },
+        {
+          "name": "Pe Decay"
+        },
+        {
+          "name": "Pe On"
+        },
+        {
+          "name": "Pe Release"
+        },
+        {
+          "name": "Pe Sustain"
+        },
+        {
+          "name": "Playback"
+        },
+        {
+          "name": "Preserve"
+        },
+        {
+          "name": "Regions"
+        },
+        {
+          "name": "Reset Slices"
+        },
+        {
+          "name": "Retrigger"
+        },
+        {
+          "name": "Reverse"
+        },
+        {
+          "name": "S Length"
+        },
+        {
+          "name": "S Loop Fade"
+        },
+        {
+          "name": "S Loop Length"
+        },
+        {
+          "name": "S Start"
+        },
+        {
+          "name": "Sensitivity"
+        },
+        {
+          "name": "Slice by"
+        },
+        {
+          "name": "Split Slice"
+        },
+        {
+          "name": "Spread"
+        },
+        {
+          "name": "Start"
+        },
+        {
+          "name": "Transpose"
+        },
+        {
+          "name": "Trigger Mode"
+        },
+        {
+          "name": "Ve Attack"
+        },
+        {
+          "name": "Ve Decay"
+        },
+        {
+          "name": "Ve Loop"
+        },
+        {
+          "name": "Ve Mode"
+        },
+        {
+          "name": "Ve Release"
+        },
+        {
+          "name": "Ve Retrig"
+        },
+        {
+          "name": "Ve Sustain"
+        },
+        {
+          "name": "Voices"
+        },
+        {
+          "name": "Vol < LFO"
+        },
+        {
+          "name": "Vol < Vel"
+        },
+        {
+          "name": "Volume"
+        },
+        {
+          "name": "Warp"
+        },
+        {
+          "name": "Warp Mode"
+        },
+        {
+          "name": "Warp as X Bars"
+        },
+        {
+          "name": "Zoom"
+        },
+        {
+          "name": "x2"
+        }
+      ]
+    },
+    {
+      "class": "Overdrive",
+      "category": "audio_effect",
+      "displayName": "Overdrive",
+      "parameters": [
+        {
+          "name": "Drive"
+        },
+        {
+          "name": "Dry/Wet"
+        },
+        {
+          "name": "Filter Freq"
+        },
+        {
+          "name": "Filter Width"
+        },
+        {
+          "name": "Preserve Dynamics"
+        },
+        {
+          "name": "Tone"
+        }
+      ]
+    },
+    {
+      "class": "Pedal",
+      "category": "audio_effect",
+      "displayName": "Pedal",
+      "parameters": [
+        {
+          "name": "Bass"
+        },
+        {
+          "name": "Dry/Wet"
+        },
+        {
+          "name": "Gain"
+        },
+        {
+          "name": "Mid"
+        },
+        {
+          "name": "Mid Freq"
+        },
+        {
+          "name": "Output"
+        },
+        {
+          "name": "Sub"
+        },
+        {
+          "name": "Treble"
+        },
+        {
+          "name": "Type"
+        }
+      ]
+    },
+    {
+      "class": "Phaser",
+      "category": "audio_effect",
+      "displayName": "Phaser",
+      "parameters": [
+        {
+          "name": "Color"
+        },
+        {
+          "name": "Dry/Wet"
+        },
+        {
+          "name": "Env. Attack"
+        },
+        {
+          "name": "Env. Modulation"
+        },
+        {
+          "name": "Env. Release"
+        },
+        {
+          "name": "Feedback"
+        },
+        {
+          "name": "Frequency"
+        },
+        {
+          "name": "LFO Amount"
+        },
+        {
+          "name": "LFO Frequency"
+        },
+        {
+          "name": "LFO Offset"
+        },
+        {
+          "name": "LFO Phase"
+        },
+        {
+          "name": "LFO Spin"
+        },
+        {
+          "name": "LFO Stereo Mode"
+        },
+        {
+          "name": "LFO Sync"
+        },
+        {
+          "name": "LFO Sync Rate"
+        },
+        {
+          "name": "LFO Waveform"
+        },
+        {
+          "name": "LFO Width (Random)"
+        },
+        {
+          "name": "Poles"
+        },
+        {
+          "name": "Type"
+        }
+      ]
+    },
+    {
+      "class": "PhaserNew",
+      "category": "audio_effect",
+      "displayName": "Phaser-Flanger",
+      "parameters": [
+        {
+          "name": "Amount"
+        },
+        {
+          "name": "Center Freq"
+        },
+        {
+          "name": "Doubler Time"
+        },
+        {
+          "name": "Dry/Wet"
+        },
+        {
+          "name": "Duty Cycle"
+        },
+        {
+          "name": "Env Amount"
+        },
+        {
+          "name": "Env Attack"
+        },
+        {
+          "name": "Env Enabled"
+        },
+        {
+          "name": "Env Release"
+        },
+        {
+          "name": "FB Inv"
+        },
+        {
+          "name": "Feedback"
+        },
+        {
+          "name": "Flange Time"
+        },
+        {
+          "name": "Flanger Time"
+        },
+        {
+          "name": "Lfo Blend"
+        },
+        {
+          "name": "Mod Blend"
+        },
+        {
+          "name": "Mod Freq"
+        },
+        {
+          "name": "Mod Freq 2"
+        },
+        {
+          "name": "Mod Phase"
+        },
+        {
+          "name": "Mod Rate"
+        },
+        {
+          "name": "Mod Rate 2"
+        },
+        {
+          "name": "Mod Sync"
+        },
+        {
+          "name": "Mod Sync 2"
+        },
+        {
+          "name": "Mod Wave"
+        },
+        {
+          "name": "Mode"
+        },
+        {
+          "name": "Notches"
+        },
+        {
+          "name": "Output Gain"
+        },
+        {
+          "name": "Safe Freq"
+        },
+        {
+          "name": "Spin"
+        },
+        {
+          "name": "Spin Enabled"
+        },
+        {
+          "name": "Spread"
+        },
+        {
+          "name": "Sync"
+        },
+        {
+          "name": "Sync 2"
+        },
+        {
+          "name": "Warmth"
+        }
+      ]
+    },
+    {
+      "class": "ProxyAudioEffectDevice",
+      "category": "audio_effect",
+      "displayName": "Audio Effect (Proxy)",
+      "parameters": [
+        {
+          "name": "Dry/Wet"
+        },
+        {
+          "name": "Input Gain"
+        },
+        {
+          "name": "Output Gain"
+        }
+      ]
+    },
+    {
+      "class": "Redux",
+      "category": "audio_effect",
+      "displayName": "Redux Legacy",
+      "parameters": [
+        {
+          "name": "Bit Depth"
+        },
+        {
+          "name": "Bit On"
+        },
+        {
+          "name": "Sample Hard"
+        },
+        {
+          "name": "Sample Mode"
+        },
+        {
+          "name": "Sample Soft"
+        }
+      ]
+    },
+    {
+      "class": "Redux2",
+      "category": "audio_effect",
+      "displayName": "Redux",
+      "parameters": [
+        {
+          "name": "Bit Depth"
+        },
+        {
+          "name": "DC Shift"
+        },
+        {
+          "name": "Dry/Wet"
+        },
+        {
+          "name": "Jitter"
+        },
+        {
+          "name": "Post-Filter"
+        },
+        {
+          "name": "Post-Filter On"
+        },
+        {
+          "name": "Pre-Filter On"
+        },
+        {
+          "name": "Quantizer Shape"
+        },
+        {
+          "name": "Sample Rate"
+        }
+      ]
+    },
+    {
+      "class": "Resonator",
+      "category": "audio_effect",
+      "displayName": "Resonators",
+      "parameters": [
+        {
+          "name": "Color"
+        },
+        {
+          "name": "Constant"
+        },
+        {
+          "name": "Decay"
+        },
+        {
+          "name": "Dry/Wet"
+        },
+        {
+          "name": "Filter"
+        },
+        {
+          "name": "Filter Type"
+        },
+        {
+          "name": "Frequency"
+        },
+        {
+          "name": "Global Gain"
+        },
+        {
+          "name": "I"
+        },
+        {
+          "name": "I Gain"
+        },
+        {
+          "name": "I Note"
+        },
+        {
+          "name": "I Tune"
+        },
+        {
+          "name": "II"
+        },
+        {
+          "name": "II Gain"
+        },
+        {
+          "name": "II Pitch"
+        },
+        {
+          "name": "II Tune"
+        },
+        {
+          "name": "III"
+        },
+        {
+          "name": "III Gain"
+        },
+        {
+          "name": "III Pitch"
+        },
+        {
+          "name": "III Tune"
+        },
+        {
+          "name": "IV"
+        },
+        {
+          "name": "IV Gain"
+        },
+        {
+          "name": "IV Pitch"
+        },
+        {
+          "name": "IV Tune"
+        },
+        {
+          "name": "Mode"
+        },
+        {
+          "name": "Select"
+        },
+        {
+          "name": "V"
+        },
+        {
+          "name": "V Gain"
+        },
+        {
+          "name": "V Pitch"
+        },
+        {
+          "name": "V Tune"
+        },
+        {
+          "name": "Width"
+        }
+      ]
+    },
+    {
+      "class": "Reverb",
+      "category": "audio_effect",
+      "displayName": "Reverb",
+      "parameters": [
+        {
+          "name": "Chorus"
+        },
+        {
+          "name": "Chorus Amount"
+        },
+        {
+          "name": "Chorus Rate"
+        },
+        {
+          "name": "Cut"
+        },
+        {
+          "name": "Decay Time"
+        },
+        {
+          "name": "Density"
+        },
+        {
+          "name": "Diff. Hi Freq"
+        },
+        {
+          "name": "Diff. Hi Type"
+        },
+        {
+          "name": "Diffuse Level"
+        },
+        {
+          "name": "Diffusion"
+        },
+        {
+          "name": "Dry/Wet"
+        },
+        {
+          "name": "ER Shape"
+        },
+        {
+          "name": "ER Spin"
+        },
+        {
+          "name": "ER Spin Amount"
+        },
+        {
+          "name": "ER Spin Rate"
+        },
+        {
+          "name": "Flat"
+        },
+        {
+          "name": "Freeze"
+        },
+        {
+          "name": "Hi Fil Type"
+        },
+        {
+          "name": "Hi Filter"
+        },
+        {
+          "name": "HiFilter Freq"
+        },
+        {
+          "name": "HiShelf Gain"
+        },
+        {
+          "name": "In Filter Freq"
+        },
+        {
+          "name": "In Filter Width"
+        },
+        {
+          "name": "In HiCut"
+        },
+        {
+          "name": "In LoCut"
+        },
+        {
+          "name": "Input Freq"
+        },
+        {
+          "name": "Lo Shelf"
+        },
+        {
+          "name": "LowShelf Freq"
+        },
+        {
+          "name": "LowShelf Gain"
+        },
+        {
+          "name": "Predelay"
+        },
+        {
+          "name": "Reflect Level"
+        },
+        {
+          "name": "Room Size"
+        },
+        {
+          "name": "Scale"
+        },
+        {
+          "name": "Size Smoothing"
+        },
+        {
+          "name": "Stereo Image"
+        }
+      ]
+    },
+    {
+      "class": "Roar",
+      "category": "audio_effect",
+      "displayName": "Roar",
+      "parameters": [
+        {
+          "name": "Blend"
+        },
+        {
+          "name": "Color"
+        },
+        {
+          "name": "Comp Amt"
+        },
+        {
+          "name": "Comp Hp"
+        },
+        {
+          "name": "Drive"
+        },
+        {
+          "name": "Dry/Wet"
+        },
+        {
+          "name": "Env Attack"
+        },
+        {
+          "name": "Env Freq"
+        },
+        {
+          "name": "Env Gain"
+        },
+        {
+          "name": "Env Release"
+        },
+        {
+          "name": "Env Thresh"
+        },
+        {
+          "name": "Env Width"
+        },
+        {
+          "name": "Fb Amt"
+        },
+        {
+          "name": "Fb Freq"
+        },
+        {
+          "name": "Fb Gate"
+        },
+        {
+          "name": "Fb Inv"
+        },
+        {
+          "name": "Fb Note"
+        },
+        {
+          "name": "Fb Synced"
+        },
+        {
+          "name": "Fb Time"
+        },
+        {
+          "name": "Fb Time Mode"
+        },
+        {
+          "name": "Fb Width"
+        },
+        {
+          "name": "Filter 1"
+        },
+        {
+          "name": "Filter 1 Pre"
+        },
+        {
+          "name": "Filter 2"
+        },
+        {
+          "name": "Filter 2 Pre"
+        },
+        {
+          "name": "Filter 3"
+        },
+        {
+          "name": "Filter 3 Pre"
+        },
+        {
+          "name": "Flt 1 Freq"
+        },
+        {
+          "name": "Flt 1 Morph"
+        },
+        {
+          "name": "Flt 1 Peak"
+        },
+        {
+          "name": "Flt 1 Res"
+        },
+        {
+          "name": "Flt 1 Type"
+        },
+        {
+          "name": "Flt 2 Freq"
+        },
+        {
+          "name": "Flt 2 Morph"
+        },
+        {
+          "name": "Flt 2 Peak"
+        },
+        {
+          "name": "Flt 2 Res"
+        },
+        {
+          "name": "Flt 2 Type"
+        },
+        {
+          "name": "Flt 3 Freq"
+        },
+        {
+          "name": "Flt 3 Morph"
+        },
+        {
+          "name": "Flt 3 Peak"
+        },
+        {
+          "name": "Flt 3 Res"
+        },
+        {
+          "name": "Flt 3 Type"
+        },
+        {
+          "name": "Global Mod Amt"
+        },
+        {
+          "name": "LFO 1 16th"
+        },
+        {
+          "name": "LFO 1 Morph"
+        },
+        {
+          "name": "LFO 1 Rate"
+        },
+        {
+          "name": "LFO 1 Rate Mode"
+        },
+        {
+          "name": "LFO 1 Smooth"
+        },
+        {
+          "name": "LFO 1 Synced Rate"
+        },
+        {
+          "name": "LFO 1 Wave"
+        },
+        {
+          "name": "LFO 2 16th"
+        },
+        {
+          "name": "LFO 2 Morph"
+        },
+        {
+          "name": "LFO 2 Rate"
+        },
+        {
+          "name": "LFO 2 Rate Mode"
+        },
+        {
+          "name": "LFO 2 Smooth"
+        },
+        {
+          "name": "LFO 2 Synced Rate"
+        },
+        {
+          "name": "LFO 2 Wave"
+        },
+        {
+          "name": "Low Mid X-Over"
+        },
+        {
+          "name": "Mid High X-Over"
+        },
+        {
+          "name": "Noise 16th"
+        },
+        {
+          "name": "Noise Rate"
+        },
+        {
+          "name": "Noise Rate Mode"
+        },
+        {
+          "name": "Noise Smooth"
+        },
+        {
+          "name": "Noise Synced Rate"
+        },
+        {
+          "name": "Noise Type"
+        },
+        {
+          "name": "Output"
+        },
+        {
+          "name": "Routing"
+        },
+        {
+          "name": "Shaper 1"
+        },
+        {
+          "name": "Shaper 1 Amt"
+        },
+        {
+          "name": "Shaper 1 Bias"
+        },
+        {
+          "name": "Shaper 1 Level"
+        },
+        {
+          "name": "Shaper 1 Type"
+        },
+        {
+          "name": "Shaper 2"
+        },
+        {
+          "name": "Shaper 2 Amt"
+        },
+        {
+          "name": "Shaper 2 Bias"
+        },
+        {
+          "name": "Shaper 2 Level"
+        },
+        {
+          "name": "Shaper 2 Type"
+        },
+        {
+          "name": "Shaper 3"
+        },
+        {
+          "name": "Shaper 3 Amt"
+        },
+        {
+          "name": "Shaper 3 Bias"
+        },
+        {
+          "name": "Shaper 3 Level"
+        },
+        {
+          "name": "Shaper 3 Type"
+        },
+        {
+          "name": "Source"
+        },
+        {
+          "name": "Stage 1"
+        },
+        {
+          "name": "Stage 2"
+        },
+        {
+          "name": "Stage 3"
+        },
+        {
+          "name": "Stage Select"
+        },
+        {
+          "name": "Tone Amt"
+        },
+        {
+          "name": "Tone Freq"
+        }
+      ]
+    },
+    {
+      "class": "Saturator",
+      "category": "audio_effect",
+      "displayName": "Saturator",
+      "parameters": [
+        {
+          "name": "Base"
+        },
+        {
+          "name": "Color"
+        },
+        {
+          "name": "Color Amt Hi"
+        },
+        {
+          "name": "Color Amt Low"
+        },
+        {
+          "name": "Color Freq"
+        },
+        {
+          "name": "Color Width"
+        },
+        {
+          "name": "Depth"
+        },
+        {
+          "name": "Drive"
+        },
+        {
+          "name": "Dry/Wet"
+        },
+        {
+          "name": "Frequency"
+        },
+        {
+          "name": "Output"
+        },
+        {
+          "name": "Soft Clip"
+        },
+        {
+          "name": "Type"
+        },
+        {
+          "name": "WS Curve"
+        },
+        {
+          "name": "WS Damp"
+        },
+        {
+          "name": "WS Depth"
+        },
+        {
+          "name": "WS Drive"
+        },
+        {
+          "name": "WS Lin"
+        },
+        {
+          "name": "WS Period"
+        },
+        {
+          "name": "Width"
+        }
+      ]
+    },
+    {
+      "class": "Shifter",
+      "category": "audio_effect",
+      "displayName": "Shifter",
+      "parameters": [
+        {
+          "name": "Delay"
+        },
+        {
+          "name": "Delay Feedback"
+        },
+        {
+          "name": "Delay S. Time"
+        },
+        {
+          "name": "Delay Sync"
+        },
+        {
+          "name": "Delay Time"
+        },
+        {
+          "name": "Dry/Wet"
+        },
+        {
+          "name": "Env Amount Hz"
+        },
+        {
+          "name": "Env Amount St"
+        },
+        {
+          "name": "Env Attack"
+        },
+        {
+          "name": "Env Release"
+        },
+        {
+          "name": "Env. Follow"
+        },
+        {
+          "name": "FShift Coarse"
+        },
+        {
+          "name": "Lfo Amount Hz"
+        },
+        {
+          "name": "Lfo Amount St"
+        },
+        {
+          "name": "Lfo Duty Cycle"
+        },
+        {
+          "name": "Lfo Offset"
+        },
+        {
+          "name": "Lfo Phase"
+        },
+        {
+          "name": "Lfo Rate Hz"
+        },
+        {
+          "name": "Lfo S. Rate"
+        },
+        {
+          "name": "Lfo Spin"
+        },
+        {
+          "name": "Lfo Spin Amount"
+        },
+        {
+          "name": "Lfo Sync"
+        },
+        {
+          "name": "Lfo Waveform"
+        },
+        {
+          "name": "Lfo Width"
+        },
+        {
+          "name": "MidiPitch Glide"
+        },
+        {
+          "name": "Mod Fine"
+        },
+        {
+          "name": "Mode"
+        },
+        {
+          "name": "Pitch Bend Range"
+        },
+        {
+          "name": "Pitch Coarse"
+        },
+        {
+          "name": "Pitch Fine"
+        },
+        {
+          "name": "Pitch Mode"
+        },
+        {
+          "name": "Pitch Window"
+        },
+        {
+          "name": "RM Coarse"
+        },
+        {
+          "name": "RM Drive"
+        },
+        {
+          "name": "RM Drive Gain"
+        },
+        {
+          "name": "Tone"
+        },
+        {
+          "name": "Wide"
+        }
+      ]
+    },
+    {
+      "class": "Spectral",
+      "category": "audio_effect",
+      "displayName": "Spectral Resonator",
+      "parameters": [
+        {
+          "name": "Delay Dly. Unit"
+        },
+        {
+          "name": "Delay Feedback"
+        },
+        {
+          "name": "Delay Frequency Shift"
+        },
+        {
+          "name": "Delay Mask"
+        },
+        {
+          "name": "Delay Mix"
+        },
+        {
+          "name": "Delay On"
+        },
+        {
+          "name": "Delay Spray"
+        },
+        {
+          "name": "Delay Stereo Spread"
+        },
+        {
+          "name": "Delay Tilt"
+        },
+        {
+          "name": "Delay Time Divisions"
+        },
+        {
+          "name": "Delay Time Seconds"
+        },
+        {
+          "name": "Delay Time Sixteenths"
+        },
+        {
+          "name": "Dry Wet"
+        },
+        {
+          "name": "Fade In"
+        },
+        {
+          "name": "Fade Out"
+        },
+        {
+          "name": "Fade Type"
+        },
+        {
+          "name": "Frozen"
+        },
+        {
+          "name": "Input Send Gain"
+        },
+        {
+          "name": "Mode"
+        },
+        {
+          "name": "On"
+        },
+        {
+          "name": "Retrigger Mode"
+        },
+        {
+          "name": "S.Rate ms"
+        },
+        {
+          "name": "Sensitivity"
+        },
+        {
+          "name": "Sync Interval"
+        },
+        {
+          "name": "Unit"
+        },
+        {
+          "name": "XFade %"
+        }
+      ]
+    },
+    {
+      "class": "StereoGain",
+      "category": "audio_effect",
+      "displayName": "Utility",
+      "parameters": [
+        {
+          "name": "Balance"
+        },
+        {
+          "name": "Bass Freq"
+        },
+        {
+          "name": "Bass Mono"
+        },
+        {
+          "name": "Channel Mode"
+        },
+        {
+          "name": "DC Filter"
+        },
+        {
+          "name": "Gain"
+        },
+        {
+          "name": "Gain (Legacy)"
+        },
+        {
+          "name": "Left Inv"
+        },
+        {
+          "name": "Mid/Side Balance"
+        },
+        {
+          "name": "Mono"
+        },
+        {
+          "name": "Mute"
+        },
+        {
+          "name": "Right Inv"
+        },
+        {
+          "name": "Stereo Width"
+        }
+      ]
+    },
+    {
+      "class": "StringStudio",
+      "category": "instrument",
+      "displayName": "Tension",
+      "parameters": [
+        {
+          "name": "Body"
+        },
+        {
+          "name": "Body Decay"
+        },
+        {
+          "name": "Body High-Cut"
+        },
+        {
+          "name": "Body Low-Cut"
+        },
+        {
+          "name": "Body Mix"
+        },
+        {
+          "name": "Body Size"
+        },
+        {
+          "name": "Body Type"
+        },
+        {
+          "name": "D Damping"
+        },
+        {
+          "name": "D Mass < Key"
+        },
+        {
+          "name": "D Pos < Key"
+        },
+        {
+          "name": "D Pos < Vel"
+        },
+        {
+          "name": "D Stiff < Key"
+        },
+        {
+          "name": "D Stiffness"
+        },
+        {
+          "name": "D Velo < Key"
+        },
+        {
+          "name": "D Velocity"
+        },
+        {
+          "name": "Damp Pos"
+        },
+        {
+          "name": "Damper"
+        },
+        {
+          "name": "Damper Mass"
+        },
+        {
+          "name": "E Pos"
+        },
+        {
+          "name": "E Pos < Key"
+        },
+        {
+          "name": "E Pos < Vel"
+        },
+        {
+          "name": "Error"
+        },
+        {
+          "name": "Exc Damping"
+        },
+        {
+          "name": "Exc ForceMassProt"
+        },
+        {
+          "name": "Exc ForceMassProt < Key"
+        },
+        {
+          "name": "Exc ForceMassProt < Vel"
+        },
+        {
+          "name": "Exc FricStiff"
+        },
+        {
+          "name": "Exc FricStiff < Key"
+        },
+        {
+          "name": "Exc FricStiff < Vel"
+        },
+        {
+          "name": "Exc Vel < Key"
+        },
+        {
+          "name": "Exc Vel < Vel"
+        },
+        {
+          "name": "Exc Velocity"
+        },
+        {
+          "name": "Exciter"
+        },
+        {
+          "name": "Exciter Type"
+        },
+        {
+          "name": "FEG < Vel"
+        },
+        {
+          "name": "FEG Att < Vel"
+        },
+        {
+          "name": "FEG Attack"
+        },
+        {
+          "name": "FEG Decay"
+        },
+        {
+          "name": "FEG Release"
+        },
+        {
+          "name": "FEG Sustain"
+        },
+        {
+          "name": "Filt Env"
+        },
+        {
+          "name": "Filter"
+        },
+        {
+          "name": "Filter Freq"
+        },
+        {
+          "name": "Filter Reso"
+        },
+        {
+          "name": "Filter Type"
+        },
+        {
+          "name": "Fine Tune"
+        },
+        {
+          "name": "Fixed Damp"
+        },
+        {
+          "name": "Fixed Exc"
+        },
+        {
+          "name": "Freq < Env"
+        },
+        {
+          "name": "Gated"
+        },
+        {
+          "name": "Key Dest"
+        },
+        {
+          "name": "Key Priority"
+        },
+        {
+          "name": "LFO"
+        },
+        {
+          "name": "LFO Delay"
+        },
+        {
+          "name": "LFO Fade In"
+        },
+        {
+          "name": "LFO Shape"
+        },
+        {
+          "name": "LFO Speed"
+        },
+        {
+          "name": "LFO Sync On"
+        },
+        {
+          "name": "LFO SyncRate"
+        },
+        {
+          "name": "Legato"
+        },
+        {
+          "name": "Mod Source"
+        },
+        {
+          "name": "Note PB Range"
+        },
+        {
+          "name": "Octave"
+        },
+        {
+          "name": "PB Range"
+        },
+        {
+          "name": "Pickup"
+        },
+        {
+          "name": "Pickup Pos"
+        },
+        {
+          "name": "Porta Time"
+        },
+        {
+          "name": "Portamento"
+        },
+        {
+          "name": "Press Amt A"
+        },
+        {
+          "name": "Press Amt B"
+        },
+        {
+          "name": "Press Dest A"
+        },
+        {
+          "name": "Press Dest B"
+        },
+        {
+          "name": "Proportional"
+        },
+        {
+          "name": "S Damp < Key"
+        },
+        {
+          "name": "S Decay < Key"
+        },
+        {
+          "name": "S Decay Ratio"
+        },
+        {
+          "name": "Section"
+        },
+        {
+          "name": "Semitone"
+        },
+        {
+          "name": "Slide Amt A"
+        },
+        {
+          "name": "Slide Amt B"
+        },
+        {
+          "name": "Slide Dest A"
+        },
+        {
+          "name": "Slide Dest B"
+        },
+        {
+          "name": "Str Damping"
+        },
+        {
+          "name": "Str Inharmon"
+        },
+        {
+          "name": "Stretch"
+        },
+        {
+          "name": "String Decay"
+        },
+        {
+          "name": "T Mass < Key"
+        },
+        {
+          "name": "T Mass < Vel"
+        },
+        {
+          "name": "Term Fng Stiff"
+        },
+        {
+          "name": "Term Fret Stiff"
+        },
+        {
+          "name": "Term Mass"
+        },
+        {
+          "name": "Termination"
+        },
+        {
+          "name": "Uni Delay"
+        },
+        {
+          "name": "Uni Detune"
+        },
+        {
+          "name": "Unison"
+        },
+        {
+          "name": "Unison Voices"
+        },
+        {
+          "name": "Vel Dest"
+        },
+        {
+          "name": "Vib & Uni"
+        },
+        {
+          "name": "Vib < ModWh"
+        },
+        {
+          "name": "Vib Amount"
+        },
+        {
+          "name": "Vib Delay"
+        },
+        {
+          "name": "Vib Error"
+        },
+        {
+          "name": "Vib Fade-In"
+        },
+        {
+          "name": "Vib Speed"
+        },
+        {
+          "name": "Vibrato"
+        },
+        {
+          "name": "Voices"
+        },
+        {
+          "name": "Volume"
+        }
+      ]
+    },
+    {
+      "class": "Transmute",
+      "category": "audio_effect",
+      "displayName": "Spectral Time",
+      "parameters": [
+        {
+          "name": "Decay"
+        },
+        {
+          "name": "Dry Wet"
+        },
+        {
+          "name": "Freq. Hz"
+        },
+        {
+          "name": "Frequency Dial Mode"
+        },
+        {
+          "name": "Glide"
+        },
+        {
+          "name": "HF Damp"
+        },
+        {
+          "name": "Harmonics"
+        },
+        {
+          "name": "Input Send Gain"
+        },
+        {
+          "name": "LF Damp"
+        },
+        {
+          "name": "Midi Gate"
+        },
+        {
+          "name": "Mod Mode"
+        },
+        {
+          "name": "Mod Rate"
+        },
+        {
+          "name": "Mono Poly"
+        },
+        {
+          "name": "Note"
+        },
+        {
+          "name": "Pitch Bend Range"
+        },
+        {
+          "name": "Pitch Mod"
+        },
+        {
+          "name": "Pitch Mode"
+        },
+        {
+          "name": "Polyphony"
+        },
+        {
+          "name": "Shift"
+        },
+        {
+          "name": "Stretch"
+        },
+        {
+          "name": "Transpose"
+        },
+        {
+          "name": "Unison"
+        },
+        {
+          "name": "Unison Amount"
+        },
+        {
+          "name": "frequency_dial_mode_opt"
+        }
+      ]
+    },
+    {
+      "class": "Tube",
+      "category": "audio_effect",
+      "displayName": "Dynamic Tube",
+      "parameters": [
+        {
+          "name": "Attack"
+        },
+        {
+          "name": "Bias"
+        },
+        {
+          "name": "Drive"
+        },
+        {
+          "name": "Dry/Wet"
+        },
+        {
+          "name": "Envelope"
+        },
+        {
+          "name": "Output"
+        },
+        {
+          "name": "Release"
+        },
+        {
+          "name": "Tone"
+        },
+        {
+          "name": "Tube Type"
+        }
+      ]
+    },
+    {
+      "class": "UltraAnalog",
+      "category": "instrument",
+      "displayName": "Analog",
+      "parameters": [
+        {
+          "name": "A1 Pan < Env"
+        },
+        {
+          "name": "A1 Pan < Key"
+        },
+        {
+          "name": "A1 Pan < LFO"
+        },
+        {
+          "name": "A2 Pan < Env"
+        },
+        {
+          "name": "A2 Pan < Key"
+        },
+        {
+          "name": "A2 Pan < LFO"
+        },
+        {
+          "name": "AEG1 A < Vel"
+        },
+        {
+          "name": "AEG1 Attack"
+        },
+        {
+          "name": "AEG1 Decay"
+        },
+        {
+          "name": "AEG1 Exp"
+        },
+        {
+          "name": "AEG1 Loop"
+        },
+        {
+          "name": "AEG1 Rel"
+        },
+        {
+          "name": "AEG1 S Time"
+        },
+        {
+          "name": "AEG1 Sustain"
+        },
+        {
+          "name": "AEG2 A < Vel"
+        },
+        {
+          "name": "AEG2 Attack"
+        },
+        {
+          "name": "AEG2 Decay"
+        },
+        {
+          "name": "AEG2 Exp"
+        },
+        {
+          "name": "AEG2 Loop"
+        },
+        {
+          "name": "AEG2 Rel"
+        },
+        {
+          "name": "AEG2 S Time"
+        },
+        {
+          "name": "AEG2 Sustain"
+        },
+        {
+          "name": "AMP1 < Key"
+        },
+        {
+          "name": "AMP1 < LFO"
+        },
+        {
+          "name": "AMP1 Level"
+        },
+        {
+          "name": "AMP1 Pan"
+        },
+        {
+          "name": "AMP2 < Key"
+        },
+        {
+          "name": "AMP2 < LFO"
+        },
+        {
+          "name": "AMP2 Level"
+        },
+        {
+          "name": "AMP2 Pan"
+        },
+        {
+          "name": "Amp 1"
+        },
+        {
+          "name": "Amp 1 Free"
+        },
+        {
+          "name": "Amp 1 Legato"
+        },
+        {
+          "name": "Amp 2"
+        },
+        {
+          "name": "Amp 2 Free"
+        },
+        {
+          "name": "Amp 2 Legato"
+        },
+        {
+          "name": "Detune"
+        },
+        {
+          "name": "Env Select"
+        },
+        {
+          "name": "F1 Drive"
+        },
+        {
+          "name": "F1 Freq"
+        },
+        {
+          "name": "F1 Freq < Env"
+        },
+        {
+          "name": "F1 Freq < Key"
+        },
+        {
+          "name": "F1 Freq < LFO"
+        },
+        {
+          "name": "F1 Res < Env"
+        },
+        {
+          "name": "F1 Res < LFO"
+        },
+        {
+          "name": "F1 Reso < Key"
+        },
+        {
+          "name": "F1 Resonance"
+        },
+        {
+          "name": "F1 Type"
+        },
+        {
+          "name": "F2 Drive"
+        },
+        {
+          "name": "F2 Freq"
+        },
+        {
+          "name": "F2 Freq < Env"
+        },
+        {
+          "name": "F2 Freq < Key"
+        },
+        {
+          "name": "F2 Freq < LFO"
+        },
+        {
+          "name": "F2 Res < Env"
+        },
+        {
+          "name": "F2 Res < LFO"
+        },
+        {
+          "name": "F2 Reso < Key"
+        },
+        {
+          "name": "F2 Resonance"
+        },
+        {
+          "name": "F2 Type"
+        },
+        {
+          "name": "FEG1 A < Vel"
+        },
+        {
+          "name": "FEG1 Attack"
+        },
+        {
+          "name": "FEG1 Decay"
+        },
+        {
+          "name": "FEG1 Exp"
+        },
+        {
+          "name": "FEG1 Loop"
+        },
+        {
+          "name": "FEG1 Rel"
+        },
+        {
+          "name": "FEG1 S Time"
+        },
+        {
+          "name": "FEG1 Sustain"
+        },
+        {
+          "name": "FEG2 A < Vel"
+        },
+        {
+          "name": "FEG2 Attack"
+        },
+        {
+          "name": "FEG2 Decay"
+        },
+        {
+          "name": "FEG2 Exp"
+        },
+        {
+          "name": "FEG2 Loop"
+        },
+        {
+          "name": "FEG2 Rel"
+        },
+        {
+          "name": "FEG2 S Time"
+        },
+        {
+          "name": "FEG2 Sustain"
+        },
+        {
+          "name": "Filter 1"
+        },
+        {
+          "name": "Filter 2"
+        },
+        {
+          "name": "Flt 1 Free"
+        },
+        {
+          "name": "Flt 1 Legato"
+        },
+        {
+          "name": "Flt 2 Follow"
+        },
+        {
+          "name": "Flt 2 Free"
+        },
+        {
+          "name": "Flt 2 Legato"
+        },
+        {
+          "name": "Glide"
+        },
+        {
+          "name": "Glide Mode"
+        },
+        {
+          "name": "Glide Time"
+        },
+        {
+          "name": "Key Error"
+        },
+        {
+          "name": "Key Priority"
+        },
+        {
+          "name": "Key Stretch"
+        },
+        {
+          "name": "LFO 1"
+        },
+        {
+          "name": "LFO 1 Retrig"
+        },
+        {
+          "name": "LFO 2"
+        },
+        {
+          "name": "LFO 2 Retrig"
+        },
+        {
+          "name": "LFO Select"
+        },
+        {
+          "name": "LFO1 Delay"
+        },
+        {
+          "name": "LFO1 Fade In"
+        },
+        {
+          "name": "LFO1 PW"
+        },
+        {
+          "name": "LFO1 Phase"
+        },
+        {
+          "name": "LFO1 Shape"
+        },
+        {
+          "name": "LFO1 SncRate"
+        },
+        {
+          "name": "LFO1 Speed"
+        },
+        {
+          "name": "LFO1 Sync"
+        },
+        {
+          "name": "LFO2 Delay"
+        },
+        {
+          "name": "LFO2 Fade In"
+        },
+        {
+          "name": "LFO2 PW"
+        },
+        {
+          "name": "LFO2 Phase"
+        },
+        {
+          "name": "LFO2 Shape"
+        },
+        {
+          "name": "LFO2 SncRate"
+        },
+        {
+          "name": "LFO2 Speed"
+        },
+        {
+          "name": "LFO2 Sync"
+        },
+        {
+          "name": "Legato"
+        },
+        {
+          "name": "Mod Dest"
+        },
+        {
+          "name": "Mod Source"
+        },
+        {
+          "name": "Noise"
+        },
+        {
+          "name": "Noise Balance"
+        },
+        {
+          "name": "Noise Color"
+        },
+        {
+          "name": "Noise Level"
+        },
+        {
+          "name": "Note PB Range"
+        },
+        {
+          "name": "O1 Keytrack"
+        },
+        {
+          "name": "O1 PW < LFO"
+        },
+        {
+          "name": "O1 Sub/Sync"
+        },
+        {
+          "name": "O2 Keytrack"
+        },
+        {
+          "name": "O2 PW < LFO"
+        },
+        {
+          "name": "O2 Sub/Sync"
+        },
+        {
+          "name": "OSC1 < LFO"
+        },
+        {
+          "name": "OSC1 Balance"
+        },
+        {
+          "name": "OSC1 Detune"
+        },
+        {
+          "name": "OSC1 Level"
+        },
+        {
+          "name": "OSC1 Mode"
+        },
+        {
+          "name": "OSC1 Octave"
+        },
+        {
+          "name": "OSC1 PW"
+        },
+        {
+          "name": "OSC1 Semi"
+        },
+        {
+          "name": "OSC1 Shape"
+        },
+        {
+          "name": "OSC2 < LFO"
+        },
+        {
+          "name": "OSC2 Balance"
+        },
+        {
+          "name": "OSC2 Detune"
+        },
+        {
+          "name": "OSC2 Level"
+        },
+        {
+          "name": "OSC2 Mode"
+        },
+        {
+          "name": "OSC2 Octave"
+        },
+        {
+          "name": "OSC2 PW"
+        },
+        {
+          "name": "OSC2 Semi"
+        },
+        {
+          "name": "OSC2 Shape"
+        },
+        {
+          "name": "Octave"
+        },
+        {
+          "name": "Osc / Amp"
+        },
+        {
+          "name": "Osc 1"
+        },
+        {
+          "name": "Osc 2"
+        },
+        {
+          "name": "Osc Select"
+        },
+        {
+          "name": "PB Range"
+        },
+        {
+          "name": "PEG1 Amount"
+        },
+        {
+          "name": "PEG1 Time"
+        },
+        {
+          "name": "PEG2 Amount"
+        },
+        {
+          "name": "PEG2 Time"
+        },
+        {
+          "name": "Press Amt A"
+        },
+        {
+          "name": "Press Amt B"
+        },
+        {
+          "name": "Press Dest A"
+        },
+        {
+          "name": "Press Dest B"
+        },
+        {
+          "name": "Select"
+        },
+        {
+          "name": "Semitone"
+        },
+        {
+          "name": "Slide Amt A"
+        },
+        {
+          "name": "Slide Amt B"
+        },
+        {
+          "name": "Slide Dest A"
+        },
+        {
+          "name": "Slide Dest B"
+        },
+        {
+          "name": "Unison"
+        },
+        {
+          "name": "Unison Delay"
+        },
+        {
+          "name": "Unison Detune"
+        },
+        {
+          "name": "Unison Voices"
+        },
+        {
+          "name": "Vib < ModWh"
+        },
+        {
+          "name": "Vib Amount"
+        },
+        {
+          "name": "Vib Delay"
+        },
+        {
+          "name": "Vib Error"
+        },
+        {
+          "name": "Vib Fade-In"
+        },
+        {
+          "name": "Vib Speed"
+        },
+        {
+          "name": "Vibrato"
+        },
+        {
+          "name": "Voices"
+        },
+        {
+          "name": "Volume"
+        }
+      ]
+    },
+    {
+      "class": "Vinyl",
+      "category": "audio_effect",
+      "displayName": "Vinyl Distortion",
+      "parameters": [
+        {
+          "name": "Crackle Density"
+        },
+        {
+          "name": "Crackle Volume"
+        },
+        {
+          "name": "Global Drive"
+        },
+        {
+          "name": "Module"
+        },
+        {
+          "name": "Pinch"
+        },
+        {
+          "name": "Pinch Ch"
+        },
+        {
+          "name": "Pinch Drive"
+        },
+        {
+          "name": "Pinch Freq."
+        },
+        {
+          "name": "Pinch Mode"
+        },
+        {
+          "name": "Pinch Width"
+        },
+        {
+          "name": "Tracing"
+        },
+        {
+          "name": "Tracing Drive"
+        },
+        {
+          "name": "Tracing Freq."
+        },
+        {
+          "name": "Tracing Width"
+        }
+      ]
+    },
+    {
+      "class": "Vocoder",
+      "category": "audio_effect",
+      "displayName": "Vocoder",
+      "parameters": [
+        {
+          "name": "Attack Time"
+        },
+        {
+          "name": "Dry/Wet"
+        },
+        {
+          "name": "Enhance"
+        },
+        {
+          "name": "Envelope Depth"
+        },
+        {
+          "name": "Filter Bandwidth"
+        },
+        {
+          "name": "Formant Shift"
+        },
+        {
+          "name": "Gate Threshold"
+        },
+        {
+          "name": "Lower Filter Band"
+        },
+        {
+          "name": "Lower Pitch Detection"
+        },
+        {
+          "name": "Mono/Stereo"
+        },
+        {
+          "name": "Noise Crackle"
+        },
+        {
+          "name": "Noise Rate"
+        },
+        {
+          "name": "Oscillator Pitch"
+        },
+        {
+          "name": "Oscillator Waveform"
+        },
+        {
+          "name": "Output Level"
+        },
+        {
+          "name": "Precise/Retro"
+        },
+        {
+          "name": "Release Time"
+        },
+        {
+          "name": "Unvoiced Level"
+        },
+        {
+          "name": "Unvoiced Sensitivity"
+        },
+        {
+          "name": "Unvoiced Speed"
+        },
+        {
+          "name": "Upper Filter Band"
+        },
+        {
+          "name": "Upper Pitch Detection"
+        }
+      ]
+    }
+  ]
+}
