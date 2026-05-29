@@ -48,6 +48,7 @@ from runtime_profile import (
 )
 from utils.cleanup import cleanup_artifacts
 import csv_export
+import transcription_pianoroll
 import upload_limits
 import url_ingest
 from server_upload import (  # noqa: F401 — re-exported for test backward compat
@@ -2576,6 +2577,200 @@ async def export_run_field_as_csv(
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
         },
+    )
+
+
+@app.get("/api/analysis-runs/{run_id}/transcription/pianoroll")
+async def get_transcription_pianoroll(
+    run_id: str,
+    mode: str = Query(
+        "frame",
+        description="'frame' (sustained notes painted across their duration) "
+        "or 'onset' (note starts only — useful for rhythmic visualization).",
+    ),
+    pitch_low: int = Query(
+        transcription_pianoroll.DEFAULT_PITCH_LOW,
+        alias="pitchLow",
+        description="Lower MIDI pitch bound (inclusive). Default: 21 (A0).",
+    ),
+    pitch_high: int = Query(
+        transcription_pianoroll.DEFAULT_PITCH_HIGH,
+        alias="pitchHigh",
+        description="Upper MIDI pitch bound (exclusive). Default: 109 "
+        "(one above C8 — the 88-key piano range).",
+    ),
+    tpq: int = Query(
+        transcription_pianoroll.DEFAULT_TPQ,
+        description="Time resolution in ticks per quarter note. Default: 4 "
+        "(one row per 16th note at typical tempos).",
+    ),
+    x_asa_user_id: str | None = Header(None),
+    x_asa_user_email: str | None = Header(None),
+) -> JSONResponse:
+    """Render the run's transcriptionDetail as a velocity-encoded pianoroll.
+
+    Derived view — Phase 1's ``transcriptionDetail`` (sourced from the
+    pitch-note translation stage) stays authoritative. The response cites
+    Phase 1's ``bpm`` + ``timeSignature`` so the UI surface can attribute
+    every cell back to a measurement (invariant #2 in ``PURPOSE.md``).
+
+    Status mapping is deliberately split between 404 (won't appear without
+    user action) and 409 (wait or finish a prerequisite):
+
+    * 404 ``RUN_NOT_FOUND`` — run doesn't exist or is not owned by the caller.
+    * 409 ``MEASUREMENT_NOT_COMPLETED`` — measurement stage hasn't finished.
+    * 404 ``TRANSCRIPTION_NOT_REQUESTED`` — run was created with pitch-note
+      translation disabled. The caller should enable transcription on a new run.
+    * 409 ``TRANSCRIPTION_NOT_COMPLETED`` — pitch-note stage is queued/running.
+    * 404 ``TRANSCRIPTION_NOT_AVAILABLE`` — pitch-note stage completed (or
+      failed / was interrupted) without producing a ``transcriptionDetail``
+      payload. Caller's affordance is "re-run the transcription stage."
+    * 400 ``INVALID_MODE`` / ``INVALID_PITCH_RANGE`` / ``INVALID_TPQ`` —
+      query parameter validation. Returned as structured codes rather than
+      FastAPI's default 422 so clients can branch on them.
+    """
+    # Up-front query validation so the route returns structured error codes
+    # rather than letting ``render_pianoroll`` raise generic ``ValueError``
+    # — clients should be able to switch on the specific failure.
+    if mode not in ("frame", "onset"):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "code": "INVALID_MODE",
+                    "message": f"mode must be 'frame' or 'onset'; got {mode!r}.",
+                }
+            },
+        )
+    if pitch_low < 0 or pitch_high > 128 or pitch_low >= pitch_high:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "code": "INVALID_PITCH_RANGE",
+                    "message": (
+                        f"pitch range [{pitch_low}, {pitch_high}) is invalid; "
+                        "must satisfy 0 <= pitchLow < pitchHigh <= 128."
+                    ),
+                }
+            },
+        )
+    if tpq < 1:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "code": "INVALID_TPQ",
+                    "message": f"tpq must be >= 1; got {tpq}.",
+                }
+            },
+        )
+
+    user_context = _resolve_route_user_context(x_asa_user_id, x_asa_user_email)
+    if isinstance(user_context, JSONResponse):
+        return user_context
+
+    runtime = get_analysis_runtime()
+    try:
+        snapshot = runtime.get_run(run_id, owner_user_id=user_context.user_id)
+    except (KeyError, PermissionError):
+        return _run_not_found_response(run_id)
+
+    stages = snapshot.get("stages", {}) if isinstance(snapshot, dict) else {}
+    measurement = stages.get("measurement", {}) or {}
+    if measurement.get("status") != "completed":
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": {
+                    "code": "MEASUREMENT_NOT_COMPLETED",
+                    "message": (
+                        "Measurement stage must complete before the "
+                        "transcription pianoroll can be rendered."
+                    ),
+                }
+            },
+        )
+
+    pn_stage = stages.get("pitchNoteTranslation", {}) or {}
+    pn_status = pn_stage.get("status")
+    if pn_status == "not_requested":
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": {
+                    "code": "TRANSCRIPTION_NOT_REQUESTED",
+                    "message": (
+                        "This run was created with pitch-note translation "
+                        "disabled. Enable transcription on a new run to "
+                        "render the pianoroll."
+                    ),
+                }
+            },
+        )
+    if pn_status in ("ready", "queued", "running"):
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": {
+                    "code": "TRANSCRIPTION_NOT_COMPLETED",
+                    "message": (
+                        "Pitch-note translation has not finished. Wait for "
+                        "the stage to complete and try again."
+                    ),
+                }
+            },
+        )
+
+    pn_result = pn_stage.get("result")
+    transcription_detail = (
+        pn_result.get("transcriptionDetail")
+        if isinstance(pn_result, dict)
+        else None
+    )
+    if not isinstance(transcription_detail, dict):
+        # Covers: completed-but-null result, failed attempt, interrupted
+        # attempt — the user's recourse is identical (re-run transcription).
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": {
+                    "code": "TRANSCRIPTION_NOT_AVAILABLE",
+                    "message": (
+                        "Pitch-note translation did not produce a "
+                        "transcriptionDetail payload for this run."
+                    ),
+                }
+            },
+        )
+
+    measurement_result = (
+        measurement.get("result")
+        if isinstance(measurement.get("result"), dict)
+        else {}
+    )
+    bpm_value = measurement_result.get("bpm")
+    time_signature_value = measurement_result.get("timeSignature")
+
+    payload = transcription_pianoroll.render_pianoroll(
+        transcription_detail,
+        bpm=(
+            float(bpm_value)
+            if isinstance(bpm_value, (int, float)) and bpm_value > 0
+            else None
+        ),
+        time_signature=(
+            time_signature_value
+            if isinstance(time_signature_value, str)
+            else None
+        ),
+        mode=mode,  # type: ignore[arg-type]
+        pitch_low=pitch_low,
+        pitch_high=pitch_high,
+        tpq=tpq,
+    )
+    return JSONResponse(
+        content=transcription_pianoroll.payload_to_json_dict(payload)
     )
 
 

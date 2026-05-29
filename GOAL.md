@@ -214,25 +214,25 @@ the team trusts to tell better recommendations from worse ones without anyone re
 
 ---
 
-## Implementation status (as of 2026-05-27)
+## Implementation status (as of 2026-05-28)
 
-This file is the north-star *spec*. A first cut of the supporting implementation — fixture schema,
-five catalog-valid spec fixtures, the scorer (`recommendation_evaluation.py` + the CLI runner), the
-Node deterministic-source bridge, the UI verification badge wired into `AnalysisResults.tsx`, and
-the `RECOMMENDATION_VERDICT.md` write-up — was built on the local branch `worktree-goal-doc` (worktree
-at `.claude/worktrees/goal-doc/`) under an explicit "continue without input" directive. It is **not**
-on `main`. Landing that work is a separate, deliberate decision; in particular:
+This file is the north-star *spec*. The supporting implementation — fixture schema, five
+catalog-valid spec fixtures, the scorer (`apps/backend/recommendation_evaluation.py` + the CLI
+runner `apps/backend/scripts/evaluate_recommendations.py`), the Node deterministic-source bridge
+(`apps/backend/scripts/emit_deterministic_recs.ts`), the UI verification badge wired into
+`apps/ui/src/components/AnalysisResults.tsx`, and the `apps/backend/RECOMMENDATION_VERDICT.md`
+write-up — **landed on `main` in PR #114 (commit `348498d`)** and sits on top of the Tier-1/2
+phase2 prompt fixes (`5610ca5` / `ade2ae5`). The mechanical four-sub-goal scaffolding is in place;
+the campaign's open work is now the owner-gated parts called out in `apps/backend/NEEDS.md`:
 
-1. Sub-goal 1's renders are owner-gated — the five specs need to be dialed in Live 12 and rendered to
-   48 kHz / 24-bit FLAC before the corpus is authoritative (see the worktree's
-   `apps/backend/NEEDS.md` for the build-and-render checklist).
-2. The Gemini-vs-deterministic verdict in the worktree was scored against numpy-proxy renders, not
-   Ableton renders, so its known-settings axes (role recall, value accuracy) are provisional until
-   the real renders exist.
-3. Before any further sub-goal 3 prompt iteration, the worktree branch needs to be rebased on top of
-   the Tier-1/2 phase2 prompt fixes that already landed on `main` (commits around `5610ca56` /
-   `ade2ae5a`).
+1. **Sub-goal 1's renders are still owner-gated** — the five specs need to be dialed in Live 12
+   and rendered to 48 kHz / 24-bit FLAC before the corpus is authoritative (see
+   `apps/backend/tests/fixtures/recommendation_tracks/README.md` for the build-and-render checklist).
+2. **The Gemini-vs-deterministic verdict** in `RECOMMENDATION_VERDICT.md` was scored against
+   numpy-proxy renders, not Ableton renders, so its known-settings axes (role recall, value
+   accuracy) are provisional until the real renders exist.
+3. **The UI verification badge degrades to nothing pre-render** — confidence bands are all `NONE`
+   until a real corpus regenerates `apps/ui/src/data/recommendationVerification.ts`.
 
-When you're ready to bring the implementation across, start from the worktree's `NEEDS.md` — it is
-the living status doc for the campaign and tells you what's built, what's render-gated, and what's
-next.
+`apps/backend/NEEDS.md` is the living status doc for the campaign and tells you what's built,
+what's render-gated, and what's next.
