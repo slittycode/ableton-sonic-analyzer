@@ -1,20 +1,27 @@
-"""Integration tests for the Live 12 catalogue gates in
-`server_phase2.apply_live12_catalogue_gates`.
+"""Integration tests for the Live 12 catalogue checks in
+`phase2_catalogue_gates.apply_live12_catalogue_gates`.
 
-The synthetic Phase 2 result here intentionally bundles one recommendation in
-each of the four categories the goal calls out:
+WARN-AND-KEEP CONTRACT: the checks NEVER drop a recommendation and NEVER
+rewrite a parameter. Each check emits an advisory `RECOMMENDATION_UNVERIFIED`
+warning (discriminated by `reason`) and leaves the recommendation untouched in
+the payload. These tests assert exactly that — every record survives, every
+`parameter` is byte-for-byte what Gemini wrote, and the legacy
+`RECOMMENDATION_REJECTED` / `PARAMETER_REWRITTEN` codes are never emitted.
 
-  1. Valid recommendation — accepted, no event.
-  2. Hallucinated device — rejected, RECOMMENDATION_REJECTED with
-     reason=device_unknown.
-  3. Fixable parameter typo — rewritten, PARAMETER_REWRITTEN with original +
-     resolved + requestId.
-  4. Out-of-range value (on a parameter that DOES carry a spec.min/max in the
-     fixture) — rejected, RECOMMENDATION_REJECTED with
-     reason=value_out_of_range.
+The synthetic Phase 2 result here bundles one recommendation in each of the
+four check categories:
 
-A fifth case covers the citation gate (missing/empty phase1Fields →
-RECOMMENDATION_REJECTED with reason=citation_missing).
+  1. Valid recommendation — no event.
+  2. Unknown device — RECOMMENDATION_UNVERIFIED, reason=device_unknown (kept).
+  3a. Near-miss parameter that fuzzy-resolves — kept SILENTLY, no event (fuzzy
+      suppresses the warning but never rewrites the parameter).
+  3b. Parameter with no close match — RECOMMENDATION_UNVERIFIED,
+      reason=parameter_unknown (kept).
+  4. Out-of-range value (on a parameter that DOES carry spec.min/max in the
+     fixture) — RECOMMENDATION_UNVERIFIED, reason=value_out_of_range (kept).
+
+A fifth case covers the citation check (missing/empty phase1Fields →
+RECOMMENDATION_UNVERIFIED, reason=citation_missing, kept).
 """
 
 from __future__ import annotations
@@ -33,6 +40,8 @@ _THREE_DEVICE_FIXTURE = (
     / "live12_catalogue"
     / "three_device_catalogue.json"
 )
+
+_LEGACY_MUTATING_CODES = ("RECOMMENDATION_REJECTED", "PARAMETER_REWRITTEN")
 
 
 def _make_recommendation(
@@ -57,22 +66,25 @@ def _make_recommendation(
     }
 
 
-class CatalogueGatesIntegrationTests(unittest.TestCase):
+class CatalogueChecksIntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.catalogue = Live12Catalogue.from_path(_THREE_DEVICE_FIXTURE)
 
     def _apply(self, phase2_result: dict[str, Any], *, request_id: str = "req-test-42"):
-        events = apply_live12_catalogue_gates(
+        return apply_live12_catalogue_gates(
             phase2_result,
             request_id=request_id,
             catalogue=self.catalogue,
         )
-        return events
+
+    def _assert_no_legacy_codes(self, events: list[dict[str, Any]]) -> None:
+        for event in events:
+            self.assertNotIn(event["code"], _LEGACY_MUTATING_CODES)
 
     # ----- Valid recommendation -----
 
-    def test_valid_recommendation_passes_unchanged(self):
+    def test_valid_recommendation_passes_with_no_event(self):
         phase2 = {
             "abletonRecommendations": [
                 _make_recommendation(
@@ -88,7 +100,7 @@ class CatalogueGatesIntegrationTests(unittest.TestCase):
         self.assertEqual(len(phase2["abletonRecommendations"]), 1)
         self.assertEqual(phase2["abletonRecommendations"][0]["parameter"], "Drive")
 
-    def test_display_name_device_passes_unchanged(self):
+    def test_display_name_device_passes_with_no_event(self):
         phase2 = {
             "abletonRecommendations": [
                 _make_recommendation(
@@ -103,9 +115,9 @@ class CatalogueGatesIntegrationTests(unittest.TestCase):
         self.assertEqual(events, [])
         self.assertEqual(len(phase2["abletonRecommendations"]), 1)
 
-    # ----- Hallucinated device -----
+    # ----- Unknown device -----
 
-    def test_hallucinated_device_is_rejected(self):
+    def test_unknown_device_is_flagged_and_kept(self):
         phase2 = {
             "abletonRecommendations": [
                 _make_recommendation(
@@ -116,19 +128,22 @@ class CatalogueGatesIntegrationTests(unittest.TestCase):
             ],
         }
         events = self._apply(phase2)
-        self.assertEqual(phase2["abletonRecommendations"], [])
+        # Kept — warn-and-keep never drops.
+        self.assertEqual(len(phase2["abletonRecommendations"]), 1)
         self.assertEqual(len(events), 1)
         event = events[0]
-        self.assertEqual(event["code"], "RECOMMENDATION_REJECTED")
+        self.assertEqual(event["code"], "RECOMMENDATION_UNVERIFIED")
         self.assertEqual(event["reason"], "device_unknown")
         self.assertEqual(event["device"], "Saturation Color")
         self.assertEqual(event["requestId"], "req-test-42")
         self.assertEqual(event["path"], "abletonRecommendations[0]")
 
-    # ----- Fixable parameter typo -----
+    # ----- Near-miss parameter (fuzzy-resolvable) -----
 
-    def test_fixable_parameter_typo_is_rewritten_with_event(self):
-        # Saturator catalogue has "Drive" (close to "Drives" typo).
+    def test_fuzzy_resolvable_parameter_is_kept_silently_and_not_rewritten(self):
+        # Saturator catalogue has "Drive"; "Drives" fuzzy-resolves to it.
+        # Under warn-and-keep that suppresses the warning but MUST NOT rewrite
+        # the parameter — the record keeps "Drives" exactly as written.
         phase2 = {
             "abletonRecommendations": [
                 _make_recommendation(
@@ -139,21 +154,12 @@ class CatalogueGatesIntegrationTests(unittest.TestCase):
             ],
         }
         events = self._apply(phase2)
-        # Recommendation survives — fuzzy resolution accepted.
+        self.assertEqual(events, [])
         self.assertEqual(len(phase2["abletonRecommendations"]), 1)
-        self.assertEqual(phase2["abletonRecommendations"][0]["parameter"], "Drive")
-        # A single PARAMETER_REWRITTEN event was emitted, original + resolved
-        # + requestId all present.
-        self.assertEqual(len(events), 1)
-        event = events[0]
-        self.assertEqual(event["code"], "PARAMETER_REWRITTEN")
-        self.assertEqual(event["device"], "Saturator")
-        self.assertEqual(event["originalParameter"], "Drives")
-        self.assertEqual(event["resolvedParameter"], "Drive")
-        self.assertEqual(event["requestId"], "req-test-42")
-        self.assertEqual(event["path"], "abletonRecommendations[0].parameter")
+        # Critical: parameter is NOT rewritten.
+        self.assertEqual(phase2["abletonRecommendations"][0]["parameter"], "Drives")
 
-    def test_parameter_unresolvable_typo_is_rejected(self):
+    def test_parameter_with_no_close_match_is_flagged_and_kept(self):
         phase2 = {
             "abletonRecommendations": [
                 _make_recommendation(
@@ -164,16 +170,19 @@ class CatalogueGatesIntegrationTests(unittest.TestCase):
             ],
         }
         events = self._apply(phase2)
-        self.assertEqual(phase2["abletonRecommendations"], [])
+        self.assertEqual(len(phase2["abletonRecommendations"]), 1)
+        self.assertEqual(
+            phase2["abletonRecommendations"][0]["parameter"], "TotalGarbage"
+        )
         self.assertEqual(len(events), 1)
-        self.assertEqual(events[0]["code"], "RECOMMENDATION_REJECTED")
+        self.assertEqual(events[0]["code"], "RECOMMENDATION_UNVERIFIED")
         self.assertEqual(events[0]["reason"], "parameter_unknown")
         self.assertEqual(events[0]["device"], "Saturator")
         self.assertEqual(events[0]["parameter"], "TotalGarbage")
 
     # ----- Out-of-range value -----
 
-    def test_out_of_range_value_is_rejected(self):
+    def test_out_of_range_value_is_flagged_and_kept(self):
         # Operator/Volume in the fixture: type=float, min=-36.0, max=6.0.
         phase2 = {
             "abletonRecommendations": [
@@ -185,16 +194,16 @@ class CatalogueGatesIntegrationTests(unittest.TestCase):
             ],
         }
         events = self._apply(phase2)
-        self.assertEqual(phase2["abletonRecommendations"], [])
+        self.assertEqual(len(phase2["abletonRecommendations"]), 1)
         self.assertEqual(len(events), 1)
         event = events[0]
-        self.assertEqual(event["code"], "RECOMMENDATION_REJECTED")
+        self.assertEqual(event["code"], "RECOMMENDATION_UNVERIFIED")
         self.assertEqual(event["reason"], "value_out_of_range")
         self.assertEqual(event["device"], "Operator")
         self.assertEqual(event["parameter"], "Volume")
         self.assertEqual(event["value"], "42 dB")
 
-    def test_in_range_value_passes(self):
+    def test_in_range_value_produces_no_event(self):
         phase2 = {
             "abletonRecommendations": [
                 _make_recommendation(
@@ -208,8 +217,8 @@ class CatalogueGatesIntegrationTests(unittest.TestCase):
         self.assertEqual(events, [])
         self.assertEqual(len(phase2["abletonRecommendations"]), 1)
 
-    def test_range_gate_is_inert_when_spec_lacks_bounds(self):
-        # Saturator/Drive in the fixture: name only, no min/max -- range gate
+    def test_range_check_is_inert_when_spec_lacks_bounds(self):
+        # Saturator/Drive in the fixture: name only, no min/max -- range check
         # must NOT fire, even on absurd values.
         phase2 = {
             "abletonRecommendations": [
@@ -224,9 +233,9 @@ class CatalogueGatesIntegrationTests(unittest.TestCase):
         self.assertEqual(events, [])
         self.assertEqual(len(phase2["abletonRecommendations"]), 1)
 
-    def test_unparseable_value_passes_range_gate(self):
-        # "auto" cannot be coerced to a number — the gate stays silent rather
-        # than producing a false-positive rejection.
+    def test_unparseable_value_produces_no_range_event(self):
+        # "auto" cannot be coerced to a number — the check stays silent rather
+        # than producing a false-positive warning.
         phase2 = {
             "abletonRecommendations": [
                 _make_recommendation(
@@ -240,9 +249,9 @@ class CatalogueGatesIntegrationTests(unittest.TestCase):
         self.assertEqual(events, [])
         self.assertEqual(len(phase2["abletonRecommendations"]), 1)
 
-    # ----- Citation gate -----
+    # ----- Citation check -----
 
-    def test_missing_phase1_fields_is_rejected(self):
+    def test_missing_phase1_fields_is_flagged_and_kept(self):
         phase2 = {
             "abletonRecommendations": [
                 _make_recommendation(
@@ -254,13 +263,13 @@ class CatalogueGatesIntegrationTests(unittest.TestCase):
             ],
         }
         events = self._apply(phase2)
-        self.assertEqual(phase2["abletonRecommendations"], [])
+        self.assertEqual(len(phase2["abletonRecommendations"]), 1)
         self.assertEqual(len(events), 1)
-        self.assertEqual(events[0]["code"], "RECOMMENDATION_REJECTED")
+        self.assertEqual(events[0]["code"], "RECOMMENDATION_UNVERIFIED")
         self.assertEqual(events[0]["reason"], "citation_missing")
         self.assertEqual(events[0]["path"], "abletonRecommendations[0].phase1Fields")
 
-    def test_whitespace_only_phase1_fields_is_rejected(self):
+    def test_whitespace_only_phase1_fields_is_flagged_and_kept(self):
         phase2 = {
             "abletonRecommendations": [
                 _make_recommendation(
@@ -272,13 +281,13 @@ class CatalogueGatesIntegrationTests(unittest.TestCase):
             ],
         }
         events = self._apply(phase2)
-        self.assertEqual(phase2["abletonRecommendations"], [])
+        self.assertEqual(len(phase2["abletonRecommendations"]), 1)
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0]["reason"], "citation_missing")
 
-    # ----- Mixed: all four cases at once -----
+    # ----- Mixed: all cases at once, everything kept -----
 
-    def test_mixed_recommendations_drop_only_failures(self):
+    def test_mixed_recommendations_are_all_kept_with_warnings(self):
         phase2 = {
             "abletonRecommendations": [
                 _make_recommendation(
@@ -296,33 +305,29 @@ class CatalogueGatesIntegrationTests(unittest.TestCase):
             ],
         }
         events = self._apply(phase2)
-        # Survivors: index 0 (valid) and index 2 (rewritten "Drives" -> "Drive").
-        self.assertEqual(len(phase2["abletonRecommendations"]), 2)
-        self.assertEqual(phase2["abletonRecommendations"][0]["parameter"], "Drive")
-        self.assertEqual(phase2["abletonRecommendations"][1]["parameter"], "Drive")
-
-        codes = sorted(e["code"] for e in events)
-        reasons = sorted(
-            e.get("reason", "") for e in events if e["code"] == "RECOMMENDATION_REJECTED"
-        )
+        # Nothing is dropped — all four survive in their original order.
+        self.assertEqual(len(phase2["abletonRecommendations"]), 4)
+        # Parameters are never rewritten — index 2 keeps "Drives".
         self.assertEqual(
-            codes,
-            ["PARAMETER_REWRITTEN", "RECOMMENDATION_REJECTED", "RECOMMENDATION_REJECTED"],
+            [r["parameter"] for r in phase2["abletonRecommendations"]],
+            ["Drive", "Drive", "Drives", "Volume"],
         )
+        self._assert_no_legacy_codes(events)
+        # Only the unknown-device (idx 1) and out-of-range (idx 3) warn; the
+        # fuzzy-resolvable "Drives" (idx 2) is kept silently.
+        self.assertTrue(all(e["code"] == "RECOMMENDATION_UNVERIFIED" for e in events))
+        reasons = sorted(e["reason"] for e in events)
         self.assertEqual(reasons, ["device_unknown", "value_out_of_range"])
-        # Base paths still reference the ORIGINAL indices in Gemini's response
-        # so the operator log can correlate which slot was dropped.
-        rejection_paths = sorted(
-            e["path"] for e in events if e["code"] == "RECOMMENDATION_REJECTED"
-        )
+        # Paths reference the ORIGINAL indices so the operator log can correlate.
+        paths = sorted(e["path"] for e in events)
         self.assertEqual(
-            rejection_paths,
+            paths,
             ["abletonRecommendations[1]", "abletonRecommendations[3]"],
         )
 
-    # ----- mixAndMasterChain receives the same gates -----
+    # ----- mixAndMasterChain receives the same checks -----
 
-    def test_mix_and_master_chain_is_gated(self):
+    def test_mix_and_master_chain_is_checked(self):
         phase2 = {
             "mixAndMasterChain": [
                 {
@@ -331,14 +336,14 @@ class CatalogueGatesIntegrationTests(unittest.TestCase):
                     "deviceFamily": "NATIVE",
                     "trackContext": "Master",
                     "workflowStage": "MASTER",
-                    "parameter": "Drives",  # fuzzy rewrite to "Drive"
+                    "parameter": "Drives",  # fuzzy-resolvable -> kept silently
                     "value": "3.0",
                     "reason": "test",
                     "phase1Fields": ["bpm"],
                 },
                 {
                     "order": 2,
-                    "device": "Saturation Color",  # hallucination
+                    "device": "Saturation Color",  # unknown device
                     "deviceFamily": "NATIVE",
                     "trackContext": "Master",
                     "workflowStage": "MASTER",
@@ -350,20 +355,18 @@ class CatalogueGatesIntegrationTests(unittest.TestCase):
             ],
         }
         events = self._apply(phase2)
-        self.assertEqual(len(phase2["mixAndMasterChain"]), 1)
-        self.assertEqual(phase2["mixAndMasterChain"][0]["parameter"], "Drive")
-        rewrite_paths = sorted(
-            e["path"] for e in events if e["code"] == "PARAMETER_REWRITTEN"
-        )
-        self.assertEqual(rewrite_paths, ["mixAndMasterChain[0].parameter"])
-        rejection_paths = sorted(
-            e["path"] for e in events if e["code"] == "RECOMMENDATION_REJECTED"
-        )
-        self.assertEqual(rejection_paths, ["mixAndMasterChain[1]"])
+        # Both kept; "Drives" not rewritten.
+        self.assertEqual(len(phase2["mixAndMasterChain"]), 2)
+        self.assertEqual(phase2["mixAndMasterChain"][0]["parameter"], "Drives")
+        self._assert_no_legacy_codes(events)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["code"], "RECOMMENDATION_UNVERIFIED")
+        self.assertEqual(events[0]["reason"], "device_unknown")
+        self.assertEqual(events[0]["path"], "mixAndMasterChain[1]")
 
     # ----- secretSauce.workflowSteps -----
 
-    def test_workflow_steps_are_gated(self):
+    def test_workflow_steps_are_checked(self):
         phase2 = {
             "secretSauce": {
                 "title": "Test",
@@ -374,7 +377,7 @@ class CatalogueGatesIntegrationTests(unittest.TestCase):
                         "step": 1,
                         "trackContext": "Drums",
                         "device": "Saturator",
-                        "parameter": "Drives",  # fuzzy rewrite
+                        "parameter": "Drives",  # fuzzy-resolvable -> kept silently
                         "value": "3.0",
                         "instruction": "Test",
                         "measurementJustification": "Test",
@@ -395,15 +398,14 @@ class CatalogueGatesIntegrationTests(unittest.TestCase):
         }
         events = self._apply(phase2)
         steps = phase2["secretSauce"]["workflowSteps"]
-        self.assertEqual(len(steps), 1)
-        self.assertEqual(steps[0]["parameter"], "Drive")
-        codes = sorted(e["code"] for e in events)
-        self.assertEqual(codes, ["PARAMETER_REWRITTEN", "RECOMMENDATION_REJECTED"])
-        rewrite = next(e for e in events if e["code"] == "PARAMETER_REWRITTEN")
-        rejection = next(e for e in events if e["code"] == "RECOMMENDATION_REJECTED")
-        self.assertEqual(rewrite["path"], "secretSauce.workflowSteps[0].parameter")
-        self.assertEqual(rejection["path"], "secretSauce.workflowSteps[1].phase1Fields")
-        self.assertEqual(rejection["reason"], "citation_missing")
+        # Both kept; "Drives" not rewritten.
+        self.assertEqual(len(steps), 2)
+        self.assertEqual(steps[0]["parameter"], "Drives")
+        self._assert_no_legacy_codes(events)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["code"], "RECOMMENDATION_UNVERIFIED")
+        self.assertEqual(events[0]["reason"], "citation_missing")
+        self.assertEqual(events[0]["path"], "secretSauce.workflowSteps[1].phase1Fields")
 
     # ----- request_id is always present on events -----
 
@@ -419,6 +421,64 @@ class CatalogueGatesIntegrationTests(unittest.TestCase):
         for event in events:
             self.assertEqual(event["requestId"], "custom-req-id-001")
 
+    # ----- Regression: EQ-band parameters must never be rewritten -----
+
+    def test_eq_band_parameter_is_never_rewritten_against_real_catalogue(self):
+        """Regression for the wrong-band rewrite. Against the real shipped
+        catalogue, EQ Eight stores band params as '1 Frequency A' ...
+        '8 Frequency B'. A producer's natural phrasing ('Band 1 Frequency')
+        lexically fuzzy-matches the WRONG instance ('1 Frequency B' / even
+        '8 Frequency B'). Warn-and-keep must leave the parameter byte-for-byte
+        as written and never drop the recommendation."""
+        catalogue = Live12Catalogue.load_default()
+        for phrasing in (
+            "Band 1 Frequency",
+            "Frequency 1",
+            "Frequency",
+            "Band 1 Gain",
+            "Resonance",
+        ):
+            with self.subTest(phrasing=phrasing):
+                phase2 = {
+                    "abletonRecommendations": [
+                        _make_recommendation(
+                            device="EQ Eight",
+                            parameter=phrasing,
+                            value="-1.5 dB @ 35 Hz",
+                            phase1_fields=["spectralBalance.subBass"],
+                        ),
+                    ],
+                }
+                events = apply_live12_catalogue_gates(
+                    phase2, request_id="req-eq", catalogue=catalogue
+                )
+                rec = phase2["abletonRecommendations"][0]
+                # Never dropped.
+                self.assertEqual(len(phase2["abletonRecommendations"]), 1)
+                # Never rewritten — exactly what Gemini wrote.
+                self.assertEqual(rec["parameter"], phrasing)
+                # Never via a legacy mutating code.
+                self._assert_no_legacy_codes(events)
+
+    def test_record_failing_every_check_is_still_kept(self):
+        # Unknown device AND missing citation — the worst case. Still kept,
+        # with both warnings surfaced.
+        phase2 = {
+            "abletonRecommendations": [
+                _make_recommendation(
+                    device="Totally Fake Device",
+                    parameter="Whatever",
+                    value="1",
+                    phase1_fields=[],
+                ),
+            ],
+        }
+        events = self._apply(phase2)
+        self.assertEqual(len(phase2["abletonRecommendations"]), 1)
+        self._assert_no_legacy_codes(events)
+        reasons = sorted(e["reason"] for e in events)
+        self.assertEqual(reasons, ["citation_missing", "device_unknown"])
+
     # ----- Idempotency / empty / opaque input -----
 
     def test_empty_phase2_result_produces_no_events(self):
@@ -432,6 +492,19 @@ class CatalogueGatesIntegrationTests(unittest.TestCase):
             request_id="req-test-42",
             catalogue=self.catalogue,
         )
+        self.assertEqual(events, [])
+
+    def test_opaque_list_entries_are_left_untouched(self):
+        phase2 = {
+            "abletonRecommendations": [
+                "not a record",
+                _make_recommendation(device="Saturator", parameter="Drive", value="1"),
+            ],
+        }
+        events = self._apply(phase2)
+        # Opaque entry survives untouched; the real record is checked (and OK).
+        self.assertEqual(len(phase2["abletonRecommendations"]), 2)
+        self.assertEqual(phase2["abletonRecommendations"][0], "not a record")
         self.assertEqual(events, [])
 
     def test_loads_default_catalogue_when_not_injected(self):
