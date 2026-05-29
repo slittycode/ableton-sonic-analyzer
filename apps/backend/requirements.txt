@@ -58,6 +58,7 @@ soundfile==0.13.1
 soxr==1.0.0
 starlette==0.52.1
 submitit==1.5.4
+symusic==0.6.0
 sympy==1.14.0
 threadpoolctl==3.6.0
 torch==2.10.0
