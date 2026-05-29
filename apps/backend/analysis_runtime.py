@@ -1223,12 +1223,34 @@ class AnalysisRuntime:
     def reserve_next_interpretation_attempt(self) -> dict[str, Any] | None:
         now = _utc_now_iso()
         with self._connect() as conn:
+            # Interpretation is the LAST stage: it consumes the additive
+            # grounding produced by the mt3 and pitch_note peers (Gemini reads
+            # mt3Result / pitchNoteResult from get_interpretation_grounding in
+            # _execute_interpretation_attempt). Those peers race interpretation
+            # and the slower one (MT3 loads multi-GB JAX weights) usually loses,
+            # so without this guard the grounding is almost always None by the
+            # time interpretation runs. Block a queued interpretation while
+            # either grounding stage is still in-flight ('queued'/'running');
+            # the guard reads no requested_*_mode because no in-flight rows means
+            # the stage either wasn't requested or already settled. Terminal
+            # states (completed/failed/interrupted) are not in-flight, so a
+            # failure/interrupt/restart-recovery unblocks interpretation, which
+            # then runs with whatever grounding is available (possibly None).
             row = conn.execute(
                 """
                 SELECT ia.id, ia.run_id, ia.profile_id, ia.model_name
                 FROM interpretation_attempts ia
                 JOIN measurement_outputs mo ON mo.run_id = ia.run_id
-                WHERE ia.status = 'queued' AND mo.status = 'completed'
+                WHERE ia.status = 'queued'
+                  AND mo.status = 'completed'
+                  AND NOT EXISTS (
+                    SELECT 1 FROM mt3_attempts ma
+                    WHERE ma.run_id = ia.run_id AND ma.status IN ('queued', 'running')
+                  )
+                  AND NOT EXISTS (
+                    SELECT 1 FROM pitch_note_translation_attempts pna
+                    WHERE pna.run_id = ia.run_id AND pna.status IN ('queued', 'running')
+                  )
                 ORDER BY ia.created_at ASC
                 LIMIT 1
                 """
@@ -1823,21 +1845,6 @@ class AnalysisRuntime:
                 },
             )
 
-        if (
-            run_row["requested_interpretation_mode"] != "off"
-            and interpretation_exists is None
-        ):
-            self.create_interpretation_attempt(
-                run_id,
-                profile_id=run_row["requested_interpretation_profile"],
-                model_name=run_row["requested_interpretation_model"],
-                status="queued",
-                provenance={
-                    "profileId": run_row["requested_interpretation_profile"],
-                    "modelName": run_row["requested_interpretation_model"],
-                },
-            )
-
         # MT3 enqueue. requested_mt3_mode is read via .get-like fallback
         # because old SQLite rows may have NULL there (the _ensure_column
         # backfill above writes 'off', but defense-in-depth lets us survive
@@ -1853,6 +1860,30 @@ class AnalysisRuntime:
                 checkpoint_id=DEFAULT_MT3_CHECKPOINT_ID,
                 status="queued",
                 provenance={"checkpointId": DEFAULT_MT3_CHECKPOINT_ID},
+            )
+
+        # Interpretation MUST be enqueued LAST — after the pitch_note and mt3
+        # blocks above. reserve_next_interpretation_attempt blocks a queued
+        # interpretation while an mt3/pitch_note attempt is in-flight
+        # ('queued'/'running'), but each create_*_attempt commits in its own
+        # transaction. Were the interpretation row created before the grounding
+        # rows, the 0.25s-poll interpretation worker could reserve an ungrounded
+        # attempt in the window before the grounding row commits — silently
+        # defeating the gate for the mt3-on/pitch_note-off case. Creating it last
+        # guarantees the grounding rows already exist whenever interpretation does.
+        if (
+            run_row["requested_interpretation_mode"] != "off"
+            and interpretation_exists is None
+        ):
+            self.create_interpretation_attempt(
+                run_id,
+                profile_id=run_row["requested_interpretation_profile"],
+                model_name=run_row["requested_interpretation_model"],
+                status="queued",
+                provenance={
+                    "profileId": run_row["requested_interpretation_profile"],
+                    "modelName": run_row["requested_interpretation_model"],
+                },
             )
 
     def _count_active_measurement_runs(self) -> int:

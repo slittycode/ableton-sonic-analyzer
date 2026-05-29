@@ -1243,14 +1243,21 @@ def _execute_pitch_note_attempt(
     started_at = _current_time()
     run_id = str(attempt["runId"])
     attempt_id = str(attempt["attemptId"])
-    source_artifact = runtime.get_source_artifact(run_id)
     provenance: dict[str, Any] = {
         "schemaVersion": "pitch_note_translation.v1",
         "backendId": attempt["backendId"],
         "mode": attempt["mode"],
     }
+    # Bound before the try so the except handler can reference it even when
+    # get_source_artifact (now inside the try) is the call that raised.
+    source_artifact: dict[str, Any] | None = None
     stem_output_dir: str | None = None
     try:
+        # Resolve the source artifact INSIDE the try so a failure here
+        # terminalizes the attempt rather than leaving it stuck 'running' — which
+        # the interpretation-ordering gate would otherwise turn into an indefinite
+        # block on this run's interpretation. (Symmetry with _execute_mt3_attempt.)
+        source_artifact = runtime.get_source_artifact(run_id)
         source_local_path = runtime.require_local_artifact_path(
             source_artifact.get("path"),
             purpose="Source audio artifact for pitch/note translation",
@@ -1356,7 +1363,8 @@ def _execute_pitch_note_attempt(
             provenance=provenance,
             diagnostics={
                 "backendDurationMs": round(_elapsed_ms(started_at, _current_time()), 2),
-                "sourceArtifactId": source_artifact["artifactId"],
+                # Null-safe: source_artifact is None if get_source_artifact itself raised.
+                "sourceArtifactId": (source_artifact or {}).get("artifactId"),
                 "isolationMode": "subprocess",
             },
         )
@@ -1397,13 +1405,22 @@ def _execute_mt3_attempt(
     run_id = str(attempt["runId"])
     attempt_id = str(attempt["attemptId"])
     checkpoint_id = str(attempt.get("checkpointId") or "")
-    source_artifact = runtime.get_source_artifact(run_id)
     provenance: dict[str, Any] = {
         "schemaVersion": "mt3_transcription.v1",
         "checkpointId": checkpoint_id,
     }
+    # Bound before the try so the except handlers can reference it even when
+    # get_source_artifact (now inside the try) is the call that raised.
+    source_artifact: dict[str, Any] | None = None
     midi_tempdir: str | None = None
     try:
+        # Resolve the source artifact INSIDE the try. If get_source_artifact
+        # raised here (e.g. a missing artifact row), the attempt would otherwise
+        # escape to _mt3_worker_loop stuck in 'running' — and with the
+        # interpretation-ordering gate that would block this run's interpretation
+        # indefinitely (until restart recovery). Terminalizing it on failure
+        # keeps the gate's no-deadlock guarantee airtight.
+        source_artifact = runtime.get_source_artifact(run_id)
         source_local_path = runtime.require_local_artifact_path(
             source_artifact.get("path"),
             purpose="Source audio artifact for MT3 transcription",
@@ -1567,7 +1584,8 @@ def _execute_mt3_attempt(
             provenance=provenance,
             diagnostics={
                 "backendDurationMs": round(_elapsed_ms(started_at, _current_time()), 2),
-                "sourceArtifactId": source_artifact["artifactId"],
+                # Null-safe: source_artifact is None if get_source_artifact itself raised.
+                "sourceArtifactId": (source_artifact or {}).get("artifactId"),
                 "isolationMode": "subprocess",
             },
         )
