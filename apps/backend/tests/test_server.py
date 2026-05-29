@@ -1156,7 +1156,54 @@ class ServerContractTests(unittest.TestCase):
             [stage["key"] for stage in payload["estimate"]["stages"]],
             ["local_dsp", "demucs_separation", "transcription_stems"],
         )
-        build_estimate_mock.assert_called_once_with(214.6, True, True, run_standard=True)
+        build_estimate_mock.assert_called_once_with(
+            214.6, True, True, run_standard=True, run_mt3=False
+        )
+
+    @patch.object(server, "get_audio_duration_seconds", return_value=214.6, create=True)
+    @patch.object(
+        server,
+        "build_analysis_estimate",
+        return_value={
+            "durationSeconds": 214.6,
+            "totalSeconds": {"min": 167, "max": 383},
+            "stages": [
+                {
+                    "key": "dsp",
+                    "label": "DSP analysis",
+                    "seconds": {"min": 22, "max": 38},
+                },
+                {
+                    "key": "mt3_transcription",
+                    "label": "MT3 polyphonic transcription",
+                    "seconds": {"min": 60, "max": 180},
+                },
+            ],
+        },
+        create=True,
+    )
+    def test_analysis_runs_estimate_endpoint_prices_mt3_when_enabled(
+        self, build_estimate_mock, *_mocks
+    ) -> None:
+        """F2: mt3_mode='enabled' must flow through to build_analysis_estimate as
+        run_mt3=True so the returned estimate includes the MT3 stage cost."""
+        response = asyncio.run(
+            server.estimate_analysis_run(
+                track=self._upload_file(),
+                analysis_mode="standard",
+                pitch_note_mode="stem_notes",
+                pitch_note_backend="auto",
+                interpretation_mode="async",
+                interpretation_profile="producer_summary",
+                interpretation_model="gemini-2.5-flash",
+                mt3_mode="enabled",
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        build_estimate_mock.assert_called_once_with(
+            214.6, True, True, run_standard=True, run_mt3=True
+        )
 
     def test_analysis_runs_estimate_endpoint_rejects_oversized_upload(self) -> None:
         with patch.object(server.upload_limits, "MAX_UPLOAD_SIZE_BYTES", 4):
@@ -1644,7 +1691,7 @@ class ServerContractTests(unittest.TestCase):
             [stage["key"] for stage in payload["estimate"]["stages"]],
             ["local_dsp", "demucs_separation", "transcription_stems"],
         )
-        build_estimate_mock.assert_called_once_with(214.6, True, True)
+        build_estimate_mock.assert_called_once_with(214.6, True, True, run_mt3=False)
 
     @patch.object(server, "get_audio_duration_seconds", return_value=214.6, create=True)
     @patch.object(
@@ -1754,7 +1801,7 @@ class ServerContractTests(unittest.TestCase):
             ],
         )
         self.assertEqual(call_kwargs["timeout"], 526)
-        build_estimate_mock.assert_called_once_with(214.6, True, False)
+        build_estimate_mock.assert_called_once_with(214.6, True, False, run_mt3=False)
         payload = self._decode_json_response(response)
         self.assertEqual(payload["diagnostics"]["backendDurationMs"], 200.0)
         self.assertEqual(
@@ -5295,6 +5342,294 @@ class AudioMimeTypeTests(unittest.TestCase):
         self.assertEqual(server._get_audio_mime_type("track.flac"), "audio/flac")
         self.assertEqual(server._get_audio_mime_type("track.wav"), "audio/wav")
         self.assertEqual(server._get_audio_mime_type("track.aiff"), "audio/aiff")
+
+
+class Mt3ExecutorTests(unittest.TestCase):
+    """Unit tests for server._execute_mt3_attempt.
+
+    Mocks the subprocess so the test does not require MT3 / JAX / t5x
+    installed. Each test exercises one branch of the executor: happy
+    path (artifact-ref swap), Mt3NotAvailableError classification, and
+    generic failure classification. These are the gap-closure tests
+    flagged by the post-MVP advisor review.
+    """
+
+    def _create_queued_mt3_run(self, runtime) -> tuple[str, str]:
+        """Helper: create a run, complete its measurement, and queue an
+        mt3 attempt. Returns (run_id, attempt_id)."""
+        created = runtime.create_run(
+            filename="track.wav",
+            content=b"fake-audio",
+            mime_type="audio/wav",
+            pitch_note_mode="off",
+            pitch_note_backend="auto",
+            interpretation_mode="off",
+            interpretation_profile="producer_summary",
+            interpretation_model=None,
+            mt3_mode="enabled",
+        )
+        run_id = created["runId"]
+        # complete_measurement is what `_enqueue_requested_followups` hooks
+        # into to queue the mt3 attempt.
+        runtime.complete_measurement(
+            run_id,
+            payload={"bpm": 120.0},
+            provenance={},
+            diagnostics={},
+        )
+        # The followup is enqueued in `complete_measurement`. Look it up.
+        run_snapshot = runtime.get_run(run_id)
+        mt3_attempts = run_snapshot["stages"]["mt3"]["attemptsSummary"]
+        self.assertEqual(len(mt3_attempts), 1, "mt3 attempt should be queued")
+        attempt_id = mt3_attempts[0]["attemptId"]
+        # Reserve it so the executor's flow matches the worker loop.
+        runtime.reserve_mt3_attempt(attempt_id)
+        return run_id, attempt_id
+
+    def test_happy_path_swaps_midi_b64_for_artifact_ref(self) -> None:
+        """The executor MUST decode midiB64 from the subprocess output,
+        persist it as an artifact, and replace the inline base64 with
+        midiArtifactId + midiSizeBytes in the stored result. Snapshot
+        polls must never carry the full MIDI bytes."""
+        import base64 as _b64
+        from analysis_runtime import AnalysisRuntime
+
+        # Two synthetic MIDI bodies of different sizes so we can verify
+        # the size field is per-track, not a constant.
+        bass_midi = b"\x4d\x54\x68\x64" + b"\x00" * 12  # "MThd" + padding
+        other_midi = b"\x4d\x54\x68\x64" + b"\x01" * 40
+
+        mock_payload = {
+            "version": "mt3-py-0.1.0+magenta-mt3-base",
+            "stemsUsed": ["bass", "other"],
+            "tracks": [
+                {
+                    "instrument": "bass",
+                    "midiB64": _b64.b64encode(bass_midi).decode("ascii"),
+                    "noteCount": 12,
+                    "pitchRange": [36, 60],
+                },
+                {
+                    "instrument": "other",
+                    "midiB64": _b64.b64encode(other_midi).decode("ascii"),
+                    "noteCount": 24,
+                    "pitchRange": [48, 84],
+                },
+            ],
+        }
+
+        with tempfile.TemporaryDirectory(prefix="asa_mt3_executor_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            run_id, attempt_id = self._create_queued_mt3_run(runtime)
+
+            def fake_subprocess_run(command, **kwargs):
+                return subprocess.CompletedProcess(
+                    args=command,
+                    returncode=0,
+                    stdout=json.dumps(mock_payload),
+                    stderr="",
+                )
+
+            with patch.object(server.subprocess, "run", side_effect=fake_subprocess_run):
+                server._execute_mt3_attempt(
+                    runtime,
+                    {
+                        "attemptId": attempt_id,
+                        "runId": run_id,
+                        "checkpointId": "magenta-mt3-base",
+                    },
+                )
+
+            snapshot = runtime.get_run(run_id)
+            mt3_stage = snapshot["stages"]["mt3"]
+            self.assertEqual(mt3_stage["status"], "completed")
+            result = mt3_stage["result"]
+            self.assertIsNotNone(result)
+            self.assertEqual(result["version"], "mt3-py-0.1.0+magenta-mt3-base")
+            self.assertEqual(result["stemsUsed"], ["bass", "other"])
+            self.assertEqual(len(result["tracks"]), 2)
+
+            # Load-bearing assertion: no track carries midiB64; each
+            # carries midiArtifactId + midiSizeBytes.
+            for track in result["tracks"]:
+                self.assertNotIn(
+                    "midiB64",
+                    track,
+                    f"Track {track['instrument']!r} still carries inline "
+                    "midiB64 — snapshot polls would balloon. The executor "
+                    "must swap to midiArtifactId + midiSizeBytes.",
+                )
+                self.assertIn("midiArtifactId", track)
+                self.assertIn("midiSizeBytes", track)
+                self.assertIsNotNone(track["midiArtifactId"])
+
+            # Each track's midiSizeBytes matches the corresponding fixture
+            # length (verifies sizes are computed per-track, not a constant).
+            track_by_instrument = {t["instrument"]: t for t in result["tracks"]}
+            self.assertEqual(track_by_instrument["bass"]["midiSizeBytes"], len(bass_midi))
+            self.assertEqual(track_by_instrument["other"]["midiSizeBytes"], len(other_midi))
+
+            # Two artifacts written, one per track, kinds match the
+            # mt3_track_<instrument> pattern.
+            mt3_artifacts = runtime.get_internal_artifacts_by_kind(run_id, "mt3_track_")
+            self.assertEqual(len(mt3_artifacts), 2)
+            artifact_kinds = sorted(a["kind"] for a in mt3_artifacts)
+            self.assertEqual(artifact_kinds, ["mt3_track_bass", "mt3_track_other"])
+
+    def test_mt3_not_available_marker_classifies_as_not_retryable(self) -> None:
+        """When the subprocess stderr matches the Mt3NotAvailableError
+        marker phrase, the attempt fails with MT3_NOT_AVAILABLE and
+        retryable=False — distinct from generic transcription failures."""
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_mt3_unavail_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            run_id, attempt_id = self._create_queued_mt3_run(runtime)
+
+            def fake_subprocess_run(command, **kwargs):
+                return subprocess.CompletedProcess(
+                    args=command,
+                    returncode=1,
+                    stdout="",
+                    stderr=(
+                        "Traceback (most recent call last):\n"
+                        "  File ...\n"
+                        "mt3_transcription.Mt3NotAvailableError: "
+                        "MT3 backend not installed. Install via: ...\n"
+                    ),
+                )
+
+            with patch.object(server.subprocess, "run", side_effect=fake_subprocess_run):
+                server._execute_mt3_attempt(
+                    runtime,
+                    {
+                        "attemptId": attempt_id,
+                        "runId": run_id,
+                        "checkpointId": "magenta-mt3-base",
+                    },
+                )
+
+            snapshot = runtime.get_run(run_id)
+            mt3_stage = snapshot["stages"]["mt3"]
+            self.assertEqual(mt3_stage["status"], "failed")
+            error = mt3_stage["error"]
+            self.assertIsNotNone(error)
+            self.assertEqual(error["code"], "MT3_NOT_AVAILABLE")
+            self.assertFalse(error["retryable"])
+
+    def test_generic_subprocess_failure_classifies_as_retryable(self) -> None:
+        """A non-zero exit whose stderr does NOT match the
+        Mt3NotAvailableError markers should classify as a generic
+        MT3_TRANSCRIPTION_FAILED with retryable=True so the operator
+        can re-enqueue."""
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_mt3_generic_fail_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            run_id, attempt_id = self._create_queued_mt3_run(runtime)
+
+            def fake_subprocess_run(command, **kwargs):
+                return subprocess.CompletedProcess(
+                    args=command,
+                    returncode=139,  # OOM / segfault-class exit
+                    stdout="",
+                    stderr="Process aborted: out of memory while loading audio\n",
+                )
+
+            with patch.object(server.subprocess, "run", side_effect=fake_subprocess_run):
+                server._execute_mt3_attempt(
+                    runtime,
+                    {
+                        "attemptId": attempt_id,
+                        "runId": run_id,
+                        "checkpointId": "magenta-mt3-base",
+                    },
+                )
+
+            snapshot = runtime.get_run(run_id)
+            mt3_stage = snapshot["stages"]["mt3"]
+            self.assertEqual(mt3_stage["status"], "failed")
+            error = mt3_stage["error"]
+            self.assertIsNotNone(error)
+            self.assertEqual(error["code"], "MT3_TRANSCRIPTION_FAILED")
+            self.assertTrue(error["retryable"])
+
+    def test_mt3_stage_public_status_present_when_not_requested(self) -> None:
+        """Sanity check for the snapshot contract: stages.mt3.publicStatus
+        is present on every snapshot (not just when MT3 ran). When
+        mt3_mode is the default 'off', status is 'not_requested' and
+        publicStatus is None — the additive 5-value contract.
+
+        This is the assertion the post-MVP advisor flagged as unverified.
+        """
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_mt3_pubstatus_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            created = runtime.create_run(
+                filename="track.wav",
+                content=b"fake-audio",
+                mime_type="audio/wav",
+                pitch_note_mode="off",
+                pitch_note_backend="auto",
+                interpretation_mode="off",
+                interpretation_profile="producer_summary",
+                interpretation_model=None,
+                # mt3_mode defaults to "off"
+            )
+            snapshot = runtime.get_run(created["runId"])
+            self.assertIn("mt3", snapshot["stages"])
+            mt3_stage = snapshot["stages"]["mt3"]
+            self.assertEqual(mt3_stage["status"], "not_requested")
+            self.assertFalse(mt3_stage["authoritative"])
+            self.assertEqual(mt3_stage["attemptsSummary"], [])
+            self.assertIsNone(mt3_stage["result"])
+            # publicStatus is annotated on the HTTP layer by server_phase1.py;
+            # the raw runtime snapshot doesn't have it. The HTTP route's
+            # _normalize_run_snapshot wraps in _annotate_public_status and
+            # adds it. Confirm presence of the underlying status here;
+            # publicStatus contract is exercised by the next test.
+
+    def test_mt3_stage_public_status_annotated_after_normalization(self) -> None:
+        """_annotate_public_status iterates stages.items() and adds
+        publicStatus to every dict-typed stage entry. Verify that adding
+        a new stage to the snapshot is automatically picked up."""
+        from analysis_runtime import AnalysisRuntime
+        from server_phase1 import _annotate_public_status, _normalize_run_snapshot
+
+        with tempfile.TemporaryDirectory(prefix="asa_mt3_annot_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            created = runtime.create_run(
+                filename="track.wav",
+                content=b"fake-audio",
+                mime_type="audio/wav",
+                pitch_note_mode="off",
+                pitch_note_backend="auto",
+                interpretation_mode="off",
+                interpretation_profile="producer_summary",
+                interpretation_model=None,
+                mt3_mode="enabled",
+            )
+            run_snapshot = runtime.get_run(created["runId"])
+            normalized = _normalize_run_snapshot(run_snapshot, runtime)
+            self.assertIn("mt3", normalized["stages"])
+            mt3_stage = normalized["stages"]["mt3"]
+            self.assertIn(
+                "publicStatus",
+                mt3_stage,
+                "_annotate_public_status must add publicStatus to the mt3 stage. "
+                "If this test fails, the public-status annotator no longer "
+                "iterates stages dynamically — re-check server_phase1.py.",
+            )
+            # mt3_mode='enabled' creates a queued attempt automatically when
+            # measurement completes; until then, the stage status reflects
+            # "blocked" (measurement not yet completed). publicStatus
+            # collapses to "queued" per the 5-value contract.
+            self.assertIn(
+                mt3_stage["publicStatus"],
+                {"queued", "running", "completed", "failed", "interrupted", None},
+                f"publicStatus must be one of the 5-value enum or None; got {mt3_stage['publicStatus']!r}",
+            )
 
 
 if __name__ == "__main__":

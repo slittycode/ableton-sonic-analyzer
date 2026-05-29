@@ -793,6 +793,7 @@ def _build_phase2_prompt(
     pitch_note_result: dict[str, Any] | None,
     grounding_metadata: dict[str, Any],
     descriptor_hooks: dict[str, Any] | None = None,
+    mt3_result: dict[str, Any] | None = None,
 ) -> str:
     measurement_for_gemini = _normalize_measurement_result_for_gemini(measurement_result)
     sections = [
@@ -801,6 +802,16 @@ def _build_phase2_prompt(
         json.dumps(measurement_for_gemini, indent=2),
         "\n\nOPTIONAL_PITCH_NOTE_TRANSLATION_RESULT_JSON:\n",
         json.dumps(pitch_note_result, indent=2),
+        # MT3 polyphonic-transcription grounding. ADDITIVE only — Phase 1
+        # measurements remain ground truth (PURPOSE.md invariant #1). The
+        # value is null unless the user opted into the MT3 stage AND the
+        # stage succeeded. When non-null, cite paths under
+        # `transcription.mt3.*` in phase1Fields just as you would for
+        # other paths; the response's `transcriptionDetail` (from
+        # torchcrepe) and `transcription.mt3` (from MT3) coexist and
+        # complement each other — never vote between them.
+        "\n\nOPTIONAL_MT3_TRANSCRIPTION_RESULT_JSON:\n",
+        json.dumps(mt3_result, indent=2),
         "\n\nLIVE_12_DEVICE_CATALOG_JSON:\n",
         json.dumps(LIVE12_DEVICE_CATALOG, indent=2),
         "\n\nGROUNDING_METADATA:\n",
@@ -822,6 +833,7 @@ def _build_stem_summary_prompt(
     pitch_note_result: dict[str, Any] | None,
     grounding_metadata: dict[str, Any],
     descriptor_hooks: dict[str, Any],
+    mt3_result: dict[str, Any] | None = None,
 ) -> str:
     sections = [
         STEM_SUMMARY_PROMPT_TEMPLATE.rstrip(),
@@ -829,6 +841,8 @@ def _build_stem_summary_prompt(
         json.dumps(measurement_result, indent=2),
         "\n\nOPTIONAL_PITCH_NOTE_TRANSLATION_RESULT_JSON:\n",
         json.dumps(pitch_note_result, indent=2),
+        "\n\nOPTIONAL_MT3_TRANSCRIPTION_RESULT_JSON:\n",
+        json.dumps(mt3_result, indent=2),
         "\n\nMEASUREMENT_DERIVED_DESCRIPTOR_HOOKS:\n",
         json.dumps(descriptor_hooks, indent=2),
         "\n\nGROUNDING_METADATA:\n",
@@ -2651,6 +2665,8 @@ def _validate_citation_paths_for_record(
 def _validate_phase2_citation_paths(
     phase2_result: dict[str, Any],
     measurement_result: dict[str, Any],
+    *,
+    mt3_result: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Backend defense-in-depth mirror of the frontend's citation-existence check.
 
@@ -2669,9 +2685,26 @@ def _validate_phase2_citation_paths(
     ``spectralCentroid`` -> ``spectralCentroidMean``, top-level and per-stem), so a
     raw payload would lack the very names Gemini cites and emit false positives.
     The frontend avoids this by walking the already-renamed ``Phase1Result``.
+
+    F3: When ``mt3_result`` is provided, its paths are merged into the
+    allowed set under the ``transcription.mt3.*`` namespace — matching what
+    the frontend's ``projectPhase1FromRun`` does. This lets Gemini cite
+    e.g. ``transcription.mt3.noteCount`` or, for array-of-object fields,
+    ``transcription.mt3.tracks.instrument`` (the walker registers array-item
+    fields under ``prefix.key`` with no ``[i]`` index — same convention as
+    ``noveltyPeaks.time``) without the backend validator flagging it as an
+    invented path.
     """
     normalized = _normalize_measurement_result_for_gemini(measurement_result)
     allowed = _collect_measurement_field_paths(normalized)
+    if isinstance(mt3_result, dict):
+        # Mirror the frontend projection: synthesize the same
+        # `transcription.mt3.*` shape that `projectPhase1FromRun` adds to
+        # Phase1Result, then collect its paths. This keeps the backend and
+        # frontend citation-validators agreeing on what counts as a valid
+        # MT3 citation path.
+        mt3_namespace = {"transcription": {"mt3": mt3_result}}
+        allowed = allowed | _collect_measurement_field_paths(mt3_namespace)
     warnings: list[dict[str, Any]] = []
 
     for index, item in enumerate(phase2_result.get("mixAndMasterChain") or []):

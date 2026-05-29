@@ -135,6 +135,11 @@ Current server behavior that affects schema expectations:
 - `pitchDetail` is only populated when `--separate` is used; requires torchcrepe and separated stems
 - `danceability` is forwarded as the raw object shown below, not as a scalar
 - `dsp_json_override` is accepted by the server but does not alter the analyzer payload
+- `transcription` (the optional MT3 namespace) is *absent* — not `null` — unless the
+  env var `ASA_ENABLE_MT3=1` is set AND the MT3 extra is installed AND the call
+  succeeds. The key is intentionally NOT in `EXPECTED_TOP_LEVEL_KEYS` (the
+  shared full/fast contract); presence-or-absence is the contract. See the
+  "Optional MT3 Namespace" section below.
 
 ---
 
@@ -803,6 +808,105 @@ Type: `object \| null`
 |---|---|---|---|---|
 | `danceability.danceability` | `float` | Danceability score from Essentia. | algorithmic score | Relative groove suitability indicator; compare between tracks more than absolute targets. |
 | `danceability.dfa` | `float` | DFA exponent returned by danceability algo. | exponent | Rhythmic complexity/structure indicator; useful for groove simplification decisions. |
+
+---
+
+## Optional MT3 Namespace
+
+`transcription.mt3` is an *additive*, opt-in polyphonic-transcription
+namespace, produced by Magenta's MT3 (Multi-Task Multitrack Music
+Transcription) checkpoint via [`mt3_transcription.py`](./mt3_transcription.py).
+It is **purely additive to Phase 1** — it does NOT override or refine
+Essentia chord/key/beat/melody outputs (PURPOSE.md invariant #1, "Phase 1
+measurements are ground truth"). Phase 2 may *read* it for richer note
+context, but Phase 1's authoritative measurements remain the ground truth.
+
+### Two emission paths
+
+MT3 reaches clients through one of two paths:
+
+1. **Staged runtime** (production path). MT3 runs as its own stage in
+   [`analysis_runtime.py`](./analysis_runtime.py), peer to
+   `pitch_note_translation`. Opt in via the `mt3_mode=enabled` form
+   field on `POST /api/analysis-runs`, or enqueue after-the-fact via
+   `POST /api/analysis-runs/{run_id}/mt3-transcriptions`. The stage
+   result lives on `snapshot.stages.mt3.result`. MIDI bytes are
+   persisted as per-stem artifacts; the result carries `midiArtifactId`
+   + `midiSizeBytes` per track (see "Schema" below).
+
+2. **Direct CLI** (legacy / one-off). Running
+   `./venv/bin/python analyze.py <file>` with `ASA_ENABLE_MT3=1` set
+   inlines MT3 results under a top-level `transcription` key in stdout
+   JSON. In this path each track carries an inline `midiB64` base64
+   blob rather than an artifact ref — the CLI has no artifact store.
+   **Not used by the staged runtime** (which never exports the env var
+   to the subprocess); `analysis_runtime.complete_measurement()` defensively
+   pops `transcription` from the measurement-stage result so an operator
+   who exports the env var globally cannot leak it into the
+   `stages.measurement` payload.
+
+Presence contract (load-bearing):
+
+- For the **staged runtime path**, `snapshot.stages.mt3` is always
+  present with a status field; it sits at `not_requested` when
+  `mt3_mode='off'` (the default).
+- For the **direct CLI path**, the entire `transcription` key is
+  **absent from the JSON output** unless `ASA_ENABLE_MT3=1` AND the MT3
+  extra is installed AND the call succeeds.
+- The key is NOT in `EXPECTED_TOP_LEVEL_KEYS` (the shared full/fast
+  schema test) by design — adding it there would force the field to
+  always appear in CLI output, breaking the "absent when off" contract.
+- Fast mode (`--fast`) never emits the key (the fast pipeline builds
+  its own output dict separately, bypassing the MT3 hook entirely).
+- The `--pitch-note-only` subprocess mode exits before reaching the
+  MT3 hook, so the staged pitch/note translation request path is
+  unaffected.
+
+### One-time host setup (not run in CI)
+
+```bash
+./apps/backend/venv/bin/pip install -r apps/backend/requirements-mt3.txt
+mkdir -p apps/backend/models/mt3
+gsutil -m cp -r gs://mt3/checkpoints/mt3 apps/backend/models/mt3/
+
+# Staged runtime usage (per-run opt-in via the HTTP route):
+curl -X POST http://127.0.0.1:8100/api/analysis-runs \
+  -F track=@<audio.flac> -F mt3_mode=enabled
+
+# Direct CLI usage (legacy):
+export ASA_ENABLE_MT3=1
+./venv/bin/python analyze.py <audio.flac> --yes
+```
+
+### Schema (staged runtime — `snapshot.stages.mt3.result`)
+
+| Field | Type | Description |
+|---|---|---|
+| `version` | `string` | Pinned identifier — format `"mt3-py-<module-version>+<checkpoint-id>"`, e.g. `"mt3-py-0.1.0+magenta-mt3-base"`. Phase 2 reads this verbatim to know what produced the notes. |
+| `stemsUsed` | `string[]` | Stems MT3 actually transcribed. Values are Demucs canonical names (`"bass"`, `"other"`, `"vocals"`) or `["full_mix"]` when no stems were provided. |
+| `tracks` | `Mt3Track[]` | One track per stem MT3 successfully processed. May be shorter than `stemsUsed` if a per-stem failure was caught and logged. |
+| `tracks[*].instrument` | `string` | Stem name (matches one entry in `stemsUsed`). |
+| `tracks[*].midiArtifactId` | `string \| null` | Artifact ID for the per-stem MIDI bytes. Fetch via `GET /api/analysis-runs/{run_id}/artifacts/{midiArtifactId}` (mime `audio/midi`). Null only when the track had no MIDI body (defensive — should not happen in practice). |
+| `tracks[*].midiSizeBytes` | `int` | Size of the MIDI artifact in bytes. |
+| `tracks[*].noteCount` | `int` | Number of notes in the decoded MIDI. |
+| `tracks[*].pitchRange` | `[int, int]` | `[minMidi, maxMidi]` across all notes in this track. `[0, 0]` when empty. |
+
+### Direct CLI shape difference
+
+When the legacy `ASA_ENABLE_MT3=1` env-var path runs, each track carries
+an inline `midiB64: string` (base64-encoded MIDI bytes) instead of the
+artifact-ref pair. The staged-runtime executor in
+[`server.py::_execute_mt3_attempt`](./server.py) reads that `midiB64`,
+writes the bytes as a `mt3_track_<instrument>` artifact, and rewrites
+the track with `midiArtifactId` + `midiSizeBytes` before persisting.
+This is the intentional cross-layer mapping — Python and TS describe
+the same per-stem concept at different layers.
+
+LLM interpretation note: MT3 is a multi-instrument AMT system trained
+on polyphonic material. Treat MIDI output as a *transcription hint*
+layered on top of Phase 1, not a substitute for the deterministic
+measurements. Do not "vote" between MT3 notes and Phase 1's chord/key
+estimates — Phase 1 wins by invariant.
 
 ---
 

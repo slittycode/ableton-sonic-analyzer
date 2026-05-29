@@ -137,6 +137,7 @@ The backend supports staged execution via `analysis_runtime.py`, which persists 
 1. **measurement** — Phase 1 DSP via `analyze.py`
 2. **pitch/note translation** — pitch/note extraction on Demucs-separated stems
 3. **interpretation** — Gemini Phase 2 advisory
+4. **mt3** *(optional, peer of pitch/note translation)* — MT3 polyphonic transcription, gated on `mt3_mode=enabled` per run; emits per-stem MIDI as artifacts. Additive only — never overrides measurement (PURPOSE.md invariant #1). Run by `_execute_mt3_attempt`/`_mt3_worker_loop` in `server.py`. See [`JSON_SCHEMA.md` "Optional MT3 Namespace"](apps/backend/JSON_SCHEMA.md#optional-mt3-namespace).
 
 Run-oriented endpoints (`/api/analysis-runs*`) are the canonical interface for staged execution. Legacy `POST /api/analyze`, `POST /api/analyze/estimate`, and `POST /api/phase2` remain only as temporary compatibility wrappers — do not build new functionality on them.
 

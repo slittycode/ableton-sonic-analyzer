@@ -10,9 +10,22 @@ from uuid import uuid4
 from artifact_storage import ArtifactStorage, FilesystemArtifactStorage
 import uuid
 
+# Single source of truth for the MT3 checkpoint identifier — used as the
+# default `checkpoint_id` column value when queuing an mt3 attempt. The
+# executor overrides this with whatever transcribe() actually ran with so
+# the recorded value reflects the run, but having a default here lets the
+# runtime emit queued snapshots before the worker has picked the row up.
+# Import is module-level-safe: mt3_transcription.py top-level is stdlib
+# + dataclass only; JAX/t5x are lazy inside transcribe().
+from mt3_transcription import MT3_CHECKPOINT_ID as DEFAULT_MT3_CHECKPOINT_ID
+
 SQLITE_BUSY_TIMEOUT_MS = 5_000
 MEASUREMENT_PIPELINE_PROGRESS_STATUSES = {"pending", "running", "completed"}
 LOCAL_RUNTIME_OWNER_USER_ID = "local-dev"
+
+# Stage-status values for the MT3 stage. Mirrors pitch_note_translation:
+# {queued, running, completed, failed, interrupted}. Added to the public
+# snapshot via _mt3_stage_snapshot below.
 
 
 def _utc_now_iso() -> str:
@@ -41,6 +54,18 @@ class UnsupportedPitchNoteBackendError(ValueError):
     def __init__(self, pitch_note_backend: str):
         self.pitch_note_backend = pitch_note_backend
         super().__init__(f"Unsupported pitch/note backend '{pitch_note_backend}'.")
+
+
+class UnsupportedMt3ModeError(ValueError):
+    """Raised when the create-run request specifies an unknown mt3_mode.
+
+    The route layer (server.py) catches this and surfaces it as a typed
+    400 ``MT3_MODE_UNSUPPORTED`` response. Mirror of UnsupportedPitchNoteModeError.
+    """
+
+    def __init__(self, mt3_mode: str):
+        self.mt3_mode = mt3_mode
+        super().__init__(f"Unsupported mt3 mode '{mt3_mode}'.")
 
 
 class AnalysisRuntime:
@@ -140,6 +165,19 @@ class AnalysisRuntime:
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS mt3_attempts (
+                    id TEXT PRIMARY KEY,
+                    run_id TEXT NOT NULL,
+                    checkpoint_id TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    result_json TEXT,
+                    provenance_json TEXT,
+                    diagnostics_json TEXT,
+                    error_json TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
                 """
             )
             self._ensure_column(
@@ -181,6 +219,28 @@ class AnalysisRuntime:
                 "grounded_pitch_note_attempt_id",
                 "TEXT",
             )
+            # MT3 stage columns. Default to 'off' so existing local DBs that
+            # predate the staged MT3 stage continue to opt out cleanly —
+            # matches the `requested_analysis_mode = 'full'` backfill above.
+            self._ensure_column(
+                conn,
+                "analysis_runs",
+                "requested_mt3_mode",
+                "TEXT",
+            )
+            self._ensure_column(
+                conn,
+                "analysis_runs",
+                "preferred_mt3_attempt_id",
+                "TEXT",
+            )
+            conn.execute(
+                """
+                UPDATE analysis_runs
+                SET requested_mt3_mode = 'off'
+                WHERE requested_mt3_mode IS NULL
+                """
+            )
 
     @staticmethod
     def _ensure_column(
@@ -211,8 +271,13 @@ class AnalysisRuntime:
         interpretation_model: str | None,
         legacy_request_id: str | None = None,
         analysis_mode: str = "full",
+        mt3_mode: str = "off",
         expose_source_path_in_snapshot: bool = False,
     ) -> dict[str, Any]:
+        # Validate mt3_mode here so a typed error reaches the route layer
+        # rather than silently inserting an unknown enum value.
+        if mt3_mode not in {"off", "enabled"}:
+            raise UnsupportedMt3ModeError(mt3_mode)
         artifact_id = str(uuid4())
         created_at = _utc_now_iso()
         stored_artifact = self.artifact_storage.store_bytes(
@@ -242,10 +307,11 @@ class AnalysisRuntime:
                     requested_interpretation_mode,
                     requested_interpretation_profile,
                     requested_interpretation_model,
+                    requested_mt3_mode,
                     legacy_request_id,
                     created_at,
                     updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     run_id,
@@ -257,6 +323,7 @@ class AnalysisRuntime:
                     interpretation_mode,
                     interpretation_profile,
                     interpretation_model,
+                    mt3_mode,
                     legacy_request_id,
                     created_at,
                     created_at,
@@ -494,9 +561,18 @@ class AnalysisRuntime:
                 """,
                 (run_id,),
             ).fetchall()
+            mt3_rows = conn.execute(
+                """
+                SELECT * FROM mt3_attempts
+                WHERE run_id = ?
+                ORDER BY created_at DESC
+                """,
+                (run_id,),
+            ).fetchall()
         if run_row is None or measurement_row is None:
             raise KeyError(f"Unknown run {run_id}")
         preferred_pitch_note = self._preferred_pitch_note_row(run_row, pitch_note_rows)
+        preferred_mt3 = self._preferred_mt3_row(run_row, mt3_rows)
         return {
             "measurementOutputId": str(measurement_row["id"]),
             "measurementStatus": str(measurement_row["status"]),
@@ -510,6 +586,22 @@ class AnalysisRuntime:
             "pitchNoteResult": (
                 _json_loads(preferred_pitch_note["result_json"])
                 if preferred_pitch_note is not None
+                else None
+            ),
+            # MT3 grounding. Optional like pitchNote — present only when
+            # an MT3 attempt has completed for the run. Phase 2 receives
+            # this verbatim in OPTIONAL_MT3_TRANSCRIPTION_RESULT_JSON
+            # (see _build_phase2_prompt). Additive only: PURPOSE.md
+            # invariant #1 — Phase 1 is ground truth.
+            "mt3AttemptId": (
+                str(preferred_mt3["id"]) if preferred_mt3 is not None else None
+            ),
+            "mt3Status": (
+                str(preferred_mt3["status"]) if preferred_mt3 is not None else "not_requested"
+            ),
+            "mt3Result": (
+                _json_loads(preferred_mt3["result_json"])
+                if preferred_mt3 is not None
                 else None
             ),
         }
@@ -553,12 +645,30 @@ class AnalysisRuntime:
                 """,
                 (run_id,),
             ).fetchall()
+            mt3_rows = conn.execute(
+                """
+                SELECT * FROM mt3_attempts
+                WHERE run_id = ?
+                ORDER BY created_at DESC
+                """,
+                (run_id,),
+            ).fetchall()
 
         preferred_pitch_note = self._preferred_pitch_note_row(run_row, pitch_note_rows)
         preferred_interpretation = self._preferred_interpretation_row(
             run_row, interpretation_rows
         )
+        preferred_mt3 = self._preferred_mt3_row(run_row, mt3_rows)
         measurement_status = measurement_row["status"]
+        # requested_mt3_mode may be NULL on rows that predate the column
+        # backfill (the _ensure_column UPDATE handles most cases but a race
+        # at app start can leave one through). Default to "off" so the
+        # snapshot is always coherent.
+        requested_mt3_mode = (
+            run_row["requested_mt3_mode"]
+            if run_row["requested_mt3_mode"] is not None
+            else "off"
+        )
 
         return {
             "runId": run_id,
@@ -569,6 +679,7 @@ class AnalysisRuntime:
                 "interpretationMode": run_row["requested_interpretation_mode"],
                 "interpretationProfile": run_row["requested_interpretation_profile"],
                 "interpretationModel": run_row["requested_interpretation_model"],
+                "mt3Mode": requested_mt3_mode,
             },
             "artifacts": {
                 "sourceAudio": {
@@ -607,6 +718,12 @@ class AnalysisRuntime:
                     measurement_status,
                     preferred_interpretation,
                     interpretation_rows,
+                ),
+                "mt3": self._mt3_stage_snapshot(
+                    requested_mt3_mode,
+                    measurement_status,
+                    preferred_mt3,
+                    mt3_rows,
                 ),
             },
         }
@@ -683,6 +800,13 @@ class AnalysisRuntime:
         # Strip transcriptionDetail — it's a Layer 2 (pitch/note translation) concern.
         # The pitch/note translation worker produces this independently through its own stage.
         measurement_result.pop("transcriptionDetail", None)
+        # Strip transcription — same story for the MT3 polyphonic-transcription
+        # namespace. analyze.py's legacy env-var hook (ASA_ENABLE_MT3=1) may
+        # still emit it for direct CLI users, but the staged runtime owns
+        # this stage now and stores it under stages.mt3 instead. The pop is
+        # defense-in-depth so an operator who exports the env var globally
+        # doesn't leak a stale `transcription` key into the measurement row.
+        measurement_result.pop("transcription", None)
         self._update_measurement_row(
             run_id,
             status="completed",
@@ -860,6 +984,167 @@ class AnalysisRuntime:
     ) -> None:
         self._update_attempt_row(
             table="pitch_note_translation_attempts",
+            attempt_id=attempt_id,
+            status="failed",
+            result=None,
+            provenance=provenance,
+            diagnostics=diagnostics,
+            error=error,
+        )
+
+    # ─── MT3 polyphonic-transcription stage ────────────────────────────
+    # Peer of pitch_note_translation. Gated only on measurement completion
+    # (NOT on pitch_note completion) so the two can run concurrently. See
+    # docs/ARCHITECTURE_STRATEGY.md and mt3_transcription.py for the
+    # additive-only invariant: MT3 output never feeds back into the
+    # measurement result.
+
+    def create_mt3_attempt(
+        self,
+        run_id: str,
+        *,
+        checkpoint_id: str = DEFAULT_MT3_CHECKPOINT_ID,
+        status: str = "queued",
+        result: dict[str, Any] | None = None,
+        provenance: dict[str, Any] | None = None,
+    ) -> str:
+        attempt_id = str(uuid4())
+        now = _utc_now_iso()
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO mt3_attempts (
+                    id,
+                    run_id,
+                    checkpoint_id,
+                    status,
+                    result_json,
+                    provenance_json,
+                    diagnostics_json,
+                    error_json,
+                    created_at,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    attempt_id,
+                    run_id,
+                    checkpoint_id,
+                    status,
+                    _json_dumps(result),
+                    _json_dumps(provenance),
+                    None,
+                    None,
+                    now,
+                    now,
+                ),
+            )
+            if status == "completed":
+                conn.execute(
+                    """
+                    UPDATE analysis_runs
+                    SET preferred_mt3_attempt_id = ?, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (attempt_id, now, run_id),
+                )
+        return attempt_id
+
+    def reserve_mt3_attempt(self, attempt_id: str) -> bool:
+        now = _utc_now_iso()
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE mt3_attempts
+                SET status = 'running', updated_at = ?
+                WHERE id = ? AND status = 'queued'
+                """,
+                (now, attempt_id),
+            )
+        return cursor.rowcount > 0
+
+    def reserve_next_mt3_attempt(self) -> dict[str, Any] | None:
+        now = _utc_now_iso()
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT ma.id, ma.run_id, ma.checkpoint_id
+                FROM mt3_attempts ma
+                JOIN measurement_outputs mo ON mo.run_id = ma.run_id
+                WHERE ma.status = 'queued' AND mo.status = 'completed'
+                ORDER BY ma.created_at ASC
+                LIMIT 1
+                """
+            ).fetchone()
+            if row is None:
+                return None
+            cursor = conn.execute(
+                """
+                UPDATE mt3_attempts
+                SET status = 'running', updated_at = ?
+                WHERE id = ? AND status = 'queued'
+                """,
+                (now, row["id"]),
+            )
+            if cursor.rowcount == 0:
+                return None
+        return {
+            "attemptId": row["id"],
+            "runId": row["run_id"],
+            "checkpointId": row["checkpoint_id"],
+        }
+
+    def complete_mt3_attempt(
+        self,
+        attempt_id: str,
+        *,
+        result: dict[str, Any] | None,
+        provenance: dict[str, Any] | None,
+        diagnostics: dict[str, Any] | None = None,
+    ) -> None:
+        now = _utc_now_iso()
+        with self._connect() as conn:
+            attempt_row = conn.execute(
+                "SELECT run_id FROM mt3_attempts WHERE id = ?",
+                (attempt_id,),
+            ).fetchone()
+            if attempt_row is None:
+                raise KeyError(f"Unknown mt3 attempt {attempt_id}")
+            conn.execute(
+                """
+                UPDATE mt3_attempts
+                SET status = ?, result_json = ?, provenance_json = ?, diagnostics_json = ?, error_json = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    "completed",
+                    _json_dumps(result),
+                    _json_dumps(provenance),
+                    _json_dumps(diagnostics),
+                    None,
+                    now,
+                    attempt_id,
+                ),
+            )
+            conn.execute(
+                """
+                UPDATE analysis_runs
+                SET preferred_mt3_attempt_id = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (attempt_id, now, attempt_row["run_id"]),
+            )
+
+    def fail_mt3_attempt(
+        self,
+        attempt_id: str,
+        *,
+        error: dict[str, Any],
+        provenance: dict[str, Any] | None = None,
+        diagnostics: dict[str, Any] | None = None,
+    ) -> None:
+        self._update_attempt_row(
+            table="mt3_attempts",
             attempt_id=attempt_id,
             status="failed",
             result=None,
@@ -1150,6 +1435,14 @@ class AnalysisRuntime:
                 """,
                 (now,),
             )
+            conn.execute(
+                """
+                UPDATE mt3_attempts
+                SET status = 'interrupted', updated_at = ?
+                WHERE status = 'running'
+                """,
+                (now,),
+            )
 
     def interrupt_run(self, run_id: str) -> dict[str, Any]:
         now = _utc_now_iso()
@@ -1210,9 +1503,23 @@ class AnalysisRuntime:
             )
             conn.execute(
                 """
+                UPDATE mt3_attempts
+                SET status = 'interrupted',
+                    result_json = NULL,
+                    provenance_json = NULL,
+                    diagnostics_json = ?,
+                    error_json = NULL,
+                    updated_at = ?
+                WHERE run_id = ? AND status IN ('queued', 'running', 'completed', 'failed')
+                """,
+                (interruption_diagnostics, now, run_id),
+            )
+            conn.execute(
+                """
                 UPDATE analysis_runs
                 SET preferred_pitch_note_attempt_id = NULL,
                     preferred_interpretation_attempt_id = NULL,
+                    preferred_mt3_attempt_id = NULL,
                     updated_at = ?
                 WHERE id = ?
                 """,
@@ -1241,6 +1548,7 @@ class AnalysisRuntime:
             ).fetchall()
             conn.execute("DELETE FROM interpretation_attempts WHERE run_id = ?", (run_id,))
             conn.execute("DELETE FROM pitch_note_translation_attempts WHERE run_id = ?", (run_id,))
+            conn.execute("DELETE FROM mt3_attempts WHERE run_id = ?", (run_id,))
             conn.execute("DELETE FROM measurement_outputs WHERE run_id = ?", (run_id,))
             conn.execute("DELETE FROM run_artifacts WHERE run_id = ?", (run_id,))
             conn.execute("DELETE FROM analysis_runs WHERE id = ?", (run_id,))
@@ -1492,6 +1800,10 @@ class AnalysisRuntime:
                 "SELECT 1 FROM interpretation_attempts WHERE run_id = ? LIMIT 1",
                 (run_id,),
             ).fetchone()
+            mt3_exists = conn.execute(
+                "SELECT 1 FROM mt3_attempts WHERE run_id = ? LIMIT 1",
+                (run_id,),
+            ).fetchone()
 
         if (
             run_row["requested_pitch_note_mode"] != "off"
@@ -1524,6 +1836,23 @@ class AnalysisRuntime:
                     "profileId": run_row["requested_interpretation_profile"],
                     "modelName": run_row["requested_interpretation_model"],
                 },
+            )
+
+        # MT3 enqueue. requested_mt3_mode is read via .get-like fallback
+        # because old SQLite rows may have NULL there (the _ensure_column
+        # backfill above writes 'off', but defense-in-depth lets us survive
+        # a race where a brand-new run is created right at the seam).
+        requested_mt3_mode = (
+            run_row["requested_mt3_mode"]
+            if run_row["requested_mt3_mode"] is not None
+            else "off"
+        )
+        if requested_mt3_mode != "off" and mt3_exists is None:
+            self.create_mt3_attempt(
+                run_id,
+                checkpoint_id=DEFAULT_MT3_CHECKPOINT_ID,
+                status="queued",
+                provenance={"checkpointId": DEFAULT_MT3_CHECKPOINT_ID},
             )
 
     def _count_active_measurement_runs(self) -> int:
@@ -1582,6 +1911,25 @@ class AnalysisRuntime:
         return pitch_note_rows[0] if pitch_note_rows else None
 
     @staticmethod
+    def _preferred_mt3_row(
+        run_row: sqlite3.Row, mt3_rows: list[sqlite3.Row]
+    ) -> sqlite3.Row | None:
+        # Mirror _preferred_pitch_note_row: explicit preference wins, else
+        # newest attempt. _ensure_column may not have populated
+        # preferred_mt3_attempt_id on legacy rows; the column access is
+        # defensive (sqlite3.Row raises IndexError on missing columns,
+        # so we read via try/except rather than [].).
+        try:
+            preferred_id = run_row["preferred_mt3_attempt_id"]
+        except (IndexError, KeyError):
+            preferred_id = None
+        if preferred_id:
+            for row in mt3_rows:
+                if row["id"] == preferred_id:
+                    return row
+        return mt3_rows[0] if mt3_rows else None
+
+    @staticmethod
     def _preferred_interpretation_row(
         run_row: sqlite3.Row, interpretation_rows: list[sqlite3.Row]
     ) -> sqlite3.Row | None:
@@ -1591,6 +1939,45 @@ class AnalysisRuntime:
                 if row["id"] == preferred_id:
                     return row
         return interpretation_rows[0] if interpretation_rows else None
+
+    @staticmethod
+    def _mt3_stage_snapshot(
+        requested_mode: str,
+        measurement_status: str,
+        preferred_row: sqlite3.Row | None,
+        rows: list[sqlite3.Row],
+    ) -> dict[str, Any]:
+        """Mirror of _pitch_note_stage_snapshot. Always non-authoritative —
+        MT3 output is purely additive and never overrides Phase 1 (PURPOSE.md
+        invariant #1, "Phase 1 measurements are ground truth")."""
+        if preferred_row is not None:
+            status = preferred_row["status"]
+        elif requested_mode == "off":
+            status = "not_requested"
+        elif measurement_status == "interrupted":
+            status = "interrupted"
+        elif measurement_status == "completed":
+            status = "ready"
+        else:
+            status = "blocked"
+
+        return {
+            "status": status,
+            "authoritative": False,
+            "preferredAttemptId": preferred_row["id"] if preferred_row is not None else None,
+            "attemptsSummary": [
+                {
+                    "attemptId": row["id"],
+                    "checkpointId": row["checkpoint_id"],
+                    "status": row["status"],
+                }
+                for row in rows
+            ],
+            "result": _json_loads(preferred_row["result_json"]) if preferred_row is not None else None,
+            "provenance": _json_loads(preferred_row["provenance_json"]) if preferred_row is not None else None,
+            "diagnostics": _json_loads(preferred_row["diagnostics_json"]) if preferred_row is not None else None,
+            "error": _json_loads(preferred_row["error_json"]) if preferred_row is not None else None,
+        }
 
     @staticmethod
     def _pitch_note_stage_snapshot(

@@ -11,6 +11,10 @@ import {
   InterpretationStageSnapshot,
   InterpretationValidationWarning,
   MeasurementResult,
+  Mt3AttemptSummary,
+  Mt3StageSnapshot,
+  Mt3Track,
+  Mt3Transcription,
   Phase1Result,
   Phase2Result,
   SpectralArtifactRef,
@@ -36,6 +40,12 @@ interface CreateAnalysisRunOptions extends AnalysisRunsClientOptions {
   interpretationMode: string;
   interpretationProfile: string;
   interpretationModel?: string | null;
+  /**
+   * Opt-in for the MT3 polyphonic-transcription stage. Defaults to "off"
+   * when omitted. The backend enforces the {"off","enabled"} enum at
+   * route entry — sending anything else returns 400 MT3_MODE_UNSUPPORTED.
+   */
+  mt3Mode?: 'off' | 'enabled';
 }
 
 type EstimateAnalysisRunOptions = CreateAnalysisRunOptions;
@@ -86,6 +96,7 @@ export async function estimateAnalysisRun(
   if (options.interpretationModel) {
     body.append('interpretation_model', options.interpretationModel);
   }
+  body.append('mt3_mode', options.mt3Mode ?? 'off');
 
   return requestBackendEstimate(body, {
     apiBaseUrl: options.apiBaseUrl,
@@ -110,6 +121,7 @@ export async function createAnalysisRun(
   if (options.interpretationModel) {
     body.append('interpretation_model', options.interpretationModel);
   }
+  body.append('mt3_mode', options.mt3Mode ?? 'off');
 
   const response = await fetchJson(
     `${options.apiBaseUrl}/api/analysis-runs`,
@@ -173,6 +185,31 @@ export async function createPitchNoteTranslationAttempt(
   return parseAnalysisRunSnapshot(response);
 }
 
+/**
+ * Manually enqueue an MT3 polyphonic-transcription attempt on an existing
+ * run. Use when the initial `createAnalysisRun` POST sent `mt3Mode: 'off'`
+ * (or omitted it) and the user later opts in. The measurement stage must
+ * already be `completed` — the backend returns 409 MEASUREMENT_NOT_READY
+ * otherwise.
+ *
+ * Returns the post-enqueue snapshot. Poll `getAnalysisRun` to see the
+ * stage advance from `queued` → `running` → `completed|failed`.
+ */
+export async function createMt3TranscriptionAttempt(
+  runId: string,
+  options: AnalysisRunsClientOptions,
+): Promise<AnalysisRunSnapshot> {
+  const response = await fetchJson(
+    `${options.apiBaseUrl}/api/analysis-runs/${runId}/mt3-transcriptions`,
+    {
+      method: 'POST',
+      signal: options.signal,
+    },
+  );
+
+  return parseAnalysisRunSnapshot(response);
+}
+
 export async function createInterpretationAttempt(
   runId: string,
   options: CreateInterpretationAttemptOptions,
@@ -200,14 +237,19 @@ export function projectPhase1FromRun(snapshot: AnalysisRunSnapshot): Phase1Resul
 
   const measurement: MeasurementResult = snapshot.stages.measurement.result;
   const pitchNote = snapshot.stages.pitchNoteTranslation.result;
-  if (!pitchNote) {
-    return measurement;
-  }
+  const mt3 = snapshot.stages.mt3?.result ?? null;
 
-  return {
-    ...measurement,
-    transcriptionDetail: pitchNote,
-  };
+  const result: Phase1Result = pitchNote
+    ? { ...measurement, transcriptionDetail: pitchNote }
+    : measurement;
+
+  // MT3 namespace: present only when the stage produced a non-null result.
+  // Matches the absent-when-off contract documented in
+  // apps/backend/JSON_SCHEMA.md "Optional MT3 Namespace".
+  if (mt3) {
+    return { ...result, transcription: { mt3 } };
+  }
+  return result;
 }
 
 export function projectPhase2FromRun(snapshot: AnalysisRunSnapshot): Phase2Result | null {
@@ -280,6 +322,14 @@ function parseAnalysisRunSnapshot(value: unknown): AnalysisRunSnapshot {
   const measurement = expectRecord(stages.measurement, 'measurement stage');
   const pitchNoteTranslation = expectRecord(stages.pitchNoteTranslation, 'pitch/note translation stage');
   const interpretation = expectRecord(stages.interpretation, 'interpretation stage');
+  // mt3 is required on the snapshot — the backend always emits it (status
+  // "not_requested" when mt3_mode is "off"). Old payloads predating the
+  // stage may be missing it; we synthesize a default not_requested
+  // snapshot in that case so the type contract is satisfied without
+  // forcing a 422 on legacy responses.
+  const mt3 = stages.mt3 == null
+    ? null
+    : expectRecord(stages.mt3, 'mt3 stage');
 
   const artifactsRaw = expectRecord(root.artifacts, 'artifacts');
 
@@ -309,7 +359,22 @@ function parseAnalysisRunSnapshot(value: unknown): AnalysisRunSnapshot {
       },
       pitchNoteTranslation: parsePitchNoteStage(pitchNoteTranslation),
       interpretation: parseInterpretationStage(interpretation),
+      mt3: mt3 == null ? defaultMt3Stage() : parseMt3Stage(mt3),
     },
+  };
+}
+
+function defaultMt3Stage(): Mt3StageSnapshot {
+  return {
+    status: 'not_requested',
+    publicStatus: null,
+    authoritative: false,
+    preferredAttemptId: null,
+    attemptsSummary: [],
+    result: null,
+    provenance: null,
+    diagnostics: null,
+    error: null,
   };
 }
 
@@ -328,6 +393,10 @@ function parseRequestedStages(value: unknown): AnalysisRunRequestedStages {
     interpretationMode: expectString(requested.interpretationMode, 'requestedStages.interpretationMode'),
     interpretationProfile: expectString(requested.interpretationProfile, 'requestedStages.interpretationProfile'),
     interpretationModel: asString(requested.interpretationModel),
+    // Default to "off" if the server response predates the mt3Mode field
+    // (older runs may not have it on requestedStages). Matches the
+    // "absent unless requested" contract — the legacy default IS off.
+    mt3Mode: asString(requested.mt3Mode) ?? 'off',
   };
 }
 
@@ -444,6 +513,60 @@ function parsePitchNoteAttemptSummary(value: unknown): PitchNoteTranslationAttem
     backendId: expectString(attempt.backendId, 'pitch/note backendId'),
     mode: expectString(attempt.mode, 'pitch/note mode'),
     status: expectStageStatus(attempt.status),
+  };
+}
+
+function parseMt3Stage(value: Record<string, unknown>): Mt3StageSnapshot {
+  return {
+    status: expectStageStatus(value.status),
+    publicStatus: parsePublicStageStatus(value.publicStatus),
+    authoritative: false,
+    preferredAttemptId: asString(value.preferredAttemptId),
+    attemptsSummary: Array.isArray(value.attemptsSummary)
+      ? value.attemptsSummary.map(parseMt3AttemptSummary)
+      : [],
+    result: value.result == null ? null : parseMt3Result(value.result),
+    provenance: parseNullableRecord(value.provenance),
+    diagnostics: parseNullableRecord(value.diagnostics),
+    error: parseNullableError(value.error),
+  };
+}
+
+function parseMt3AttemptSummary(value: unknown): Mt3AttemptSummary {
+  const attempt = expectRecord(value, 'mt3 attempt');
+  return {
+    attemptId: expectString(attempt.attemptId, 'mt3 attemptId'),
+    checkpointId: expectString(attempt.checkpointId, 'mt3 checkpointId'),
+    status: expectStageStatus(attempt.status),
+  };
+}
+
+function parseMt3Result(value: unknown): Mt3Transcription {
+  const result = expectRecord(value, 'mt3 result');
+  const tracksRaw = Array.isArray(result.tracks) ? result.tracks : [];
+  return {
+    version: expectString(result.version, 'mt3 result.version'),
+    stemsUsed: Array.isArray(result.stemsUsed)
+      ? result.stemsUsed.flatMap((entry) => {
+          const stem = asString(entry);
+          return stem == null ? [] : [stem];
+        })
+      : [],
+    tracks: tracksRaw.map((entry, index) => parseMt3Track(entry, index)),
+  };
+}
+
+function parseMt3Track(value: unknown, index: number): Mt3Track {
+  const track = expectRecord(value, `mt3 track ${index}`);
+  const pitchRangeRaw = Array.isArray(track.pitchRange) ? track.pitchRange : [0, 0];
+  const minMidi = expectNumber(pitchRangeRaw[0] ?? 0, `mt3 track ${index} pitchRange[0]`);
+  const maxMidi = expectNumber(pitchRangeRaw[1] ?? 0, `mt3 track ${index} pitchRange[1]`);
+  return {
+    instrument: expectString(track.instrument, `mt3 track ${index} instrument`),
+    midiArtifactId: asString(track.midiArtifactId),
+    midiSizeBytes: expectNumber(track.midiSizeBytes ?? 0, `mt3 track ${index} midiSizeBytes`),
+    noteCount: expectNumber(track.noteCount ?? 0, `mt3 track ${index} noteCount`),
+    pitchRange: [minMidi, maxMidi],
   };
 }
 
