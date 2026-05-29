@@ -2687,13 +2687,22 @@ async def get_transcription_pianoroll(
             },
         )
 
+    # The pitch-note worker stores the transcriptionDetail dict *directly* as
+    # the stage result (see _execute_pitch_note_attempt →
+    # complete_pitch_note_attempt(result=transcription_detail) above), so the
+    # canonical shape is unwrapped. Tolerate a legacy ``{"transcriptionDetail":
+    # {...}}`` wrapper defensively, then require a ``notes`` list so a stray
+    # non-transcription dict (or a ``{"transcriptionDetail": None}`` null) can't
+    # masquerade as a payload.
     pn_result = pn_stage.get("result")
-    transcription_detail = (
-        pn_result.get("transcriptionDetail")
-        if isinstance(pn_result, dict)
-        else None
-    )
-    if not isinstance(transcription_detail, dict):
+    if isinstance(pn_result, dict):
+        nested = pn_result.get("transcriptionDetail")
+        transcription_detail = nested if isinstance(nested, dict) else pn_result
+    else:
+        transcription_detail = None
+    if not isinstance(transcription_detail, dict) or not isinstance(
+        transcription_detail.get("notes"), list
+    ):
         # Covers: completed-but-null result, failed attempt, interrupted
         # attempt — the user's recourse is identical (re-run transcription).
         return JSONResponse(
