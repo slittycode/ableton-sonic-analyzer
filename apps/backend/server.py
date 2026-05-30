@@ -10,7 +10,7 @@ import subprocess
 import sys
 import tempfile
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from math import isfinite
 from pathlib import Path
 from typing import Any, Callable
@@ -246,6 +246,15 @@ app.add_middleware(
 
 
 _TEMP_FILE_REGISTRY: dict[str, tuple[str, datetime]] = {}
+# Guards _TEMP_FILE_REGISTRY across request handlers and the eviction loop.
+_FILE_CACHE_LOCK = threading.Lock()
+# How long a request-scoped temp-file path stays cached before it is evicted.
+# Both _cache_temp_file/_pop_cached_temp_file and _evict_expired_cache_entries
+# referenced this constant, but it was never defined — so any call to that path
+# raised NameError. The eviction loop sleeps 300s between sweeps, so the only
+# reason this never surfaced is that the path is currently unwired; defining it
+# turns the latent landmine into working, exercisable code.
+_FILE_CACHE_TTL_SECONDS = 900
 
 
 def _cache_temp_file(request_id: str, temp_path: str, now: datetime | None = None) -> None:
@@ -1126,11 +1135,42 @@ def _execute_measurement_run(
     run_standard: bool,
     run_fast: bool,
 ) -> dict[str, Any]:
-    source_artifact = runtime.get_source_artifact(run_id)
-    source_local_path = runtime.require_local_artifact_path(
-        source_artifact.get("path"),
-        purpose="Source audio artifact for measurement",
-    )
+    # Resolve the source artifact under a guard. If this raises (e.g. the
+    # source audio was swept by artifact cleanup, or is unresolvable in a
+    # hosted profile) it would otherwise escape to _measurement_worker_loop's
+    # bare except, leaving the measurement stage stuck 'running' forever with
+    # no reaper — and the whole run would poll indefinitely. Terminalize it,
+    # mirroring _execute_pitch_note_attempt / _execute_mt3_attempt.
+    try:
+        source_artifact = runtime.get_source_artifact(run_id)
+        source_local_path = runtime.require_local_artifact_path(
+            source_artifact.get("path"),
+            purpose="Source audio artifact for measurement",
+        )
+    except Exception as exc:
+        runtime.fail_measurement(
+            run_id,
+            error={
+                "code": "MEASUREMENT_SOURCE_UNAVAILABLE",
+                "message": str(exc),
+                "retryable": False,
+                "phase": ERROR_PHASE_LOCAL_DSP,
+            },
+            provenance=_build_measurement_provenance(
+                run_separation=run_separation,
+                run_transcribe=run_transcribe,
+                run_standard=run_standard,
+                run_fast=run_fast,
+            ),
+        )
+        return {
+            "ok": False,
+            "statusCode": 500,
+            "errorCode": "MEASUREMENT_SOURCE_UNAVAILABLE",
+            "message": str(exc),
+            "retryable": False,
+            "diagnostics": None,
+        }
     execution = _run_measurement_subprocess(
         runtime=runtime,
         run_id=run_id,
@@ -1299,21 +1339,30 @@ def _execute_pitch_note_attempt(
                 )
                 command.extend(["--stem-output-dir", stem_output_dir])
 
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=600,
+        # Route through the registered-subprocess helper so an interrupt/delete
+        # can terminate this child (Demucs+torchcrepe hold ~2-4GB) instead of
+        # orphaning it until the 600s timeout. _run_streamed_subprocess registers
+        # the Popen in _ACTIVE_CHILD_PROCESSES under this stage key and terminates
+        # it on its own timeout, mirroring the measurement stage.
+        result = _run_streamed_subprocess(
+            command=command,
+            timeout_seconds=600,
+            run_id=run_id,
+            stage_key="pitchNoteTranslation",
         )
 
-        if result.returncode != 0:
+        if result["returncode"] != 0:
+            stderr_tail = result["stderr"][-500:] if result["stderr"] else "no stderr"
+            if result["timedOut"]:
+                raise RuntimeError(
+                    f"Pitch/note translation subprocess timed out after 600s: {stderr_tail}"
+                )
             raise RuntimeError(
-                f"Pitch/note translation subprocess failed (exit {result.returncode}): "
-                f"{result.stderr[-500:] if result.stderr else 'no stderr'}"
+                f"Pitch/note translation subprocess failed (exit {result['returncode']}): "
+                f"{stderr_tail}"
             )
 
-        pitch_note_payload = json.loads(result.stdout)
+        pitch_note_payload = json.loads(result["stdout"])
         transcription_detail = None
         if isinstance(pitch_note_payload, dict):
             transcription_detail = pitch_note_payload.get("transcriptionDetail")
@@ -1452,26 +1501,33 @@ def _execute_mt3_attempt(
         # MT3 model load can take ~30s on first call; long tracks add
         # several minutes of inference. 1800s gives generous headroom
         # while still bounding the worker.
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=1800,
+        # Register the child (multi-GB JAX/t5x) so interrupt/delete can reclaim
+        # it rather than orphaning it until the 1800s timeout — same rationale as
+        # the pitch_note stage.
+        result = _run_streamed_subprocess(
+            command=command,
+            timeout_seconds=1800,
+            run_id=run_id,
+            stage_key="mt3",
         )
 
-        if result.returncode != 0:
-            stderr_tail = result.stderr[-2000:] if result.stderr else ""
+        if result["returncode"] != 0:
+            stderr_tail = result["stderr"][-2000:] if result["stderr"] else ""
             if any(marker in stderr_tail for marker in _MT3_NOT_AVAILABLE_MARKERS):
                 raise _Mt3UnavailableError(
                     f"MT3 backend unavailable: {stderr_tail[-500:]}"
                 )
+            if result["timedOut"]:
+                raise RuntimeError(
+                    f"MT3 subprocess timed out after 1800s: "
+                    f"{stderr_tail[-500:] if stderr_tail else 'no stderr'}"
+                )
             raise RuntimeError(
-                f"MT3 subprocess failed (exit {result.returncode}): "
+                f"MT3 subprocess failed (exit {result['returncode']}): "
                 f"{stderr_tail[-500:] if stderr_tail else 'no stderr'}"
             )
 
-        mt3_payload = json.loads(result.stdout)
+        mt3_payload = json.loads(result["stdout"])
         if not isinstance(mt3_payload, dict):
             raise RuntimeError(
                 f"MT3 subprocess produced non-dict JSON output: {type(mt3_payload).__name__}"
@@ -2006,6 +2062,46 @@ def _run_interpretation_request_with_profile_config(
 
 
 def _execute_interpretation_attempt(
+    runtime: AnalysisRuntime,
+    attempt: dict[str, Any],
+) -> dict[str, Any]:
+    """Terminalizing wrapper around the interpretation attempt body.
+
+    Any exception during setup (grounding lookup, source-artifact resolution,
+    profile/config resolution, genai client construction) happens BEFORE the
+    Gemini call's own try/except. Without this guard such an exception would
+    escape to _interpretation_worker_loop's bare except, which only logs+sleeps,
+    leaving the attempt stuck 'running' forever with no reaper
+    (recover_incomplete_attempts only runs at process startup). Mirror the
+    defensive pattern in _execute_pitch_note_attempt / _execute_mt3_attempt:
+    terminalize the attempt so the UI sees a failed state instead of polling
+    forever. The status guard in fail_interpretation_attempt keeps this a no-op
+    if the run was already interrupted.
+    """
+    attempt_id = str(attempt["attemptId"])
+    try:
+        return _execute_interpretation_attempt_inner(runtime, attempt)
+    except Exception as exc:
+        runtime.fail_interpretation_attempt(
+            attempt_id,
+            error={
+                "code": "INTERPRETATION_SETUP_FAILED",
+                "message": str(exc),
+                "retryable": True,
+                "phase": ERROR_PHASE_GEMINI,
+            },
+        )
+        return {
+            "ok": False,
+            "statusCode": 500,
+            "errorCode": "INTERPRETATION_SETUP_FAILED",
+            "message": str(exc),
+            "retryable": True,
+            "diagnostics": None,
+        }
+
+
+def _execute_interpretation_attempt_inner(
     runtime: AnalysisRuntime,
     attempt: dict[str, Any],
 ) -> dict[str, Any]:

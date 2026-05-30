@@ -9,11 +9,21 @@ import {
   projectPhase2FromRun,
   projectStemSummaryFromRun,
 } from './analysisRunsClient';
-import { createUserCancelledError, mapBackendError } from './backendPhase1Client';
+import { createClientTimeoutError, createUserCancelledError, mapBackendError } from './backendPhase1Client';
 import { MEASUREMENT_LABEL, INTERPRETATION_LABEL, INTERPRETATION_SKIPPED_LABEL } from './phaseLabels';
 import { validatePhase2Consistency } from './phase2Validator';
 
 const DEFAULT_POLL_INTERVAL_MS = 1_000;
+// Per-poll fetch deadline. Generous: the box may be under multi-GB MT3/Demucs
+// memory pressure, so a snapshot read can be momentarily slow on a healthy run.
+// A single poll exceeding this fails the run (consistent with other transport
+// errors) rather than hanging the client forever.
+const DEFAULT_POLL_REQUEST_TIMEOUT_MS = 60_000;
+// Overall wall-clock backstop. Worst single-run case is measurement +
+// max(pitch-note 600s, MT3 1800s) (concurrent peers) + interpretation, so a
+// real run finishes well under this; it only bounds a backend that never
+// terminalizes a stage.
+const DEFAULT_RUN_WALL_CLOCK_MS = 90 * 60 * 1_000;
 
 export interface AnalyzeAudioUpdate {
   runId: string;
@@ -32,6 +42,10 @@ export interface AnalyzeAudioOptions {
   signal?: AbortSignal;
   onRunUpdate?: (update: AnalyzeAudioUpdate) => void;
   pollIntervalMs?: number;
+  /** Per-poll fetch deadline (ms). Defaults to DEFAULT_POLL_REQUEST_TIMEOUT_MS. */
+  pollRequestTimeoutMs?: number;
+  /** Overall wall-clock budget for the run (ms). Defaults to DEFAULT_RUN_WALL_CLOCK_MS. */
+  maxRunDurationMs?: number;
   transcribe?: boolean;
   phase2Requested?: boolean;
   phase2ConfigEnabled?: boolean;
@@ -62,6 +76,44 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
 
     signal?.addEventListener('abort', onAbort, { once: true });
   });
+}
+
+async function pollSnapshotWithDeadline(
+  runId: string,
+  apiBaseUrl: string,
+  signal: AbortSignal | undefined,
+  timeoutMs: number,
+): Promise<AnalysisRunSnapshot> {
+  // The per-poll fetch has no native deadline, so a wedged backend would hang
+  // this await forever — which also prevents the wall-clock budget in the poll
+  // loop from ever being re-checked. Race the fetch against a timeout. We must
+  // NOT feed a timeout signal into getAnalysisRun: fetchJson converts any
+  // aborted signal into USER_CANCELLED, which would mislabel a timeout as a
+  // user cancellation.
+  const fetchPromise = getAnalysisRun(runId, { apiBaseUrl, signal });
+  // If the deadline wins the race the fetch promise is abandoned; attach a
+  // no-op catch so a later rejection can't surface as an unhandled rejection.
+  fetchPromise.catch(() => {});
+
+  let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = globalThis.setTimeout(() => {
+      reject(
+        createClientTimeoutError(
+          'Timed out waiting for an analysis status update from the backend.',
+          timeoutMs,
+        ),
+      );
+    }, timeoutMs);
+  });
+
+  try {
+    return (await Promise.race([fetchPromise, deadline])) as AnalysisRunSnapshot;
+  } finally {
+    if (timer !== undefined) {
+      globalThis.clearTimeout(timer);
+    }
+  }
 }
 
 function buildPhase2SkippedLog(
@@ -256,13 +308,26 @@ export async function monitorAnalysisRun(
   let interpretationReported = false;
   let stemSummaryQueued = false;
 
+  const startedAt = Date.now();
+  const maxRunDurationMs = analysisOptions?.maxRunDurationMs ?? DEFAULT_RUN_WALL_CLOCK_MS;
+  const pollRequestTimeoutMs =
+    analysisOptions?.pollRequestTimeoutMs ?? DEFAULT_POLL_REQUEST_TIMEOUT_MS;
+
   try {
     while (true) {
       throwIfUserCancelled(analysisOptions?.signal);
-      let snapshot = await getAnalysisRun(runId, {
-        apiBaseUrl: appConfig.apiBaseUrl,
-        signal: analysisOptions?.signal,
-      });
+      if (Date.now() - startedAt > maxRunDurationMs) {
+        throw createClientTimeoutError(
+          'Analysis exceeded the maximum time budget before completing.',
+          maxRunDurationMs,
+        );
+      }
+      let snapshot = await pollSnapshotWithDeadline(
+        runId,
+        appConfig.apiBaseUrl,
+        analysisOptions?.signal,
+        pollRequestTimeoutMs,
+      );
       throwIfUserCancelled(analysisOptions?.signal);
 
       if (hasInterpretationProfileAttempt(snapshot, 'stem_summary')) {

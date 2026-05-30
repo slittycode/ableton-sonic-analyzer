@@ -933,3 +933,170 @@ class SpectralArtifactSnapshotTests(unittest.TestCase):
         self.assertNotIn("path", by_kind["spectrogram_stft"])
         self.assertNotIn("contentSha256", by_kind["spectrogram_stft"])
         self.assertNotIn("provenance", by_kind["spectrogram_stft"])
+
+
+class StagedRunInterruptResurrectionTests(unittest.TestCase):
+    """Regression guard: a late/orphaned stage writer must not resurrect a run
+    that was interrupted while the stage's subprocess was still finishing.
+
+    Before the staged-run lifecycle fix the stage executors could call
+    complete/fail on an attempt the interrupt had already flipped to
+    'interrupted', flipping it back to a terminal-success/failed state and
+    (for measurement) enqueuing a fresh downstream pipeline for a cancelled run.
+    """
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory(prefix="asa_resurrect_test_")
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def _runtime(self):
+        from analysis_runtime import AnalysisRuntime
+
+        return AnalysisRuntime(Path(self.temp_dir.name) / "runtime", max_pending_per_stage=4)
+
+    def _run_with_completed_measurement(self, runtime, *, interpretation_mode="off"):
+        created = runtime.create_run(
+            filename="track.mp3",
+            content=b"fake-audio",
+            mime_type="audio/mpeg",
+            pitch_note_mode="stem_notes",
+            pitch_note_backend="auto",
+            interpretation_mode=interpretation_mode,
+            interpretation_profile="producer_summary",
+            interpretation_model="gemini-2.5-flash" if interpretation_mode != "off" else None,
+        )
+        run_id = created["runId"]
+        runtime.reserve_next_measurement_run()
+        runtime.complete_measurement(
+            run_id,
+            payload={"bpm": 128, "durationSeconds": 60.0},
+            provenance={"schemaVersion": "measurement.v1"},
+            diagnostics={"backendDurationMs": 1000},
+        )
+        return run_id
+
+    def test_complete_pitch_note_attempt_does_not_resurrect_interrupted_attempt(self) -> None:
+        runtime = self._runtime()
+        run_id = self._run_with_completed_measurement(runtime)
+        attempt = runtime.reserve_next_pitch_note_attempt()
+        self.assertIsNotNone(attempt)
+        attempt_id = str(attempt["attemptId"])
+
+        runtime.interrupt_run(run_id)
+
+        # The now-orphaned subprocess finishes and reports success.
+        runtime.complete_pitch_note_attempt(
+            attempt_id,
+            result={"transcriptionMethod": "stub", "noteCount": 0, "notes": []},
+            provenance={"backendId": "auto"},
+        )
+
+        with runtime._connect() as conn:
+            status = conn.execute(
+                "SELECT status FROM pitch_note_translation_attempts WHERE id = ?",
+                (attempt_id,),
+            ).fetchone()[0]
+            preferred = conn.execute(
+                "SELECT preferred_pitch_note_attempt_id FROM analysis_runs WHERE id = ?",
+                (run_id,),
+            ).fetchone()[0]
+        self.assertEqual(status, "interrupted")
+        self.assertIsNone(preferred)
+
+    def test_fail_pitch_note_attempt_does_not_overwrite_interrupted_attempt(self) -> None:
+        runtime = self._runtime()
+        run_id = self._run_with_completed_measurement(runtime)
+        attempt = runtime.reserve_next_pitch_note_attempt()
+        attempt_id = str(attempt["attemptId"])
+
+        runtime.interrupt_run(run_id)
+
+        # Interrupt kills the child → non-zero exit → fail_pitch_note_attempt.
+        runtime.fail_pitch_note_attempt(
+            attempt_id,
+            error={
+                "code": "PITCH_NOTE_TRANSLATION_FAILED",
+                "message": "subprocess terminated",
+                "retryable": True,
+                "phase": "pitch_note_translation",
+            },
+        )
+
+        with runtime._connect() as conn:
+            status = conn.execute(
+                "SELECT status FROM pitch_note_translation_attempts WHERE id = ?",
+                (attempt_id,),
+            ).fetchone()[0]
+        self.assertEqual(status, "interrupted")
+
+    def test_complete_mt3_attempt_does_not_resurrect_interrupted_attempt(self) -> None:
+        runtime = self._runtime()
+        run_id = self._run_with_completed_measurement(runtime)
+        mt3_attempt_id = runtime.create_mt3_attempt(run_id)
+        self.assertTrue(runtime.reserve_mt3_attempt(mt3_attempt_id))
+
+        runtime.interrupt_run(run_id)
+
+        runtime.complete_mt3_attempt(
+            mt3_attempt_id,
+            result={"tracks": []},
+            provenance={"checkpointId": "test"},
+        )
+
+        with runtime._connect() as conn:
+            status = conn.execute(
+                "SELECT status FROM mt3_attempts WHERE id = ?",
+                (mt3_attempt_id,),
+            ).fetchone()[0]
+            preferred = conn.execute(
+                "SELECT preferred_mt3_attempt_id FROM analysis_runs WHERE id = ?",
+                (run_id,),
+            ).fetchone()[0]
+        self.assertEqual(status, "interrupted")
+        self.assertIsNone(preferred)
+
+    def test_complete_measurement_after_interrupt_does_not_enqueue_followups(self) -> None:
+        runtime = self._runtime()
+        created = runtime.create_run(
+            filename="track.mp3",
+            content=b"fake-audio",
+            mime_type="audio/mpeg",
+            pitch_note_mode="stem_notes",
+            pitch_note_backend="auto",
+            interpretation_mode="async",
+            interpretation_profile="producer_summary",
+            interpretation_model="gemini-2.5-flash",
+        )
+        run_id = created["runId"]
+        runtime.reserve_next_measurement_run()  # → measurement 'running'
+
+        runtime.interrupt_run(run_id)
+
+        # A racing/orphaned measurement subprocess reports success after the
+        # interrupt. The guard must no-op the status flip AND skip enqueuing the
+        # downstream pitch-note/interpretation pipeline for a cancelled run.
+        runtime.complete_measurement(
+            run_id,
+            payload={"bpm": 128, "durationSeconds": 60.0},
+            provenance={"schemaVersion": "measurement.v1"},
+            diagnostics={"backendDurationMs": 1000},
+        )
+
+        with runtime._connect() as conn:
+            measurement_status = conn.execute(
+                "SELECT status FROM measurement_outputs WHERE run_id = ?",
+                (run_id,),
+            ).fetchone()[0]
+            pn_count = conn.execute(
+                "SELECT COUNT(*) FROM pitch_note_translation_attempts WHERE run_id = ?",
+                (run_id,),
+            ).fetchone()[0]
+            interp_count = conn.execute(
+                "SELECT COUNT(*) FROM interpretation_attempts WHERE run_id = ?",
+                (run_id,),
+            ).fetchone()[0]
+        self.assertEqual(measurement_status, "interrupted")
+        self.assertEqual(pn_count, 0)
+        self.assertEqual(interp_count, 0)

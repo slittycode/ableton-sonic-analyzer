@@ -748,3 +748,79 @@ describe('analyzeAudio', () => {
     consoleErrorSpy.mockRestore();
   });
 });
+
+describe('analyzeAudio polling timeouts', () => {
+  const runningSnapshot = () =>
+    makeRunSnapshot({
+      stages: {
+        measurement: {
+          status: 'running',
+          authoritative: true,
+          result: null,
+          provenance: null,
+          diagnostics: null,
+          error: null,
+        },
+        pitchNoteTranslation: {
+          status: 'blocked',
+          authoritative: false,
+          preferredAttemptId: null,
+          attemptsSummary: [],
+          result: null,
+          provenance: null,
+          diagnostics: null,
+          error: null,
+        },
+        interpretation: {
+          status: 'blocked',
+          authoritative: false,
+          preferredAttemptId: null,
+          attemptsSummary: [],
+          result: null,
+          provenance: null,
+          diagnostics: null,
+          error: null,
+        },
+      },
+    });
+
+  it('fails with CLIENT_TIMEOUT when a single poll exceeds the per-request deadline', async () => {
+    createAnalysisRunMock.mockResolvedValue(runningSnapshot());
+    // A wedged backend: the poll fetch never resolves. Without a per-poll
+    // deadline this would hang the client forever (review finding #4).
+    getAnalysisRunMock.mockImplementation(() => new Promise<never>(() => {}));
+
+    const file = new File(['audio-data'], 'track.mp3', { type: 'audio/mpeg' });
+    const onError = vi.fn();
+
+    await analyzeAudio(file, 'gemini-2.5-pro', null, vi.fn(), vi.fn(), onError, {
+      pollRequestTimeoutMs: 10,
+      pollIntervalMs: 0,
+    });
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    const error = onError.mock.calls[0]?.[0];
+    expect(error).toBeInstanceOf(BackendClientError);
+    expect((error as BackendClientError).code).toBe('CLIENT_TIMEOUT');
+  });
+
+  it('fails with CLIENT_TIMEOUT when the overall run budget is exceeded', async () => {
+    createAnalysisRunMock.mockResolvedValue(runningSnapshot());
+    // Never reaches a terminal stage, so only the wall-clock budget can end it.
+    getAnalysisRunMock.mockResolvedValue(runningSnapshot());
+
+    const file = new File(['audio-data'], 'track.mp3', { type: 'audio/mpeg' });
+    const onError = vi.fn();
+
+    // Negative budget forces the wall-clock guard to trip on the first iteration.
+    await analyzeAudio(file, 'gemini-2.5-pro', null, vi.fn(), vi.fn(), onError, {
+      maxRunDurationMs: -1,
+      pollIntervalMs: 0,
+    });
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    const error = onError.mock.calls[0]?.[0];
+    expect(error).toBeInstanceOf(BackendClientError);
+    expect((error as BackendClientError).code).toBe('CLIENT_TIMEOUT');
+  });
+});
