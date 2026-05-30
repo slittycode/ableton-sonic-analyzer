@@ -60,6 +60,73 @@ export interface TranscriptionDetail {
   notes: TranscriptionNote[];
 }
 
+/**
+ * Optional MT3 (Magenta Multi-Task Multitrack) polyphonic-transcription
+ * output. Emitted only when the backend env var `ASA_ENABLE_MT3=1` is set
+ * AND the MT3 extra is installed (see apps/backend/requirements-mt3.txt and
+ * the apps/backend/mt3_transcription.py module docstring).
+ *
+ * Purely additive to Phase 1 — does NOT override Essentia chord/key/beat/
+ * melody outputs (PURPOSE.md invariant #1). Rendered by `Mt3TranscriptionPanel`
+ * (mounted from `AnalysisResults`) when the MT3 stage completed with at least
+ * one track; the camelCase field names mirror the backend JSON verbatim
+ * (CLAUDE.md tripwire #3 — no conversion layer between camelCase JSON and TS).
+ */
+/**
+ * One per-instrument track in the MT3 stage result.
+ *
+ * NOTE: this is the *stored* shape served by `GET /api/analysis-runs/{id}`,
+ * not the raw subprocess emission. The MT3 subprocess emits a `midiB64`
+ * (inline base64) field on each track; the staged-runtime executor in
+ * `apps/backend/server.py::_execute_mt3_attempt` persists those bytes as
+ * a per-stem artifact and replaces `midiB64` with `midiArtifactId`. So
+ * the Python `Mt3Track` dataclass (in `apps/backend/mt3_transcription.py`)
+ * has `midi_b64`; this TS interface has `midiArtifactId`. They describe
+ * the same per-stem concept at different layers of the pipeline.
+ */
+export interface Mt3Track {
+  /**
+   * Stem the MIDI was extracted from (Demucs canonical names: "bass",
+   * "other", "vocals", "drums") or "full_mix" when no stems were provided.
+   */
+  instrument: string;
+  /**
+   * Artifact ID for the MIDI bytes. Decoupled from the snapshot itself
+   * because a multi-track MT3 result is 0.5-3MB of base64 per track and
+   * inline blobs would balloon every snapshot poll. Fetch the actual MIDI
+   * via `GET /api/analysis-runs/{run_id}/artifacts/{midiArtifactId}`.
+   * Null if the track was emitted with no MIDI body (defensive — should
+   * not happen in practice; the backend writes empty-bytes MIDI when a
+   * stem produced no notes).
+   */
+  midiArtifactId: string | null;
+  midiSizeBytes: number;
+  noteCount: number;
+  /** `[minMidi, maxMidi]` over all notes in this track; `[0, 0]` when empty. */
+  pitchRange: [number, number];
+}
+
+export interface Mt3Transcription {
+  /**
+   * Pinned identifier of the MT3 module + checkpoint that produced the notes.
+   * Format: `"mt3-py-<module-version>+<checkpoint-id>"` — Phase 2 reads this
+   * verbatim to know what to attribute the notes to.
+   */
+  version: string;
+  stemsUsed: string[];
+  tracks: Mt3Track[];
+}
+
+/**
+ * Top-level namespace for *additive* transcription backends that produce
+ * full MIDI rather than the lighter per-note schema in `TranscriptionDetail`.
+ * Reserved for future translation backends; today only `mt3` is wired.
+ * The whole namespace is *absent* (not null) when no opt-in backend ran.
+ */
+export interface TranscriptionNamespace {
+  mt3?: Mt3Transcription;
+}
+
 export interface DanceabilityResult {
   danceability: number;
   dfa: number;
@@ -648,6 +715,17 @@ export interface Phase1Result {
   rhythmDetail?: RhythmDetail | null;
   melodyDetail?: MelodyDetail;
   transcriptionDetail?: TranscriptionDetail | null;
+  /**
+   * Optional MT3 polyphonic-transcription namespace. Present only when the
+   * backend env var `ASA_ENABLE_MT3=1` is set and the MT3 extra is installed.
+   * The whole field is *absent* (not `null`) when the gate is off — see
+   * apps/backend/mt3_transcription.py and JSON_SCHEMA.md "Optional MT3
+   * Namespace" for the contract. Rendered by `Mt3TranscriptionPanel`
+   * (mounted from `AnalysisResults` in the Session Musician suite) when
+   * `transcription.mt3.tracks` is non-empty; the per-track MIDI is fetched
+   * lazily via `services/mt3Client.ts`.
+   */
+  transcription?: TranscriptionNamespace;
   pitchDetail?: PitchDetail | null;
   grooveDetail?: GrooveDetail | null;
   beatsLoudness?: BeatsLoudness | null;

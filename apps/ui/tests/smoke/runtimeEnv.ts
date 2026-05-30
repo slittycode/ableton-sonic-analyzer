@@ -11,3 +11,9 @@ export async function enablePhase2ForTest(page: Page) {
     window.__VITE_ENABLE_PHASE2_GEMINI_OVERRIDE__ = 'true';
   });
 }
+
+export async function enableMt3ForTest(page: Page) {
+  await page.addInitScript(() => {
+    window.__VITE_ENABLE_MT3_OVERRIDE__ = 'true';
+  });
+}

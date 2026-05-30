@@ -1,4 +1,4 @@
-import type { MeasurementResult, Phase1Result, TranscriptionDetail } from './measurement';
+import type { MeasurementResult, Mt3Transcription, Phase1Result, TranscriptionDetail } from './measurement';
 import type { InterpretationResult } from './interpretation';
 
 export interface BackendTimingDiagnostics {
@@ -142,6 +142,14 @@ export interface AnalysisRunRequestedStages {
   interpretationMode: string;
   interpretationProfile: string;
   interpretationModel: string | null;
+  /**
+   * Per-run opt-in for the MT3 polyphonic-transcription stage.
+   * "off" (default) means the stage is not enqueued. "enabled" means the
+   * worker will run MT3 after measurement completes. The whole `stages.mt3`
+   * snapshot is still present in either case — it just shows status
+   * "not_requested" when off.
+   */
+  mt3Mode: string;
 }
 
 export interface MeasurementAvailabilityContext {
@@ -187,6 +195,37 @@ export interface PitchNoteTranslationStageSnapshot {
   error: AnalysisStageError | null;
 }
 
+export interface Mt3AttemptSummary {
+  attemptId: string;
+  checkpointId: string;
+  status: AnalysisStageStatus;
+}
+
+export interface Mt3StageSnapshot {
+  status: AnalysisStageStatus;
+  /** Additive 5-value collapse of `status`. `null` when status is `not_requested`. */
+  publicStatus: PublicStageStatus | null;
+  /**
+   * MT3 output is purely additive to Phase 1 — it never overrides
+   * Essentia chord/key/beat/melody measurements (PURPOSE.md invariant
+   * #1, "Phase 1 measurements are ground truth"). The `false` value is
+   * a compile-time guard against future maintainers accidentally
+   * promoting MT3 above Phase 1.
+   */
+  authoritative: false;
+  preferredAttemptId: string | null;
+  attemptsSummary: Mt3AttemptSummary[];
+  /**
+   * Stored MT3 result (post-executor). Each track's MIDI bytes live
+   * in the artifact store; this object carries only metadata + the
+   * artifact ref. Null when no MT3 attempt has completed yet.
+   */
+  result: Mt3Transcription | null;
+  provenance: Record<string, unknown> | null;
+  diagnostics: Record<string, unknown> | null;
+  error: AnalysisStageError | null;
+}
+
 export interface InterpretationStageSnapshot {
   status: AnalysisStageStatus;
   /** Additive 5-value collapse of `status`. `null` when status is `not_requested`. */
@@ -221,6 +260,7 @@ export interface AnalysisRunSnapshot {
     measurement: MeasurementStageSnapshot;
     pitchNoteTranslation: PitchNoteTranslationStageSnapshot;
     interpretation: InterpretationStageSnapshot;
+    mt3: Mt3StageSnapshot;
   };
 }
 
@@ -261,7 +301,7 @@ export type DiagnosticLogStatus = "running" | "success" | "error" | "skipped";
 export interface DiagnosticLogEntry {
   model: string;
   phase: string;
-  stageKey?: 'measurement' | 'pitchNoteTranslation' | 'interpretation' | 'system';
+  stageKey?: 'measurement' | 'pitchNoteTranslation' | 'interpretation' | 'mt3' | 'system';
   promptLength: number;
   responseLength: number;
   durationMs: number;

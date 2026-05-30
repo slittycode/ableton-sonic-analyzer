@@ -27,6 +27,7 @@ vi.mock('../../src/config', () => ({
   },
   canRunGeminiPhase2: () => isGeminiPhase2ConfigEnabledMock(),
   isGeminiPhase2ConfigEnabled: isGeminiPhase2ConfigEnabledMock,
+  isMt3ConfigEnabled: () => false,
 }));
 
 vi.mock('../../src/services/backendPhase1Client', async () => {
@@ -328,6 +329,39 @@ describe('analyzeAudio', () => {
     expect(getAnalysisRunMock).toHaveBeenCalledWith('run_123', expect.any(Object));
     expect(onRunUpdate).toHaveBeenCalled();
     expect(phase1Log?.phase).toContain('Measurement');
+  });
+
+  it('forces mt3Mode off when the flag is disabled, even if mt3 is requested', async () => {
+    // The run path passes raw `mt3Requested`, so analyzer.ts re-gates with
+    // isMt3ConfigEnabled(appConfig) — pinned to false by the ../config mock.
+    // This pins that backstop: removing the `&& isMt3ConfigEnabled(...)` guard
+    // would send mt3Mode='enabled' here and fail this assertion.
+    createAnalysisRunMock.mockResolvedValue(makeRunSnapshot());
+    getAnalysisRunMock.mockResolvedValue(makeRunSnapshot());
+
+    const file = new File(['audio-data'], 'track.mp3', { type: 'audio/mpeg' });
+
+    await analyzeAudio(
+      file,
+      'gemini-2.5-pro',
+      null,
+      () => {},
+      () => {},
+      (error) => {
+        throw error;
+      },
+      {
+        mt3Requested: true,
+        pitchNoteRequested: false,
+        interpretationRequested: false,
+        pollIntervalMs: 0,
+      },
+    );
+
+    expect(createAnalysisRunMock).toHaveBeenCalledWith(
+      file,
+      expect.objectContaining({ mt3Mode: 'off' }),
+    );
   });
 
   it('queues a stem summary interpretation after pitch notes complete', async () => {

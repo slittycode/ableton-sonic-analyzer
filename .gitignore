@@ -62,6 +62,11 @@ apps/backend/tests/fixtures/estimations/
 apps/backend/tests/fixtures/beat_tracks/*
 !apps/backend/tests/fixtures/beat_tracks/README.md
 
+# Optional MT3 model cache. Multi-GB JAX checkpoint downloaded out-of-band
+# via `gsutil cp gs://mt3/checkpoints/mt3 apps/backend/models/mt3/` — never
+# redistributed and not on the request path. See apps/backend/mt3_transcription.py.
+apps/backend/models/
+
 # Ephemeral local state
 .claude/scheduled_tasks.lock
 .continue.sh

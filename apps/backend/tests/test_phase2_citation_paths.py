@@ -215,5 +215,88 @@ class SpectralRenameNormalizationTests(unittest.TestCase):
         self.assertEqual(warnings[0]["code"], "UNRESOLVED_CITATION_PATH")
 
 
+class Mt3CitationPathsTests(unittest.TestCase):
+    """F3: when an MT3 transcription result is supplied, the validator must
+    accept ``transcription.mt3.*`` citations (mirroring the frontend's
+    ``projectPhase1FromRun`` which folds the MT3 result into Phase1Result
+    under that namespace). When no MT3 result is supplied, the same citation
+    must be flagged — MT3 paths are only valid when MT3 actually ran.
+    """
+
+    MEASUREMENT = {"bpm": 128.0, "spectralBalance": {"subBass": 0.4}}
+
+    # Stored MT3 shape (server.py::_execute_mt3_attempt). midiB64 is swapped
+    # for an artifact ref before persistence; there is no top-level noteCount.
+    MT3_RESULT = {
+        "version": "magenta-mt3-base",
+        "stemsUsed": ["bass", "other"],
+        "tracks": [
+            {
+                "instrument": "bass",
+                "midiArtifactId": "artifact-123",
+                "midiSizeBytes": 412,
+                "noteCount": 96,
+                "pitchRange": [28, 52],
+            }
+        ],
+    }
+
+    def test_mt3_citation_flagged_when_no_mt3_result_supplied(self):
+        phase2 = {
+            "abletonRecommendations": [
+                {"device": "Operator", "phase1Fields": ["transcription.mt3.stemsUsed"]}
+            ]
+        }
+        warnings = _validate_phase2_citation_paths(phase2, self.MEASUREMENT)
+        self.assertEqual(len(warnings), 1)
+        self.assertEqual(warnings[0]["code"], "UNRESOLVED_CITATION_PATH")
+        self.assertEqual(warnings[0]["originalValue"], "transcription.mt3.stemsUsed")
+
+    def test_mt3_top_level_citation_accepted_with_mt3_result(self):
+        phase2 = {
+            "abletonRecommendations": [
+                {"device": "Operator", "phase1Fields": ["transcription.mt3.stemsUsed"]}
+            ]
+        }
+        warnings = _validate_phase2_citation_paths(
+            phase2, self.MEASUREMENT, mt3_result=self.MT3_RESULT
+        )
+        self.assertEqual(warnings, [])
+
+    def test_mt3_array_item_citation_accepted_with_mt3_result(self):
+        # Array-of-object fields register under `prefix.key` with no [i] index
+        # (same convention as arrangementDetail.noveltyPeaks.time).
+        phase2 = {
+            "mixAndMasterChain": [
+                {
+                    "device": "Operator",
+                    "phase1Fields": [
+                        "transcription.mt3.tracks.instrument",
+                        "transcription.mt3.tracks.noteCount",
+                    ],
+                }
+            ]
+        }
+        warnings = _validate_phase2_citation_paths(
+            phase2, self.MEASUREMENT, mt3_result=self.MT3_RESULT
+        )
+        self.assertEqual(warnings, [])
+
+    def test_invented_mt3_path_still_flagged_with_mt3_result(self):
+        # Supplying mt3_result does not blanket-accept the namespace — a path
+        # absent from the actual MT3 payload is still flagged.
+        phase2 = {
+            "abletonRecommendations": [
+                {"device": "Operator", "phase1Fields": ["transcription.mt3.bogusField"]}
+            ]
+        }
+        warnings = _validate_phase2_citation_paths(
+            phase2, self.MEASUREMENT, mt3_result=self.MT3_RESULT
+        )
+        self.assertEqual(len(warnings), 1)
+        self.assertEqual(warnings[0]["code"], "UNRESOLVED_CITATION_PATH")
+        self.assertEqual(warnings[0]["originalValue"], "transcription.mt3.bogusField")
+
+
 if __name__ == "__main__":
     unittest.main()

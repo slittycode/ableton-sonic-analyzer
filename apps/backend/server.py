@@ -33,6 +33,7 @@ import auth_context
 from auth_context import AuthenticationRequiredError, UserContext, resolve_api_user_context
 from analysis_runtime import (
     AnalysisRuntime,
+    UnsupportedMt3ModeError,
     UnsupportedPitchNoteBackendError,
     UnsupportedPitchNoteModeError,
 )
@@ -298,6 +299,7 @@ def _create_background_tasks(
                 asyncio.create_task(_measurement_worker_loop()),
                 asyncio.create_task(_pitch_note_worker_loop()),
                 asyncio.create_task(_interpretation_worker_loop()),
+                asyncio.create_task(_mt3_worker_loop()),
             ]
         )
     return tasks
@@ -541,6 +543,31 @@ def _run_streamed_subprocess(
     }
 
 
+def _coerce_mt3_mode(value: Any) -> str:
+    """Validate/normalize a route-form mt3_mode.
+
+    The HTTP route declares ``mt3_mode: str = Form("off")``. When the route
+    function is invoked directly (not via HTTP dispatch — e.g. the unit tests
+    that call ``server.create_analysis_run(...)`` to bypass multipart parsing),
+    FastAPI leaves the default as its internal ``Form(...)`` sentinel object
+    rather than the string ``"off"``. That sentinel — and the empty string,
+    which is how an absent multipart field can arrive — normalize to the
+    conservative ``"off"`` default (the "absent unless requested" contract).
+
+    A real, non-empty string is validated strictly: ``"off"`` / ``"enabled"``
+    pass through; anything else raises :class:`UnsupportedMt3ModeError` so a
+    client typo like ``"enable"`` surfaces as ``400 MT3_MODE_UNSUPPORTED``
+    rather than silently disabling MT3. This mirrors how ``pitch_note_mode`` is
+    rejected and keeps the typed error / catch / code machinery (and the
+    contract documented in ``analysisRunsClient.ts``) live rather than dead.
+    """
+    if not isinstance(value, str) or value == "":
+        return "off"
+    if value in {"off", "enabled"}:
+        return value
+    raise UnsupportedMt3ModeError(value)
+
+
 async def _create_analysis_run_record(
     *,
     track: UploadFile,
@@ -552,7 +579,9 @@ async def _create_analysis_run_record(
     interpretation_profile: str,
     interpretation_model: str | None,
     legacy_request_id: str | None = None,
+    mt3_mode: Any = "off",
 ) -> tuple[AnalysisRuntime, str]:
+    mt3_mode = _coerce_mt3_mode(mt3_mode)
     temp_path: str | None = None
     runtime = get_analysis_runtime()
     analysis_mode = _resolve_analysis_mode_value(analysis_mode)
@@ -583,6 +612,7 @@ async def _create_analysis_run_record(
         interpretation_profile=interpretation_profile,
         interpretation_model=interpretation_model,
         legacy_request_id=legacy_request_id,
+        mt3_mode=mt3_mode,
     )
     return runtime, created["runId"]
 
@@ -598,6 +628,7 @@ async def _create_analysis_run_record_from_url(
     interpretation_profile: str,
     interpretation_model: str | None,
     legacy_request_id: str | None = None,
+    mt3_mode: Any = "off",
 ) -> tuple[AnalysisRuntime, str]:
     """Parallel of ``_create_analysis_run_record`` but for URL-fetched audio.
 
@@ -606,6 +637,7 @@ async def _create_analysis_run_record_from_url(
     errors are surfaced unchanged to the caller, which is responsible
     for translating them into HTTP envelopes.
     """
+    mt3_mode = _coerce_mt3_mode(mt3_mode)
     runtime = get_analysis_runtime()
     analysis_mode = _resolve_analysis_mode_value(analysis_mode)
     if interpretation_mode != "off":
@@ -625,6 +657,7 @@ async def _create_analysis_run_record_from_url(
         interpretation_profile=interpretation_profile,
         interpretation_model=interpretation_model,
         legacy_request_id=legacy_request_id,
+        mt3_mode=mt3_mode,
     )
     return runtime, created["runId"]
 
@@ -671,6 +704,7 @@ async def _estimate_analysis_run(
     interpretation_mode: str,
     interpretation_profile: str,
     interpretation_model: str | None,
+    mt3_mode: Any = "off",
     run_separation_override: bool | None = None,
     run_transcribe_override: bool | None = None,
 ) -> JSONResponse:
@@ -697,11 +731,13 @@ async def _estimate_analysis_run(
             if run_transcribe_override is None
             else run_transcribe_override
         )
+        run_mt3 = _coerce_mt3_mode(mt3_mode) == "enabled"
         estimate = _build_backend_estimate(
             temp_path,
             run_separation,
             run_transcribe,
             analysis_mode=analysis_mode,
+            run_mt3=run_mt3,
         )
         return JSONResponse(
             content={
@@ -1208,14 +1244,21 @@ def _execute_pitch_note_attempt(
     started_at = _current_time()
     run_id = str(attempt["runId"])
     attempt_id = str(attempt["attemptId"])
-    source_artifact = runtime.get_source_artifact(run_id)
     provenance: dict[str, Any] = {
         "schemaVersion": "pitch_note_translation.v1",
         "backendId": attempt["backendId"],
         "mode": attempt["mode"],
     }
+    # Bound before the try so the except handler can reference it even when
+    # get_source_artifact (now inside the try) is the call that raised.
+    source_artifact: dict[str, Any] | None = None
     stem_output_dir: str | None = None
     try:
+        # Resolve the source artifact INSIDE the try so a failure here
+        # terminalizes the attempt rather than leaving it stuck 'running' — which
+        # the interpretation-ordering gate would otherwise turn into an indefinite
+        # block on this run's interpretation. (Symmetry with _execute_mt3_attempt.)
+        source_artifact = runtime.get_source_artifact(run_id)
         source_local_path = runtime.require_local_artifact_path(
             source_artifact.get("path"),
             purpose="Source audio artifact for pitch/note translation",
@@ -1321,13 +1364,243 @@ def _execute_pitch_note_attempt(
             provenance=provenance,
             diagnostics={
                 "backendDurationMs": round(_elapsed_ms(started_at, _current_time()), 2),
-                "sourceArtifactId": source_artifact["artifactId"],
+                # Null-safe: source_artifact is None if get_source_artifact itself raised.
+                "sourceArtifactId": (source_artifact or {}).get("artifactId"),
                 "isolationMode": "subprocess",
             },
         )
     finally:
         if stem_output_dir is not None:
             shutil.rmtree(stem_output_dir, ignore_errors=True)
+
+
+# MT3 stage error-classification markers. The MT3 module emits these
+# verbatim in its Mt3NotAvailableError messages; matching on stderr is
+# fragile but cheap and avoids round-tripping a structured error object
+# through stdout. If mt3_transcription.py changes its phrasing, update
+# both sides together.
+_MT3_NOT_AVAILABLE_MARKERS = (
+    "MT3 backend not installed",
+    "MT3 checkpoint missing",
+    "Failed to initialize MT3 InferenceModel",
+)
+
+
+def _execute_mt3_attempt(
+    runtime: AnalysisRuntime,
+    attempt: dict[str, Any],
+) -> None:
+    """Run MT3 polyphonic transcription as a subprocess.
+
+    Subprocess isolation matters even more here than for pitch_note: MT3
+    loads multi-GB JAX/t5x model weights and a freshly-imported JAX
+    pollutes the parent's import graph in ways that interact badly with
+    the rest of the analyse server. Subprocess exit reclaims everything.
+
+    MVP scope: runs MT3 on the full mix unless a previous stage (pitch_note)
+    has already persisted Demucs stems as artifacts. We do NOT invoke
+    Demucs from this stage today — the follow-up step adds bidirectional
+    stems handover (either stage caches stems for the other to consume).
+    """
+    started_at = _current_time()
+    run_id = str(attempt["runId"])
+    attempt_id = str(attempt["attemptId"])
+    checkpoint_id = str(attempt.get("checkpointId") or "")
+    provenance: dict[str, Any] = {
+        "schemaVersion": "mt3_transcription.v1",
+        "checkpointId": checkpoint_id,
+    }
+    # Bound before the try so the except handlers can reference it even when
+    # get_source_artifact (now inside the try) is the call that raised.
+    source_artifact: dict[str, Any] | None = None
+    midi_tempdir: str | None = None
+    try:
+        # Resolve the source artifact INSIDE the try. If get_source_artifact
+        # raised here (e.g. a missing artifact row), the attempt would otherwise
+        # escape to _mt3_worker_loop stuck in 'running' — and with the
+        # interpretation-ordering gate that would block this run's interpretation
+        # indefinitely (until restart recovery). Terminalizing it on failure
+        # keeps the gate's no-deadlock guarantee airtight.
+        source_artifact = runtime.get_source_artifact(run_id)
+        source_local_path = runtime.require_local_artifact_path(
+            source_artifact.get("path"),
+            purpose="Source audio artifact for MT3 transcription",
+        )
+        command = [
+            "./venv/bin/python", "analyze.py",
+            source_local_path,
+            "--mt3-only",
+            "--yes",
+        ]
+
+        # If pitch_note has already run, its stems are persisted as
+        # internal artifacts (kind = "stem_<name>"). Reuse them by
+        # passing the common parent directory so the MT3 subprocess
+        # discovers them via mt3_transcription._resolve_sources.
+        existing_stems = runtime.get_internal_artifacts_by_kind(run_id, "stem_")
+        stem_paths_map = {
+            artifact["kind"].removeprefix("stem_"): str(local_path)
+            for artifact in existing_stems
+            if (local_path := runtime.resolve_artifact_local_path(artifact.get("path"))) is not None
+            and local_path.is_file()
+        }
+        if "bass" in stem_paths_map or "other" in stem_paths_map:
+            stem_dirs = {os.path.dirname(p) for p in stem_paths_map.values()}
+            if len(stem_dirs) == 1:
+                command.extend(["--stem-dir", stem_dirs.pop()])
+
+        # MT3 model load can take ~30s on first call; long tracks add
+        # several minutes of inference. 1800s gives generous headroom
+        # while still bounding the worker.
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=1800,
+        )
+
+        if result.returncode != 0:
+            stderr_tail = result.stderr[-2000:] if result.stderr else ""
+            if any(marker in stderr_tail for marker in _MT3_NOT_AVAILABLE_MARKERS):
+                raise _Mt3UnavailableError(
+                    f"MT3 backend unavailable: {stderr_tail[-500:]}"
+                )
+            raise RuntimeError(
+                f"MT3 subprocess failed (exit {result.returncode}): "
+                f"{stderr_tail[-500:] if stderr_tail else 'no stderr'}"
+            )
+
+        mt3_payload = json.loads(result.stdout)
+        if not isinstance(mt3_payload, dict):
+            raise RuntimeError(
+                f"MT3 subprocess produced non-dict JSON output: {type(mt3_payload).__name__}"
+            )
+
+        # Swap each track's inline midiB64 for a persisted artifact ref.
+        # This is the load-bearing decision from the design: snapshot
+        # polls must stay small (KB), not balloon to MB per track.
+        tracks_in = mt3_payload.get("tracks") or []
+        tracks_out: list[dict[str, Any]] = []
+        midi_tempdir = tempfile.mkdtemp(
+            prefix="asa_mt3_midi_",
+            dir=str(runtime.runtime_dir),
+        )
+        for track in tracks_in:
+            if not isinstance(track, dict):
+                continue
+            midi_b64 = track.get("midiB64")
+            if not isinstance(midi_b64, str) or not midi_b64:
+                # Track with no MIDI body — keep the metadata but skip
+                # the artifact step. This shouldn't happen in practice
+                # (the MT3 module emits empty-bytes base64 for empty
+                # tracks) but defends against malformed subprocess output.
+                tracks_out.append(
+                    {
+                        "instrument": str(track.get("instrument", "unknown")),
+                        "midiArtifactId": None,
+                        "midiSizeBytes": 0,
+                        "noteCount": int(track.get("noteCount", 0)),
+                        "pitchRange": list(track.get("pitchRange", [0, 0])),
+                    }
+                )
+                continue
+            instrument = str(track.get("instrument", "unknown"))
+            midi_bytes = base64.b64decode(midi_b64)
+            midi_path = os.path.join(midi_tempdir, f"{instrument}.mid")
+            with open(midi_path, "wb") as midi_file:
+                midi_file.write(midi_bytes)
+            artifact = runtime.record_artifact(
+                run_id,
+                kind=f"mt3_track_{instrument}",
+                source_path=midi_path,
+                filename=f"mt3_{instrument}.mid",
+                mime_type="audio/midi",
+                provenance={
+                    "schemaVersion": "artifact.v1",
+                    "sourceArtifactId": source_artifact["artifactId"],
+                    "generator": "mt3_transcription_subprocess",
+                    "instrument": instrument,
+                    "checkpointId": checkpoint_id,
+                },
+            )
+            tracks_out.append(
+                {
+                    "instrument": instrument,
+                    "midiArtifactId": str(artifact["artifactId"]),
+                    "midiSizeBytes": int(artifact["sizeBytes"]),
+                    "noteCount": int(track.get("noteCount", 0)),
+                    "pitchRange": list(track.get("pitchRange", [0, 0])),
+                }
+            )
+
+        mt3_result = {
+            "version": str(mt3_payload.get("version") or ""),
+            "stemsUsed": list(mt3_payload.get("stemsUsed") or []),
+            "tracks": tracks_out,
+        }
+
+        diagnostics = {
+            "backendDurationMs": round(_elapsed_ms(started_at, _current_time()), 2),
+            "stemSeparationUsed": bool(stem_paths_map),
+            "sourceArtifactId": source_artifact["artifactId"],
+            "isolationMode": "subprocess",
+            "trackCount": len(tracks_out),
+        }
+        # Surface the actual checkpoint string the subprocess reported so
+        # Phase 2 (when wired) can attribute notes to the real revision.
+        if isinstance(mt3_result["version"], str) and mt3_result["version"]:
+            provenance["resolvedCheckpointId"] = mt3_result["version"]
+        runtime.complete_mt3_attempt(
+            attempt_id,
+            result=mt3_result,
+            provenance=provenance,
+            diagnostics=diagnostics,
+        )
+    except _Mt3UnavailableError as exc:
+        runtime.fail_mt3_attempt(
+            attempt_id,
+            error={
+                "code": "MT3_NOT_AVAILABLE",
+                "message": str(exc),
+                "retryable": False,
+                "phase": "mt3_transcription",
+            },
+            provenance=provenance,
+            diagnostics={
+                "backendDurationMs": round(_elapsed_ms(started_at, _current_time()), 2),
+                "sourceArtifactId": source_artifact["artifactId"],
+                "isolationMode": "subprocess",
+            },
+        )
+    except Exception as exc:  # noqa: BLE001 - catch-all per stage convention
+        runtime.fail_mt3_attempt(
+            attempt_id,
+            error={
+                "code": "MT3_TRANSCRIPTION_FAILED",
+                "message": str(exc),
+                "retryable": True,
+                "phase": "mt3_transcription",
+            },
+            provenance=provenance,
+            diagnostics={
+                "backendDurationMs": round(_elapsed_ms(started_at, _current_time()), 2),
+                # Null-safe: source_artifact is None if get_source_artifact itself raised.
+                "sourceArtifactId": (source_artifact or {}).get("artifactId"),
+                "isolationMode": "subprocess",
+            },
+        )
+    finally:
+        if midi_tempdir is not None:
+            shutil.rmtree(midi_tempdir, ignore_errors=True)
+
+
+class _Mt3UnavailableError(RuntimeError):
+    """Internal marker raised by _execute_mt3_attempt when stderr matches
+    the mt3_transcription Mt3NotAvailableError phrasing. Separate from the
+    typed exception in mt3_transcription so server.py doesn't need to
+    import the MT3 module (which would pull mt3_transcription's lazy
+    import graph into the parent process)."""
 
 
 def _run_interpretation_request(
@@ -1341,6 +1614,7 @@ def _run_interpretation_request(
     grounding_metadata: dict[str, Any],
     model_name: str,
     request_id: str,
+    mt3_result: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     try:
         profile_config = _resolve_interpretation_profile_config(profile_id)
@@ -1364,6 +1638,7 @@ def _run_interpretation_request(
         grounding_metadata=grounding_metadata,
         model_name=model_name,
         request_id=request_id,
+        mt3_result=mt3_result,
     )
 
 
@@ -1376,6 +1651,7 @@ def _run_combined_stem_summary_request(
     grounding_metadata: dict[str, Any],
     model_name: str,
     request_id: str,
+    mt3_result: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     stem_artifacts = runtime.get_internal_artifacts_by_kind(run_id, "stem_")
     usable_stems = [
@@ -1420,6 +1696,7 @@ def _run_combined_stem_summary_request(
             grounding_metadata=stem_grounding_metadata,
             model_name=model_name,
             request_id=f"{request_id}:{stem_kind}",
+            mt3_result=mt3_result,
         )
         diagnostics_by_stem.append(
             {
@@ -1479,6 +1756,7 @@ def _run_interpretation_request_with_profile_config(
     grounding_metadata: dict[str, Any],
     model_name: str,
     request_id: str,
+    mt3_result: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     request_started_at = _current_time()
     flags_used: list[str] = []
@@ -1521,6 +1799,7 @@ def _run_interpretation_request_with_profile_config(
         pitch_note_result=pitch_note_result,
         grounding_metadata=grounding_metadata,
         descriptor_hooks=descriptor_hooks,
+        mt3_result=mt3_result,
     )
     client = _genai.Client(
         api_key=api_key,
@@ -1618,7 +1897,11 @@ def _run_interpretation_request_with_profile_config(
             else []
         )
         citation_path_warnings = (
-            _validate_phase2_citation_paths(interpretation_result, measurement_result)
+            _validate_phase2_citation_paths(
+                interpretation_result,
+                measurement_result,
+                mt3_result=mt3_result,
+            )
             if profile_id == "producer_summary" and interpretation_result is not None
             else []
         )
@@ -1731,12 +2014,20 @@ def _execute_interpretation_attempt(
     grounding = runtime.get_interpretation_grounding(run_id)
     measurement_result = grounding["measurementResult"] or {}
     pitch_note_result = grounding["pitchNoteResult"]
+    # MT3 polyphonic transcription, when present, is forwarded to Gemini as
+    # additive grounding (OPTIONAL_MT3_TRANSCRIPTION_RESULT_JSON). It is None
+    # unless an MT3 attempt completed for this run. PURPOSE.md invariant #1 —
+    # Phase 1 stays authoritative; MT3 never overrides measured values.
+    mt3_result = grounding.get("mt3Result")
     grounding_metadata = {
         "measurementIsAuthoritative": True,
         "pitchNoteTranslationIsBestEffort": True,
+        "mt3TranscriptionIsBestEffort": True,
         "measurementOutputId": grounding["measurementOutputId"],
         "pitchNoteAttemptId": grounding["pitchNoteAttemptId"],
+        "mt3AttemptId": grounding.get("mt3AttemptId"),
         "doNotPromotePitchNoteToMeasurement": True,
+        "doNotPromoteMt3ToMeasurement": True,
         "profileId": profile_id,
     }
     model_name = _coerce_string(attempt.get("modelName"), "gemini-2.5-flash")
@@ -1749,6 +2040,7 @@ def _execute_interpretation_attempt(
             grounding_metadata=grounding_metadata,
             model_name=model_name,
             request_id=str(attempt["attemptId"]),
+            mt3_result=mt3_result,
         )
     else:
         source_artifact = runtime.get_source_artifact(run_id)
@@ -1766,6 +2058,7 @@ def _execute_interpretation_attempt(
             grounding_metadata=grounding_metadata,
             model_name=model_name,
             request_id=str(attempt["attemptId"]),
+            mt3_result=mt3_result,
         )
     profile_config = _resolve_interpretation_profile_config(profile_id)
     provenance = {
@@ -1892,6 +2185,32 @@ async def _interpretation_worker_loop() -> None:
             await asyncio.sleep(WORKER_IDLE_SECONDS)
 
 
+async def _mt3_worker_loop() -> None:
+    """Peer of _pitch_note_worker_loop / _interpretation_worker_loop.
+
+    Picks up queued MT3 attempts whose owning run's measurement stage has
+    completed, runs them through _execute_mt3_attempt, and idles between
+    polls. Wired into _create_background_tasks so it activates in both
+    local (`include_workers=True`) and hosted-worker process roles.
+    """
+    while True:
+        try:
+            attempt = await asyncio.to_thread(get_analysis_runtime().reserve_next_mt3_attempt)
+            if attempt is None:
+                await asyncio.sleep(WORKER_IDLE_SECONDS)
+                continue
+            await asyncio.to_thread(
+                _execute_mt3_attempt,
+                get_analysis_runtime(),
+                attempt,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            print(f"[warn] mt3 worker loop failed: {exc}", file=sys.stderr)
+            await asyncio.sleep(WORKER_IDLE_SECONDS)
+
+
 
 def _uploaded_file_size_bytes(track: UploadFile) -> int | None:
     file_obj = getattr(track, "file", None)
@@ -1961,6 +2280,7 @@ async def create_analysis_run(
     interpretation_mode: str = Form("off"),
     interpretation_profile: str = Form("producer_summary"),
     interpretation_model: str | None = Form(None),
+    mt3_mode: str = Form("off"),
     x_asa_user_id: str | None = Header(None),
     x_asa_user_email: str | None = Header(None),
 ) -> JSONResponse:
@@ -2051,6 +2371,7 @@ async def create_analysis_run(
                 interpretation_mode=interpretation_mode,
                 interpretation_profile=interpretation_profile,
                 interpretation_model=interpretation_model,
+                mt3_mode=mt3_mode,
             )
         else:
             runtime, run_id = await _create_analysis_run_record(
@@ -2062,6 +2383,7 @@ async def create_analysis_run(
                 interpretation_mode=interpretation_mode,
                 interpretation_profile=interpretation_profile,
                 interpretation_model=interpretation_model,
+                mt3_mode=mt3_mode,
             )
         return JSONResponse(
             content=_normalize_run_snapshot(
@@ -2077,6 +2399,20 @@ async def create_analysis_run(
             content={
                 "error": {
                     "code": "PITCH_NOTE_BACKEND_UNSUPPORTED",
+                    "message": str(exc),
+                }
+            },
+        )
+    except UnsupportedMt3ModeError as exc:
+        # Explicit catch before the generic ValueError fall-through so
+        # the client gets a typed MT3_MODE_UNSUPPORTED code, not the
+        # generic INTERPRETATION_PROFILE_UNSUPPORTED fallback in
+        # _value_error_code.
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "code": "MT3_MODE_UNSUPPORTED",
                     "message": str(exc),
                 }
             },
@@ -2115,6 +2451,11 @@ async def estimate_analysis_run(
     interpretation_mode: str = Form("off"),
     interpretation_profile: str = Form("producer_summary"),
     interpretation_model: str | None = Form(None),
+    # When mt3_mode == "enabled", _estimate_analysis_run forwards run_mt3 to
+    # build_analysis_estimate, which appends the MT3 polyphonic-transcription
+    # stage to the returned BackendEstimateStage list so the UI can show the
+    # added cost before the user commits to the run.
+    mt3_mode: str = Form("off"),
     x_asa_user_id: str | None = Header(None),
     x_asa_user_email: str | None = Header(None),
 ) -> JSONResponse:
@@ -2131,6 +2472,7 @@ async def estimate_analysis_run(
             interpretation_mode=interpretation_mode,
             interpretation_profile=interpretation_profile,
             interpretation_model=interpretation_model,
+            mt3_mode=mt3_mode,
         )
     except UploadTooLargeError as exc:
         return _canonical_upload_too_large_response(exc)
@@ -2150,6 +2492,19 @@ async def estimate_analysis_run(
             content={
                 "error": {
                     "code": "PITCH_NOTE_BACKEND_UNSUPPORTED",
+                    "message": str(exc),
+                }
+            },
+        )
+    except UnsupportedMt3ModeError as exc:
+        # Mirror the create-run route: an unrecognised mt3_mode (now raised by
+        # _coerce_mt3_mode) must surface as a typed MT3_MODE_UNSUPPORTED code,
+        # not the generic _value_error_code fall-through below.
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "code": "MT3_MODE_UNSUPPORTED",
                     "message": str(exc),
                 }
             },
@@ -2889,6 +3244,63 @@ async def generate_spectral_enhancement(
         )
 
 
+@app.post("/api/analysis-runs/{run_id}/mt3-transcriptions")
+async def create_mt3_transcription_attempt(
+    run_id: str,
+    x_asa_user_id: str | None = Header(None),
+    x_asa_user_email: str | None = Header(None),
+) -> JSONResponse:
+    """Manually enqueue an MT3 attempt on an existing run.
+
+    Mirror of :func:`create_pitch_note_translation_attempt`. Used when a
+    client wants to opt into MT3 *after* the run was created (e.g. the
+    initial POST /api/analysis-runs had ``mt3_mode='off'`` but the user
+    later decides they want a MIDI export). The measurement stage must be
+    completed first — MT3 reads stems and/or the source audio that
+    measurement persists as artifacts.
+
+    Returns 202 with the post-enqueue snapshot. The worker (started by
+    ``_create_background_tasks``) will reserve and run the attempt.
+
+    No request body / form fields today — MT3 has no configurable
+    backend or mode. If/when multiple checkpoints land, the route can
+    accept ``checkpoint_id`` without changing its URL.
+    """
+    user_context = _resolve_route_user_context(x_asa_user_id, x_asa_user_email)
+    if isinstance(user_context, JSONResponse):
+        return user_context
+    runtime = get_analysis_runtime()
+    try:
+        runtime.get_run(run_id, owner_user_id=user_context.user_id)
+        if runtime.get_measurement_status(run_id) != "completed":
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "error": {
+                        "code": "MEASUREMENT_NOT_READY",
+                        "message": "Measurement must complete before MT3 transcription can run.",
+                    }
+                },
+            )
+        runtime.create_mt3_attempt(
+            run_id,
+            status="queued",
+            provenance={
+                "schemaVersion": "mt3_transcription.v1",
+                "requestedViaApi": True,
+            },
+        )
+        return JSONResponse(
+            status_code=202,
+            content=_normalize_run_snapshot(
+                runtime.get_run(run_id, owner_user_id=user_context.user_id),
+                runtime,
+            ),
+        )
+    except (KeyError, PermissionError):
+        return _run_not_found_response(run_id)
+
+
 @app.post("/api/analysis-runs/{run_id}/pitch-note-translations")
 async def create_pitch_note_translation_attempt(
     run_id: str,
@@ -3012,6 +3424,7 @@ def _build_backend_estimate(
     run_transcribe: bool,
     *,
     analysis_mode: str = "full",
+    run_mt3: bool = False,
 ) -> dict[str, Any]:
     try:
         duration_seconds = get_audio_duration_seconds(audio_path)
@@ -3025,12 +3438,14 @@ def _build_backend_estimate(
             run_separation,
             run_transcribe,
             run_standard=True,
+            run_mt3=run_mt3,
         )
     else:
         raw_estimate = build_analysis_estimate(
             safe_duration,
             run_separation,
             run_transcribe,
+            run_mt3=run_mt3,
         )
     raw_stages = raw_estimate.get("stages")
     stages = (
