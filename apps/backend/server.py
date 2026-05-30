@@ -478,6 +478,19 @@ def _read_subprocess_stream(
             pass
 
 
+def _stream_text(value: Any) -> Any:
+    """Coerce a subprocess stream (str | bytes | None) to text.
+
+    Mirrors the real branch's text=True contract so the mock branch is faithful:
+    a patched subprocess.run that yields bytes streams — or a TimeoutExpired
+    carrying bytes — would otherwise make callers' ``marker in stderr`` (str in
+    bytes) raise TypeError instead of reaching the timeout/error classification.
+    """
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value
+
+
 def _run_streamed_subprocess(
     *,
     command: list[str],
@@ -498,14 +511,14 @@ def _run_streamed_subprocess(
         except subprocess.TimeoutExpired as exc:
             return {
                 "returncode": None,
-                "stdout": exc.stdout,
-                "stderr": exc.stderr,
+                "stdout": _stream_text(exc.stdout),
+                "stderr": _stream_text(exc.stderr),
                 "timedOut": True,
             }
         return {
             "returncode": result.returncode,
-            "stdout": result.stdout,
-            "stderr": result.stderr,
+            "stdout": _stream_text(result.stdout),
+            "stderr": _stream_text(result.stderr),
             "timedOut": False,
         }
 

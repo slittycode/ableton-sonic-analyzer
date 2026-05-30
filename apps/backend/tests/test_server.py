@@ -5673,6 +5673,10 @@ class Mt3ExecutorTests(unittest.TestCase):
             error = mt3_stage["error"]
             self.assertIsNotNone(error)
             self.assertEqual(error["code"], "MT3_TRANSCRIPTION_FAILED")
+            # Faithful mock (str streams, not bytes) means the executor reaches
+            # the timeout-specific branch instead of dying on a str-in-bytes
+            # TypeError that the broad except would have masked.
+            self.assertIn("timed out", error["message"])
 
     def test_source_artifact_failure_terminalizes_attempt(self) -> None:
         """If get_source_artifact raises (e.g. a missing artifact row), the

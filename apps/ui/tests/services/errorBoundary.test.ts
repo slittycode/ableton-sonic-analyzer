@@ -4,10 +4,8 @@ import { ErrorBoundary } from '../../src/components/ErrorBoundary';
 
 // Vitest runs in the `node` environment (no jsdom), so we exercise the
 // boundary's capture logic directly rather than rendering it. The fallback UI
-// render itself is NOT exercised by any automated test (smoke flows only cover
-// the happy path where AnalysisResults renders); it is checked by the
-// type-checker and a ~1-min manual pass (throw inside AnalysisResults, confirm
-// the fallback shows with working "Try again" / "Reload page" actions).
+// render is covered by tests/smoke/error-boundary.spec.ts, which aborts the
+// lazy AnalysisResults chunk and asserts the fallback (alert + actions) renders.
 describe('ErrorBoundary', () => {
   it('captures a thrown error into render state via getDerivedStateFromError', () => {
     const error = new Error('AnalysisResults failed to render');

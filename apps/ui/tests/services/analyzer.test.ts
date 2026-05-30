@@ -59,7 +59,7 @@ vi.mock('../../src/services/phase2Validator', () => ({
 }));
 
 import { BackendClientError } from '../../src/services/backendPhase1Client';
-import { analyzeAudio } from '../../src/services/analyzer';
+import { analyzeAudio, raceWithDeadline } from '../../src/services/analyzer';
 
 const phase1Result: Phase1Result = {
   bpm: 128,
@@ -822,5 +822,35 @@ describe('analyzeAudio polling timeouts', () => {
     const error = onError.mock.calls[0]?.[0];
     expect(error).toBeInstanceOf(BackendClientError);
     expect((error as BackendClientError).code).toBe('CLIENT_TIMEOUT');
+  });
+});
+
+describe('raceWithDeadline', () => {
+  it('resolves with the work value when work settles before the deadline', async () => {
+    await expect(raceWithDeadline(Promise.resolve('snapshot'), 1_000, 'too slow')).resolves.toBe(
+      'snapshot',
+    );
+  });
+
+  it('rejects with CLIENT_TIMEOUT when the deadline wins', async () => {
+    const neverSettles = new Promise<string>(() => {});
+    const rejection = raceWithDeadline(neverSettles, 5, 'too slow');
+    await expect(rejection).rejects.toBeInstanceOf(BackendClientError);
+    await expect(rejection).rejects.toMatchObject({ code: 'CLIENT_TIMEOUT' });
+  });
+
+  it('does not surface the abandoned work rejection after the deadline wins', async () => {
+    // The work rejects AFTER the deadline fires; the neutralizing catch inside
+    // raceWithDeadline must keep it from becoming an unhandled rejection.
+    let rejectWork: (reason: unknown) => void = () => {};
+    const work = new Promise<string>((_, reject) => {
+      rejectWork = reject;
+    });
+
+    await expect(raceWithDeadline(work, 5, 'too slow')).rejects.toBeInstanceOf(BackendClientError);
+
+    rejectWork(new Error('late backend failure'));
+    // Let the rejection settle; a missing neutralizer would surface here.
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 10));
   });
 });

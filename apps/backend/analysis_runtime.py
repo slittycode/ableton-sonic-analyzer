@@ -1849,6 +1849,17 @@ class AnalysisRuntime:
             ).fetchone()
             if run_row is None:
                 return
+            # Re-assert measurement is still completed before enqueuing. complete_measurement
+            # commits the measurement-complete update in one transaction and calls this in a
+            # separate one; an interrupt_run committing in between (measurement worker thread
+            # vs. event-loop thread) would otherwise leave inert 'queued' follow-up rows on an
+            # already-interrupted run. The caller's `if updated:` gate can't see this window.
+            measurement_row = conn.execute(
+                "SELECT status FROM measurement_outputs WHERE run_id = ?",
+                (run_id,),
+            ).fetchone()
+            if measurement_row is None or measurement_row["status"] != "completed":
+                return
             pitch_note_exists = conn.execute(
                 "SELECT 1 FROM pitch_note_translation_attempts WHERE run_id = ? LIMIT 1",
                 (run_id,),

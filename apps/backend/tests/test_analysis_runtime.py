@@ -1100,3 +1100,44 @@ class StagedRunInterruptResurrectionTests(unittest.TestCase):
         self.assertEqual(measurement_status, "interrupted")
         self.assertEqual(pn_count, 0)
         self.assertEqual(interp_count, 0)
+
+    def test_enqueue_followups_bails_when_measurement_interrupted_after_complete(self) -> None:
+        # Cross-transaction race: complete_measurement committed its update
+        # (updated=True), then interrupt_run committed (measurement -> interrupted),
+        # then the measurement worker resumes and calls _enqueue_requested_followups.
+        # The status re-check must see 'interrupted' and enqueue nothing, so a
+        # cancelled run can't accrue inert 'queued' follow-up rows.
+        runtime = self._runtime()
+        created = runtime.create_run(
+            filename="track.mp3",
+            content=b"fake-audio",
+            mime_type="audio/mpeg",
+            pitch_note_mode="stem_notes",
+            pitch_note_backend="auto",
+            interpretation_mode="async",
+            interpretation_profile="producer_summary",
+            interpretation_model="gemini-2.5-flash",
+        )
+        run_id = created["runId"]
+        runtime.reserve_next_measurement_run()
+        runtime.interrupt_run(run_id)  # measurement -> interrupted
+
+        # The racing worker's now-stale enqueue call.
+        runtime._enqueue_requested_followups(run_id)
+
+        with runtime._connect() as conn:
+            pn = conn.execute(
+                "SELECT COUNT(*) FROM pitch_note_translation_attempts WHERE run_id = ?",
+                (run_id,),
+            ).fetchone()[0]
+            interp = conn.execute(
+                "SELECT COUNT(*) FROM interpretation_attempts WHERE run_id = ?",
+                (run_id,),
+            ).fetchone()[0]
+            mt3 = conn.execute(
+                "SELECT COUNT(*) FROM mt3_attempts WHERE run_id = ?",
+                (run_id,),
+            ).fetchone()[0]
+        self.assertEqual(pn, 0)
+        self.assertEqual(interp, 0)
+        self.assertEqual(mt3, 0)

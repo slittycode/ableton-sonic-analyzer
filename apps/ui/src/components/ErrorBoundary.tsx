@@ -19,8 +19,11 @@ interface ErrorBoundaryState {
  * chunk-load failure in a lazily-loaded view) cannot blank the entire app.
  *
  * The default fallback is recoverable: "Try again" clears the error state and
- * re-renders the children — which retries a failed lazy import — and "Reload
- * page" does a hard reload for non-transient failures.
+ * re-renders the subtree — which recovers a transient *render* error (the lazy
+ * module already resolved). It does NOT recover a failed *chunk load*:
+ * React.lazy caches the rejected import, so re-rendering re-throws the cached
+ * rejection. "Reload page" (a hard reload) is the reliable recovery for a
+ * chunk-load failure.
  *
  * Intentionally self-contained (no design-system imports): an error boundary
  * must stay renderable even when the component tree it guards — potentially

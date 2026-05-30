@@ -78,7 +78,32 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-async function pollSnapshotWithDeadline(
+export async function raceWithDeadline<T>(
+  work: Promise<T>,
+  timeoutMs: number,
+  timeoutMessage: string,
+): Promise<T> {
+  // If the deadline wins the race, `work` is abandoned; attach a no-op catch so
+  // a later rejection can't surface as an unhandled promise rejection.
+  work.catch(() => {});
+
+  let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = globalThis.setTimeout(() => {
+      reject(createClientTimeoutError(timeoutMessage, timeoutMs));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([work, deadline]);
+  } finally {
+    if (timer !== undefined) {
+      globalThis.clearTimeout(timer);
+    }
+  }
+}
+
+function pollSnapshotWithDeadline(
   runId: string,
   apiBaseUrl: string,
   signal: AbortSignal | undefined,
@@ -86,34 +111,14 @@ async function pollSnapshotWithDeadline(
 ): Promise<AnalysisRunSnapshot> {
   // The per-poll fetch has no native deadline, so a wedged backend would hang
   // this await forever — which also prevents the wall-clock budget in the poll
-  // loop from ever being re-checked. Race the fetch against a timeout. We must
-  // NOT feed a timeout signal into getAnalysisRun: fetchJson converts any
-  // aborted signal into USER_CANCELLED, which would mislabel a timeout as a
-  // user cancellation.
-  const fetchPromise = getAnalysisRun(runId, { apiBaseUrl, signal });
-  // If the deadline wins the race the fetch promise is abandoned; attach a
-  // no-op catch so a later rejection can't surface as an unhandled rejection.
-  fetchPromise.catch(() => {});
-
-  let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
-  const deadline = new Promise<never>((_, reject) => {
-    timer = globalThis.setTimeout(() => {
-      reject(
-        createClientTimeoutError(
-          'Timed out waiting for an analysis status update from the backend.',
-          timeoutMs,
-        ),
-      );
-    }, timeoutMs);
-  });
-
-  try {
-    return (await Promise.race([fetchPromise, deadline])) as AnalysisRunSnapshot;
-  } finally {
-    if (timer !== undefined) {
-      globalThis.clearTimeout(timer);
-    }
-  }
+  // loop from ever being re-checked. Race it against a deadline. We must NOT
+  // feed a timeout signal into getAnalysisRun: fetchJson converts any aborted
+  // signal into USER_CANCELLED, which would mislabel a timeout as a user cancel.
+  return raceWithDeadline(
+    getAnalysisRun(runId, { apiBaseUrl, signal }),
+    timeoutMs,
+    'Timed out waiting for an analysis status update from the backend.',
+  );
 }
 
 function buildPhase2SkippedLog(
@@ -390,12 +395,18 @@ export async function monitorAnalysisRun(
           interpretationConfigEnabled,
         )
       ) {
-        snapshot = await createInterpretationAttempt(runId, {
-          apiBaseUrl: appConfig.apiBaseUrl,
-          interpretationProfile: 'stem_summary',
-          interpretationModel: modelName,
-          signal: analysisOptions?.signal,
-        });
+        // Bound this POST too: a wedged enqueue would otherwise hang the await
+        // and bypass the wall-clock budget (only re-checked at the loop top).
+        snapshot = await raceWithDeadline(
+          createInterpretationAttempt(runId, {
+            apiBaseUrl: appConfig.apiBaseUrl,
+            interpretationProfile: 'stem_summary',
+            interpretationModel: modelName,
+            signal: analysisOptions?.signal,
+          }),
+          pollRequestTimeoutMs,
+          'Timed out enqueuing the stem-summary interpretation request.',
+        );
         stemSummaryQueued = true;
         emitRunUpdate(snapshot);
       }
