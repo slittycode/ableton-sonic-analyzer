@@ -1,6 +1,6 @@
 # ASA Public Hosting Foundation
 
-_Archived 2026-05-30 — moved from `docs/` to `docs/history/`. This is a record of completed work, not a living spec. The hosted-mode code itself (`runtime_profile.py`, `worker.py`, `artifact_storage.py`, `auth_context.py`, `apps/ui/src/config.ts` runtime overrides) is current; the "Remaining work before real public hosting" section near the end is the live punch list and lives outside this archived doc._
+_Archived 2026-05-30 — moved from `docs/` to `docs/history/`. This is a record of completed work, not a living spec. The hosted-mode code itself (`runtime_profile.py`, `worker.py`, `artifact_storage.py`, `auth_context.py`, `apps/ui/src/config.ts` runtime overrides) is current; the "Remaining work before real public hosting" punch list inside is aspirational — re-open items in `BACKLOG.md` if needed._
 
 _Last updated (pre-archive): 2026-04-01_
 
