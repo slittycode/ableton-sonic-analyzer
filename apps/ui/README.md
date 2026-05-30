@@ -24,6 +24,7 @@ The app uploads a track to the local DSP backend, shows the estimate and executi
   - quantize grid and swing controls
   - browser preview and `.mid` download
 - transcription pianoroll heatmap (velocity-encoded `pitch × time`) fetched from the backend; rendered when `transcriptionDetail.noteCount > 0` and grounded in the Phase 1 `bpm` + `timeSignature` so each cell traces back to a measurement
+- optional MT3 polyphonic transcription view (`mt3Client.ts`, `mt3_mode` form field on the create-run request) — additive only, surfaced alongside the deterministic Session Musician view; measurement remains authoritative
 - JSON export and markdown report export
 - Phase 3 audition-sample playback panel — on-demand heuristic WAV/MIDI clips with citation metadata, requested after interpretation completes
 - chain-of-custody report (`Phase2ConsistencyReport`) that surfaces `phase2Validator` violations directly under the Phase 2 results

@@ -19,5 +19,6 @@ Everything in this directory is past-tense. Treat it as a paper trail, not a sou
 - `external-repo-review-2026-05-13.md` — completed external-repo incorporation review (openmeters / soundscope / Partiels / forever-jukebox). All three tracks resolved.
 - `track1-spike-outcome-2026-05-13.md` — completed loudness verification spike. Fix shipped; regression test retained.
 - `audio-analyzer-rs-decision-2026-05-20.md` — completed evaluation/decision on the audio-analyzer-rs path.
+- `public-hosting-foundation-2026-04-01.md` — completion record for the hosted runtime foundation (`runtime_profile.py`, `worker.py`, `artifact_storage.py`, `auth_context.py`, plus frontend runtime overrides). The implementation it describes is current code; the "Remaining work before real public hosting" punch list inside is aspirational — re-open items in `BACKLOG.md` if needed.
 - `field_utilization_report.md` — point-in-time (2026-03-26) snapshot of which Phase 1 fields appear in Phase 2 recommendations. Field names and removal recommendations are stale; see `apps/backend/JSON_SCHEMA.md` for the authoritative field list.
 - `archive/` — older archived plans and result stubs.

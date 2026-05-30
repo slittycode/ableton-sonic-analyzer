@@ -146,7 +146,7 @@ The Codex architecture hardening plan (SQLite + job queue + async Phase 2) is th
 | Done | Backport genreProfiles, abletonDevices, 8 detection services from sonic-architect-app | Grounds Phase 2 Gemini in spectral targets |
 | Now | Experiment A — gather a broader real producer corpus for torchcrepe validation | Quality work on real target material |
 | Now | Legacy endpoint removal (`/api/analyze`, `/api/phase2`) | Reduce maintenance surface |
-| Next | Polyphonic full-track research spike stays offline-only | Compare `basic-pitch` and optional `MT3` through `apps/backend/scripts/evaluate_polyphonic.py`; do not expose a product backend unless the corpus clears the manual usefulness gates |
+| Done | MT3 polyphonic transcription shipped as an **opt-in, additive** staged backend | Gated on run-level `mt3_mode='enabled'` (and `ASA_ENABLE_MT3=1` on the legacy CLI); never overrides measurement. Other candidates still gated behind `scripts/evaluate_polyphonic.py` before any runtime exposure. |
 | +3 months | Ship Session Musician v2 — whichever path(s) produced usable output, honestly labelled | Product decision based on experiment results |
 | +6 months | Re-evaluate polyphonic transcription landscape | The field is moving, but new candidates should first go through the offline research harness instead of going straight into the product path. |
 

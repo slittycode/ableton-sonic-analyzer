@@ -70,8 +70,8 @@ Each WAV is ≤ 5 seconds, mono or stereo, 44.1 kHz, 16-bit PCM — small enough
               │     ├── PyTheory if available      │
               │     └── pure-Python fallback       │
               │                                    │
-              │   sample_drums.synth_kit()         │
-              │     └── NumPy oscillators          │
+              │   sample_drums.synth_kick/snare/   │
+              │     hat()  └── NumPy oscillators   │
               │                                    │
               │   sample_synthesis.render_midi()   │
               │     ├── FluidSynth if available    │

@@ -7,7 +7,7 @@
 - The repo is a local Python audio-analysis service with two entry points:
   - `analyze.py`: raw CLI analyzer
   - `server.py`: FastAPI wrapper around the CLI
-- There are no repo-local Cursor rules, `.cursorrules`, or Copilot instruction files in this repo as of 2026-05-27.
+- There are no repo-local Cursor rules, `.cursorrules`, or Copilot instruction files in this repo as of 2026-05-30.
 
 ## Working Style For Agents
 
@@ -37,8 +37,8 @@ python3.11 -m venv venv
 
 - Main runtime dependencies are pinned in `requirements.txt`.
 - Python `3.12+` is not a supported full-feature local bootstrap target on macOS arm64 because Essentia 2.1b6 wheels are only published for 3.11 on arm64.
-- Basic Pitch has been removed. `TorchcrepeBackend` is the canonical Layer 2 backend. PENN was assessed and removed after local benchmarks showed no meaningful win over torchcrepe for ASA's stem-aware note workflow.
-- Do not add Basic Pitch or MT3 as production backends in `analyze.py` or `server.py`. If you need to investigate polyphonic full-track transcription, use `polyphonic_evaluation.py` and `scripts/evaluate_polyphonic.py` as a research-only harness.
+- Basic Pitch has been removed. `TorchcrepeBackend` is the canonical Layer 2 (monophonic pitch/note) backend. PENN was assessed and removed after local benchmarks showed no meaningful win over torchcrepe for ASA's stem-aware note workflow.
+- MT3 polyphonic transcription is now an **optional, opt-in staged backend** (`mt3_transcription.py`, gated by run-level `mt3_mode=enabled` and the env var `ASA_ENABLE_MT3=1` for the legacy CLI path). It is additive — measurement remains authoritative (PURPOSE.md invariant #1). Do not add Basic Pitch as a production backend; use `polyphonic_evaluation.py` and `scripts/evaluate_polyphonic.py` for research-only comparison of other candidates.
 - If audio/DSP imports fail, check local native dependencies before editing code.
 
 ## Main Commands
@@ -107,7 +107,8 @@ python3.11 -m venv venv
 ## File Map
 
 - `analyze.py`: CLI entry point. Coordinates the split `analyze_*.py` feature modules and emits the raw JSON.
-- `analyze_core.py`, `analyze_audio_io.py`, `analyze_detection.py`, `analyze_estimate.py`, `analyze_rhythm.py`, `analyze_segments.py`, `analyze_structure.py`, `analyze_transcription.py`, `analyze_fast.py`: Feature modules (BPM/key/LUFS/stereo, rhythm/melody/groove, segments, structure, transcription, the `--fast` pipeline). Split from the original monolith in commit `5c40dd44` — keep the split when adding features.
+- `analyze_core.py`, `analyze_audio_io.py`, `analyze_detection.py`, `analyze_estimate.py`, `analyze_rhythm.py`, `analyze_segments.py`, `analyze_structure.py`, `analyze_transcription.py`, `analyze_fast.py`: Feature modules (BPM/key/LUFS/stereo, rhythm/melody/groove, segments, structure, transcription, the `--fast` pipeline). Split from the original `analyze.py` monolith — keep the split when adding features, don't merge them back in.
+- `mt3_transcription.py`: Optional polyphonic transcription via Google MT3 (research-grade T5X model). Gated on the env var `ASA_ENABLE_MT3=1` for the legacy CLI path and on run-level `mt3_mode=enabled` for the staged API. Additive only — never overrides measurement (PURPOSE.md invariant #1). Heavy dependency footprint pinned separately in `requirements-mt3.txt`. Driven from `_execute_mt3_attempt`/`_mt3_worker_loop` in `server.py`; the staged-run handler emits per-stem MIDI as artifacts and surfaces an `mt3` namespace per the "Optional MT3 Namespace" section of `JSON_SCHEMA.md`.
 - `server.py` + `server_phase1.py`, `server_phase2.py`, `server_upload.py`, `server_samples.py`: FastAPI app + route modules. Multipart/URL upload handling, subprocess execution, envelope normalization, and the on-demand Phase 3 audition-sample routes.
 - `analysis_runtime.py`: SQLite-backed run state, stage queue, artifact metadata.
 - `worker.py`, `runtime_profile.py`, `auth_context.py`, `artifact_storage.py`: Hosted-mode foundation. Local mode shouldn't branch through these unless it has to.
@@ -132,6 +133,7 @@ python3.11 -m venv venv
 - `tests/test_csv_export.py`, `tests/test_sample_*.py`, `tests/test_server_samples.py`: Coverage for CSV export and Phase 3 audition samples.
 - `tests/test_phase1_golden.py`: golden-snapshot regression gate over measured Phase 1 values (`tests/fixtures/golden/phase1_default.json`). Re-baseline deliberately when a measurement change is intended.
 - `tests/test_beat_evaluation.py`, `tests/test_loudness_rec_evaluation.py`: unit coverage for the research/eval-only beat and loudness-recommendation harnesses.
+- `tests/test_mt3_transcription.py`: unit coverage for the optional MT3 polyphonic backend module.
 - `ARCHITECTURE.md`: backend responsibilities and request flow.
 - `JSON_SCHEMA.md`: raw CLI schema plus HTTP mapping notes.
 

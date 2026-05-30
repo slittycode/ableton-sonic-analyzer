@@ -1,25 +1,27 @@
 # Polyphonic Full-Track Research Spike
 
-**Status:** Research only. Not a production backend.  
-**Updated:** March 23, 2026
+**Status:** Offline research harness. The MT3 candidate has since shipped as an **opt-in** product stage; this harness remains the comparison rig for other candidates.  
+**Updated:** 2026-05-30
 
 ## What This Is
 
-ASA does not currently ship full-track polyphonic audio-to-MIDI as a product feature.
+The original spike (March 2026) asked: should ASA ship full-track polyphonic audio-to-MIDI as a product feature, and which candidate? The answer landed in two parts:
 
-In plain English: on dense mixed producer tracks, current public models can generate note data, but they do not reliably generate note data that a producer can trust without heavy cleanup. That makes this a research question, not a product toggle.
+- **MT3 was promoted** to an opt-in staged backend after this evaluation (`apps/backend/mt3_transcription.py`, run-level `mt3_mode='enabled'`, env var `ASA_ENABLE_MT3=1` on the legacy CLI). It is additive — measurement remains authoritative (PURPOSE.md invariant #1) — and off by default because dense-mix quality still varies.
+- **The offline harness below is preserved** for comparing future candidates (or alternate MT3 wrappers, or `basic-pitch`) against a fixed corpus **without** touching the runtime. New candidates should clear this harness before any consideration of a runtime path.
 
-The repo now includes a separate offline harness for comparing polyphonic candidates on a fixed corpus:
+In plain English: MT3 made it from spike to shipping (opt-in, additive only). Everything else still lives behind this offline harness.
+
+The harness:
 
 - module: `apps/backend/polyphonic_evaluation.py`
 - CLI entry point: `apps/backend/scripts/evaluate_polyphonic.py`
 
-This harness is intentionally **not** wired into:
+It is intentionally **not** wired into:
 
-- `apps/backend/analyze.py`
-- `apps/backend/server.py`
-- the public API
-- the UI
+- `apps/backend/analyze.py` (the `--transcribe` flag still uses torchcrepe; MT3 is a separate optional pass gated by `ASA_ENABLE_MT3`)
+- the canonical product path inside `apps/backend/server.py` for new candidates
+- the UI for new candidates
 
 ## Current Candidates
 
