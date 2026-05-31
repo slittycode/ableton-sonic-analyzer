@@ -119,11 +119,18 @@ PENN was evaluated as an alternative Layer 2 backend and then removed.
 
 In plain English: it did not produce a useful quality win over the existing stem-aware torchcrepe path, it was slower in local benchmarks, and it added extra setup cost and first-run model downloads. ASA stays on `torchcrepe-viterbi` for pitch/note translation.
 
-### Polyphonic full-track research spike
+### Polyphonic full-track transcription
 
-ASA does not ship a production polyphonic full-track transcription backend.
+ASA now ships **optional, opt-in** polyphonic transcription via Google MT3 (T5X). It is gated on:
 
-In plain English: for dense mixed songs, current public models still do not clear the quality bar needed for a reliable producer feature. If you want to compare research candidates anyway, use the offline harness:
+- the env var `ASA_ENABLE_MT3=1` for the legacy `analyze.py` CLI path
+- the run-level form field `mt3_mode='enabled'` on `POST /api/analysis-runs` for the canonical staged API
+
+When enabled, the staged `mt3` stage runs as a **peer of pitch/note translation** and emits per-stem MIDI as artifacts plus an `mt3` namespace on the run snapshot. It is **additive only** — measurement remains authoritative (PURPOSE.md invariant #1), and the UI prefers the deterministic torchcrepe note view for Session Musician unless the user explicitly opts into MT3.
+
+In plain English: full-track polyphonic transcription is available, but off by default. For dense mixed songs the quality varies, so the user (or the operator) has to opt in deliberately, and the result is offered alongside Phase 1 — never instead of it.
+
+For offline comparison of other research candidates (e.g. `basic-pitch`, alternate MT3 wrappers, future models) without touching the runtime, use the eval harness:
 
 ```bash
 ./venv/bin/python scripts/evaluate_polyphonic.py --manifest /absolute/path/to/polyphonic_manifest.json

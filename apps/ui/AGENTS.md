@@ -5,7 +5,7 @@
 - This file applies to `apps/ui` inside the `asa` monorepo.
 - Stack: React 19, TypeScript, Vite 6, Tailwind CSS v4, Vitest, Playwright.
 - The app talks to the local `sonic-analyzer` backend. Gemini is backend-mediated; the UI does **not** import an AI SDK.
-- No repo-local `.cursorrules`, `.cursor/rules/`, or `.github/copilot-instructions.md` exist here as of 2026-05-27.
+- No repo-local `.cursorrules`, `.cursor/rules/`, or `.github/copilot-instructions.md` exist here as of 2026-05-30.
 
 ## Working Style For Agents
 
@@ -96,6 +96,7 @@ RUN_GEMINI_LIVE_SMOKE=true VITE_ENABLE_PHASE2_GEMINI=true GEMINI_API_KEY=your_ke
 - `src/services/httpClient.ts`: shared fetch helpers and request-header injection used by the run/artifact/sample clients.
 - `src/services/spectralArtifactsClient.ts`: spectrogram and spectral-evolution artifact fetches via `/api/analysis-runs/{run_id}/artifacts/…`.
 - `src/services/transcriptionPianorollClient.ts`: velocity-encoded transcription pianoroll matrix via `/api/analysis-runs/{run_id}/transcription/pianoroll`. Backed by `apps/backend/transcription_pianoroll.py`; rendered in `components/TranscriptionPianoroll.tsx` / `TranscriptionPianorollBlock.tsx`.
+- `src/services/mt3Client.ts`: opt-in MT3 polyphonic transcription client. POSTs `/api/analysis-runs/{run_id}/mt3-transcriptions` and polls the run snapshot for the additive `mt3` namespace. Surfaced only when the user opts in; measurement remains authoritative.
 - `src/services/sampleGenerationClient.ts`: Phase 3 audition-sample POST/GET against `/api/analysis-runs/{run_id}/samples` plus per-clip artifact streaming.
 - `src/services/audioFile.ts`: client-side audio validation, blank-MIME extension fallback, and preview-URL lifecycle.
 - `src/services/mixDoctor.ts`: client-side spectral-balance scoring against genre profiles.

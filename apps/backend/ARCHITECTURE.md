@@ -4,7 +4,8 @@
 
 | Component | Role |
 | --- | --- |
-| `analyze.py` | Raw CLI analyzer entry point. Loads audio, coordinates the `analyze_*.py` feature modules (see [Analyzer Submodules](#analyzer-submodules) below), optionally separates stems and transcribes notes through torchcrepe, then prints JSON to `stdout`. |
+| `analyze.py` | Raw CLI analyzer entry point. Loads audio, coordinates the `analyze_*.py` feature modules (see [Analyzer Submodules](#analyzer-submodules) below), optionally separates stems and transcribes notes through torchcrepe, optionally runs MT3 polyphonic transcription (gated by `ASA_ENABLE_MT3=1`), then prints JSON to `stdout`. |
+| `mt3_transcription.py` | Optional polyphonic transcription via Google MT3 (T5X). Additive only — never overrides measurement. Gated by `ASA_ENABLE_MT3=1` for the CLI path and by run-level `mt3_mode=enabled` for the staged API. Driven by `_execute_mt3_attempt`/`_mt3_worker_loop` in `server.py`. Optional dependencies in `requirements-mt3.txt`. |
 | `server.py` + `server_phase1.py` / `server_phase2.py` / `server_upload.py` / `server_samples.py` | FastAPI app and router composition. Accepts uploads, computes estimates, manages the canonical staged run API, normalizes measurement results, serves artifact access, and exposes the on-demand Phase 3 audition-sample routes. |
 | `analysis_runtime.py` | Run-state persistence and staged-analysis orchestration. Owns run snapshots, stage status, artifact metadata, and ownership checks. |
 | `artifact_storage.py` | Artifact storage boundary. The current implementation uses the local filesystem, but the runtime now talks to a storage service interface instead of assuming every artifact is a local disk path forever. |
@@ -37,7 +38,7 @@
 
 ### Analyzer Submodules
 
-`analyze.py` was split from a monolith in commit `5c40dd44` and now imports from the modules below. Add new measurements in the module that matches the domain, not back into `analyze.py`.
+`analyze.py` was split from a monolith and now imports from the modules below. Add new measurements in the module that matches the domain, not back into `analyze.py`.
 
 | Module | Domain |
 | --- | --- |
@@ -95,6 +96,7 @@ Custom routes:
 - `GET /api/analysis-runs/{run_id}/transcription/pianoroll` — velocity-encoded pianoroll matrix derived from the pitch-note translation stage's `transcriptionDetail`. Query params: `mode` (`frame`|`onset`, default `frame`), `pitchLow` (default 21), `pitchHigh` (default 109, exclusive), `tpq` (default 4). Response cites the Phase 1 `bpm` and `timeSignature` so every cell traces back to a measurement. Status codes: 200 (payload), 400 (`INVALID_MODE`/`INVALID_PITCH_RANGE`/`INVALID_TPQ`), 404 (`RUN_NOT_FOUND`/`TRANSCRIPTION_NOT_REQUESTED`/`TRANSCRIPTION_NOT_AVAILABLE`), 409 (`MEASUREMENT_NOT_COMPLETED`/`TRANSCRIPTION_NOT_COMPLETED`). Implementation in [`transcription_pianoroll.py`](transcription_pianoroll.py).
 - `POST /api/analysis-runs/{run_id}/spectral-enhancements/{kind}` — on-demand spectral artifacts. `kind` is one of `cqt`, `hpss`, `onset`, `chroma_interactive`, or `reassigned` (sharper transient/frequency localization via `librosa.reassigned_spectrogram`).
 - `POST /api/analysis-runs/{run_id}/pitch-note-translations`
+- `POST /api/analysis-runs/{run_id}/mt3-transcriptions` — opt-in MT3 polyphonic transcription, peer of pitch-note translation. Runs only when the create-run request had `mt3_mode='enabled'` (or this route is hit explicitly to re-attempt). Additive — never overrides measurement; emits per-stem MIDI as artifacts. See the "Optional MT3 Namespace" section of [`JSON_SCHEMA.md`](JSON_SCHEMA.md).
 - `POST /api/analysis-runs/{run_id}/interpretations`
 - `POST /api/analysis-runs/{run_id}/samples` and `GET /api/analysis-runs/{run_id}/samples` — on-demand Phase 3 audition-sample generation and retrieval. Nothing in the staged-execution loop runs these automatically; the UI POSTs after interpretation completes. See [`server_samples.py`](server_samples.py) and [`docs/SAMPLE_GENERATION.md`](../../docs/SAMPLE_GENERATION.md).
 - `POST /api/analyze` (legacy compatibility)

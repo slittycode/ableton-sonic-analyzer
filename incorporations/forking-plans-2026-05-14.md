@@ -22,6 +22,8 @@ proceeded using the task description as the spec, the actual upstream
 repos as the authoritative source for license / API / schema, and the
 prior `external-repo-review-2026-05-13.md` for house style.
 
+> **STATUS UPDATE (2026-05-30):** Plan 6 (jivetalking — Phase 2 prompt-level measurement→parameter heuristics) has **substantially landed** via the Live 12 source-catalogue (`apps/backend/live12_catalogue.py`, `data/live12_catalogue.json`), the warn-and-keep output gates (`apps/backend/phase2_catalogue_gates.py`), and the Phase 2 prompt hardening pass. Plans 4 (audio-analyzer-rs) and 5 (resonators) remain open. Plans 7 / 8 remain re-scoped per the 2026-05-22 correction below and have not been worked. When all five plans are resolved (landed, declined, or rolled into BACKLOG.md), this doc moves to `docs/history/`.
+>
 > **CORRECTION (2026-05-22): "Harmonia" is a phantom — it does not exist.**
 > A later investigation (4 independent agents + first-hand repo/web
 > forensics, including an adversarial pass tasked with proving it real)

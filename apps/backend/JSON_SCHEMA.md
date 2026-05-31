@@ -17,6 +17,8 @@ Top-level keys:
 
 `bpm`, `bpmConfidence`, `bpmPercival`, `bpmAgreement`, `bpmDoubletime`, `bpmSource`, `bpmRawOriginal`, `key`, `keyConfidence`, `keyProfile`, `tuningFrequency`, `tuningCents`, `timeSignature`, `timeSignatureSource`, `timeSignatureConfidence`, `durationSeconds`, `sampleRate`, `lufsIntegrated`, `lufsRange`, `lufsMomentaryMax`, `lufsShortTermMax`, `lufsCurve`, `truePeak`, `crestFactor`, `dynamicSpread`, `monoCompatible`, `plr`, `dynamicCharacter`, `textureCharacter`, `stereoDetail`, `spectralBalance`, `spectralBalanceTimeSeries`, `spectralDetail`, `stemAnalysis`, `transientDensityDetail`, `saturationDetail`, `snareDetail`, `hihatDetail`, `rhythmDetail`, `melodyDetail`, `transcriptionDetail`, `pitchDetail`, `grooveDetail`, `beatsLoudness`, `rhythmTimeline`, `sidechainDetail`, `reverbDetail`, `vocalDetail`, `acidDetail`, `supersawDetail`, `bassDetail`, `kickDetail`, `genreDetail`, `effectsDetail`, `synthesisCharacter`, `danceability`, `structure`, `arrangementDetail`, `segmentLoudness`, `segmentSpectral`, `segmentStereo`, `segmentKey`, `chordDetail`, `perceptual`, `essentiaFeatures`.
 
+**Shared (fast + full) vs full-only.** Fast-mode output is asserted byte-for-byte against the `EXPECTED_TOP_LEVEL_KEYS` set in [`tests/test_analyze.py`](tests/test_analyze.py). Full mode emits those keys *plus* a handful of detail-only fields that are deliberately absent from the shared snapshot: `keyProfile`, `tuningFrequency`, `tuningCents`, `lufsMomentaryMax`, `lufsShortTermMax`, and `pitchDetail`. When changing the schema, update both this list and `EXPECTED_TOP_LEVEL_KEYS`; full-only fields stay out of that set on purpose. See CLAUDE.md tripwire #4.
+
 ## Relationship To `POST /api/analyze`
 
 The HTTP success envelope is:
