@@ -36,7 +36,7 @@ First-time local setup (Python 3.11 venv, Node deps, Phase 2 Gemini wiring) is d
 npm run dev:local                   # Dev server on 127.0.0.1:3100
 npm run verify                      # lint + test:unit + build + test:smoke (full gate)
 npm run lint                        # TypeScript type-check only (no ESLint/Prettier)
-npm test                            # All Vitest tests (tests/services/ + tests/decision_gate.*.live.test.ts)
+npm test                            # All Vitest tests (vitest.config.ts include: tests/**/*.test.ts)
 npm run test:unit                   # Vitest, restricted to tests/services/ (the unit subset)
 npm run test:smoke                  # Playwright smoke suite (tests/smoke/, default config)
 npm run test:smoke:live-gemini      # Playwright smoke against the real Gemini Files API (tests/smoke/upload-phase2-live-gemini.spec.ts)
