@@ -46,6 +46,7 @@ import {
   Phase1Result,
 } from './types';
 import type { AnalysisResultsProps } from './components/AnalysisResults';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import {
   loadPhase2RequestedPreference,
   savePhase2RequestedPreference,
@@ -1405,6 +1406,7 @@ export default function App() {
             )}
 
             {phase1ForRender ? (
+              <ErrorBoundary title="The analysis results view failed to render">
               <Suspense
                 fallback={
                   <div className="space-y-6">
@@ -1448,6 +1450,7 @@ export default function App() {
                   }
                 />
               </Suspense>
+              </ErrorBoundary>
             ) : null}
             <DiagnosticLog logs={diagnosticLogs} defaultExpanded={isAnalyzing} />
           </main>

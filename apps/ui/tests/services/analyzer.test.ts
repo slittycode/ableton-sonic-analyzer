@@ -59,7 +59,7 @@ vi.mock('../../src/services/phase2Validator', () => ({
 }));
 
 import { BackendClientError } from '../../src/services/backendPhase1Client';
-import { analyzeAudio } from '../../src/services/analyzer';
+import { analyzeAudio, raceWithDeadline } from '../../src/services/analyzer';
 
 const phase1Result: Phase1Result = {
   bpm: 128,
@@ -746,5 +746,111 @@ describe('analyzeAudio', () => {
     expect(consoleErrorSpy).toHaveBeenCalled();
 
     consoleErrorSpy.mockRestore();
+  });
+});
+
+describe('analyzeAudio polling timeouts', () => {
+  const runningSnapshot = () =>
+    makeRunSnapshot({
+      stages: {
+        measurement: {
+          status: 'running',
+          authoritative: true,
+          result: null,
+          provenance: null,
+          diagnostics: null,
+          error: null,
+        },
+        pitchNoteTranslation: {
+          status: 'blocked',
+          authoritative: false,
+          preferredAttemptId: null,
+          attemptsSummary: [],
+          result: null,
+          provenance: null,
+          diagnostics: null,
+          error: null,
+        },
+        interpretation: {
+          status: 'blocked',
+          authoritative: false,
+          preferredAttemptId: null,
+          attemptsSummary: [],
+          result: null,
+          provenance: null,
+          diagnostics: null,
+          error: null,
+        },
+      },
+    });
+
+  it('fails with CLIENT_TIMEOUT when a single poll exceeds the per-request deadline', async () => {
+    createAnalysisRunMock.mockResolvedValue(runningSnapshot());
+    // A wedged backend: the poll fetch never resolves. Without a per-poll
+    // deadline this would hang the client forever (review finding #4).
+    getAnalysisRunMock.mockImplementation(() => new Promise<never>(() => {}));
+
+    const file = new File(['audio-data'], 'track.mp3', { type: 'audio/mpeg' });
+    const onError = vi.fn();
+
+    await analyzeAudio(file, 'gemini-2.5-pro', null, vi.fn(), vi.fn(), onError, {
+      pollRequestTimeoutMs: 10,
+      pollIntervalMs: 0,
+    });
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    const error = onError.mock.calls[0]?.[0];
+    expect(error).toBeInstanceOf(BackendClientError);
+    expect((error as BackendClientError).code).toBe('CLIENT_TIMEOUT');
+  });
+
+  it('fails with CLIENT_TIMEOUT when the overall run budget is exceeded', async () => {
+    createAnalysisRunMock.mockResolvedValue(runningSnapshot());
+    // Never reaches a terminal stage, so only the wall-clock budget can end it.
+    getAnalysisRunMock.mockResolvedValue(runningSnapshot());
+
+    const file = new File(['audio-data'], 'track.mp3', { type: 'audio/mpeg' });
+    const onError = vi.fn();
+
+    // Negative budget forces the wall-clock guard to trip on the first iteration.
+    await analyzeAudio(file, 'gemini-2.5-pro', null, vi.fn(), vi.fn(), onError, {
+      maxRunDurationMs: -1,
+      pollIntervalMs: 0,
+    });
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    const error = onError.mock.calls[0]?.[0];
+    expect(error).toBeInstanceOf(BackendClientError);
+    expect((error as BackendClientError).code).toBe('CLIENT_TIMEOUT');
+  });
+});
+
+describe('raceWithDeadline', () => {
+  it('resolves with the work value when work settles before the deadline', async () => {
+    await expect(raceWithDeadline(Promise.resolve('snapshot'), 1_000, 'too slow')).resolves.toBe(
+      'snapshot',
+    );
+  });
+
+  it('rejects with CLIENT_TIMEOUT when the deadline wins', async () => {
+    const neverSettles = new Promise<string>(() => {});
+    const rejection = raceWithDeadline(neverSettles, 5, 'too slow');
+    await expect(rejection).rejects.toBeInstanceOf(BackendClientError);
+    await expect(rejection).rejects.toMatchObject({ code: 'CLIENT_TIMEOUT' });
+  });
+
+  it('does not surface the abandoned work rejection after the deadline wins', async () => {
+    // The work rejects AFTER the deadline fires; the neutralizing catch inside
+    // raceWithDeadline must keep it from becoming an unhandled rejection.
+    let rejectWork: (reason: unknown) => void = () => {};
+    const work = new Promise<string>((_, reject) => {
+      rejectWork = reject;
+    });
+
+    await expect(raceWithDeadline(work, 5, 'too slow')).rejects.toBeInstanceOf(BackendClientError);
+
+    rejectWork(new Error('late backend failure'));
+    // Let the rejection settle; a missing neutralizer would surface here.
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 10));
   });
 });

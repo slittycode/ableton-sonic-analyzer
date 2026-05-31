@@ -77,6 +77,13 @@ export function createUserCancelledError(message = "Analysis was cancelled by th
   return new BackendClientError("USER_CANCELLED", message);
 }
 
+export function createClientTimeoutError(
+  message = "The UI timed out waiting for the local DSP backend response.",
+  timeoutMs?: number,
+): BackendClientError {
+  return new BackendClientError("CLIENT_TIMEOUT", message, { timeoutMs });
+}
+
 export interface AnalyzePhase1Options {
   apiBaseUrl: string;
   timeoutMs?: number;
@@ -932,6 +939,21 @@ function parseOptionalAcidDetail(value: unknown): AcidDetail | null {
   };
 }
 
+function parseOptionalPerBandRt60(value: unknown): ReverbDetail['perBandRt60'] {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value)) return null;
+  const result: NonNullable<ReverbDetail['perBandRt60']> = {};
+  const low = toNumber(value.low);
+  const lowMids = toNumber(value.lowMids);
+  const highMids = toNumber(value.highMids);
+  const highs = toNumber(value.highs);
+  if (low !== null) result.low = low;
+  if (lowMids !== null) result.lowMids = lowMids;
+  if (highMids !== null) result.highMids = highMids;
+  if (highs !== null) result.highs = highs;
+  return result;
+}
+
 function parseOptionalReverbDetail(value: unknown): ReverbDetail | null {
   if (value === undefined || value === null) return null;
   if (!isRecord(value)) return null;
@@ -940,6 +962,11 @@ function parseOptionalReverbDetail(value: unknown): ReverbDetail | null {
     isWet: value.isWet === true,
     tailEnergyRatio: toNumber(value.tailEnergyRatio),
     measured: value.measured === true,
+    // Carry the per-band RT60 and pre-delay subfields the Phase 2 prompt is
+    // told it may cite (reverbDetail.perBandRt60.*, reverbDetail.preDelayMs).
+    // Dropping them here made legitimate citations fail the existence check.
+    perBandRt60: parseOptionalPerBandRt60(value.perBandRt60),
+    preDelayMs: toNumber(value.preDelayMs),
   };
 }
 
@@ -957,6 +984,11 @@ function parseOptionalVocalDetail(value: unknown): VocalDetail | null {
     vocalEnergyRatio,
     formantStrength,
     mfccLikelihood,
+    // Carry the Demucs-ghost-stem proxies the Phase 2 prompt may cite
+    // (vocalDetail.stemEnergyRatio, vocalDetail.stemOtherCorrelation). Kept as
+    // number|null so the citation path resolves whenever the backend measured it.
+    stemEnergyRatio: toNumber(value.stemEnergyRatio),
+    stemOtherCorrelation: toNumber(value.stemOtherCorrelation),
   };
 }
 

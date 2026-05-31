@@ -807,15 +807,20 @@ class AnalysisRuntime:
         # defense-in-depth so an operator who exports the env var globally
         # doesn't leak a stale `transcription` key into the measurement row.
         measurement_result.pop("transcription", None)
-        self._update_measurement_row(
+        updated = self._update_measurement_row(
             run_id,
             status="completed",
             result=measurement_result,
             provenance=provenance,
             diagnostics=diagnostics,
             error=None,
+            guard_terminal=True,
         )
-        self._enqueue_requested_followups(run_id)
+        # Only enqueue the downstream pipeline if this completion actually landed.
+        # If the run was interrupted in the TOCTOU window the update no-ops, and
+        # enqueuing here would resurrect a fresh pipeline for an interrupted run.
+        if updated:
+            self._enqueue_requested_followups(run_id)
 
     def fail_measurement(
         self,
@@ -832,6 +837,7 @@ class AnalysisRuntime:
             provenance=provenance,
             diagnostics=diagnostics,
             error=error,
+            guard_terminal=True,
         )
 
     def create_pitch_note_attempt(
@@ -949,11 +955,11 @@ class AnalysisRuntime:
             ).fetchone()
             if attempt_row is None:
                 raise KeyError(f"Unknown pitch/note translation attempt {attempt_id}")
-            conn.execute(
+            cursor = conn.execute(
                 """
                 UPDATE pitch_note_translation_attempts
                 SET status = ?, result_json = ?, provenance_json = ?, diagnostics_json = ?, error_json = ?, updated_at = ?
-                WHERE id = ?
+                WHERE id = ? AND status NOT IN ('completed', 'failed', 'interrupted')
                 """,
                 (
                     "completed",
@@ -965,6 +971,12 @@ class AnalysisRuntime:
                     attempt_id,
                 ),
             )
+            if cursor.rowcount == 0:
+                # Already terminal — e.g. interrupt_run flipped this attempt to
+                # 'interrupted' while its (now-orphaned) subprocess was still
+                # finishing. Do NOT resurrect it to 'completed' or hijack the
+                # run's preferred pointer (the documented resurrection bug).
+                return
             conn.execute(
                 """
                 UPDATE analysis_runs
@@ -1110,11 +1122,11 @@ class AnalysisRuntime:
             ).fetchone()
             if attempt_row is None:
                 raise KeyError(f"Unknown mt3 attempt {attempt_id}")
-            conn.execute(
+            cursor = conn.execute(
                 """
                 UPDATE mt3_attempts
                 SET status = ?, result_json = ?, provenance_json = ?, diagnostics_json = ?, error_json = ?, updated_at = ?
-                WHERE id = ?
+                WHERE id = ? AND status NOT IN ('completed', 'failed', 'interrupted')
                 """,
                 (
                     "completed",
@@ -1126,6 +1138,10 @@ class AnalysisRuntime:
                     attempt_id,
                 ),
             )
+            if cursor.rowcount == 0:
+                # Already terminal (interrupted while the orphaned MT3 subprocess
+                # was still finishing) — do not resurrect or hijack the pointer.
+                return
             conn.execute(
                 """
                 UPDATE analysis_runs
@@ -1292,11 +1308,11 @@ class AnalysisRuntime:
             ).fetchone()
             if attempt_row is None:
                 raise KeyError(f"Unknown interpretation attempt {attempt_id}")
-            conn.execute(
+            cursor = conn.execute(
                 """
                 UPDATE interpretation_attempts
                 SET status = ?, grounded_measurement_output_id = ?, grounded_pitch_note_attempt_id = ?, result_json = ?, provenance_json = ?, diagnostics_json = ?, error_json = ?, updated_at = ?
-                WHERE id = ?
+                WHERE id = ? AND status NOT IN ('completed', 'failed', 'interrupted')
                 """,
                 (
                     "completed",
@@ -1310,6 +1326,10 @@ class AnalysisRuntime:
                     attempt_id,
                 ),
             )
+            if cursor.rowcount == 0:
+                # Already terminal (interrupted between the is_run_interrupted
+                # gate and here) — do not resurrect or hijack the pointer.
+                return
             conn.execute(
                 """
                 UPDATE analysis_runs
@@ -1334,7 +1354,7 @@ class AnalysisRuntime:
                 """
                 UPDATE interpretation_attempts
                 SET status = ?, grounded_measurement_output_id = ?, grounded_pitch_note_attempt_id = ?, result_json = ?, provenance_json = ?, diagnostics_json = ?, error_json = ?, updated_at = ?
-                WHERE id = ?
+                WHERE id = ? AND status NOT IN ('completed', 'failed', 'interrupted')
                 """,
                 (
                     "failed",
@@ -1703,13 +1723,26 @@ class AnalysisRuntime:
         provenance: dict[str, Any] | None = None,
         diagnostics: dict[str, Any] | None = None,
         error: dict[str, Any] | None = None,
-    ) -> None:
+        guard_terminal: bool = False,
+    ) -> bool:
+        # When guard_terminal is set, refuse to transition a measurement row that
+        # is already terminal. This closes the interrupt TOCTOU: interrupt_run can
+        # flip the row to 'interrupted' after _execute_measurement_run's
+        # is_run_interrupted check but before complete/fail. Without the guard the
+        # late writer resurrects it — and, via complete_measurement, would enqueue
+        # a fresh follow-up pipeline for an interrupted run. Returns True iff a row
+        # was actually updated.
+        terminal_guard = (
+            " AND status NOT IN ('completed', 'failed', 'interrupted')"
+            if guard_terminal
+            else ""
+        )
         with self._connect() as conn:
-            conn.execute(
-                """
+            cursor = conn.execute(
+                f"""
                 UPDATE measurement_outputs
                 SET status = ?, result_json = ?, provenance_json = ?, diagnostics_json = ?, error_json = ?, updated_at = ?
-                WHERE run_id = ?
+                WHERE run_id = ?{terminal_guard}
                 """,
                 (
                     status,
@@ -1721,6 +1754,8 @@ class AnalysisRuntime:
                     run_id,
                 ),
             )
+            updated = cursor.rowcount > 0
+        return updated
 
     def _update_attempt_row(
         self,
@@ -1738,7 +1773,7 @@ class AnalysisRuntime:
                 f"""
                 UPDATE {table}
                 SET status = ?, result_json = ?, provenance_json = ?, diagnostics_json = ?, error_json = ?, updated_at = ?
-                WHERE id = ?
+                WHERE id = ? AND status NOT IN ('completed', 'failed', 'interrupted')
                 """,
                 (
                     status,
@@ -1813,6 +1848,17 @@ class AnalysisRuntime:
                 (run_id,),
             ).fetchone()
             if run_row is None:
+                return
+            # Re-assert measurement is still completed before enqueuing. complete_measurement
+            # commits the measurement-complete update in one transaction and calls this in a
+            # separate one; an interrupt_run committing in between (measurement worker thread
+            # vs. event-loop thread) would otherwise leave inert 'queued' follow-up rows on an
+            # already-interrupted run. The caller's `if updated:` gate can't see this window.
+            measurement_row = conn.execute(
+                "SELECT status FROM measurement_outputs WHERE run_id = ?",
+                (run_id,),
+            ).fetchone()
+            if measurement_row is None or measurement_row["status"] != "completed":
                 return
             pitch_note_exists = conn.execute(
                 "SELECT 1 FROM pitch_note_translation_attempts WHERE run_id = ? LIMIT 1",

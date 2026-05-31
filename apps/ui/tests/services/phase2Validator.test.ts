@@ -1484,3 +1484,130 @@ describe('Loudness action presence (objective safety net)', () => {
     expect(loudnessViolations(result)).toHaveLength(0);
   });
 });
+
+describe('normalizeKey abbreviation handling', () => {
+  it('does not flag a contradiction when Phase 2 abbreviates a major key as "Maj"', () => {
+    // Regression: normalizeKey used to rewrite "major" into "majoror", so a
+    // valid "A Maj" mention mismatched the spelled-out "A major" and raised a
+    // FALSE key contradiction.
+    const phase1 = createBasePhase1({ key: 'A major' });
+    const phase2 = createBasePhase2({
+      trackCharacter: 'Bright arpeggiated lead in A Maj throughout the drop.',
+    });
+
+    const result = validatePhase2Consistency(phase1, phase2);
+
+    expect(result.violations.find((v) => v.field === 'key')).toBeUndefined();
+  });
+
+  it('matches a "Min" abbreviation against a spelled-out minor key', () => {
+    const phase1 = createBasePhase1({ key: 'F minor' });
+    const phase2 = createBasePhase2({ trackCharacter: 'Dark sustained pad in F Min.' });
+
+    const result = validatePhase2Consistency(phase1, phase2);
+
+    expect(result.violations.find((v) => v.field === 'key')).toBeUndefined();
+  });
+
+  it('still flags a genuine key contradiction (the fix did not weaken detection)', () => {
+    const phase1 = createBasePhase1({ key: 'F minor' });
+    const phase2 = createBasePhase2({ trackCharacter: 'Uplifting riff in A major.' });
+
+    const result = validatePhase2Consistency(phase1, phase2);
+
+    expect(result.violations.find((v) => v.field === 'key')).toBeDefined();
+  });
+});
+
+describe('Phase 1 citable-field contract (reverb/vocal subfields)', () => {
+  it('collects the reverb/vocal subfields the Phase 2 prompt is allowed to cite', () => {
+    // Cross-app contract guard for the camelCase field-drop class of bug: a
+    // field the prompt may cite must survive into Phase1Result and be visible to
+    // the citation-existence checker. These four were silently dropped by the
+    // parser, so legitimate citations to them failed.
+    const phase1 = createBasePhase1({
+      reverbDetail: {
+        rt60: 1.2,
+        isWet: true,
+        tailEnergyRatio: 0.3,
+        measured: true,
+        perBandRt60: { low: 1.4, lowMids: 1.1, highMids: 0.8, highs: 0.5 },
+        preDelayMs: 22.5,
+      },
+      vocalDetail: {
+        hasVocals: true,
+        confidence: 0.7,
+        vocalEnergyRatio: 0.4,
+        formantStrength: 0.6,
+        mfccLikelihood: 0.5,
+        stemEnergyRatio: 0.12,
+        stemOtherCorrelation: 0.41,
+      },
+    });
+
+    const paths = collectPhase1FieldPaths(phase1);
+
+    for (const citable of [
+      'reverbDetail.preDelayMs',
+      'reverbDetail.perBandRt60.low',
+      'reverbDetail.perBandRt60.lowMids',
+      'reverbDetail.perBandRt60.highMids',
+      'reverbDetail.perBandRt60.highs',
+      'vocalDetail.stemEnergyRatio',
+      'vocalDetail.stemOtherCorrelation',
+    ]) {
+      expect(paths.has(citable)).toBe(true);
+    }
+  });
+
+  it('accepts a recommendation that cites the previously-dropped reverb/vocal fields', () => {
+    // End-to-end guard for the actual user-facing failure: a recommendation
+    // citing these paths used to fail the existence check because the parser
+    // dropped them. With the parser fixed, validatePhase2Consistency must raise
+    // no MISSING_CITATION for them.
+    const droppedFieldPaths = [
+      'reverbDetail.preDelayMs',
+      'reverbDetail.perBandRt60.low',
+      'vocalDetail.stemEnergyRatio',
+      'vocalDetail.stemOtherCorrelation',
+    ];
+    const phase1 = createBasePhase1({
+      reverbDetail: {
+        rt60: 1.2,
+        isWet: true,
+        tailEnergyRatio: 0.3,
+        measured: true,
+        perBandRt60: { low: 1.4, lowMids: 1.1, highMids: 0.8, highs: 0.5 },
+        preDelayMs: 22.5,
+      },
+      vocalDetail: {
+        hasVocals: true,
+        confidence: 0.7,
+        vocalEnergyRatio: 0.4,
+        formantStrength: 0.6,
+        mfccLikelihood: 0.5,
+        stemEnergyRatio: 0.12,
+        stemOtherCorrelation: 0.41,
+      },
+    });
+    const phase2 = createBasePhase2({
+      abletonRecommendations: [
+        {
+          device: 'Reverb',
+          category: 'REVERB',
+          parameter: 'Pre-delay',
+          value: '22 ms',
+          reason: 'Match the measured pre-delay, per-band decay and vocal-stem presence.',
+          phase1Fields: droppedFieldPaths,
+        },
+      ],
+    });
+
+    const result = validatePhase2Consistency(phase1, phase2);
+
+    const droppedFieldCitationErrors = result.violations.filter(
+      (v) => v.type === 'MISSING_CITATION' && droppedFieldPaths.includes(String(v.phase2Value)),
+    );
+    expect(droppedFieldCitationErrors).toHaveLength(0);
+  });
+});

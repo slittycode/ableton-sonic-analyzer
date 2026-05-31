@@ -742,10 +742,14 @@ function normalizeKey(key: string): string {
   return key
     .toLowerCase()
     .replace(/\s+/g, ' ')
-    .replace(/major/g, 'major')
-    .replace(/minor/g, 'minor')
-    .replace(/maj/g, 'major')
-    .replace(/min(?!or)/g, 'minor')
+    // Collapse "maj"/"major" → "major" and "min"/"minor" → "minor" in a single
+    // pass each. The previous form ran `maj`→`major` AFTER `major`→`major`, so
+    // the "maj" inside an already-spelled "major" was rewritten again, yielding
+    // "majoror" — which made a valid "Maj" abbreviation mismatch a spelled-out
+    // "major" and raised a FALSE key-contradiction. Word boundaries keep this
+    // from touching unrelated substrings.
+    .replace(/\bmaj(?:or)?\b/g, 'major')
+    .replace(/\bmin(?:or)?\b/g, 'minor')
     .trim();
 }
 

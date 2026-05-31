@@ -247,6 +247,8 @@ const validPayload = {
       isWet: true,
       tailEnergyRatio: 0.35,
       measured: true,
+      perBandRt60: { low: 1.4, lowMids: 1.1, highMids: 0.8, highs: 0.5 },
+      preDelayMs: 22.5,
     },
     vocalDetail: {
       hasVocals: false,
@@ -254,6 +256,8 @@ const validPayload = {
       vocalEnergyRatio: 0.02,
       formantStrength: 0.05,
       mfccLikelihood: 0.1,
+      stemEnergyRatio: 0.12,
+      stemOtherCorrelation: 0.41,
     },
     supersawDetail: {
       isSupersaw: false,
@@ -401,7 +405,18 @@ describe('parseBackendAnalyzeResponse', () => {
     expect(parsed.phase1.acidDetail?.confidence).toBe(0.12);
     expect(parsed.phase1.reverbDetail?.isWet).toBe(true);
     expect(parsed.phase1.reverbDetail?.rt60).toBe(1.2);
+    // Contract-drift guard: the reverb/vocal subfields the Phase 2 prompt may
+    // cite must survive parsing, or legitimate citations fail the existence check.
+    expect(parsed.phase1.reverbDetail?.perBandRt60).toEqual({
+      low: 1.4,
+      lowMids: 1.1,
+      highMids: 0.8,
+      highs: 0.5,
+    });
+    expect(parsed.phase1.reverbDetail?.preDelayMs).toBe(22.5);
     expect(parsed.phase1.vocalDetail?.hasVocals).toBe(false);
+    expect(parsed.phase1.vocalDetail?.stemEnergyRatio).toBe(0.12);
+    expect(parsed.phase1.vocalDetail?.stemOtherCorrelation).toBe(0.41);
     expect(parsed.phase1.supersawDetail?.isSupersaw).toBe(false);
     expect(parsed.phase1.bassDetail?.type).toBe('punchy');
     expect(parsed.phase1.kickDetail?.kickCount).toBe(256);

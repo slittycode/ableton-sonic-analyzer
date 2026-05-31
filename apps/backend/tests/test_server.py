@@ -5673,6 +5673,10 @@ class Mt3ExecutorTests(unittest.TestCase):
             error = mt3_stage["error"]
             self.assertIsNotNone(error)
             self.assertEqual(error["code"], "MT3_TRANSCRIPTION_FAILED")
+            # Faithful mock (str streams, not bytes) means the executor reaches
+            # the timeout-specific branch instead of dying on a str-in-bytes
+            # TypeError that the broad except would have masked.
+            self.assertIn("timed out", error["message"])
 
     def test_source_artifact_failure_terminalizes_attempt(self) -> None:
         """If get_source_artifact raises (e.g. a missing artifact row), the
@@ -5781,6 +5785,175 @@ class Mt3ExecutorTests(unittest.TestCase):
                 {"queued", "running", "completed", "failed", "interrupted", None},
                 f"publicStatus must be one of the 5-value enum or None; got {mt3_stage['publicStatus']!r}",
             )
+
+
+class StageSetupFailureTerminalizationTests(unittest.TestCase):
+    """Regression guard for the measurement (#7) and interpretation (#3/#6)
+    setup-failure terminalizers from the 2026-05-30 review.
+
+    Both executors resolve the source artifact / grounding BEFORE their inner
+    request's own try/except. If that setup raises — e.g. artifact cleanup swept
+    the source audio while the stage sat queued, or a hosted profile can't
+    resolve the path — the exception used to escape to the worker loop's bare
+    except (which only logs+sleeps), leaving the stage stuck 'running' forever
+    with no reaper (recover_incomplete_attempts runs only at process startup).
+    The fix wraps setup so the stage terminalizes to 'failed' instead. The MT3
+    sibling already has Mt3ExecutorTests.test_source_artifact_failure_*; these
+    cover the two stages that gained the same guard in this change.
+    """
+
+    def test_measurement_source_failure_terminalizes_run(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_measurement_src_fail_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            created = runtime.create_run(
+                filename="track.mp3",
+                content=b"fake-audio",
+                mime_type="audio/mpeg",
+                pitch_note_mode="off",
+                pitch_note_backend="auto",
+                interpretation_mode="off",
+                interpretation_profile="producer_summary",
+                interpretation_model=None,
+            )
+            run_id = created["runId"]
+            runtime.reserve_next_measurement_run()  # measurement -> 'running'
+
+            # Source audio swept by artifact cleanup before the subprocess
+            # starts: require_local_artifact_path raises FileNotFoundError.
+            # Without the terminalizer this escapes to _measurement_worker_loop's
+            # bare except and the stage wedges in 'running' forever (finding #7).
+            with patch.object(
+                runtime,
+                "require_local_artifact_path",
+                side_effect=FileNotFoundError("source audio missing"),
+            ):
+                result = server._execute_measurement_run(
+                    runtime,
+                    run_id,
+                    request_id=run_id,
+                    run_separation=False,
+                    run_transcribe=False,
+                    run_standard=True,
+                    run_fast=False,
+                )
+
+            self.assertFalse(result["ok"])
+            self.assertEqual(result["errorCode"], "MEASUREMENT_SOURCE_UNAVAILABLE")
+            snapshot = runtime.get_run(run_id)
+            measurement_stage = snapshot["stages"]["measurement"]
+            # The key assertion: terminal, NOT stuck 'running'.
+            self.assertEqual(measurement_stage["status"], "failed")
+            self.assertEqual(
+                measurement_stage["error"]["code"], "MEASUREMENT_SOURCE_UNAVAILABLE"
+            )
+
+    def test_interpretation_setup_failure_terminalizes_attempt(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_interp_setup_fail_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            created = runtime.create_run(
+                filename="track.mp3",
+                content=b"fake-audio",
+                mime_type="audio/mpeg",
+                pitch_note_mode="off",
+                pitch_note_backend="auto",
+                interpretation_mode="async",
+                interpretation_profile="producer_summary",
+                interpretation_model="gemini-2.5-flash",
+            )
+            run_id = created["runId"]
+            runtime.reserve_next_measurement_run()
+            runtime.complete_measurement(
+                run_id,
+                payload={"bpm": 120.0},
+                provenance={},
+                diagnostics={},
+            )
+            attempt = runtime.reserve_next_interpretation_attempt()  # interp -> 'running'
+            self.assertIsNotNone(attempt, "interpretation attempt should be reservable")
+
+            # Grounding lookup raises before the Gemini call's own try/except
+            # (e.g. a delete-race on the run/measurement rows). Without the
+            # wrapping terminalizer this escapes to _interpretation_worker_loop's
+            # bare except and the attempt strands 'running' forever (findings
+            # #3/#6) — the UI then polls indefinitely with no error surfaced.
+            with patch.object(
+                runtime,
+                "get_interpretation_grounding",
+                side_effect=KeyError("missing grounding"),
+            ):
+                result = server._execute_interpretation_attempt(runtime, attempt)
+
+            self.assertFalse(result["ok"])
+            self.assertEqual(result["errorCode"], "INTERPRETATION_SETUP_FAILED")
+            snapshot = runtime.get_run(run_id)
+            interpretation_stage = snapshot["stages"]["interpretation"]
+            # The key assertion: terminal, NOT stuck 'running'.
+            self.assertEqual(interpretation_stage["status"], "failed")
+            self.assertEqual(
+                interpretation_stage["error"]["code"], "INTERPRETATION_SETUP_FAILED"
+            )
+
+
+class TempFileCacheTests(unittest.TestCase):
+    """Exercises the request-scoped temp-file cache path.
+
+    _cache_temp_file / _pop_cached_temp_file / _evict_expired_cache_entries
+    referenced _FILE_CACHE_LOCK and _FILE_CACHE_TTL_SECONDS, which were never
+    defined — so any call raised NameError the moment that branch ran. These
+    tests drive the path directly so the landmine cannot silently return.
+    """
+
+    def setUp(self) -> None:
+        server._TEMP_FILE_REGISTRY.clear()
+
+    def tearDown(self) -> None:
+        server._TEMP_FILE_REGISTRY.clear()
+
+    def _make_temp_file(self) -> str:
+        handle = tempfile.NamedTemporaryFile(prefix="asa_cache_test_", delete=False)
+        handle.close()
+        path = handle.name
+        self.addCleanup(lambda: Path(path).exists() and Path(path).unlink())
+        return path
+
+    def test_cache_then_pop_returns_path_before_expiry(self) -> None:
+        path = self._make_temp_file()
+        base = datetime(2026, 1, 1, 0, 0, 0)
+        server._cache_temp_file("req-1", path, now=base)
+        with patch.object(server, "_current_time", return_value=base + timedelta(seconds=1)):
+            self.assertEqual(server._pop_cached_temp_file("req-1"), path)
+        # A successful pop also removes the entry from the registry.
+        self.assertNotIn("req-1", server._TEMP_FILE_REGISTRY)
+
+    def test_pop_evicts_and_cleans_up_an_expired_entry(self) -> None:
+        path = self._make_temp_file()
+        base = datetime(2026, 1, 1, 0, 0, 0)
+        server._cache_temp_file("req-2", path, now=base)
+        with patch.object(
+            server,
+            "_current_time",
+            return_value=base + timedelta(seconds=server._FILE_CACHE_TTL_SECONDS + 1),
+        ):
+            self.assertIsNone(server._pop_cached_temp_file("req-2"))
+        self.assertNotIn("req-2", server._TEMP_FILE_REGISTRY)
+        self.assertFalse(Path(path).exists())
+
+    def test_evict_expired_cache_entries_sweeps_and_cleans_up(self) -> None:
+        path = self._make_temp_file()
+        base = datetime(2026, 1, 1, 0, 0, 0)
+        server._cache_temp_file("req-3", path, now=base)
+        with patch.object(
+            server,
+            "_current_time",
+            return_value=base + timedelta(seconds=server._FILE_CACHE_TTL_SECONDS + 1),
+        ):
+            server._evict_expired_cache_entries()
+        self.assertNotIn("req-3", server._TEMP_FILE_REGISTRY)
+        self.assertFalse(Path(path).exists())
 
 
 if __name__ == "__main__":
