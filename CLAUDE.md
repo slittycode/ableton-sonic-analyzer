@@ -86,7 +86,7 @@ Operational and one-shot scripts live in two places. They are not on the request
 `scripts/` (repo root):
 1. `dev.sh` — full-stack dev launcher (covered above).
 2. `test-e2e.sh` / `test-e2e-integration.sh` — e2e harnesses (covered above).
-3. `calibrate_confidence.py` — threshold-sweep harness for the pitch / chord / sidechain detectors. Research-only.
+3. `calibrate_confidence.py` — threshold-sweep harness for the pitch / chord / sidechain detectors. Research-only. Its unit test lives in `scripts/tests/test_calibrate_confidence.py`.
 4. `build_live12_catalogue.py` — regenerates `data/live12_catalogue.json` (the source-extracted Live 12 device/parameter catalogue) from the upstream `gluon/AbletonLive12_MIDIRemoteScripts` checkout. Static AST extraction; carries no proprietary code. Re-run when the upstream commit shifts or the schema bumps; the published `data/live12_catalogue.schema.json` validates the output.
 
 `apps/backend/scripts/`:
@@ -107,7 +107,7 @@ Operational and one-shot scripts live in two places. They are not on the request
 2. `packages/loudness-spectro-wasm/` — browser-first WebAssembly DSP (ITU-R BS.1770-5 / EBU R128 loudness, A-weighted spectrum, and spectral-reassignment spectrogram). Rust lifted from [openmeters](https://github.com/httpsworldview/openmeters) and compiled via `wasm-bindgen`, GPL-3.0-or-later. **Phase 1: standalone, not yet imported by `apps/ui` or `apps/backend`.** Has its own Cargo workspace, `npm`/`cargo` build, and EBU/ebur128/pyloudnorm validation layers — see [`packages/loudness-spectro-wasm/README.md`](packages/loudness-spectro-wasm/README.md). When integration lands, the canonical Phase 1 LUFS contract still comes from the Essentia path until this is wired in and proven at parity. (The reassigned spectrogram on the product path today comes from librosa via the `reassigned` spectral-enhancement endpoint, not this package.)
 3. `audits/` — dated, automated audit reports (e.g. `nightly-2026-05-19.md`, `phase2-recommendation-surface-2026-05-24.md`). Past-tense paper trail; not imported by either app. (Older one-shot advisory deliverables like the phase 1 audit have been archived under `docs/history/phase1-audit/`.)
 4. `incorporations/` — planning docs for incorporating upstream projects (e.g. `forking-plans-2026-05-14.md`, `beat-this-measurement-gate-2026-05-20.md`). Planning notes only; not code.
-5. `docs/` — long-form rationale (`ARCHITECTURE_STRATEGY.md`, `history/`). Read these *before* structural changes; do not treat them as living API docs.
+5. `docs/` — long-form rationale and architectural records. Key contents: `ARCHITECTURE_STRATEGY.md` (three-layer design rationale), `SETUP.md` (first-run setup), `LAYER2_EVALUATION.md` and `POLYPHONIC_TRANSCRIPTION_SPIKE.md` (Layer 2 research), `SAMPLE_GENERATION.md` (Phase 3 design), `adr/` (Architecture Decision Records — `0001-phase1-json-schema-v1.md` declares the v1 schema stability contract), and `history/` (completed plans, one-shot audits, and deliverables — past-tense). Read the relevant doc *before* structural changes; do not treat them as living API docs.
 6. `tests/ground_truth/` — labeled-corpus fixtures consumed by `scripts/calibrate_confidence.py` (see `tests/ground_truth/README.md`). Not a test suite — each app owns its own (`apps/backend/tests/`, `apps/ui/tests/`).
 
 ### Three-Layer Model
@@ -215,8 +215,8 @@ Single-page React 19 + Vite + TypeScript + Tailwind CSS v4 app with no router. V
 11. **`src/services/phase1Picker.ts`** + **`phaseLabels.ts`**: Phase-snapshot projection helpers consumed by the results surface.
 12. **`src/services/audioFile.ts`**: Client-side audio validation, blank-MIME extension fallback, preview-URL lifecycle.
 13. **`src/services/fieldAnalytics.ts`** + **`diagnosticLogs.ts`**: Instrumentation hooks and diagnostic-log capture for the request panel.
-14. **`src/services/midi/`**: MIDI export, preview, and quantization utilities (`midiExport.ts`, `midiPreview.ts`, `quantization.ts`).
-15. **`src/services/sessionMusician/`**: Session Musician helpers — `confidenceBand.ts`, `noteConversion.ts`, `renderState.ts`, `stemListeningNotes.ts`.
+14. **`src/services/midi/`**: MIDI export, preview, and quantization utilities (`midiExport.ts`, `midiPreview.ts`, `quantization.ts`, `types.ts`).
+15. **`src/services/sessionMusician/`**: Session Musician helpers — `confidenceBand.ts`, `index.ts`, `noteConversion.ts`, `renderState.ts`, `stemListeningNotes.ts`.
 16. **`src/types.ts`** + **`src/types/`**: `types.ts` is a barrel re-export of `./types/{measurement,interpretation,backend}.ts`. `Phase1Result` lives in `types/measurement.ts`; `AnalysisRunSnapshot` in `types/backend.ts`; `Phase2Result` in `types/interpretation.ts`; `./types/samples.ts` is imported directly, not through the barrel.
 17. **`src/config.ts`**: Runtime resolution of `VITE_API_BASE_URL` and feature flags; falls back to `http://127.0.0.1:8100`. Supports window-level overrides (`window.__VITE_API_BASE_URL_OVERRIDE__`, `window.__VITE_ENABLE_PHASE2_GEMINI_OVERRIDE__`) for hosted deployments that inject config at runtime without a rebuild.
 
@@ -316,5 +316,6 @@ This repo carries parallel guidance for non-Claude agents:
 3. **`docs/ARCHITECTURE_STRATEGY.md`** — *why* the three-layer architecture is shaped the way it is.
 4. **`GOAL.md`** — the recommendation-proof campaign (north-star goal). `apps/backend/NEEDS.md` is its living status doc; `apps/backend/RECOMMENDATION_VERDICT.md` is the provisional Gemini-vs-deterministic write-up (proxy-render caveats inside).
 5. **`docs/history/`** — completed plans and one-shot audits. Past-tense, not living docs.
+6. **`docs/adr/`** — Architecture Decision Records. `0001-phase1-json-schema-v1.md` declares the Phase 1 JSON schema v1 stability contract (field-rename policy, CSV column pinning, `publicStatus` collapse). Consult before proposing breaking changes to the Phase 1 payload shape.
 
 When information conflicts: `PURPOSE.md` > `CLAUDE.md` > `GOAL.md` > per-app `AGENTS.md`.
