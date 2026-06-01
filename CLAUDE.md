@@ -36,9 +36,13 @@ First-time local setup (Python 3.11 venv, Node deps, Phase 2 Gemini wiring) is d
 npm run dev:local                   # Dev server on 127.0.0.1:3100
 npm run verify                      # lint + test:unit + build + test:smoke (full gate)
 npm run lint                        # TypeScript type-check only (no ESLint/Prettier)
-npm test                            # All Vitest unit tests
-npm run test:unit                   # Unit tests only (tests/services/)
-npm run test:smoke                  # Playwright smoke tests
+npm test                            # All Vitest tests (vitest.config.ts include: tests/**/*.test.ts)
+npm run test:unit                   # Vitest, restricted to tests/services/ (the unit subset)
+npm run test:smoke                  # Playwright smoke suite (tests/smoke/, default config)
+npm run test:smoke:live-gemini      # Playwright smoke against the real Gemini Files API (tests/smoke/upload-phase2-live-gemini.spec.ts)
+npm run test:e2e                    # Playwright full e2e suite (playwright.full.config.ts)
+npm run test:e2e:integration        # Playwright analysis-runs integration spec (playwright.integration.config.ts)
+npm run test:e2e:headed             # Same as test:e2e but headed for local debugging
 
 # Single test file
 npx vitest run tests/services/backendPhase1Client.test.ts
@@ -47,6 +51,8 @@ npx vitest run tests/services/backendPhase1Client.test.ts -t "accepts a valid ba
 # Single smoke spec
 npm run test:smoke -- tests/smoke/upload-phase1.spec.ts
 ```
+
+The smoke suite (`tests/smoke/`) is the fast Playwright gate that `verify` runs; the larger e2e suite (`tests/e2e/`) sits behind `test:e2e` / `test:e2e:integration` and is what the repo-root `scripts/test-e2e*.sh` harnesses drive.
 
 ### Backend (`apps/backend`)
 
