@@ -628,7 +628,10 @@ export interface GenreDetail {
 }
 
 export interface Phase1Result {
+  /** Phase 1 schema version, e.g. "phase1.v2". Absent on pre-v2 snapshots. */
+  phase1Version?: string | null;
   bpm: number;
+  /** Tempo confidence, normalized 0-1 (Phase 1 v2; raw Essentia ~0-5.32 in v1). */
   bpmConfidence: number;
   bpmPercival?: number | null;
   bpmAgreement?: boolean | null;
@@ -649,7 +652,8 @@ export interface Phase1Result {
   lufsRange?: number | null;
   lufsMomentaryMax?: number | null;
   lufsShortTermMax?: number | null;
-  truePeak: number;
+  /** Max true peak in dBTP (Phase 1 v2; was a linear amplitude proxy in v1). 0.0 == full scale, > 0 == inter-sample over. `null` for digital silence (no defined dBTP). */
+  truePeak: number | null;
   plr?: number | null;
   crestFactor?: number | null;
   dynamicSpread?: number | null;

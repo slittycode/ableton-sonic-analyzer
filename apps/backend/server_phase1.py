@@ -137,6 +137,8 @@ def _build_phase1(payload: dict[str, Any]) -> dict[str, Any]:
     if plr is None:
         lufs_integrated = _coerce_nullable_number(payload.get("lufsIntegrated"))
         true_peak = _coerce_nullable_number(payload.get("truePeak"))
+        # truePeak is dBTP (Phase 1 v2); PLR is a direct dB-domain subtraction
+        # (mirrors analyze_core.analyze_plr).
         if lufs_integrated is not None and true_peak is not None:
             plr = round(true_peak - lufs_integrated, 2)
 
@@ -146,6 +148,7 @@ def _build_phase1(payload: dict[str, Any]) -> dict[str, Any]:
         mono_compatible = sub_bass_mono if isinstance(sub_bass_mono, bool) else None
 
     return {
+        "phase1Version": _coerce_nullable_string(payload.get("phase1Version")),
         "bpm": _coerce_number(payload.get("bpm")),
         "bpmConfidence": _coerce_number(payload.get("bpmConfidence")),
         "bpmPercival": _coerce_nullable_number(payload.get("bpmPercival")),
@@ -168,7 +171,10 @@ def _build_phase1(payload: dict[str, Any]) -> dict[str, Any]:
         "lufsMomentaryMax": _coerce_nullable_number(payload.get("lufsMomentaryMax")),
         "lufsShortTermMax": _coerce_nullable_number(payload.get("lufsShortTermMax")),
         "lufsCurve": payload.get("lufsCurve"),
-        "truePeak": _coerce_number(payload.get("truePeak")),
+        # truePeak is dBTP (Phase 1 v2) and is null for digital silence (no
+        # defined dBTP). Preserve that null rather than coercing it to 0.0,
+        # which would falsely report a full-scale peak for a silent track.
+        "truePeak": _coerce_nullable_number(payload.get("truePeak")),
         "plr": plr,
         "crestFactor": _coerce_nullable_number(payload.get("crestFactor")),
         "dynamicSpread": _coerce_nullable_number(payload.get("dynamicSpread")),

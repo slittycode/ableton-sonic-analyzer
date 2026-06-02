@@ -37,6 +37,7 @@ EXPECTED_SPECTRAL_BANDS = {
 # here would force the field to always appear in CLI output and break the
 # "absent when off" contract. See JSON_SCHEMA.md "Optional MT3 Namespace".
 EXPECTED_TOP_LEVEL_KEYS = {
+    "phase1Version",
     "bpm", "bpmConfidence", "bpmPercival", "bpmAgreement",
     "bpmDoubletime", "bpmSource", "bpmRawOriginal",
     "key", "keyConfidence", "timeSignature", "timeSignatureSource",
@@ -57,6 +58,7 @@ EXPECTED_TOP_LEVEL_KEYS = {
 
 # Fields fast mode populates with real values.
 FAST_MODE_POPULATED_FIELDS = {
+    "phase1Version",
     "bpm", "bpmConfidence", "bpmPercival", "bpmAgreement",
     "bpmDoubletime", "bpmSource", "bpmRawOriginal",
     "key", "keyConfidence", "timeSignature", "timeSignatureSource",

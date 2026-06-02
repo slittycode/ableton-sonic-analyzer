@@ -223,6 +223,7 @@ def _evaluate_plr_consistency(payload: dict[str, Any]) -> FixtureCheck:
             passed=False,
             message=f"non-numeric values plr={plr} truePeak={true_peak} lufsIntegrated={lufs}",
         )
+    # truePeak is dBTP (Phase 1 v2), so PLR is a direct dB-domain subtraction.
     expected = float(true_peak) - float(lufs)
     delta = abs(float(plr) - expected)
     passed = delta <= 0.11

@@ -443,6 +443,25 @@ function formatSignedDb(value: number): string {
   return `${value >= 0 ? "+" : ""}${fixed} dB`;
 }
 
+/**
+ * Phase 1 v2 emits `truePeak: null` for digital silence (no defined dBTP).
+ * Report the measured peak, or an em-dash when it's absent — matching the
+ * house convention (`formatNumber` renders missing values as "—").
+ */
+export function formatTruePeak(truePeak: number | null, suffix = " dBTP"): string {
+  return truePeak === null ? "—" : `${truePeak.toFixed(1)}${suffix}`;
+}
+
+/**
+ * Master-limiter ceiling target derived from the true peak. When the peak is
+ * null (silence) there is nothing to duck below, so fall back to the -0.3 dB
+ * safety cap — the same value the formula yields for any peak ≥ -0.2 dBTP —
+ * keeping the recommendation card actionable rather than showing a blank.
+ */
+export function masterCeilingDb(truePeak: number | null): number {
+  return truePeak === null ? -0.3 : Math.min(-0.3, truePeak - 0.1);
+}
+
 function midiToNoteName(midi: number): string {
   const noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"] as const;
   const clamped = Math.max(0, Math.min(127, Math.round(midi)));
@@ -531,7 +550,7 @@ function getSonicMeasurements(
   const sets: Record<string, SonicMeasurementViewModel[]> = {
     kick: [
       { icon: "🎚", label: "Low Bass", value: formatSignedDb(phase1.spectralBalance.lowBass) },
-      { icon: "📏", label: "Peak", value: `${phase1.truePeak.toFixed(1)} dB` },
+      { icon: "📏", label: "Peak", value: formatTruePeak(phase1.truePeak) },
       { icon: "⏱", label: "Tempo", value: `${Math.round(phase1.bpm)} BPM` },
     ],
     bass: [
@@ -587,7 +606,7 @@ function getSonicMeasurements(
     widthAndStereo: [
       { icon: "↔", label: "Width", value: phase1.stereoWidth.toFixed(2) },
       { icon: "📡", label: "Correlation", value: phase1.stereoCorrelation.toFixed(2) },
-      { icon: "🧲", label: "Peak", value: `${phase1.truePeak.toFixed(1)} dB` },
+      { icon: "🧲", label: "Peak", value: formatTruePeak(phase1.truePeak) },
     ],
     harmonicContent: [
       { icon: "🎼", label: "Key", value: phase1.key ?? "Unknown" },
@@ -815,7 +834,7 @@ function buildDerivedChainParameters(
     case "DRUM PROCESSING":
       return [
         { label: "Tempo Sync", value: `${Math.round(phase1.bpm)} BPM` },
-        { label: "Punch Target", value: `${phase1.truePeak.toFixed(1)} dB peak` },
+        { label: "Punch Target", value: formatTruePeak(phase1.truePeak, " dBTP peak") },
       ];
     case "BASS PROCESSING":
       return [
@@ -846,7 +865,7 @@ function buildDerivedChainParameters(
       );
     case "MASTER BUS":
       return [
-        { label: "Ceiling", value: `${Math.min(-0.3, phase1.truePeak - 0.1).toFixed(1)} dB` },
+        { label: "Ceiling", value: `${masterCeilingDb(phase1.truePeak).toFixed(1)} dB` },
         { label: "Integrated Loudness", value: `${phase1.lufsIntegrated.toFixed(1)} LUFS` },
       ];
     default:
@@ -897,7 +916,7 @@ function makeLimiterFallbackCard(phase1: Phase1Result, nextOrder: number) {
     trackContext: "Master",
     workflowStage: prettifyWorkflowStage("MASTER"),
     parameters: [
-      { label: "Ceiling", value: `${Math.min(-0.3, phase1.truePeak - 0.1).toFixed(1)} dB` },
+      { label: "Ceiling", value: `${masterCeilingDb(phase1.truePeak).toFixed(1)} dB` },
       { label: "Integrated Loudness", value: `${phase1.lufsIntegrated.toFixed(1)} LUFS` },
       { label: "Stereo Width", value: phase1.stereoWidth.toFixed(2) },
     ],
@@ -1132,7 +1151,7 @@ function buildStereoWidthPatchCard(
       { label: "Stereo Width", value: phase1.stereoWidth.toFixed(2) },
       { label: "Correlation Floor", value: phase1.stereoCorrelation.toFixed(2) },
       { label: "Bass mono below", value: "100 Hz" },
-      { label: "Ceiling", value: `${Math.min(-0.3, phase1.truePeak - 0.1).toFixed(1)} dB` },
+      { label: "Ceiling", value: `${masterCeilingDb(phase1.truePeak).toFixed(1)} dB` },
     ],
     proTip:
       "Make width moves in the highs first, then mono-check kick and bass before committing the setting.",

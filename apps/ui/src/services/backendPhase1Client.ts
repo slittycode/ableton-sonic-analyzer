@@ -556,9 +556,12 @@ export function parsePhase1Result(value: unknown): Phase1Result {
   }
 
   const lufsIntegrated = expectNumber(phase1, "lufsIntegrated");
-  const truePeak = expectNumber(phase1, "truePeak");
+  // Phase 1 v2: truePeak is `null` for digital silence (no defined dBTP). Accept
+  // an explicit null, but still reject a malformed/missing field via expectNumber.
+  const truePeak = phase1.truePeak === null ? null : expectNumber(phase1, "truePeak");
   const explicitPlr = toNumber(phase1.plr);
-  const normalizedPlr = explicitPlr ?? roundToTwoDecimals(truePeak - lufsIntegrated);
+  const normalizedPlr =
+    explicitPlr ?? (truePeak !== null ? roundToTwoDecimals(truePeak - lufsIntegrated) : null);
   const monoCompatible = phase1.monoCompatible === true
     ? true
     : phase1.monoCompatible === false

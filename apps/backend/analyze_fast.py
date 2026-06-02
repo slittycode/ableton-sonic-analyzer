@@ -42,7 +42,12 @@ def analyze_fast(mono: np.ndarray, sample_rate: int = 44100) -> dict:
         rhythm_extractor = es.RhythmExtractor2013(method="multifeature")
         bpm, beats, bpm_confidence, _, _ = rhythm_extractor(mono)
         result["bpm"] = round(float(bpm), 2) if bpm is not None else None
-        result["bpmConfidence"] = round(float(bpm_confidence), 3) if bpm_confidence is not None else None
+        # Phase 1 v2: normalize RhythmExtractor2013 confidence (~0-5.32) to 0-1.
+        result["bpmConfidence"] = (
+            round(min(max(float(bpm_confidence), 0.0) / 5.0, 1.0), 3)
+            if bpm_confidence is not None
+            else None
+        )
     except Exception as e:
         print(f"[warn] Fast mode BPM analysis failed: {e}", file=sys.stderr)
         result["bpm"] = None
@@ -106,11 +111,15 @@ def analyze_fast(mono: np.ndarray, sample_rate: int = 44100) -> dict:
         result["lufsIntegrated"] = None
         result["lufsRange"] = None
 
-    # True peak (from stereo)
+    # True peak (from stereo), emitted in dBTP (Phase 1 v2). NOTE: fast mode uses
+    # a plain sample peak (np.max(np.abs)), NOT the oversampled inter-sample true
+    # peak the standard path computes via Essentia's TruePeakDetector — so this is
+    # a sample-peak approximation and may read lower than the standard path on
+    # material with real inter-sample overs.
     try:
         if stereo is not None:
-            max_peak = np.max(np.abs(stereo))
-            result["truePeak"] = round(float(max_peak), 6) if max_peak > 0 else None
+            max_peak = float(np.max(np.abs(stereo)))
+            result["truePeak"] = round(20.0 * np.log10(max_peak), 1) if max_peak > 0 else None
         else:
             result["truePeak"] = None
     except Exception as e:

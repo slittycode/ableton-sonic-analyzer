@@ -93,7 +93,11 @@ def analyze_bpm(
 
         if rhythm_data is not None:
             bpm = round(float(rhythm_data["bpm"]), 1)
-            bpm_confidence = round(float(rhythm_data["confidence"]), 2)
+            # Phase 1 schema v2: normalize Essentia RhythmExtractor2013 confidence
+            # (raw ~0-5.32) to 0-1 by dividing by 5.0 and clamping. Consistent with
+            # every other *Confidence field; raw < 2.0 ("ambiguous" per the detector)
+            # maps to < 0.4, the standard low-confidence hedge threshold.
+            bpm_confidence = round(min(max(float(rhythm_data["confidence"]), 0.0) / 5.0, 1.0), 3)
 
         percival_cls = getattr(es, "PercivalBpmEstimator", None)
         if percival_cls is not None:
@@ -248,8 +252,13 @@ def analyze_true_peak(stereo: np.ndarray) -> dict:
                 peaks.append(float(np.max(peak_value)) if len(peak_value) > 0 else 0.0)
             else:
                 peaks.append(float(peak_value))
-        true_peak = max(peaks) if peaks else 0.0
-        return {"truePeak": round(true_peak, 1)}
+        true_peak_linear = max(peaks) if peaks else 0.0
+        # Phase 1 schema v2: emit dBTP (v1 emitted a linear amplitude proxy).
+        # 0.0 dBTP == full scale; > 0.0 dBTP == inter-sample over. A silent
+        # signal (linear 0) has no defined dBTP, so emit None.
+        if true_peak_linear <= 0.0:
+            return {"truePeak": None}
+        return {"truePeak": round(20.0 * float(np.log10(true_peak_linear)), 1)}
     except Exception as e:
         print(f"[warn] True peak detection failed: {e}", file=sys.stderr)
         return {"truePeak": None}
@@ -621,13 +630,20 @@ def analyze_spectral_balance(
         return {"spectralBalance": None, "spectralBalanceTimeSeries": None}
 
 
-def analyze_plr(lufs_integrated: float | None, true_peak: float | None) -> dict:
-    """Peak-to-loudness ratio (PLR): truePeak - LUFS integrated."""
+def analyze_plr(lufs_integrated: float | None, true_peak_dbtp: float | None) -> dict:
+    """Peak-to-loudness ratio (PLR) in LU: truePeak (dBTP) - integrated loudness (LUFS).
+
+    As of Phase 1 schema v2, ``truePeak`` is expressed in dBTP (see
+    ``analyze_true_peak``), so PLR is a direct dB-domain subtraction. (In v1
+    ``truePeak`` was a linear amplitude proxy and this subtraction was unit-
+    incoherent — the v2 migration fixes that at the source.) Returns None for
+    missing or non-finite inputs.
+    """
     try:
-        if lufs_integrated is None or true_peak is None:
+        if lufs_integrated is None or true_peak_dbtp is None:
             return {"plr": None}
         lufs_value = float(lufs_integrated)
-        true_peak_value = float(true_peak)
+        true_peak_value = float(true_peak_dbtp)
         if not np.isfinite(lufs_value) or not np.isfinite(true_peak_value):
             return {"plr": None}
         return {"plr": round(true_peak_value - lufs_value, 2)}

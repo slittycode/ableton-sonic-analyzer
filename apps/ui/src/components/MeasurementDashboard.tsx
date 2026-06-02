@@ -1615,15 +1615,17 @@ export function MeasurementDashboard({
                     </span>
                   </div>
                 ))}
-                {/* True Peak marker */}
-                <div
-                  className="absolute left-0 right-0 border-t-2 border-error/70 z-10"
-                  style={{ top: `${Math.max(0, Math.min(100, ((3 - phase1.truePeak) / 51) * 100))}%` }}
-                >
-                  <span className="absolute left-7 -top-1.5 text-[7px] font-mono text-error/70 whitespace-nowrap">
-                    TP {formatNumber(phase1.truePeak, 1)}
-                  </span>
-                </div>
+                {/* True Peak marker (omitted for silence — no defined dBTP) */}
+                {phase1.truePeak !== null && (
+                  <div
+                    className="absolute left-0 right-0 border-t-2 border-error/70 z-10"
+                    style={{ top: `${Math.max(0, Math.min(100, ((3 - phase1.truePeak) / 51) * 100))}%` }}
+                  >
+                    <span className="absolute left-7 -top-1.5 text-[7px] font-mono text-error/70 whitespace-nowrap">
+                      TP {formatNumber(phase1.truePeak, 1)}
+                    </span>
+                  </div>
+                )}
                 {/* Integrated LUFS marker */}
                 <div
                   className="absolute left-0 right-0 border-t-2 border-accent/70 z-10"
@@ -1633,16 +1635,18 @@ export function MeasurementDashboard({
                     INT {formatNumber(phase1.lufsIntegrated, 1)}
                   </span>
                 </div>
-                {/* PLR gap fill */}
-                <div
-                  className="absolute left-0 right-0 bg-accent/10"
-                  style={{
-                    top: `${Math.max(0, Math.min(100, ((3 - phase1.truePeak) / 51) * 100))}%`,
-                    bottom: `${100 - Math.max(0, Math.min(100, ((3 - phase1.lufsIntegrated) / 51) * 100))}%`,
-                  }}
-                />
+                {/* PLR gap fill (spans true-peak → integrated; omitted for silence) */}
+                {phase1.truePeak !== null && (
+                  <div
+                    className="absolute left-0 right-0 bg-accent/10"
+                    style={{
+                      top: `${Math.max(0, Math.min(100, ((3 - phase1.truePeak) / 51) * 100))}%`,
+                      bottom: `${100 - Math.max(0, Math.min(100, ((3 - phase1.lufsIntegrated) / 51) * 100))}%`,
+                    }}
+                  />
+                )}
                 {/* PLR annotation */}
-                {phase1.plr !== undefined && phase1.plr !== null && (
+                {phase1.plr !== undefined && phase1.plr !== null && phase1.truePeak !== null && (
                   <div
                     className="absolute left-8 flex items-center z-20"
                     style={{

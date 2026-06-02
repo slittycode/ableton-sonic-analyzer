@@ -3,11 +3,10 @@ import type { Phase1Result } from '../types';
 /**
  * Objective, genre-independent loudness defects.
  *
- * Unit note: Phase 1 `truePeak` is a LINEAR amplitude proxy (see
- * apps/backend/JSON_SCHEMA.md — "linear amplitude proxy (rounded)"; the
- * full-scale audio fixture in apps/backend/tests/test_audio_fixture.py asserts
- * truePeak ≈ 1.0), NOT dBTP. 1.0 == 0 dBFS full scale; > 1.0 == inter-sample
- * over. Always compare in linear amplitude, never in dB.
+ * Unit note: as of Phase 1 schema v2, `truePeak` is dBTP (see
+ * apps/backend/JSON_SCHEMA.md). 0.0 dBTP == full scale; > 0.0 dBTP ==
+ * inter-sample over. Compare in dBTP. (In v1 this field was a linear amplitude
+ * proxy with a 1.0 boundary; the v2 migration moved it to dBTP.)
  *
  * The robust trigger is `saturationDetail.clippedSampleCount` (stereo samples
  * with |x| >= 0.9999) — unit-independent and unambiguous. truePeak is a
@@ -18,8 +17,8 @@ import type { Phase1Result } from '../types';
  * safety net only asserts correctness — that a measured defect is addressed.
  */
 
-/** Linear amplitude above which `truePeak` is an inter-sample over (0 dBFS). */
-export const TRUE_PEAK_OVER_LINEAR = 1.0;
+/** dBTP above which `truePeak` is an inter-sample over (0.0 dBTP == full scale). */
+export const TRUE_PEAK_OVER_DBTP = 0.0;
 
 export type LoudnessDefectKind = 'CLIPPING' | 'TRUE_PEAK_OVER';
 
@@ -60,7 +59,7 @@ export function loudnessDefectsDemandingAction(phase1: Phase1Result): LoudnessDe
   if (
     typeof truePeak === 'number' &&
     Number.isFinite(truePeak) &&
-    truePeak > TRUE_PEAK_OVER_LINEAR
+    truePeak > TRUE_PEAK_OVER_DBTP
   ) {
     defects.push({
       kind: 'TRUE_PEAK_OVER',

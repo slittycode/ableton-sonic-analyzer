@@ -56,7 +56,7 @@ if str(_BACKEND_ROOT) not in sys.path:
 try:
     import essentia.standard as es  # noqa: F401
     import analyze_core
-    from analyze_core import analyze_loudness
+    from analyze_core import analyze_loudness, analyze_plr, analyze_true_peak
     ESSENTIA_AVAILABLE = True
 except Exception:  # pragma: no cover - guarded by skip
     ESSENTIA_AVAILABLE = False
@@ -320,6 +320,80 @@ class TestAnalyzeLoudnessThreadsSampleRateToEssentia(unittest.TestCase):
             analyze_loudness(stereo, sample_rate=96_000)
 
         fake_class.assert_called_once_with(sampleRate=96_000)
+
+
+@unittest.skipUnless(ESSENTIA_AVAILABLE, "Essentia not available in test env")
+class TestAnalyzePlrIsDbtpMinusLufs(unittest.TestCase):
+    """``analyze_plr`` is a direct dB-domain subtraction: truePeak(dBTP) - LUFS.
+
+    Phase 1 schema v2 emits ``truePeak`` in dBTP, so PLR needs no log conversion.
+    Regression gate for the prior unit-mismatch bug where PLR mixed a linear
+    amplitude with a dB value. The golden fixture only covers one signal, so
+    these pure-function cases lock the contract (including negative dBTP, which
+    real masters always have).
+    """
+
+    def test_full_scale_peak_plr_equals_negative_lufs(self) -> None:
+        # 0.0 dBTP (full scale) → PLR == -lufsIntegrated.
+        self.assertAlmostEqual(analyze_plr(-8.9, 0.0)["plr"], 8.9, places=2)
+
+    def test_negative_dbtp_peak(self) -> None:
+        # A mastered track at -1.2 dBTP, -9.0 LUFS → PLR 7.8 LU. (A positivity
+        # guard would have wrongly nulled this — most masters are negative dBTP.)
+        self.assertAlmostEqual(analyze_plr(-9.0, -1.2)["plr"], 7.8, places=2)
+
+    def test_inter_sample_over_positive_dbtp(self) -> None:
+        # +0.6 dBTP over, -7.0 LUFS → PLR 7.6 LU.
+        self.assertAlmostEqual(analyze_plr(-7.0, 0.6)["plr"], 7.6, places=2)
+
+    def test_missing_or_non_finite_inputs_return_none(self) -> None:
+        self.assertIsNone(analyze_plr(None, 0.0)["plr"])
+        self.assertIsNone(analyze_plr(-8.0, None)["plr"])
+        self.assertIsNone(analyze_plr(float("nan"), 0.0)["plr"])
+        self.assertIsNone(analyze_plr(-8.0, float("inf"))["plr"])
+
+
+@unittest.skipUnless(ESSENTIA_AVAILABLE, "Essentia not available in test env")
+class TestAnalyzeTruePeakEmitsDbtp(unittest.TestCase):
+    """``analyze_true_peak`` emits dBTP (Phase 1 schema v2). A linear peak above
+    1.0 must surface as a *positive* dBTP (an inter-sample over), full scale as
+    0.0 dBTP, and silence as None.
+
+    White-box: patches ``TruePeakDetector`` to return a known linear peak so the
+    dBTP conversion is asserted independent of Essentia's oversampler.
+    """
+
+    def _true_peak_dbtp_for_linear(self, linear: float) -> float | None:
+        stereo = _make_stereo_sine(
+            peak_dbfs=0.0, duration_s=0.1, sample_rate=44_100
+        )
+        fake_class = mock.MagicMock(name="TruePeakDetector_class")
+        fake_instance = mock.MagicMock(name="TruePeakDetector_instance")
+        fake_instance.return_value = (
+            np.zeros(8, dtype=np.float32),
+            np.array([linear], dtype=np.float32),
+        )
+        fake_class.return_value = fake_instance
+        with mock.patch.object(
+            analyze_core.es, "TruePeakDetector", new=fake_class
+        ):
+            return analyze_true_peak(stereo)["truePeak"]
+
+    def test_inter_sample_over_is_positive_dbtp(self) -> None:
+        # linear 1.032 → 20*log10(1.032) == +0.27 dBTP (an over).
+        result = self._true_peak_dbtp_for_linear(1.032)
+        self.assertAlmostEqual(result, 0.3, places=1)
+        self.assertGreater(result, 0.0, "an inter-sample over must read > 0 dBTP")
+
+    def test_full_scale_is_zero_dbtp(self) -> None:
+        self.assertAlmostEqual(self._true_peak_dbtp_for_linear(1.0), 0.0, places=1)
+
+    def test_minus_one_dbtp(self) -> None:
+        # linear 0.8913 → -1.0 dBTP (the conventional master ceiling).
+        self.assertAlmostEqual(self._true_peak_dbtp_for_linear(0.8913), -1.0, places=1)
+
+    def test_silence_returns_none(self) -> None:
+        self.assertIsNone(self._true_peak_dbtp_for_linear(0.0))
 
 
 if __name__ == "__main__":

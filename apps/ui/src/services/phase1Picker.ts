@@ -46,7 +46,7 @@ export function pickPhase1Value(
  *   formatCitedValue("reverbDetail.rt60", 2.04)          → "2.04s"
  *   formatCitedValue("bpmConfidence", 0.86)              → "86%"
  *   formatCitedValue("lufsIntegrated", -9.3)             → "-9.3 LUFS"
- *   formatCitedValue("truePeak", -0.2)                   → "-0.2 dB"
+ *   formatCitedValue("truePeak", -0.2)                   → "-0.2 dBTP"
  *   formatCitedValue("key", "F minor")                   → "F minor"
  *   formatCitedValue("acidDetail.isAcid", true)          → "yes"
  *   formatCitedValue("anything", null | undefined)       → ""
@@ -100,13 +100,17 @@ export function formatCitedValue(path: string, value: unknown): string {
     return `${value.toFixed(2)}s`;
   }
 
-  // True peak / dynamic / peak family — dB without sign-prefix rule.
-  // Match by suffix so nested paths like `kickDetail.crestFactor` also pick
-  // up the dB formatter rather than falling through to the bare-number rule.
+  // True peak is dBTP (Phase 1 v2).
+  if (path === 'truePeak' && typeof value === 'number') {
+    return `${value.toFixed(1)} dBTP`;
+  }
+
+  // Dynamic / peak family — dB without sign-prefix rule. Match by suffix so
+  // nested paths like `kickDetail.crestFactor` also pick up the dB formatter
+  // rather than falling through to the bare-number rule.
   if (
     typeof value === 'number' &&
-    (path === 'truePeak' ||
-      /(^|\.)(crestFactor|dynamicSpread|plr)$/.test(path))
+    /(^|\.)(crestFactor|dynamicSpread|plr)$/.test(path)
   ) {
     return `${value.toFixed(1)} dB`;
   }

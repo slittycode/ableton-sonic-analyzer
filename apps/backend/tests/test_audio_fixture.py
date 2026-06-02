@@ -10,6 +10,7 @@ import numpy as np
 
 
 EXPECTED_TOP_LEVEL_KEYS = {
+    "phase1Version",
     "bpm", "bpmConfidence", "bpmPercival", "bpmAgreement",
     "bpmDoubletime", "bpmSource", "bpmRawOriginal",
     "key", "keyConfidence", "keyProfile", "tuningFrequency", "tuningCents",
@@ -106,9 +107,12 @@ class AudioFixtureSmokeTest(unittest.TestCase):
     EXPECTED_LUFS_TOLERANCE = 0.5
     EXPECTED_LUFS_RANGE = 0.8
     EXPECTED_LUFS_RANGE_TOLERANCE = 0.5
-    EXPECTED_TRUE_PEAK = 1.0
-    EXPECTED_TRUE_PEAK_TOLERANCE = 0.1
-    EXPECTED_PLR = 9.9
+    # Phase 1 v2: truePeak is dBTP. The clipped fixture peaks at ~full scale,
+    # so truePeak ~ 0.0 dBTP (was 1.0 as a linear amplitude proxy in v1).
+    EXPECTED_TRUE_PEAK = 0.0
+    EXPECTED_TRUE_PEAK_TOLERANCE = 0.2
+    # PLR (LU) = truePeak(dBTP) - lufsIntegrated = ~0.0 - (-8.9) = ~8.9.
+    EXPECTED_PLR = 8.9
     EXPECTED_PLR_TOLERANCE = 0.7
     EXPECTED_CREST_FACTOR = 11.0
     EXPECTED_CREST_FACTOR_TOLERANCE = 0.5

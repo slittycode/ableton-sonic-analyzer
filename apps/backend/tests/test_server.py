@@ -2798,6 +2798,23 @@ class BuildPhase1CoercionTests(unittest.TestCase):
         phase1 = server._build_phase1(self._minimal_payload(plr=None, truePeak=-0.1, lufsIntegrated=-8.2))
         self.assertEqual(phase1["plr"], 8.1)
 
+    def test_true_peak_valid_float_passes_through(self) -> None:
+        phase1 = server._build_phase1(self._minimal_payload(truePeak=-0.1))
+        self.assertEqual(phase1["truePeak"], -0.1)
+
+    def test_true_peak_none_stays_none(self) -> None:
+        # Phase 1 v2: silence has no defined dBTP, so the analyzer emits
+        # truePeak=null. The envelope must preserve null rather than coercing
+        # it to 0.0 (which would falsely report a full-scale peak).
+        phase1 = server._build_phase1(self._minimal_payload(truePeak=None))
+        self.assertIsNone(phase1["truePeak"])
+
+    def test_plr_is_none_when_true_peak_is_none(self) -> None:
+        # With no true peak there is nothing to subtract LUFS from, so the
+        # PLR fallback must also stay null rather than fabricating a value.
+        phase1 = server._build_phase1(self._minimal_payload(plr=None, truePeak=None))
+        self.assertIsNone(phase1["plr"])
+
     def test_mono_compatible_passes_through(self) -> None:
         phase1 = server._build_phase1(self._minimal_payload(monoCompatible=False))
         self.assertFalse(phase1["monoCompatible"])

@@ -10,7 +10,7 @@
     "lufsRange": 0.8,
     "lufsShortTermMax": -5.2,
     "monoCompatible": true,
-    "plr": 6.6,
+    "plr": 5.6,
     "sampleRate": 44100,
     "spectralBalance.brilliance": -64.7,
     "spectralBalance.highs": -62.2,
@@ -25,7 +25,7 @@
     "stereoDetail.subBassMono": true,
     "timeSignature": "4/4",
     "timeSignatureSource": "assumed_four_four",
-    "truePeak": 1.0
+    "truePeak": 0.0
   },
   "topLevelKeys": [
     "acidDetail",
@@ -62,6 +62,7 @@
     "melodyDetail",
     "monoCompatible",
     "perceptual",
+    "phase1Version",
     "pitchDetail",
     "plr",
     "reverbDetail",
@@ -129,6 +130,7 @@
     "melodyDetail": "dict",
     "monoCompatible": "bool",
     "perceptual": "dict",
+    "phase1Version": "str",
     "pitchDetail": "null",
     "plr": "number",
     "reverbDetail": "dict",

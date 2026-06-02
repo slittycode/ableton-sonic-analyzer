@@ -115,7 +115,7 @@ describe('formatCitedValue', () => {
   });
 
   it('formats dB-family paths', () => {
-    expect(formatCitedValue('truePeak', -0.2)).toBe('-0.2 dB');
+    expect(formatCitedValue('truePeak', -0.2)).toBe('-0.2 dBTP');
     expect(formatCitedValue('crestFactor', 11.6)).toBe('11.6 dB');
   });
 
