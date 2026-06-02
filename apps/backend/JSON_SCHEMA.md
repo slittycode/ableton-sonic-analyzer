@@ -183,7 +183,7 @@ Current server behavior that affects schema expectations:
 |---|---|---|---|---|
 | `lufsIntegrated` | `float \| null` | Integrated loudness via `LoudnessEBUR128`. | LUFS | Global loudness target reference for gain staging and master chain matching. |
 | `lufsRange` | `float \| null` | Loudness range via `LoudnessEBUR128`. | LU | Indicates macro-dynamic movement across sections. |
-| `truePeak` | `float \| null` | Max true peak across stereo channels. | dBTP (Phase 1 v2: was a linear amplitude proxy in v1) | 0.0 dBTP == full scale; > 0.0 == inter-sample over. Helps detect clipping risk and required headroom when rebuilding. |
+| `truePeak` | `float \| null` | Max true peak across stereo channels. | dBTP (Phase 1 v2: was a linear amplitude proxy in v1) | 0.0 dBTP == full scale; > 0.0 == inter-sample over; `null` for digital silence (no defined dBTP). Helps detect clipping risk and required headroom when rebuilding. |
 | `crestFactor` | `float \| null` | Peak-to-RMS ratio over mono signal. | dB | Higher crest means stronger transients/less compression; lower crest suggests denser limiting/compression. |
 | `lufsMomentaryMax` | `float \| null` | Maximum momentary loudness (400 ms window) via `LoudnessEBUR128`. | LUFS | Peak short-burst loudness; useful for detecting loud transient moments. |
 | `lufsShortTermMax` | `float \| null` | Maximum short-term loudness (3 s window) via `LoudnessEBUR128`. | LUFS | Peak sustained loudness; gap between this and integrated LUFS indicates dynamic range use. |

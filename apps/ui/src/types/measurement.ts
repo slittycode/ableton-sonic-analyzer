@@ -652,8 +652,8 @@ export interface Phase1Result {
   lufsRange?: number | null;
   lufsMomentaryMax?: number | null;
   lufsShortTermMax?: number | null;
-  /** Max true peak in dBTP (Phase 1 v2; was a linear amplitude proxy in v1). 0.0 == full scale, > 0 == inter-sample over. */
-  truePeak: number;
+  /** Max true peak in dBTP (Phase 1 v2; was a linear amplitude proxy in v1). 0.0 == full scale, > 0 == inter-sample over. `null` for digital silence (no defined dBTP). */
+  truePeak: number | null;
   plr?: number | null;
   crestFactor?: number | null;
   dynamicSpread?: number | null;

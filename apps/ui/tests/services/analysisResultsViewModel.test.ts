@@ -5,6 +5,8 @@ import {
   buildPatchCards,
   buildPatchGroups,
   buildSonicElementCards,
+  formatTruePeak,
+  masterCeilingDb,
   toConfidenceBadges,
   truncateAtSentenceBoundary,
   truncateBySentenceCount,
@@ -786,5 +788,39 @@ describe('analysisResultsViewModel helpers', () => {
     const guide = cards.find((c) => c.device === 'MIDI Clip Guide');
     const confidenceRow = guide?.parameters.find((p) => p.label === 'Melody Confidence');
     expect(confidenceRow?.value).toBe('72% (Workable draft)');
+  });
+
+  it('renders true peak as an em-dash when the v2 measurement is null (silence)', () => {
+    // Phase 1 v2 emits truePeak: null for digital silence (no defined dBTP).
+    // Building the card must not crash on an unguarded .toFixed and the Peak
+    // readout should fall back to the house "—" convention.
+    const silent = { ...measurement, truePeak: null };
+    const sonicCards = buildSonicElementCards(silent, {
+      kick: 'Kick sentence.',
+      bass: 'Bass sentence.',
+      melodicArp: 'Arp sentence.',
+      grooveAndTiming: 'Groove sentence.',
+      effectsAndTexture: 'Fx sentence.',
+      widthAndStereo: 'Width sentence.',
+      harmonicContent: 'Harmony sentence.',
+    });
+    const kickCard = sonicCards.find((card) => card.id === 'kick');
+    const peakRow = kickCard?.measurements.find((m) => m.label === 'Peak');
+    expect(peakRow?.value).toBe('—');
+  });
+
+  it('formatTruePeak renders dBTP for a number and an em-dash for null', () => {
+    expect(formatTruePeak(-0.2)).toBe('-0.2 dBTP');
+    expect(formatTruePeak(0)).toBe('0.0 dBTP');
+    expect(formatTruePeak(-1.3, ' dBTP peak')).toBe('-1.3 dBTP peak');
+    expect(formatTruePeak(null)).toBe('—');
+  });
+
+  it('masterCeilingDb ducks below the peak but falls back to the -0.3 dB cap for null', () => {
+    // A hot peak yields peak - 0.1; any peak ≥ -0.2 is capped at -0.3; silence
+    // (null) has no peak to duck below, so the same -0.3 safety cap applies.
+    expect(masterCeilingDb(-3.0)).toBeCloseTo(-3.1, 5);
+    expect(masterCeilingDb(0)).toBeCloseTo(-0.3, 5);
+    expect(masterCeilingDb(null)).toBeCloseTo(-0.3, 5);
   });
 });

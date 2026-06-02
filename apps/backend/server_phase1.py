@@ -171,7 +171,10 @@ def _build_phase1(payload: dict[str, Any]) -> dict[str, Any]:
         "lufsMomentaryMax": _coerce_nullable_number(payload.get("lufsMomentaryMax")),
         "lufsShortTermMax": _coerce_nullable_number(payload.get("lufsShortTermMax")),
         "lufsCurve": payload.get("lufsCurve"),
-        "truePeak": _coerce_number(payload.get("truePeak")),
+        # truePeak is dBTP (Phase 1 v2) and is null for digital silence (no
+        # defined dBTP). Preserve that null rather than coercing it to 0.0,
+        # which would falsely report a full-scale peak for a silent track.
+        "truePeak": _coerce_nullable_number(payload.get("truePeak")),
         "plr": plr,
         "crestFactor": _coerce_nullable_number(payload.get("crestFactor")),
         "dynamicSpread": _coerce_nullable_number(payload.get("dynamicSpread")),
