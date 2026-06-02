@@ -65,8 +65,9 @@ export function decodeWavPcm(buffer: ArrayBuffer): DecodedWavPcm | null {
       channels = view.getUint16(body + 2, true);
       sampleRate = view.getUint32(body + 4, true);
       bitsPerSample = view.getUint16(body + 14, true);
-      if (formatTag === WAVE_FORMAT_EXTENSIBLE && chunkSize >= 24) {
-        // Real format lives in the first 2 bytes of the SubFormat GUID.
+      if (formatTag === WAVE_FORMAT_EXTENSIBLE && chunkSize >= 26) {
+        // Real format lives in the first 2 bytes of the SubFormat GUID, which
+        // starts at body+24 — so the chunk must hold at least bytes 24-25.
         formatTag = view.getUint16(body + 24, true);
       }
     } else if (chunkId === "data") {

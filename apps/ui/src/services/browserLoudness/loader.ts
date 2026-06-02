@@ -62,8 +62,9 @@ export function measureWithModule(
 }
 
 function wasmModuleUrl(): string | null {
-  const env = (import.meta as { env?: Record<string, string | undefined> }).env;
-  const url = env?.VITE_BROWSER_LOUDNESS_WASM_URL?.trim();
+  // VITE_BROWSER_LOUDNESS_WASM_URL is declared in vite-env.d.ts, so import.meta
+  // is already typed here — no cast needed.
+  const url = import.meta.env.VITE_BROWSER_LOUDNESS_WASM_URL?.trim();
   return url ? url : null;
 }
 
