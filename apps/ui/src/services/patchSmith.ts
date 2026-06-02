@@ -219,13 +219,31 @@ function mapSubLayer(phase1: Phase1Result, acc: PatchAccumulator): void {
     label: "Sub oscillator",
     vitalParam: "osc_2_on",
     value: 1.0,
-    display: "on (−1 oct)",
+    display: "on",
     phase1Fields: ["spectralBalance.subBass"],
     rationale: `Sub band sits ${subBass.toFixed(1)} dB above the mix average — add an octave-down oscillator for that weight.`,
     confidence: "MED",
   });
-  acc.settings.osc_2_transpose = -12.0;
-  acc.settings.osc_2_level = 0.5;
+  // The octave-down transpose and balance are what "sub layer" means; cite them
+  // too so every value in the preset is traceable in the manifest (invariant #2).
+  applyCitation(acc, {
+    label: "Sub oscillator octave",
+    vitalParam: "osc_2_transpose",
+    value: -12.0,
+    display: "−1 octave",
+    phase1Fields: ["spectralBalance.subBass"],
+    rationale: "An octave below the main oscillator carries the measured sub weight.",
+    confidence: "MED",
+  });
+  applyCitation(acc, {
+    label: "Sub oscillator level",
+    vitalParam: "osc_2_level",
+    value: 0.5,
+    display: "50%",
+    phase1Fields: ["spectralBalance.subBass"],
+    rationale: "Mixed under the main oscillator so the sub supports rather than dominates.",
+    confidence: "MED",
+  });
 }
 
 /** Acid character → resonant filter; spectral brightness places its cutoff. */

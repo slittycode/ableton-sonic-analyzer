@@ -75,13 +75,6 @@ export function PatchSmithPanel({ phase1, className }: PatchSmithPanelProps) {
       status={generated ? rackStatus(result) : "idle"}
       aria-label="Vital synth patch generator"
       className={className}
-      action={
-        generated && (
-          <Button variant="link" size="sm" onClick={() => downloadVital(result)}>
-            Download .vital
-          </Button>
-        )
-      }
     >
       <div className="space-y-3">
         <p className="max-w-xl font-mono text-[11px] leading-snug text-text-secondary">

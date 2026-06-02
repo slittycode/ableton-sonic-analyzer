@@ -99,6 +99,11 @@ describe("buildPatch — mapping & citations", () => {
     expect(sub?.value).toBe(1.0);
     expect(sub?.phase1Fields).toEqual(["spectralBalance.subBass"]);
     expect(result.preset.settings.osc_2_transpose).toBe(-12.0);
+    // The octave + level are cited too, so the manifest accounts for every
+    // osc_2 value the preset carries (review follow-up).
+    expect(citation(result, "osc_2_transpose")?.value).toBe(-12.0);
+    expect(citation(result, "osc_2_transpose")?.phase1Fields).toEqual(["spectralBalance.subBass"]);
+    expect(citation(result, "osc_2_level")?.value).toBe(0.5);
   });
 
   it("maps acid character to a resonant filter with a spectral-placed cutoff", () => {
