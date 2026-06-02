@@ -82,6 +82,17 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
 
+## Merging PRs — green is the go signal
+
+When a PR opened during a session has **all CI checks green**, merge it — don't stop to report "it's green" and wait for a manual go-ahead. This is standing authorization: green means merge, no confirmation needed. Match the repo's history with a **squash** merge.
+
+Stop and check in only when:
+- CI is **red or still pending** (fix the failure or wait — never merge yellow/incomplete),
+- a review **requests changes** (address it first), or
+- the merge is genuinely contentious (touches release/migration paths, or is otherwise hard to reverse).
+
+Everything else — green checks, optionally an approving review — is a merge, not a question.
+
 ## Commands
 
 First-time local setup (Python 3.11 venv, Node deps, Phase 2 Gemini wiring) is documented step-by-step in [`docs/SETUP.md`](docs/SETUP.md) — start there on a fresh checkout.
