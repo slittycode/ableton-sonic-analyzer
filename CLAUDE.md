@@ -245,6 +245,8 @@ GEMINI_API_KEY="your_key_here"           # read by server.py at runtime, not in 
 SONIC_ANALYZER_ADMIN_KEY="optional"      # if set, DELETE /api/analysis-runs/{run_id} accepts an X-Admin-Key header that bypasses ownership for operator-level purge. Unset by default; admin path is closed.
 ASA_ENABLE_MT3="0"                       # set to "1" on the legacy analyze.py CLI path to run the optional MT3 polyphonic transcription pass. Canonical staged API uses the run-level form field `mt3_mode='enabled'` instead. Heavy deps in apps/backend/requirements-mt3.txt.
 ASA_SAMPLE_SYNTH_BACKEND="auto"          # Phase 3 audition-sample synth backend: `auto` (default, prefers FluidSynth and falls back to symusic), `symusic`, or `fluidsynth` to pin one. See apps/backend/sample_synthesis.py.
+ASA_LOUDNESS_BACKEND="essentia"          # Phase 1 loudness source for the LUFS scalars: `essentia` (default, authoritative) or `wasm` to override lufsIntegrated/lufsRange/lufsMomentaryMax/lufsShortTermMax with the asa-dsp (loudness-spectro-wasm) reading via the native measure-cli binary. truePeak + lufsCurve stay Essentia; degrades back to Essentia if measure-cli is unbuilt. Default-off experiment. See apps/backend/loudness_backend.py.
+ASA_MEASURE_CLI=""                       # optional absolute path to the measure-cli binary used by ASA_LOUDNESS_BACKEND=wasm; defaults to packages/loudness-spectro-wasm/target/release/measure-cli.
 ```
 
 Phase 2 is gated by `VITE_ENABLE_PHASE2_GEMINI`. `GEMINI_API_KEY` is backend-only. `SONIC_ANALYZER_ADMIN_KEY` is backend-only and never exposed to clients.

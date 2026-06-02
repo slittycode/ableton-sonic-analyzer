@@ -97,6 +97,7 @@ from analyze_core import (  # noqa: E402
     analyze_duration_and_sr,
     analyze_time_signature,
 )
+from loudness_backend import apply_loudness_backend  # noqa: E402
 from analyze_structure import (  # noqa: E402
     STRUCTURE_FRAME_SIZE,
     STRUCTURE_HOP_SIZE,
@@ -1588,7 +1589,12 @@ def main():
     # K-weighting coefficients. `sr` here is the source rate returned by
     # load_stereo above; thread it through so Essentia's filter is correct.
     if stereo is not None:
-        result.update(analyze_loudness(stereo, sample_rate=sr))
+        loudness = analyze_loudness(stereo, sample_rate=sr)
+        # WS3b: optionally override the LUFS scalars with the asa-dsp (WASM core)
+        # reading when ASA_LOUDNESS_BACKEND=wasm. No-op by default; degrades back
+        # to Essentia on any failure. truePeak + lufsCurve stay Essentia.
+        loudness = apply_loudness_backend(loudness, stereo, sr)
+        result.update(loudness)
     else:
         result["lufsIntegrated"] = None
         result["lufsRange"] = None
