@@ -31,6 +31,7 @@ import { INTERPRETATION_LABEL } from '../services/phaseLabels';
 import type { ValidationReport } from '../services/phase2Validator';
 import { Phase2ConsistencyReport } from './Phase2ConsistencyReport';
 import { MeasurementDashboard } from './MeasurementDashboard';
+import { PatchSmithPanel } from './PatchSmithPanel';
 import { SamplePlayback } from './SamplePlayback';
 import { SessionMusicianPanel } from './SessionMusicianPanel';
 import { TranscriptionPianorollBlock } from './TranscriptionPianorollBlock';
@@ -2552,6 +2553,7 @@ export function AnalysisResults({
           runId={runId}
         />
       </section>
+      {phase1 && <PatchSmithPanel phase1={phase1} className="mt-6" />}
       {apiBaseUrl && runId && (
         <SamplePlayback
           runId={runId}
