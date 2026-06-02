@@ -42,13 +42,15 @@ const richSupersaw = makePhase1({
     spectralComplexity: 0.7,
   },
   spectralBalance: {
-    subBass: 2.0, // strong sub → osc 2
-    lowBass: 1.0,
-    lowMids: 0.0,
-    mids: -0.5,
-    upperMids: 0.5,
-    highs: 2.0,
-    brilliance: 1.0,
+    // Absolute band energy in dB (~ -100..0), as real Phase 1 emits. subBass
+    // sits ~10 dB above the 7-band mean (-18), so the sub-osc mapping engages.
+    subBass: -8.0,
+    lowBass: -10.0,
+    lowMids: -22.0,
+    mids: -26.0,
+    upperMids: -20.0,
+    highs: -16.0,
+    brilliance: -24.0,
   },
 });
 
@@ -117,13 +119,15 @@ describe("buildPatch — mapping & citations", () => {
           bassRhythmDensity: 0.6,
         },
         spectralBalance: {
-          subBass: 0,
-          lowBass: 0,
-          lowMids: 0,
-          mids: 0,
-          upperMids: 0,
-          highs: 3.0,
-          brilliance: 2.0,
+          // Absolute dB; highs/brilliance sit ~10 dB above the mix average,
+          // so the cutoff opens well above the 200 Hz floor.
+          subBass: -30,
+          lowBass: -28,
+          lowMids: -22,
+          mids: -18,
+          upperMids: -12,
+          highs: -6,
+          brilliance: -10,
         },
       }),
     );
@@ -164,6 +168,55 @@ describe("buildPatch — mapping & citations", () => {
     for (const c of result.manifest.citations) {
       expect(c.phase1Fields.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("buildPatch — spectralBalance read relative to the mix average", () => {
+  // Regression for the v1 calibration bug: spectralBalance bands are ABSOLUTE
+  // dB (~ -100..0), not relative to the mix. The old guards compared raw
+  // absolute values against small thresholds and so never fired on real input.
+  it("engages the sub oscillator when sub is prominent vs the mix average (realistic absolute dB)", () => {
+    const result = buildPatch(
+      makePhase1({
+        spectralBalance: {
+          subBass: -8, lowBass: -10, lowMids: -22, mids: -26,
+          upperMids: -20, highs: -16, brilliance: -24,
+        },
+      }),
+    );
+    // subBass (-8) sits ~10 dB above the 7-band mean (-18) → sub layer engages.
+    expect(citation(result, "osc_2_on")?.value).toBe(1.0);
+    expect(citation(result, "osc_2_on")?.rationale).toMatch(/above the mix average/);
+  });
+
+  it("skips the sub oscillator when sub sits below the mix average (golden-like absolute dB)", () => {
+    const result = buildPatch(
+      makePhase1({
+        spectralBalance: {
+          subBass: -41.6, lowBass: -4.9, lowMids: -6.1, mids: -41.0,
+          upperMids: -53.4, highs: -62.2, brilliance: -64.7,
+        },
+      }),
+    );
+    // Real golden track: sub is far below the dominant low-bass body → no sub osc.
+    expect(citation(result, "osc_2_on")).toBeUndefined();
+  });
+
+  it("opens the acid cutoff above the 200 Hz floor when the top is relatively bright", () => {
+    const result = buildPatch(
+      makePhase1({
+        acidDetail: { isAcid: true, confidence: 0.8, resonanceLevel: 0.7 } as never,
+        // A dark overall mix whose top is still the brightest part: absolute
+        // highs/brilliance are low but ABOVE the mix mean. The old absolute
+        // formula pinned the cutoff to 200 Hz; the relative one opens it.
+        spectralBalance: {
+          subBass: -50, lowBass: -52, lowMids: -55, mids: -58,
+          upperMids: -54, highs: -45, brilliance: -48,
+        },
+      }),
+    );
+    // 200 Hz floor ≈ semitone 55; a responsive cutoff sits clearly above it.
+    expect(citation(result, "filter_1_cutoff")?.value).toBeGreaterThan(70);
   });
 });
 

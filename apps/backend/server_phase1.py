@@ -2,7 +2,7 @@
 
 import sys
 from datetime import datetime
-from math import ceil, isfinite
+from math import ceil, isfinite, log10
 from typing import Any
 
 from fastapi.responses import JSONResponse
@@ -124,7 +124,43 @@ def _normalize_stem_analysis(stem_analysis: Any) -> dict[str, Any] | None:
     return out
 
 
+def _migrate_v1_loudness_units(payload: dict[str, Any]) -> dict[str, Any]:
+    """Convert a persisted Phase 1 *v1* payload's loudness fields to v2 units.
+
+    Schema v1 (pre-#128) stored ``truePeak`` as a linear amplitude proxy and
+    ``bpmConfidence`` as raw Essentia confidence (~0-5.32). The analyzer has
+    emitted ``phase1Version`` since v2, so a payload that lacks ``"phase1.v2"``
+    is a persisted v1 run replayed from SQLite (``analysis_runtime`` stores raw
+    analyze.py output and never migrates it). Without this, v2 consumers misread
+    the stored values — a linear ``truePeak`` of 0.98 reads as a +0.98 dBTP
+    inter-sample over (false ``TRUE_PEAK_OVER`` / ``MISSING_LOUDNESS_ACTION``),
+    and a raw ``bpmConfidence`` of 3.2 renders as 320%. Convert in place so the
+    rest of ``_build_phase1`` (including its PLR fallback) operates on v2-correct
+    units. No-op for v2 payloads (idempotent).
+    """
+    if not isinstance(payload, dict) or payload.get("phase1Version") == "phase1.v2":
+        return payload
+    migrated = dict(payload)
+    # truePeak: linear amplitude proxy -> dBTP (None for <= 0, matching v2 silence).
+    true_peak_linear = _coerce_nullable_number(payload.get("truePeak"))
+    if true_peak_linear is not None:
+        migrated["truePeak"] = (
+            round(20.0 * log10(true_peak_linear), 1) if true_peak_linear > 0 else None
+        )
+    # bpmConfidence: raw Essentia (~0-5.32) -> 0-1 (/5, clamped), matching analyze_core.
+    bpm_confidence = _coerce_nullable_number(payload.get("bpmConfidence"))
+    if bpm_confidence is not None:
+        migrated["bpmConfidence"] = round(min(max(bpm_confidence, 0.0) / 5.0, 1.0), 3)
+    # The stored v1 plr mixed a linear peak with dB LUFS (incoherent); drop it so
+    # the _build_phase1 fallback recomputes it from the now-dBTP truePeak.
+    migrated["plr"] = None
+    # Stamp the generation so the normalized result advertises v2 units.
+    migrated["phase1Version"] = "phase1.v2"
+    return migrated
+
+
 def _build_phase1(payload: dict[str, Any]) -> dict[str, Any]:
+    payload = _migrate_v1_loudness_units(payload)
     stereo_detail = payload.get("stereoDetail")
     if not isinstance(stereo_detail, dict):
         stereo_detail = {}
