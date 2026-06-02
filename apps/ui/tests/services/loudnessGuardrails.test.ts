@@ -1,27 +1,28 @@
 import { describe, it, expect } from 'vitest';
 import {
-  TRUE_PEAK_OVER_LINEAR,
+  TRUE_PEAK_OVER_DBTP,
   citationAddressesLoudnessDefect,
   loudnessDefectsDemandingAction,
 } from '../../src/services/loudnessGuardrails';
 import type { Phase1Result } from '../../src/types';
 
 // Minimal Phase1Result — only the fields the predicate reads matter; the rest
-// are irrelevant to loudness defect detection.
+// are irrelevant to loudness defect detection. Default truePeak is a normal
+// mastered peak below full scale (negative dBTP).
 const phase1 = (overrides: Partial<Phase1Result>): Phase1Result =>
-  ({ truePeak: 0.5, ...overrides }) as Phase1Result;
+  ({ truePeak: -1.0, ...overrides }) as Phase1Result;
 
 describe('loudnessDefectsDemandingAction', () => {
   it('returns no defects for a clean master (no clipping, peak below full scale)', () => {
     const result = loudnessDefectsDemandingAction(
-      phase1({ truePeak: 0.5, saturationDetail: { clippedSampleCount: 0 } as any }),
+      phase1({ truePeak: -1.0, saturationDetail: { clippedSampleCount: 0 } as any }),
     );
     expect(result).toEqual([]);
   });
 
   it('flags CLIPPING when clippedSampleCount > 0', () => {
     const result = loudnessDefectsDemandingAction(
-      phase1({ truePeak: 0.5, saturationDetail: { clippedSampleCount: 1280 } as any }),
+      phase1({ truePeak: -1.0, saturationDetail: { clippedSampleCount: 1280 } as any }),
     );
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({
@@ -31,14 +32,14 @@ describe('loudnessDefectsDemandingAction', () => {
     });
   });
 
-  it('flags TRUE_PEAK_OVER when truePeak exceeds full scale (linear > 1.0)', () => {
+  it('flags TRUE_PEAK_OVER when truePeak exceeds full scale (dBTP > 0)', () => {
     const result = loudnessDefectsDemandingAction(phase1({ truePeak: 1.1 }));
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({ kind: 'TRUE_PEAK_OVER', field: 'truePeak', value: 1.1 });
   });
 
-  it('does not flag a true peak exactly at full scale (1.0 is the boundary, not an over)', () => {
-    const result = loudnessDefectsDemandingAction(phase1({ truePeak: TRUE_PEAK_OVER_LINEAR }));
+  it('does not flag a true peak exactly at full scale (0.0 dBTP is the boundary, not an over)', () => {
+    const result = loudnessDefectsDemandingAction(phase1({ truePeak: TRUE_PEAK_OVER_DBTP }));
     expect(result).toEqual([]);
   });
 
@@ -49,8 +50,9 @@ describe('loudnessDefectsDemandingAction', () => {
     expect(result.map(d => d.kind).sort()).toEqual(['CLIPPING', 'TRUE_PEAK_OVER']);
   });
 
-  it('treats truePeak as LINEAR, so a dB-style negative value never trips the over check', () => {
-    // Guards the unit contract: truePeak is a linear amplitude proxy, not dBTP.
+  it('treats truePeak as dBTP, so a normal master below full scale (negative dBTP) is not an over', () => {
+    // Guards the unit contract: truePeak is dBTP (Phase 1 v2). -0.2 dBTP is below
+    // full scale, so it is not an inter-sample over.
     const result = loudnessDefectsDemandingAction(phase1({ truePeak: -0.2 }));
     expect(result).toEqual([]);
   });
@@ -59,7 +61,7 @@ describe('loudnessDefectsDemandingAction', () => {
     expect(loudnessDefectsDemandingAction(phase1({ truePeak: null as any }))).toEqual([]);
     expect(
       loudnessDefectsDemandingAction(
-        phase1({ truePeak: 0.5, saturationDetail: null as any }),
+        phase1({ truePeak: -1.0, saturationDetail: null as any }),
       ),
     ).toEqual([]);
     expect(loudnessDefectsDemandingAction(phase1({ truePeak: NaN }))).toEqual([]);

@@ -189,4 +189,10 @@ def measure_loudness_true_peak(
 
     loudness = analyze_core.analyze_loudness(stereo, sample_rate=sample_rate)
     true_peak = analyze_core.analyze_true_peak(stereo)
-    return loudness.get("lufsIntegrated"), true_peak.get("truePeak")
+    # Phase 1 v2 emits truePeak in dBTP; this eval works in linear amplitude
+    # (limiter-ceiling reachability), so convert back to a linear peak.
+    true_peak_dbtp = true_peak.get("truePeak")
+    true_peak_linear = (
+        10.0 ** (float(true_peak_dbtp) / 20.0) if true_peak_dbtp is not None else None
+    )
+    return loudness.get("lufsIntegrated"), true_peak_linear

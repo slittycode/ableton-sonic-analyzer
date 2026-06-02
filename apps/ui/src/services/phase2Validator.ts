@@ -58,11 +58,10 @@ const TRIVIAL_CITATION_DOMINANCE_THRESHOLD = 0.6;
 
 /**
  * Confidence below which paired recommendation text must use hedged language.
- * Most detector confidences are normalized 0-1. `bpmConfidence` is Essentia's
- * unbounded RhythmExtractor2013 confidence, so it uses its own threshold.
+ * All detector confidences — including `bpmConfidence`, normalized to 0-1 as of
+ * Phase 1 schema v2 — share this threshold.
  */
 const NORMALIZED_LOW_CONFIDENCE_THRESHOLD = 0.4;
-const BPM_LOW_CONFIDENCE_THRESHOLD = 1.0;
 
 /**
  * Phase 1 fields whose presence-but-zero-citations should warn. The list now
@@ -1231,10 +1230,7 @@ function lowConfidenceTriggerForCitation(
 
   const value = readNumberAtPath(phase1, confidencePath);
   if (value === null) return null;
-  const threshold =
-    confidencePath === 'bpmConfidence'
-      ? BPM_LOW_CONFIDENCE_THRESHOLD
-      : NORMALIZED_LOW_CONFIDENCE_THRESHOLD;
+  const threshold = NORMALIZED_LOW_CONFIDENCE_THRESHOLD;
   if (value >= threshold) return null;
   return {
     field: cited,

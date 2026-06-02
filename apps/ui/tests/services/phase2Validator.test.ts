@@ -1089,8 +1089,10 @@ describe('validatePhase2Consistency', () => {
       expect(violations).toHaveLength(0);
     });
 
-    it('uses bpmConfidence < 1.0 as the low-confidence tempo threshold', () => {
-      const phase1 = createBasePhase1({ bpm: 126, bpmConfidence: 0.82 });
+    it('uses the normalized 0.4 threshold for low-confidence bpmConfidence (v2)', () => {
+      // Phase 1 v2: bpmConfidence is normalized 0-1, so it shares the standard
+      // 0.4 hedge threshold (0.2 < 0.4 → unhedged tempo claim is a violation).
+      const phase1 = createBasePhase1({ bpm: 126, bpmConfidence: 0.2 });
       const phase2 = createBasePhase2({
         abletonRecommendations: [
           {
@@ -1109,11 +1111,11 @@ describe('validatePhase2Consistency', () => {
         v => v.type === 'LOW_CONFIDENCE_NOT_HEDGED',
       );
       expect(violations).toHaveLength(1);
-      expect(violations[0].message).toContain('bpmConfidence < 1');
+      expect(violations[0].message).toContain('bpmConfidence < 0.4');
     });
 
-    it('does not apply the normalized 0.4 threshold to reliable bpmConfidence values', () => {
-      const phase1 = createBasePhase1({ bpm: 126, bpmConfidence: 1.2 });
+    it('does not flag a reliable (>= 0.4) bpmConfidence value', () => {
+      const phase1 = createBasePhase1({ bpm: 126, bpmConfidence: 0.9 });
       const phase2 = createBasePhase2({
         abletonRecommendations: [
           {
@@ -1375,7 +1377,8 @@ describe('Loudness action presence (objective safety net)', () => {
 
   const clippingPhase1 = () =>
     createBasePhase1({
-      truePeak: 0.9,
+      // -0.5 dBTP: below full scale, so CLIPPING is the only defect under test.
+      truePeak: -0.5,
       saturationDetail: { clippedSampleCount: 1280, clippedSamplePercent: 0.4 } as any,
     });
 
@@ -1415,7 +1418,7 @@ describe('Loudness action presence (objective safety net)', () => {
     expect(loudnessViolations(validatePhase2Consistency(phase1, phase2))).toHaveLength(0);
   });
 
-  it('warns on an unaddressed true-peak over (linear > 1.0)', () => {
+  it('warns on an unaddressed true-peak over (dBTP > 0)', () => {
     const result = validatePhase2Consistency(createBasePhase1({ truePeak: 1.1 }), newShapePhase2());
     const loudness = loudnessViolations(result);
     expect(loudness).toHaveLength(1);
@@ -1424,7 +1427,8 @@ describe('Loudness action presence (objective safety net)', () => {
 
   it('does not warn for a clean master (no clipping, peak below full scale)', () => {
     const phase1 = createBasePhase1({
-      truePeak: 0.8,
+      // -0.8 dBTP: a clean master sitting below full scale.
+      truePeak: -0.8,
       saturationDetail: { clippedSampleCount: 0, clippedSamplePercent: 0 } as any,
     });
     expect(loudnessViolations(validatePhase2Consistency(phase1, newShapePhase2()))).toHaveLength(0);

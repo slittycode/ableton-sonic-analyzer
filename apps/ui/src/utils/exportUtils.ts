@@ -54,7 +54,7 @@ export function generateMarkdown(
   md += `- **Time Signature**: ${phase1.timeSignature}\n`;
   md += `- **Duration (s)**: ${phase1.durationSeconds}\n`;
   md += `- **Integrated LUFS**: ${phase1.lufsIntegrated}\n`;
-  md += `- **True Peak**: ${phase1.truePeak}\n`;
+  md += `- **True Peak**: ${phase1.truePeak} dBTP\n`;
   md += `- **Stereo Width**: ${phase1.stereoWidth}\n`;
   md += `- **Stereo Correlation**: ${phase1.stereoCorrelation}\n\n`;
 

@@ -1469,6 +1469,7 @@ def main():
         )
         fast_plr = analyze_plr(result.get("lufsIntegrated"), result.get("truePeak")).get("plr")
         output = {
+            "phase1Version": "phase1.v2",
             "bpm": result.get("bpm"),
             "bpmConfidence": result.get("bpmConfidence"),
             "bpmPercival": result.get("bpmPercival"),
@@ -1872,6 +1873,7 @@ def main():
 
     # Build final output in the exact requested key order
     output = {
+        "phase1Version": "phase1.v2",
         "bpm": result.get("bpm"),
         "bpmConfidence": result.get("bpmConfidence"),
         "bpmPercival": result.get("bpmPercival"),
