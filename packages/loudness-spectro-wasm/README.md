@@ -80,7 +80,7 @@ npm run build:node     # -> pkg-node/ (for the Node smoke test)
 
 ## Validation
 
-Three independent layers, run by `npm run test:rust` (`cargo test`):
+Three independent `cargo test` layers, plus two Python dev helpers:
 
 1. **Absolute EBU Tech 3341/3342 conformance** (primary oracle,
    `crates/asa-dsp/tests/ebu_conformance.rs`). Synthesized, network-free signals
@@ -100,6 +100,21 @@ Three independent layers, run by `npm run test:rust` (`cargo test`):
    pip install pyloudnorm soundfile numpy
    python scripts/pyloudnorm_crosscheck.py <corpus-dir>   # asserts |Δ| < 0.5 LU
    ```
+4. **Essentia parity** (the check that gates wiring this package into ASA —
+   `scripts/essentia_parity.py`, dev helper). ASA's authoritative Phase 1
+   loudness is Essentia's `LoudnessEBUR128`; before asa-dsp can back any product
+   path it must agree with it. The harness runs a deterministic synthetic corpus
+   through both asa-dsp (`measure-cli`) and Essentia at native rate and reports
+   integrated deltas, gating at **±0.1 LU**. Run with a Python that has Essentia
+   (the repo's backend venv):
+
+   ```bash
+   npm run build:cli                                          # asa-dsp side
+   ../../apps/backend/venv/bin/python scripts/essentia_parity.py   # Essentia side
+   ```
+
+   The committed [`docs/essentia-parity-report.md`](docs/essentia-parity-report.md)
+   is the latest run (the WS3a checkpoint).
 
 `npm run test:smoke` additionally exercises the generated WASM from Node.
 
