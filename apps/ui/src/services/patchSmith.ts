@@ -144,6 +144,32 @@ export function detuneCentsToVital(cents: number): number {
   return round(clamp(cents / 7.0, 0, 10), 3);
 }
 
+/**
+ * Mean of the 7 `spectralBalance` bands — the "mix average" reference.
+ *
+ * CRITICAL: the bands are ABSOLUTE band energy in dB (`10·log10(mean_energy)`,
+ * roughly −100…0; see `apps/backend/analyze_core.py`), NOT relative to the mix
+ * average. A real track reads e.g. `subBass −41`, `highs −62`. So any
+ * "X dB above/below the mix average" reasoning MUST subtract this mean first —
+ * comparing a raw band value against a small absolute threshold (the original
+ * bug) never fires on real input.
+ */
+export function meanBandDb(sb: Phase1Result["spectralBalance"] | null | undefined): number | null {
+  if (!sb) return null;
+  const bands = [sb.subBass, sb.lowBass, sb.lowMids, sb.mids, sb.upperMids, sb.highs, sb.brilliance];
+  const finite = bands.filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+  if (finite.length === 0) return null;
+  return finite.reduce((sum, v) => sum + v, 0) / finite.length;
+}
+
+/**
+ * dB above the mix average at which the sub band is "prominent" enough to
+ * warrant a dedicated octave-down oscillator. First cut — tuned so a genuinely
+ * sub-forward mix engages it while ordinary low-end does not; revisit against
+ * the recommendation corpus (GOAL.md).
+ */
+const SUB_PROMINENCE_DB = 3.0;
+
 // ── Mapping engine ─────────────────────────────────────────────────────────
 
 const CONF_RANK: Record<PatchConfidence, number> = { HIGH: 2, MED: 1, LOW: 0 };
@@ -212,8 +238,16 @@ function mapSupersaw(phase1: Phase1Result, acc: PatchAccumulator): void {
 
 /** Strong measured sub energy → a sub-octave second oscillator. */
 function mapSubLayer(phase1: Phase1Result, acc: PatchAccumulator): void {
-  const subBass = phase1.spectralBalance?.subBass;
-  if (typeof subBass !== "number" || subBass <= 1.0) return;
+  const sb = phase1.spectralBalance;
+  const subBass = sb?.subBass;
+  if (typeof subBass !== "number") return;
+  // The bands are absolute dB, so reduce to a prominence vs the mix average
+  // before thresholding (see meanBandDb) — the old `subBass <= 1.0` guard
+  // compared an absolute ~−41 dB reading against 1.0 and never fired.
+  const meanDb = meanBandDb(sb);
+  if (meanDb === null) return;
+  const subProminenceDb = subBass - meanDb;
+  if (subProminenceDb <= SUB_PROMINENCE_DB) return;
 
   applyCitation(acc, {
     label: "Sub oscillator",
@@ -221,7 +255,7 @@ function mapSubLayer(phase1: Phase1Result, acc: PatchAccumulator): void {
     value: 1.0,
     display: "on",
     phase1Fields: ["spectralBalance.subBass"],
-    rationale: `Sub band sits ${subBass.toFixed(1)} dB above the mix average — add an octave-down oscillator for that weight.`,
+    rationale: `Sub band sits ${subProminenceDb.toFixed(1)} dB above the mix average — add an octave-down oscillator for that weight.`,
     confidence: "MED",
   });
   // The octave-down transpose and balance are what "sub layer" means; cite them
@@ -273,10 +307,14 @@ function mapAcidFilter(phase1: Phase1Result, acc: PatchAccumulator): void {
     confidence,
   });
 
-  // Place the cutoff from spectral brightness (always-present measurement).
+  // Place the cutoff from spectral brightness *relative to the mix average*.
+  // The bands are absolute dB; the 1200 Hz center assumes a relative reading,
+  // so without subtracting the mean (the old bug) brightness ≈ −63 and the
+  // cutoff pinned to the 200 Hz floor on every real track.
   const sb = phase1.spectralBalance;
-  if (sb && typeof sb.highs === "number" && typeof sb.brilliance === "number") {
-    const brightness = (sb.highs + sb.brilliance) / 2; // dB above/below average
+  const meanDb = meanBandDb(sb);
+  if (sb && meanDb !== null && typeof sb.highs === "number" && typeof sb.brilliance === "number") {
+    const brightness = (sb.highs + sb.brilliance) / 2 - meanDb; // dB above/below mix average
     const cutoffHz = clamp(1200 * 2 ** (brightness / 6), 200, 16000);
     applyCitation(acc, {
       label: "Filter cutoff",
@@ -284,7 +322,7 @@ function mapAcidFilter(phase1: Phase1Result, acc: PatchAccumulator): void {
       value: hzToCutoffSemitone(cutoffHz),
       display: `${Math.round(cutoffHz)} Hz`,
       phase1Fields: ["spectralBalance.highs", "spectralBalance.brilliance"],
-      rationale: `High/brilliance balance (${brightness >= 0 ? "+" : ""}${brightness.toFixed(1)} dB) sets the cutoff at ≈${Math.round(cutoffHz)} Hz.`,
+      rationale: `High/brilliance balance (${brightness >= 0 ? "+" : ""}${brightness.toFixed(1)} dB vs mix average) sets the cutoff at ≈${Math.round(cutoffHz)} Hz.`,
       confidence: "MED",
     });
   }

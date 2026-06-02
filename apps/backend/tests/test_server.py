@@ -2639,6 +2639,7 @@ class BuildPhase1CoercionTests(unittest.TestCase):
 
     def _minimal_payload(self, **overrides) -> dict:
         base = {
+            "phase1Version": "phase1.v2",
             "bpm": 128,
             "bpmConfidence": 0.92,
             "key": "A minor",
@@ -2662,6 +2663,54 @@ class BuildPhase1CoercionTests(unittest.TestCase):
         }
         base.update(overrides)
         return base
+
+    # ── Phase 1 v1 -> v2 replay migration (persisted pre-#128 runs) ──────────
+    # A run completed before #128 was stored with a LINEAR truePeak, RAW
+    # bpmConfidence (~0-5.32), an incoherent v1 plr, and NO phase1Version.
+    # _build_phase1 must migrate those to v2 units on replay so v2 consumers
+    # (loudnessGuardrails dBTP>0, exportUtils *100) don't misread them.
+    def _v1_payload(self, **overrides) -> dict:
+        payload = self._minimal_payload(**overrides)
+        payload.pop("phase1Version", None)  # pre-#128 runs lack the marker
+        return payload
+
+    def test_v1_linear_true_peak_is_converted_to_dbtp(self) -> None:
+        # Linear 0.98 (a hot-but-not-over v1 peak) -> ~ -0.2 dBTP, NOT a false
+        # +0.98 dBTP inter-sample over.
+        phase1 = server._build_phase1(self._v1_payload(truePeak=0.98))
+        self.assertAlmostEqual(phase1["truePeak"], -0.2, places=1)
+
+    def test_v1_full_scale_linear_true_peak_becomes_zero_dbtp(self) -> None:
+        phase1 = server._build_phase1(self._v1_payload(truePeak=1.0))
+        self.assertEqual(phase1["truePeak"], 0.0)
+
+    def test_v1_silent_linear_true_peak_becomes_none(self) -> None:
+        phase1 = server._build_phase1(self._v1_payload(truePeak=0.0))
+        self.assertIsNone(phase1["truePeak"])
+
+    def test_v1_raw_bpm_confidence_is_normalized(self) -> None:
+        # Raw 3.2 (reliable on the old scale) -> 0.64, not a 320%-rendering 3.2.
+        phase1 = server._build_phase1(self._v1_payload(bpmConfidence=3.2))
+        self.assertAlmostEqual(phase1["bpmConfidence"], 0.64, places=2)
+
+    def test_v1_plr_is_recomputed_as_dbtp_minus_lufs(self) -> None:
+        # v1 stored an incoherent plr (24.8); it must be dropped and recomputed
+        # from the migrated dBTP truePeak: 0.0 - (-8.2) = 8.2.
+        phase1 = server._build_phase1(
+            self._v1_payload(truePeak=1.0, lufsIntegrated=-8.2, plr=24.8)
+        )
+        self.assertAlmostEqual(phase1["plr"], 8.2, places=1)
+
+    def test_v1_payload_is_stamped_v2_after_migration(self) -> None:
+        phase1 = server._build_phase1(self._v1_payload(truePeak=0.9))
+        self.assertEqual(phase1["phase1Version"], "phase1.v2")
+
+    def test_v2_payload_loudness_fields_are_not_migrated(self) -> None:
+        # A v2 payload (phase1Version set) must pass through untouched: a -0.1
+        # dBTP peak stays -0.1, not re-logged into nonsense, and 0.92 stays 0.92.
+        phase1 = server._build_phase1(self._minimal_payload(truePeak=-0.1, bpmConfidence=0.92))
+        self.assertEqual(phase1["truePeak"], -0.1)
+        self.assertEqual(phase1["bpmConfidence"], 0.92)
 
     def test_lufs_range_nan_is_coerced_to_none(self) -> None:
         phase1 = server._build_phase1(self._minimal_payload(lufsRange=float("nan")))
