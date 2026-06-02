@@ -15,9 +15,10 @@ apps/ui/.env
 apps/ui/.env*
 !apps/ui/.env.example
 
-apps/backend/__pycache__/
-apps/backend/*.py[cod]
-apps/backend/*.pyo
+# Python bytecode (repo-wide — covers scripts/, apps/backend/, etc.)
+__pycache__/
+*.py[cod]
+*.pyo
 apps/backend/*.egg-info/
 apps/backend/build/
 apps/backend/dist/
