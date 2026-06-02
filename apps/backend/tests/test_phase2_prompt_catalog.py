@@ -50,6 +50,29 @@ class Phase2PromptCatalogTests(unittest.TestCase):
         self.assertIn('"parameter":"Amp Envelope Decay"', prompt)
         self.assertIn("Reverb device Predelay parameter", prompt)
 
+    def test_prompt_loudness_units_are_v2_dbtp_with_plr_and_bpm_hedge(self):
+        """WS2: the prompt must teach Phase 1 v2 loudness semantics.
+
+        truePeak is dBTP (not a linear proxy), the mastering move is driven by
+        the now-correct plr, and the tempo hedge uses the v2 normalized 0.4
+        bpmConfidence threshold (matching phase2Validator's shared threshold).
+        """
+        prompt = _load_prompt()
+
+        # v2: truePeak is dBTP. The old linear framing (1.0 == full scale,
+        # >1.0 == over) would mislead Gemini now that >0.0 dBTP is the over.
+        self.assertNotIn("linear amplitude proxy", prompt)
+        self.assertIn("above 0.0 dBTP", prompt)
+
+        # PLR-driven mastering decision bands surface the now-correct plr, and
+        # the bands are contiguous (no 12–14 LU gap — review follow-up).
+        self.assertIn("peak-to-loudness ratio", prompt)
+        self.assertIn("PLR ≤ 8 LU", prompt)
+        self.assertIn("PLR 8–14 LU", prompt)
+
+        # bpmConfidence hedge at the v2 normalized 0.4 threshold.
+        self.assertIn("bpmConfidence < 0.4", prompt)
+
 
 if __name__ == "__main__":
     unittest.main()
