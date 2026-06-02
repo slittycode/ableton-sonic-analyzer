@@ -531,7 +531,7 @@ function getSonicMeasurements(
   const sets: Record<string, SonicMeasurementViewModel[]> = {
     kick: [
       { icon: "🎚", label: "Low Bass", value: formatSignedDb(phase1.spectralBalance.lowBass) },
-      { icon: "📏", label: "Peak", value: `${phase1.truePeak.toFixed(1)} dB` },
+      { icon: "📏", label: "Peak", value: `${phase1.truePeak.toFixed(1)} dBTP` },
       { icon: "⏱", label: "Tempo", value: `${Math.round(phase1.bpm)} BPM` },
     ],
     bass: [
@@ -587,7 +587,7 @@ function getSonicMeasurements(
     widthAndStereo: [
       { icon: "↔", label: "Width", value: phase1.stereoWidth.toFixed(2) },
       { icon: "📡", label: "Correlation", value: phase1.stereoCorrelation.toFixed(2) },
-      { icon: "🧲", label: "Peak", value: `${phase1.truePeak.toFixed(1)} dB` },
+      { icon: "🧲", label: "Peak", value: `${phase1.truePeak.toFixed(1)} dBTP` },
     ],
     harmonicContent: [
       { icon: "🎼", label: "Key", value: phase1.key ?? "Unknown" },
@@ -815,7 +815,7 @@ function buildDerivedChainParameters(
     case "DRUM PROCESSING":
       return [
         { label: "Tempo Sync", value: `${Math.round(phase1.bpm)} BPM` },
-        { label: "Punch Target", value: `${phase1.truePeak.toFixed(1)} dB peak` },
+        { label: "Punch Target", value: `${phase1.truePeak.toFixed(1)} dBTP peak` },
       ];
     case "BASS PROCESSING":
       return [

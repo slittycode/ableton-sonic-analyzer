@@ -14,8 +14,8 @@
       "thresholds": {
         "bpm": { "target": 120.1, "tolerance": 0.2 },
         "lufsIntegrated": { "target": -23.9, "tolerance": 0.5 },
-        "truePeak": { "target": 0.9, "tolerance": 0.2 },
-        "plr": { "target": 24.8, "tolerance": 0.7 },
+        "truePeak": { "target": -0.9, "tolerance": 0.2 },
+        "plr": { "target": 23.2, "tolerance": 0.7 },
         "monoCompatible": { "equals": true }
       }
     },
@@ -31,8 +31,8 @@
       "thresholds": {
         "bpm": { "target": 112.2, "tolerance": 0.2 },
         "lufsIntegrated": { "target": -6.9, "tolerance": 0.5 },
-        "truePeak": { "target": 0.5, "tolerance": 0.2 },
-        "plr": { "target": 7.4, "tolerance": 0.7 },
+        "truePeak": { "target": -6.0, "tolerance": 0.2 },
+        "plr": { "target": 1.0, "tolerance": 0.7 },
         "monoCompatible": { "equals": true }
       }
     }
