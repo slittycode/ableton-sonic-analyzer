@@ -306,6 +306,12 @@ def build_report(rows: list[dict], tolerance: float) -> tuple[str, bool]:
                  "decorrelated stereo). Broadband noise is the most demanding "
                  "case for K-weighting agreement; tones are easy. Real-program "
                  "parity should be re-confirmed before flipping any default.")
+    lines.append("- **True peak diverges materially on broadband content** "
+                 "(see `white_noise`: a ~0.6 dBTP gap) because the two "
+                 "oversampling/reconstruction filters differ. Integrated loudness "
+                 "is unaffected. WS3c must **not** expose a browser true-peak "
+                 "readout without its own gate — treat true peak as a known "
+                 "divergence until that is closed.")
     lines.append("- This is the WS3a checkpoint. A PASS clears WS3b/WS3c to "
                  "proceed *behind a default-off flag*; the loudness default only "
                  "flips to asa-dsp after real-program parity is also proven.")
@@ -316,14 +322,22 @@ def build_report(rows: list[dict], tolerance: float) -> tuple[str, bool]:
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 
-def run(corpus: list[Path], tolerance: float) -> tuple[list[dict], bool]:
+def run(corpus: list[Path]) -> list[dict]:
+    """Measure each WAV through both paths; return the per-file rows.
+
+    Reporting and the pass/fail verdict are build_report()'s job — the caller
+    owns that single call, so we don't render here.
+    """
     rows: list[dict] = []
     for wav in corpus:
-        asa = measure_asa_dsp(wav)
-        ess = measure_essentia(wav)
-        rows.append({"name": wav.stem, "asa": asa, "ess": ess})
-    _text, passed = build_report(rows, tolerance)
-    return rows, passed
+        rows.append(
+            {
+                "name": wav.stem,
+                "asa": measure_asa_dsp(wav),
+                "ess": measure_essentia(wav),
+            }
+        )
+    return rows
 
 
 def main(argv: list[str]) -> int:
@@ -359,7 +373,7 @@ def main(argv: list[str]) -> int:
         sys.exit("no *.wav files in corpus")
 
     try:
-        rows, passed = run(corpus, args.tolerance)
+        rows = run(corpus)
     finally:
         if tmp is not None:
             tmp.cleanup()

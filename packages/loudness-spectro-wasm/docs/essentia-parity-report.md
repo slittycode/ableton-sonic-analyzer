@@ -40,4 +40,5 @@ _Generated 2026-06-02 by `scripts/essentia_parity.py` (WS3a checkpoint)._
 
 - Both paths decode each WAV at its **native rate** with no resampling. Essentia uses `AudioLoader` → `LoudnessEBUR128` (identical to `analyze_core.analyze_loudness`); asa-dsp uses the `measure-cli` binary (source-identical to the WASM core).
 - The corpus is **synthetic** (tones, sweep, white/pink noise, decorrelated stereo). Broadband noise is the most demanding case for K-weighting agreement; tones are easy. Real-program parity should be re-confirmed before flipping any default.
+- **True peak diverges materially on broadband content** (see `white_noise`: a ~0.6 dBTP gap) because the two oversampling/reconstruction filters differ. Integrated loudness is unaffected. WS3c must **not** expose a browser true-peak readout without its own gate — treat true peak as a known divergence until that is closed.
 - This is the WS3a checkpoint. A PASS clears WS3b/WS3c to proceed *behind a default-off flag*; the loudness default only flips to asa-dsp after real-program parity is also proven.
