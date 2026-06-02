@@ -52,7 +52,9 @@ _OVERRIDABLE_FIELDS = (
     "lufsShortTermMax",
 )
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+# loudness_backend.py lives at apps/backend/, so the repo root is parents[2]
+# (parents[0]=apps/backend, [1]=apps, [2]=repo root).
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_MEASURE_CLI = (
     _REPO_ROOT / "packages" / "loudness-spectro-wasm" / "target" / "release" / "measure-cli"
 )
@@ -175,7 +177,12 @@ def apply_loudness_backend(
 
     merged = dict(loudness)
     for field in _OVERRIDABLE_FIELDS:
-        merged[field] = cli_result.get(field)
+        # Only override when the CLI gave a real value: integrated can be
+        # non-null while lra is undefined for short content, and we must not
+        # clobber a valid Essentia reading with None.
+        value = cli_result.get(field)
+        if value is not None:
+            merged[field] = value
     print(
         "[info] loudness backend: WASM (asa-dsp) overrode LUFS scalars "
         f"(integrated {merged.get('lufsIntegrated')} LUFS); "

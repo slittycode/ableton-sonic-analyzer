@@ -45,6 +45,14 @@ class LoudnessBackendNameTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {"ASA_LOUDNESS_BACKEND": "WASM"}):
             self.assertEqual(lb.loudness_backend_name(), "wasm")
 
+    def test_default_measure_cli_path_is_under_repo_packages(self) -> None:
+        # Guards the parents[] index: the package lives at <repo>/packages/...,
+        # NOT <repo>/apps/packages/... An off-by-one would silently degrade
+        # ASA_LOUDNESS_BACKEND=wasm to Essentia by default.
+        package_dir = lb._DEFAULT_MEASURE_CLI.parents[2]
+        self.assertEqual(package_dir.name, "loudness-spectro-wasm")
+        self.assertTrue(package_dir.is_dir(), f"{package_dir} should exist")
+
 
 class ApplyLoudnessBackendTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -79,6 +87,20 @@ class ApplyLoudnessBackendTests(unittest.TestCase):
         self.assertEqual(out["lufsShortTermMax"], -13.2)
         # ...while the per-frame curve (Essentia-only) passes through untouched.
         self.assertEqual(out["lufsCurve"], ESSENTIA_LOUDNESS["lufsCurve"])
+
+    def test_wasm_keeps_essentia_value_when_cli_field_is_null(self) -> None:
+        # Valid integrated but null lra (undefined for short content): the CLI's
+        # None must not overwrite Essentia's valid LRA reading.
+        cli_json = (
+            '{"integrated":-14.71,"momentaryMax":-12.5,'
+            '"shortTermMax":-13.2,"truePeak":-1.0,"lra":null}'
+        )
+        with mock.patch.dict(os.environ, {"ASA_LOUDNESS_BACKEND": "wasm"}), \
+            mock.patch.object(lb, "_measure_cli_path", return_value=_FAKE_CLI), \
+            mock.patch.object(lb.subprocess, "run", return_value=_cli_proc(cli_json)):
+            out = lb.apply_loudness_backend(dict(ESSENTIA_LOUDNESS), self.stereo, 48_000)
+        self.assertEqual(out["lufsIntegrated"], -14.7)  # overridden
+        self.assertEqual(out["lufsRange"], ESSENTIA_LOUDNESS["lufsRange"])  # preserved
 
     def test_wasm_missing_binary_falls_back_to_essentia(self) -> None:
         with mock.patch.dict(os.environ, {"ASA_LOUDNESS_BACKEND": "wasm"}), \
