@@ -5,6 +5,8 @@ interface ImportMetaEnv {
   readonly VITE_API_REQUEST_HEADERS_JSON?: string;
   readonly VITE_ENABLE_PHASE2_GEMINI?: string;
   readonly VITE_ENABLE_MT3?: string;
+  readonly VITE_ENABLE_BROWSER_LOUDNESS?: string;
+  readonly VITE_BROWSER_LOUDNESS_WASM_URL?: string;
   readonly VITE_RUNTIME_PROFILE?: string;
   readonly DISABLE_HMR?: string;
 }

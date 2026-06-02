@@ -30,6 +30,8 @@ import { downloadFile, generateMarkdown } from '../utils/exportUtils';
 import { INTERPRETATION_LABEL } from '../services/phaseLabels';
 import type { ValidationReport } from '../services/phase2Validator';
 import { Phase2ConsistencyReport } from './Phase2ConsistencyReport';
+import { isBrowserLoudnessConfigEnabled } from '../config';
+import { BrowserLoudnessPanel } from './BrowserLoudnessPanel';
 import { MeasurementDashboard } from './MeasurementDashboard';
 import { PatchSmithPanel } from './PatchSmithPanel';
 import { SamplePlayback } from './SamplePlayback';
@@ -83,6 +85,8 @@ export interface AnalysisResultsProps {
   phase2ConsistencyReport?: ValidationReport | null;
   phase2StatusMessage?: string | null;
   sourceFileName?: string | null;
+  /** The uploaded source File, retained for the in-browser loudness readout (WS3c). */
+  audioFile?: File | null;
   spectralArtifacts?: SpectralArtifacts | null;
   measurementAvailability?: MeasurementAvailabilityContext;
   apiBaseUrl?: string;
@@ -633,6 +637,7 @@ export function AnalysisResults({
   phase2ConsistencyReport = null,
   phase2StatusMessage = null,
   sourceFileName = null,
+  audioFile = null,
   spectralArtifacts = null,
   measurementAvailability,
   apiBaseUrl,
@@ -2560,6 +2565,9 @@ export function AnalysisResults({
           apiBaseUrl={apiBaseUrl}
           measurementCompleted={Boolean(phase1)}
         />
+      )}
+      {isBrowserLoudnessConfigEnabled() && phase1 && (
+        <BrowserLoudnessPanel phase1={phase1} audioFile={audioFile} className="mt-6" />
       )}
     </motion.div>
   );

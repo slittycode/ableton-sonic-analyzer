@@ -10,6 +10,12 @@ export interface AppConfig {
    * results panel renders any MT3 result that exists regardless of this flag.
    */
   enableMt3: boolean;
+  /**
+   * Operator opt-in for the in-browser loudness parity readout (WS3c). Default
+   * OFF — it needs the loudness-spectro-wasm core built + served and only
+   * covers WAV input, so it's an additive diagnostic, not a shipped feature.
+   */
+  enableBrowserLoudness: boolean;
   runtimeProfile: RuntimeProfile;
   requestHeaders: Record<string, string>;
 }
@@ -20,6 +26,7 @@ type AppConfigEnv = Partial<
     | 'VITE_API_BASE_URL'
     | 'VITE_ENABLE_PHASE2_GEMINI'
     | 'VITE_ENABLE_MT3'
+    | 'VITE_ENABLE_BROWSER_LOUDNESS'
     | 'VITE_RUNTIME_PROFILE'
     | 'VITE_API_REQUEST_HEADERS_JSON'
   >
@@ -110,6 +117,10 @@ export function resolveAppConfig(
       overrides.VITE_ENABLE_MT3 ?? env.VITE_ENABLE_MT3,
       false,
     ),
+    enableBrowserLoudness: parseBooleanFlag(
+      overrides.VITE_ENABLE_BROWSER_LOUDNESS ?? env.VITE_ENABLE_BROWSER_LOUDNESS,
+      false,
+    ),
     requestHeaders: parseRequestHeaders(
       overrides.VITE_API_REQUEST_HEADERS_JSON ?? env.VITE_API_REQUEST_HEADERS_JSON,
     ),
@@ -132,6 +143,10 @@ export function isGeminiPhase2ConfigEnabled(config: AppConfig = appConfig): bool
 
 export function isMt3ConfigEnabled(config: AppConfig = appConfig): boolean {
   return config.enableMt3;
+}
+
+export function isBrowserLoudnessConfigEnabled(config: AppConfig = appConfig): boolean {
+  return config.enableBrowserLoudness;
 }
 
 export function buildConfiguredRequestInit(

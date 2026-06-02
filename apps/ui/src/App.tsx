@@ -1429,6 +1429,7 @@ export default function App() {
                   phase2ConsistencyReport={phase2ConsistencyReport}
                   phase2StatusMessage={phase2StatusMessage}
                   sourceFileName={audioFile?.name ?? null}
+                  audioFile={audioFile}
                   spectralArtifacts={analysisRun?.artifacts?.spectral ?? null}
                   measurementAvailability={{
                     analysisMode: analysisRun?.requestedStages.analysisMode,
