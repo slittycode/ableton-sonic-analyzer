@@ -64,9 +64,11 @@ class Phase2PromptCatalogTests(unittest.TestCase):
         self.assertNotIn("linear amplitude proxy", prompt)
         self.assertIn("above 0.0 dBTP", prompt)
 
-        # PLR-driven mastering decision bands surface the now-correct plr.
+        # PLR-driven mastering decision bands surface the now-correct plr, and
+        # the bands are contiguous (no 12–14 LU gap — review follow-up).
         self.assertIn("peak-to-loudness ratio", prompt)
         self.assertIn("PLR ≤ 8 LU", prompt)
+        self.assertIn("PLR 8–14 LU", prompt)
 
         # bpmConfidence hedge at the v2 normalized 0.4 threshold.
         self.assertIn("bpmConfidence < 0.4", prompt)

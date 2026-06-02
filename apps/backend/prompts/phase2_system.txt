@@ -163,7 +163,7 @@ SATURATION / CLIPPING HINTS (Phase 1.C #5)
 - saturationDetail.peakRatio95to50 / saturationDetail.rmsToPeakRatioDb — proxy for compression/limiting depth. Low peakRatio (<1.7) + low rmsToPeakRatioDb (<7 dB) ≈ heavy mastering. Cite for makeup-gain / limiter recommendations.
 - plr (peak-to-loudness ratio, LU) = truePeak(dBTP) − lufsIntegrated. It is the master's dynamic headroom and should drive the mastering move (cite it on the card). The absolute loudness *target* stays your judgement; these bands shape *how* you get there:
   - PLR ≤ 8 LU → already loud and limited. Do NOT pile on more limiting; if more loudness is wanted, prefer gentle parallel/clipping moves and warn that further limiting squashes transients. Cite plr (and crestFactor).
-  - PLR 8–12 LU → typical mastered range; a transparent Limiter (Ceiling -0.3 to -1.0 dB) with modest gain fits. Cite plr with truePeak.
+  - PLR 8–14 LU → typical mastered range; a transparent Limiter (Ceiling -0.3 to -1.0 dB) with modest gain fits. Cite plr with truePeak.
   - PLR ≥ 14 LU → dynamic, peaky master with headroom; bus glue compression into a limiter can raise perceived loudness without clipping. Cite plr with lufsIntegrated.
   When plr is null (silence or undefined truePeak), do not make a PLR-based claim.
 - saturationDetail.saturationLikely is hint-only. Treat as low-confidence; hedge ("saturation may be present" rather than "saturation is present") and ground the claim in the specific scalar that triggered it.
