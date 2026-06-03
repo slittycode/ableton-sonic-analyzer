@@ -102,7 +102,7 @@ RUN_GEMINI_LIVE_SMOKE=true VITE_ENABLE_PHASE2_GEMINI=true GEMINI_API_KEY=your_ke
 - `src/services/sampleGenerationClient.ts`: Phase 3 audition-sample POST/GET against `/api/analysis-runs/{run_id}/samples` plus per-clip artifact streaming.
 - `src/services/browserLoudness/`: browser-side WASM loudness integration (WS3c). `loader.ts` dynamically imports the built `loudness-spectro-wasm` web glue from `VITE_BROWSER_LOUDNESS_WASM_URL` (off by default — `pkg/` is not a build dep). `wavDecoder.ts` decodes audio to PCM; `parity.ts` defines `BrowserLoudnessReading`. Degrades gracefully when the URL is unset.
 - `src/services/audioFile.ts`: client-side audio validation, blank-MIME extension fallback, and preview-URL lifecycle.
-- `src/services/mixDoctor.ts`: client-side spectral-balance scoring against genre profiles.
+- `src/services/mixDoctor.ts`: client-side spectral-balance scoring against genre profiles. Genre profile data lives in `src/data/genreProfiles.ts`.
 - `src/services/phase2Validator.ts` + `loudnessGuardrails.ts`: runtime guardrail — chain-of-custody checks of Phase 2 against Phase 1 (BPM, key, LUFS, genre/DSP, numeric bounds, and a `MISSING_LOUDNESS_ACTION` check). `loudnessGuardrails.ts` defines the objective loudness defects (clipping, true-peak overs) a Phase 2 mastering/dynamics card must address. Surfaced in the UI via `components/Phase2ConsistencyReport.tsx`.
 - `src/services/recommendationVerification.ts` + `src/data/recommendationVerification.ts` + `components/RecommendationVerificationBadge.tsx`: per-recommendation corpus-verification badge for the recommendation-proof campaign (`../../GOAL.md` sub-goal 4). The data module is a generated artifact from `apps/backend/scripts/evaluate_recommendations.py --verification-artifact` (all-`NONE` until the ground-truth corpus has renders); the service infers a card's domain (mirroring the backend scorer's `infer_domain`) and looks up its confidence band; the badge renders nothing when confidence is `NONE` so the surface degrades gracefully.
 - `src/services/phase1Picker.ts` + `phaseLabels.ts`: phase-snapshot projection helpers used by the results surface.
@@ -110,10 +110,14 @@ RUN_GEMINI_LIVE_SMOKE=true VITE_ENABLE_PHASE2_GEMINI=true GEMINI_API_KEY=your_ke
 - `src/services/fieldAnalytics.ts` + `diagnosticLogs.ts`: instrumentation hooks and diagnostic log capture for the request panel.
 - `src/services/midi/`: MIDI export, preview, and quantization (`midiExport.ts`, `midiPreview.ts`, `quantization.ts`).
 - `src/services/sessionMusician/`: Session Musician helpers — `confidenceBand.ts`, `noteConversion.ts`, `renderState.ts`, `stemListeningNotes.ts`.
-- `src/types.ts` + `src/types/`: shared frontend contract types. `types.ts` is a barrel re-export of `./types/{measurement,interpretation,backend}.ts`; `./types/samples.ts` exists but is imported directly, not through the barrel.
+- `src/data/genreProfiles.ts`: genre profile definitions consumed by `mixDoctor.ts` for spectral-balance scoring and recommendations.
+- `src/types.ts` + `src/types/`: shared frontend contract types. `types.ts` re-exports through `./types/index.ts`, which re-exports `measurement.ts`, `interpretation.ts`, and `backend.ts`. `./types/samples.ts` exists but is imported directly, not through the barrel.
 - `src/hooks/`: custom React hooks — `useCpuMeter.ts`, `useGlobalDrag.ts`, `useImageZoom.ts`, `useSpectralCursorBus.tsx`.
 - `src/utils/`: pure utility helpers — `appView.ts`, `assertNever.ts`, `chordTheory.ts`, `colorScales.ts`, `displayText.ts`, `exportUtils.ts`, `phase2Preference.ts`, `renderBenchmark.ts`, `spectralScales.ts`.
 - `src/index.css`: Tailwind theme tokens and visual language.
+- `src/components/sessionMusician/`: Session Musician UI components — `ConfidenceBandBadge.tsx`, `MelodyContourBlock.tsx`, `MidiControlsRow.tsx`, `NoteDraftBlock.tsx`, `PianoRollCanvas.tsx`, `QuantizeControls.tsx`, `usePreviewController.ts`. Mounted inside `SessionMusicianPanel.tsx`; separate from the service helpers in `src/services/sessionMusician/`.
+- `src/components/analysisResultsViewModel.ts`: ViewModel helpers and pure projection functions for `AnalysisResults.tsx` — keeps large render-logic out of the component body.
+- `src/components/waveformPlayerUtils.ts`: Utility functions for `WaveformPlayer.tsx` (peak tracking, spectrum activity).
 - `tests/services/*`: unit and service tests.
 - `tests/smoke/*`: smoke and live smoke coverage.
 - `tests/e2e/*`: canonical no-Gemini integration spec plus live full-stack Gemini specs (Playwright).

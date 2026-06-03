@@ -139,6 +139,21 @@ python3.11 -m venv venv
 - `tests/test_mt3_transcription.py`: unit coverage for the optional MT3 polyphonic backend module.
 - `tests/test_loudness_backend.py`: unit coverage for `loudness_backend.py` (the selectable LUFS backend).
 - `tests/test_loudness_r128.py`: contract tests for ADR 0002 unit changes — `analyze_true_peak` emits dBTP, `analyze_plr` is a dB-domain subtraction.
+- `tests/test_analysis_runtime.py`: SQLite run-state, stage queue, and artifact-metadata behavior.
+- `tests/test_server_phase2.py`: Phase 2 route contracts, `_validate_phase2_citation_paths`, and Gemini upload path behavior.
+- `tests/test_transcription_pianoroll.py`: pianoroll matrix rendering and chain-of-custody header contracts.
+- `tests/test_url_ingest.py`: SSRF guard, MIME detection, and URL-mode ingestion behavior.
+- `tests/test_upload_limits.py`: upload-limit constant contracts (matches `upload_limits.py`).
+- `tests/test_worker.py`: hosted-mode worker entry point contracts.
+- `tests/test_audio_mime.py`: canonical MIME map parity with the frontend `audioFile.ts` contract (tripwire #9 in `CLAUDE.md`).
+- `tests/test_artifact_storage.py`: storage-boundary contracts and profile-switching behavior.
+- `tests/test_stage_status.py`: `publicStatus` collapse behavior for all eight internal stage statuses.
+- `tests/test_analyze_audio_io.py`, `tests/test_analyze_detection_*.py`: coverage for the audio-I/O and detection feature modules.
+- `tests/test_auth_context.py`, `tests/test_runtime_profile.py`: hosted-mode auth and profile-switching contracts.
+- `tests/test_dsp_bandbank.py`, `tests/test_dsp_utils.py`: shared DSP primitive contracts.
+- `tests/test_live12_catalogue.py`, `tests/test_phase2_validator_catalogue.py`, `tests/test_phase2_citation_paths.py`: catalogue lookup and Phase 2 warn-and-keep gate behavior.
+- `tests/test_spectral_viz.py`, `tests/test_stage_status.py`, `tests/test_transcription_backends.py`: spectral-artifact, stage-status, and transcription-backend contracts.
+- `tests/test_phase1_evaluation.py`, `tests/test_polyphonic_evaluation.py`, `tests/test_recommendation_evaluation.py`: unit coverage for research/eval-only harnesses (mirror their production counterparts).
 - `ARCHITECTURE.md`: backend responsibilities and request flow.
 - `JSON_SCHEMA.md`: raw CLI schema plus HTTP mapping notes.
 
