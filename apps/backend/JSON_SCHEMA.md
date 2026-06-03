@@ -274,7 +274,9 @@ Sibling time-series partner for `spectralBalance`. Each row carries all seven ba
 
 Type: `object \| null`
 
-Phase 1.B per-stem analytical surface — populated only when Demucs stem separation ran successfully (`--separate`). Null when separation wasn't requested or failed. Phase 2 cites individual stems for element-specific recommendations.
+Phase 1.B per-stem analytical surface — populated only when stem separation ran successfully (`--separate`). Null when separation wasn't requested or failed. Phase 2 cites individual stems for element-specific recommendations.
+
+The separation backend is **selectable** (`ASA_SEPARATION_BACKEND`, default `demucs`; `msst` drives a stronger MSST/BS-RoFormer model — see `separation_backend.py`), but this schema is **backend-agnostic**: stems are always the canonical `drums`/`bass`/`other`/`vocals` at 44.1 kHz, so `stemAnalysis` is unchanged regardless of which backend produced them.
 
 For each available stem (`drums` / `bass` / `other` / `vocals`), the same high-value full-mix analyzers run on the stem's audio:
 
