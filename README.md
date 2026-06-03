@@ -34,16 +34,24 @@ docs/history/    Completed plans and one-shot audits (reference only)
 
 Requires **Python 3.11.x** (Essentia 2.1b6 wheels aren't published for 3.12+) and **Node.js 20+**.
 
-```bash
-# One-time backend setup
-./apps/backend/scripts/bootstrap.sh
+ASA ships an `asa` developer CLI — the single command for running and managing the
+stack. It wraps `./scripts/dev.sh` and the other scripts, which still work directly.
 
-# One-time frontend setup
-cd apps/ui && npm install && cd -
+```bash
+# Install the asa CLI onto your PATH (one-time; symlinks into ~/.local/bin)
+./bin/asa install
+
+# Set up the backend venv + frontend deps (one-time)
+./bin/asa bootstrap
 
 # Start the full stack (UI on :3100, backend on :8100)
-./scripts/dev.sh
+./bin/asa
 ```
+
+Once `~/.local/bin` is on your PATH (run `hash -r` or open a new shell — `asa install`
+prints a reminder), drop the `./bin/` prefix and just type `asa`. Run `asa help` for the
+full command list (`asa backend`, `asa frontend`, `asa stop`, `asa status`, `asa verify`,
+`asa cleanup`, `asa analyze`, …).
 
 Full setup, environment variables, Phase 2 (Gemini) configuration, and
 verification commands live in [`docs/SETUP.md`](docs/SETUP.md).
@@ -51,10 +59,14 @@ verification commands live in [`docs/SETUP.md`](docs/SETUP.md).
 ## Verification
 
 ```bash
-cd apps/ui && npm run verify                              # lint + unit + build + smoke
-cd apps/backend && ./venv/bin/python -m unittest discover -s tests
+asa verify                                                # frontend verify + backend tests
+asa verify backend                                        # backend tests only
 ./scripts/test-e2e-integration.sh                         # local-only e2e, no Gemini key
 ```
+
+`asa verify` wraps the underlying gates, which still work directly:
+`cd apps/ui && npm run verify` and
+`cd apps/backend && ./venv/bin/python -m unittest discover -s tests`.
 
 ## Documentation
 

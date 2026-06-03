@@ -40,15 +40,20 @@ def _is_exempt(path: Path, artifacts_dir: Path) -> bool:
     return "preserved" in relative_parts
 
 
-def cleanup_artifacts(runtime_dir: str | Path, ttl_hours: float = 24) -> None:
-    artifacts_dir = Path(runtime_dir) / "artifacts"
+def list_expired_candidates(artifacts_dir: str | Path, ttl_hours: float = 24) -> list[Path]:
+    """Return non-exempt artifact files older than ``ttl_hours`` under ``artifacts_dir``.
+
+    The single source of truth for "which artifacts are expired." Both the real
+    deletion path (``cleanup_artifacts``) and any read-only preview/dry-run consume
+    this, so a preview can never diverge from what ``cleanup_artifacts`` deletes.
+    Returns an empty list when the directory is absent.
+    """
+    artifacts_dir = Path(artifacts_dir)
     if not artifacts_dir.is_dir():
-        logger.info("[artifact-cleanup] Artifacts directory does not exist: %s", artifacts_dir)
-        return
+        return []
 
     cutoff = _current_time() - timedelta(hours=ttl_hours)
     expired_candidates: list[Path] = []
-
     for path in artifacts_dir.rglob("*"):
         if not path.is_file() or _is_exempt(path, artifacts_dir):
             continue
@@ -56,6 +61,16 @@ def cleanup_artifacts(runtime_dir: str | Path, ttl_hours: float = 24) -> None:
         if modified_at >= cutoff:
             continue
         expired_candidates.append(path)
+    return expired_candidates
+
+
+def cleanup_artifacts(runtime_dir: str | Path, ttl_hours: float = 24) -> None:
+    artifacts_dir = Path(runtime_dir) / "artifacts"
+    if not artifacts_dir.is_dir():
+        logger.info("[artifact-cleanup] Artifacts directory does not exist: %s", artifacts_dir)
+        return
+
+    expired_candidates = list_expired_candidates(artifacts_dir, ttl_hours)
 
     for path in expired_candidates:
         logger.info("[artifact-cleanup] Would delete expired artifact: %s", path)

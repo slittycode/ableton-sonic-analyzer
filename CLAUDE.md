@@ -97,6 +97,30 @@ Everything else — green checks, optionally an approving review — is a merge,
 
 First-time local setup (Python 3.11 venv, Node deps, Phase 2 Gemini wiring) is documented step-by-step in [`docs/SETUP.md`](docs/SETUP.md) — start there on a fresh checkout.
 
+### `asa` developer CLI (primary entry point)
+
+`asa` is the single command for running and managing the local stack. It **wraps** the
+scripts documented below — they still work directly. Install it once with `./bin/asa install`
+(symlinks `bin/asa` into `~/.local/bin`), then:
+
+```bash
+asa                 # start the full stack (UI 3100 + backend 8100) — wraps scripts/dev.sh
+asa backend         # backend only (port 8100, SONIC_ANALYZER_PORT-aware)
+asa frontend        # UI only (port 3100)
+asa stop            # free ports 3100 + 8100
+asa status          # preflight: Python 3.11, venv, node_modules, ports, .env
+asa bootstrap       # recreate backend venv + install UI deps
+asa verify          # frontend verify + backend tests (narrow: asa verify backend|frontend)
+asa cleanup         # delete artifacts >24h old via the safe cleanup path
+                    #   (--dry-run / --ttl-hours N / --max N)
+asa analyze <file>  # run the Phase 1 analyzer (always passes --yes)
+asa help            # full command list
+```
+
+The script lives at [bin/asa](bin/asa); on macOS it shadows the near-dead `/usr/bin/asa`
+system utility (run `hash -r` after install). The sections below document the underlying
+commands `asa` wraps.
+
 ### Full Stack
 
 ```bash

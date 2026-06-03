@@ -1,0 +1,389 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# asa — Ableton Sonic Analyzer developer CLI.
+#
+# A thin, additive convenience layer over the existing repo scripts. It WRAPS
+# scripts/dev.sh and friends; it never reimplements them. See bin/asa in the repo
+# and docs/SETUP.md for the full command list.
+
+# --- Resolve this script's real location, following symlinks ----------------
+# (macOS BSD readlink has no reliable -f). Resolve from the script's own
+# location, never from $PWD, so asa works from any directory.
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+REPO_ROOT="$(cd -P "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)"
+
+UI_DIR="$REPO_ROOT/apps/ui"
+BACKEND_DIR="$REPO_ROOT/apps/backend"
+RUNTIME_DIR="$BACKEND_DIR/.runtime"
+VENV_PY="$BACKEND_DIR/venv/bin/python"
+UI_PORT=3100
+BACKEND_PORT="${SONIC_ANALYZER_PORT:-8100}"
+
+# --- Shared helpers ---------------------------------------------------------
+
+err() { echo "$@" >&2; }
+
+# Return success (0) when the port has a LISTEN socket. lsof exits 1 when the
+# port is free, so call this only inside an `if` (never bare under `set -e`).
+port_in_use() {
+  lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1
+}
+
+# Print listening PIDs on a port (one per line), empty if free.
+port_pids() {
+  lsof -nP -iTCP:"$1" -sTCP:LISTEN -t 2>/dev/null || true
+}
+
+print_port_conflict() {
+  local port="$1" name="$2"
+  err "Port ${port} is already in use, so the ${name} cannot start."
+  lsof -nP -iTCP:"${port}" -sTCP:LISTEN >&2 || true
+  err "Stop the process above (try: asa stop) or free the port before rerunning."
+}
+
+ensure_backend_venv() {
+  if [[ ! -e "$VENV_PY" ]]; then
+    err "Missing backend virtualenv python: ${VENV_PY}"
+    err "Run ./apps/backend/scripts/bootstrap.sh (or: asa bootstrap) to create the Python 3.11 backend environment."
+    exit 1
+  fi
+}
+
+# --- Commands ---------------------------------------------------------------
+
+# Full stack — hand off entirely to the proven launcher.
+cmd_up() {
+  exec "$REPO_ROOT/scripts/dev.sh"
+}
+
+cmd_backend() {
+  ensure_backend_venv
+  if port_in_use "$BACKEND_PORT"; then
+    print_port_conflict "$BACKEND_PORT" "backend"
+    exit 1
+  fi
+  echo "Starting Sonic Analyzer backend on http://127.0.0.1:${BACKEND_PORT}..."
+  cd "$BACKEND_DIR"
+  exec env SONIC_ANALYZER_PORT="$BACKEND_PORT" ./venv/bin/python server.py
+}
+
+cmd_frontend() {
+  if port_in_use "$UI_PORT"; then
+    print_port_conflict "$UI_PORT" "UI dev server"
+    exit 1
+  fi
+  echo "Starting Sonic Analyzer UI on http://127.0.0.1:${UI_PORT}..."
+  cd "$UI_DIR"
+  exec npm run dev:local
+}
+
+cmd_cleanup() {
+  local ttl=24 maxarg="" dry=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --ttl-hours) ttl="${2:?--ttl-hours needs a value}"; shift 2 ;;
+      --ttl-hours=*) ttl="${1#*=}"; shift ;;
+      --max) maxarg="${2:?--max needs a value}"; shift 2 ;;
+      --max=*) maxarg="${1#*=}"; shift ;;
+      --dry-run) dry=1; shift ;;
+      -h|--help) echo "usage: asa cleanup [--ttl-hours N] [--max N] [--dry-run]"; return 0 ;;
+      *) err "asa cleanup: unknown option: $1"; return 1 ;;
+    esac
+  done
+
+  # cleanup.py is stdlib-only, so the backend venv is not required; fall back to
+  # system python3 so cleanup works even when the venv is missing/broken.
+  local pybin="$VENV_PY"
+  [[ -x "$pybin" ]] || pybin="python3"
+
+  "$pybin" - "$RUNTIME_DIR" "$ttl" "$maxarg" "$dry" <<'PY'
+import os
+import sys
+from pathlib import Path
+
+runtime_dir = sys.argv[1]
+ttl = float(sys.argv[2])
+max_s = sys.argv[3]
+dry = sys.argv[4] == "1"
+
+# runtime_dir is <backend>/.runtime; its parent is the backend dir.
+backend_dir = os.path.dirname(runtime_dir.rstrip("/"))
+sys.path.insert(0, os.path.join(backend_dir, "utils"))
+import cleanup as c  # canonical deletion + candidate selection (stdlib-only)
+
+artifacts = Path(runtime_dir) / "artifacts"
+
+
+def walk_stats(d):
+    count = 0
+    size = 0
+    if d.is_dir():
+        for p in d.rglob("*"):
+            if p.is_file():
+                try:
+                    size += p.stat().st_size
+                    count += 1
+                except OSError:
+                    pass
+    return count, size
+
+
+def human(nbytes):
+    x = float(nbytes)
+    for unit in ("B", "KiB", "MiB", "GiB", "TiB"):
+        if x < 1024.0 or unit == "TiB":
+            return f"{x:.1f} {unit}"
+        x /= 1024.0
+
+
+if not artifacts.is_dir():
+    print(f"No artifacts directory at {artifacts} — nothing to clean.")
+    sys.exit(0)
+
+before_n, before_b = walk_stats(artifacts)
+
+# cleanup.py owns candidate selection (single source of truth), so this preview
+# never diverges from what cleanup_artifacts() would actually delete.
+candidates = c.list_expired_candidates(artifacts, ttl)
+
+print(f"Artifacts: {artifacts}")
+print(f"Before:    {before_n} files, {human(before_b)}")
+print(f"Expired:   {len(candidates)} files older than {ttl:g}h (.keep / preserved exempt)")
+
+if dry:
+    for p in sorted(candidates):
+        try:
+            rel = p.relative_to(artifacts)
+        except ValueError:
+            rel = p
+        print(f"  would delete  {rel}")
+    print("Dry run — nothing deleted.")
+    sys.exit(0)
+
+# Effectively uncapped by default so a real backlog clears; --max re-arms the guard.
+effective_max = int(max_s) if max_s else 10_000_000
+if len(candidates) > effective_max:
+    print(f"Refusing to delete: {len(candidates)} expired files exceed --max {effective_max}.")
+    print(f"Rerun with --max {len(candidates)} (or higher) to confirm.")
+    sys.exit(1)
+
+os.environ["ARTIFACT_CLEANUP_MAX"] = str(effective_max)
+c.cleanup_artifacts(runtime_dir, ttl_hours=ttl)  # canonical deletion — never rm -rf
+
+after_n, after_b = walk_stats(artifacts)
+print(f"After:     {after_n} files, {human(after_b)}")
+print(f"Deleted {before_n - after_n} files, freed {human(before_b - after_b)}.")
+PY
+}
+
+cmd_stop() {
+  local port pid name pids killed=""
+  for port in "$UI_PORT" "$BACKEND_PORT"; do
+    pids="$(port_pids "$port")"
+    if [[ -z "$pids" ]]; then
+      echo "Port ${port}: no listener."
+      continue
+    fi
+    for pid in $pids; do
+      name="$(ps -o comm= -p "$pid" 2>/dev/null || true)"
+      echo "Port ${port}: stopping PID ${pid} (${name:-unknown})"
+      kill "$pid" 2>/dev/null || true
+      killed="${killed} ${pid}"
+    done
+  done
+
+  [[ -z "$killed" ]] && return 0
+
+  sleep 0.5 || true  # brief grace period for SIGTERM; never let an interrupted sleep abort teardown
+  for port in "$UI_PORT" "$BACKEND_PORT"; do
+    for pid in $(port_pids "$port"); do
+      echo "Port ${port}: force-killing PID ${pid}"
+      kill -9 "$pid" 2>/dev/null || true
+    done
+  done
+}
+
+cmd_status() {
+  local hard_fail=0 port
+  echo "ASA preflight (${REPO_ROOT})"
+
+  # (a) Python 3.11 present
+  if python3.11 --version >/dev/null 2>&1; then
+    echo "  [ok]   Python 3.11 present ($(python3.11 --version 2>/dev/null))"
+  else
+    case "$(python3 --version 2>/dev/null)" in
+      *3.11.*) echo "  [ok]   Python 3.11 present ($(python3 --version 2>/dev/null))" ;;
+      *) echo "  [FAIL] Python 3.11 not found — install it: brew install python@3.11"; hard_fail=1 ;;
+    esac
+  fi
+
+  # (b) backend venv built + is 3.11.x
+  if [[ -x "$VENV_PY" ]]; then
+    case "$("$VENV_PY" --version 2>/dev/null)" in
+      *3.11.*) echo "  [ok]   Backend venv built ($("$VENV_PY" --version 2>/dev/null))" ;;
+      *) echo "  [FAIL] Backend venv is not Python 3.11 — rebuild: asa bootstrap"; hard_fail=1 ;;
+    esac
+  else
+    echo "  [FAIL] Backend venv missing — build it: asa bootstrap"
+    hard_fail=1
+  fi
+
+  # (c) UI node_modules installed
+  if [[ -d "$UI_DIR/node_modules" && -f "$UI_DIR/node_modules/.package-lock.json" ]]; then
+    echo "  [ok]   UI node_modules installed"
+  else
+    echo "  [FAIL] UI node_modules missing — install: npm --prefix apps/ui install (or: asa bootstrap)"
+    hard_fail=1
+  fi
+
+  # (d) ports free (warn only)
+  for port in "$UI_PORT" "$BACKEND_PORT"; do
+    if port_in_use "$port"; then
+      echo "  [warn] Port ${port} in use:"
+      lsof -nP -iTCP:"$port" -sTCP:LISTEN || true
+    else
+      echo "  [ok]   Port ${port} free"
+    fi
+  done
+
+  # (e) apps/ui/.env wired (warn only)
+  if [[ -f "$UI_DIR/.env" ]] && grep -q "VITE_API_BASE_URL" "$UI_DIR/.env"; then
+    echo "  [ok]   apps/ui/.env present with VITE_API_BASE_URL"
+  else
+    echo "  [warn] apps/ui/.env missing or has no VITE_API_BASE_URL — cp apps/ui/.env.example apps/ui/.env"
+  fi
+
+  if [[ "$hard_fail" -ne 0 ]]; then
+    err "Preflight found blocking issues (see [FAIL] above)."
+    exit 1
+  fi
+  echo "Preflight OK."
+}
+
+cmd_bootstrap() {
+  echo "== Backend venv (apps/backend/scripts/bootstrap.sh) =="
+  "$BACKEND_DIR/scripts/bootstrap.sh"
+  echo "== Frontend deps (npm --prefix apps/ui install) =="
+  npm --prefix "$UI_DIR" install
+  echo "Bootstrap complete. Start the stack with: asa"
+}
+
+cmd_verify() {
+  local target="${1:-all}"
+  case "$target" in
+    all|backend|frontend|ui) ;;
+    *) err "asa verify: unknown target '${target}' (use: backend | frontend)"; return 1 ;;
+  esac
+  [[ "$target" == ui ]] && target="frontend"
+
+  local fe=0 be=0 ran_fe=0 ran_be=0
+  if [[ "$target" == all || "$target" == frontend ]]; then
+    ran_fe=1
+    echo "== Frontend verify (lint + unit + build + smoke) =="
+    npm --prefix "$UI_DIR" run verify || fe=$?
+  fi
+  if [[ "$target" == all || "$target" == backend ]]; then
+    ran_be=1
+    ensure_backend_venv
+    echo "== Backend unittest discover =="
+    # Must run from apps/backend: test modules do `import server` and rely on CWD.
+    ( cd "$BACKEND_DIR" && ./venv/bin/python -m unittest discover -s tests ) || be=$?
+  fi
+
+  echo "----"
+  if [[ "$ran_fe" -eq 1 ]]; then
+    if [[ "$fe" -eq 0 ]]; then echo "frontend: PASS"; else echo "frontend: FAIL (exit ${fe})"; fi
+  fi
+  if [[ "$ran_be" -eq 1 ]]; then
+    if [[ "$be" -eq 0 ]]; then echo "backend:  PASS"; else echo "backend:  FAIL (exit ${be})"; fi
+  fi
+  if [[ "$fe" -ne 0 || "$be" -ne 0 ]]; then exit 1; fi
+}
+
+cmd_analyze() {
+  ensure_backend_venv
+  if [[ $# -lt 1 ]]; then
+    err "usage: asa analyze <file> [flags]"
+    exit 1
+  fi
+  # No cd: invoke by absolute paths so a relative <file> resolves against the
+  # user's PWD. analyze.py finds sibling modules via sys.path[0] (its own dir).
+  # Always append --yes so it never hangs on the TTY confirmation prompt.
+  exec "$VENV_PY" "$BACKEND_DIR/analyze.py" "$@" --yes
+}
+
+cmd_install() {
+  local target_dir="${1:-$HOME/.local/bin}"
+  mkdir -p "$target_dir"
+  ln -sf "$REPO_ROOT/bin/asa" "$target_dir/asa"
+  echo "Linked ${target_dir}/asa -> ${REPO_ROOT}/bin/asa"
+  case ":$PATH:" in
+    *":$target_dir:"*) ;;
+    *)
+      echo "NOTE: ${target_dir} is not on your PATH. Add this to ~/.zshrc:"
+      echo "  export PATH=\"${target_dir}:\$PATH\""
+      ;;
+  esac
+  if [[ -x /usr/bin/asa ]]; then
+    echo "NOTE: this shadows the macOS /usr/bin/asa (carriage-control) utility."
+    echo "Run 'hash -r' (or open a new shell) so your shell picks up the new asa."
+  fi
+}
+
+usage() {
+  cat <<EOF
+asa — Ableton Sonic Analyzer developer CLI
+
+Usage: asa <command> [args]
+
+Run the stack:
+  asa                       Start the full dev stack (UI :3100 + backend :8100)
+  asa up | dev              Alias for the above (wraps scripts/dev.sh)
+  asa backend               Start only the backend (port \$SONIC_ANALYZER_PORT, default 8100)
+  asa frontend | ui         Start only the UI dev server (port 3100)
+  asa stop | down           Stop services / free ports 3100 + 8100
+
+Maintain:
+  asa cleanup [opts]        Delete artifacts >24h old (reuses the safe cleanup path)
+                            opts: --ttl-hours N  --max N  --dry-run
+  asa status | doctor       Preflight checks (Python 3.11, venv, node_modules, ports, .env)
+  asa bootstrap | setup     Recreate the backend venv + install UI deps
+  asa verify | test [t]     Run frontend verify + backend tests (t: backend | frontend)
+  asa analyze <file> [..]   Run the Phase 1 analyzer on a file (always passes --yes)
+
+Install:
+  asa install [dir]         Symlink this script onto PATH (default: ~/.local/bin)
+  asa help | -h | --help    Show this help
+
+The underlying scripts (scripts/dev.sh, apps/backend/scripts/bootstrap.sh, …) still work directly.
+EOF
+}
+
+main() {
+  local cmd="${1:-}"
+  [[ $# -gt 0 ]] && shift
+  case "$cmd" in
+    ""|up|dev)        cmd_up ;;
+    backend)          cmd_backend ;;
+    frontend|ui)      cmd_frontend ;;
+    cleanup)          cmd_cleanup "$@" ;;
+    stop|down)        cmd_stop ;;
+    status|doctor)    cmd_status ;;
+    bootstrap|setup)  cmd_bootstrap ;;
+    verify|test)      cmd_verify "$@" ;;
+    analyze)          cmd_analyze "$@" ;;
+    install)          cmd_install "$@" ;;
+    help|-h|--help)   usage ;;
+    *)                err "Unknown command: ${cmd}"; usage >&2; exit 1 ;;
+  esac
+}
+
+main "$@"

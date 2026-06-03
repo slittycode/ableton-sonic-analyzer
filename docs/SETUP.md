@@ -37,8 +37,11 @@ npm install
 
 ## Full stack
 
+Install the `asa` CLI once (`./bin/asa install`, symlinks into `~/.local/bin`), then start
+everything with a single command (`asa` wraps `./scripts/dev.sh`, which still works directly):
+
 ```bash
-./scripts/dev.sh
+asa
 ```
 
 This boots backend on `127.0.0.1:8100` and UI on `127.0.0.1:3100`. It waits
@@ -93,7 +96,7 @@ GEMINI_API_KEY="your_real_key_here"
 
 ## Running services individually
 
-Backend only:
+Backend only (`asa backend`, or directly):
 
 ```bash
 cd apps/backend
@@ -108,7 +111,7 @@ SONIC_ANALYZER_RUNTIME_PROFILE=hosted SONIC_ANALYZER_PROCESS_ROLE=worker \
   ./venv/bin/python worker.py
 ```
 
-UI only:
+UI only (`asa frontend`, or directly):
 
 ```bash
 cd apps/ui
@@ -116,6 +119,9 @@ VITE_API_BASE_URL=http://127.0.0.1:8100 npm run dev:local
 ```
 
 ## Verification
+
+Run both gates at once with `asa verify` (or narrow: `asa verify backend` /
+`asa verify frontend`). The underlying gates still work directly:
 
 Frontend gate:
 
