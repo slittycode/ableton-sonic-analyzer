@@ -61,10 +61,10 @@ from analyze_audio_io import (  # noqa: E402
     _demucs_chunked_inference,
     _load_stem_mono,
     _load_stem_stereo,
-    separate_stems,
     analyze_crepe_pitch,
     cleanup_stems,
 )
+from separation_backend import separate_stems_backend  # noqa: E402
 from analyze_estimate import (  # noqa: E402
     _format_duration_label,
     _estimate_stage_seconds,
@@ -1162,7 +1162,7 @@ def _run_pitch_note_translation(
 
     if need_separation:
         temp_dir = stem_output_dir or tempfile.mkdtemp(prefix="asa_pitch_note_stems_")
-        separated = separate_stems(audio_path, output_dir=temp_dir)
+        separated = separate_stems_backend(audio_path, output_dir=temp_dir)
         if isinstance(separated, dict) and separated:
             stem_paths = separated
 
@@ -1224,9 +1224,9 @@ def _run_mt3_transcription(
     # handover convention so both stages can short-circuit Demucs.
     if stems_dir_path is None and stem_output_dir is not None:
         os.makedirs(stem_output_dir, exist_ok=True)
-        separated = separate_stems(audio_path, output_dir=stem_output_dir)
+        separated = separate_stems_backend(audio_path, output_dir=stem_output_dir)
         if isinstance(separated, dict) and separated:
-            # separate_stems returns {"bass": "/path/...wav", ...}. Recover
+            # separate_stems_backend returns {"bass": "/path/...wav", ...}. Recover
             # the shared parent — all stem files live in one directory.
             for stem_path in separated.values():
                 if isinstance(stem_path, str) and os.path.isfile(stem_path):
@@ -1555,7 +1555,7 @@ def main():
             "Running source separation (this may take 30-60 seconds)...",
             file=sys.stderr,
         )
-        stems = separate_stems(audio_path)
+        stems = separate_stems_backend(audio_path)
         print("@@SEPARATION_COMPLETE", file=sys.stderr)
 
     # Run torchcrepe pitch extraction on separated stems (if available)
