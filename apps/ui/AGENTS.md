@@ -31,7 +31,8 @@
 
 ## Main Commands
 
-- Preferred synced local stack from the monorepo root: `./scripts/dev.sh`
+- Preferred: the `asa` developer CLI — `asa` (full stack), `asa frontend` (UI only), `asa verify` (gate). It wraps the commands below, which still work directly.
+- Synced local stack from the monorepo root: `./scripts/dev.sh`
 - Dev server (local, port 3100): `npm run dev:local`
 - Dev server (open, port 3000): `npm run dev` (non-canonical — prefer `dev:local` for local work)
 - Synced local UI only: `VITE_API_BASE_URL=http://127.0.0.1:8100 npm run dev:local`

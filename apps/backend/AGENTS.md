@@ -43,6 +43,7 @@ python3.11 -m venv venv
 
 ## Main Commands
 
+- Preferred: the `asa` developer CLI — `asa` (full stack), `asa backend` (backend only), `asa cleanup`, `asa verify`. It wraps the commands below, which still work directly.
 - Preferred synced local stack from the monorepo root: `./scripts/dev.sh`
 - Run the CLI analyzer:
 
@@ -63,6 +64,7 @@ python3.11 -m venv venv
 
 ## Validation Commands
 
+- `asa verify backend` runs the full suite below; `asa verify` adds the frontend gate.
 - Minimal syntax validation:
 
 ```bash
