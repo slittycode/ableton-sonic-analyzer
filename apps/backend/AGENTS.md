@@ -152,7 +152,7 @@ python3.11 -m venv venv
 - `tests/test_auth_context.py`, `tests/test_runtime_profile.py`: hosted-mode auth and profile-switching contracts.
 - `tests/test_dsp_bandbank.py`, `tests/test_dsp_utils.py`: shared DSP primitive contracts.
 - `tests/test_live12_catalogue.py`, `tests/test_phase2_validator_catalogue.py`, `tests/test_phase2_citation_paths.py`: catalogue lookup and Phase 2 warn-and-keep gate behavior.
-- `tests/test_spectral_viz.py`, `tests/test_stage_status.py`, `tests/test_transcription_backends.py`: spectral-artifact, stage-status, and transcription-backend contracts.
+- `tests/test_spectral_viz.py`, `tests/test_transcription_backends.py`: spectral-artifact and transcription-backend contracts.
 - `tests/test_phase1_evaluation.py`, `tests/test_polyphonic_evaluation.py`, `tests/test_recommendation_evaluation.py`: unit coverage for research/eval-only harnesses (mirror their production counterparts).
 - `ARCHITECTURE.md`: backend responsibilities and request flow.
 - `JSON_SCHEMA.md`: raw CLI schema plus HTTP mapping notes.
