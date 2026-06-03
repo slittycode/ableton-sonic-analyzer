@@ -82,6 +82,28 @@ class CleanupArtifactsTests(unittest.TestCase):
         self.assertIn("ARTIFACT_CLEANUP_MAX", joined_logs)
         self.assertIn("aborting", joined_logs.lower())
 
+    def test_list_expired_candidates_selects_only_expired_non_exempt_files(self) -> None:
+        cleanup_module = self._cleanup_module()
+        now = datetime(2026, 3, 26, 12, 0, 0)
+
+        expired_root = self._write_artifact("expired.wav", age_hours=30, now=now)
+        expired_nested = self._write_artifact("nested/expired.json", age_hours=30, now=now)
+        self._write_artifact("fresh.wav", age_hours=2, now=now)
+        self._write_artifact("nested/sentinel.keep", age_hours=30, now=now)
+        self._write_artifact("preserved/old.mid", age_hours=30, now=now)
+
+        with patch.object(cleanup_module, "_current_time", return_value=now):
+            candidates = cleanup_module.list_expired_candidates(self.artifacts_dir)
+
+        self.assertEqual(sorted(candidates), sorted([expired_root, expired_nested]))
+
+    def test_list_expired_candidates_returns_empty_for_missing_dir(self) -> None:
+        cleanup_module = self._cleanup_module()
+        self.assertEqual(
+            cleanup_module.list_expired_candidates(self.runtime_dir / "missing"),
+            [],
+        )
+
 
 class CleanupStartupHookTests(unittest.TestCase):
     def _close_coro_and_return_task(self, coro):

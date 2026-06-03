@@ -107,7 +107,6 @@ cmd_cleanup() {
   "$pybin" - "$RUNTIME_DIR" "$ttl" "$maxarg" "$dry" <<'PY'
 import os
 import sys
-import datetime
 from pathlib import Path
 
 runtime_dir = sys.argv[1]
@@ -118,7 +117,7 @@ dry = sys.argv[4] == "1"
 # runtime_dir is <backend>/.runtime; its parent is the backend dir.
 backend_dir = os.path.dirname(runtime_dir.rstrip("/"))
 sys.path.insert(0, os.path.join(backend_dir, "utils"))
-import cleanup as c  # canonical deletion path + exemption predicate (stdlib-only)
+import cleanup as c  # canonical deletion + candidate selection (stdlib-only)
 
 artifacts = Path(runtime_dir) / "artifacts"
 
@@ -151,21 +150,9 @@ if not artifacts.is_dir():
 
 before_n, before_b = walk_stats(artifacts)
 
-# Use the SAME clock + exemption predicate the canonical function uses, so the
-# preview never diverges from a real run.
-cutoff = c._current_time() - datetime.timedelta(hours=ttl)
-candidates = []
-for p in artifacts.rglob("*"):
-    if not p.is_file():
-        continue
-    if c._is_exempt(p, artifacts):
-        continue
-    try:
-        mtime = datetime.datetime.fromtimestamp(p.stat().st_mtime)
-    except OSError:
-        continue
-    if mtime < cutoff:
-        candidates.append(p)
+# cleanup.py owns candidate selection (single source of truth), so this preview
+# never diverges from what cleanup_artifacts() would actually delete.
+candidates = c.list_expired_candidates(artifacts, ttl)
 
 print(f"Artifacts: {artifacts}")
 print(f"Before:    {before_n} files, {human(before_b)}")
