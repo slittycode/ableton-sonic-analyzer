@@ -91,6 +91,48 @@ class DispatchTests(unittest.TestCase):
         demucs.assert_called_once()
         self.assertEqual(out, _SENTINEL_STEMS)
 
+    def test_msst_happy_path_returns_runner_stems(self) -> None:
+        # Full chain: separate_stems_backend -> _separate_via_msst_subprocess ->
+        # subprocess exits 0 with a valid manifest -> stems returned (no fallback).
+        env = {
+            "ASA_SEPARATION_BACKEND": "msst",
+            "ASA_MSST_PYTHON": __file__,
+            "ASA_MSST_ROOT": str(Path(__file__).parent),
+        }
+        manifest = json.dumps(
+            {
+                "stems": {
+                    "vocals": "/tmp/v.wav",
+                    "bass": "/tmp/b.wav",
+                    "drums": "/tmp/d.wav",
+                    "other": "/tmp/o.wav",
+                },
+                "modelType": "scnet",
+                "loadSeconds": 3.2,
+                "inferSeconds": 5.1,
+                "device": "cpu",
+            }
+        )
+        with mock.patch.dict(os.environ, env, clear=False), \
+            mock.patch.object(Path, "exists", return_value=True), \
+            mock.patch.object(Path, "is_dir", return_value=True), \
+            mock.patch("separation_backend.os.makedirs"), \
+            mock.patch("separation_backend.os.path.isfile", return_value=True), \
+            mock.patch("separation_backend.subprocess.run",
+                       return_value=_runner_proc(manifest, returncode=0)), \
+            mock.patch.object(sb, "separate_stems") as demucs:
+            out = sb.separate_stems_backend("/tmp/track.flac", output_dir="/tmp/out")
+        demucs.assert_not_called()  # MSST succeeded — no Demucs fallback
+        self.assertEqual(
+            out,
+            {
+                "vocals": "/tmp/v.wav",
+                "bass": "/tmp/b.wav",
+                "drums": "/tmp/d.wav",
+                "other": "/tmp/o.wav",
+            },
+        )
+
     def test_msst_runner_nonzero_exit_falls_back_to_demucs(self) -> None:
         env = {
             "ASA_SEPARATION_BACKEND": "msst",
