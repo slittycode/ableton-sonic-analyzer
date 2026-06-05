@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ableton-sonic-analyzer.local/schemas/recommendations.v1.schema.json",
+  "title": "ASA Recommendations Contract v1",
+  "description": "Frozen, versioned contract for ASA's normalized recommendation surface. Each entry is a deterministic, server-side projection of a Phase 2 (interpretation) device card into a flat, machine-actionable shape. The contract is a DERIVED VIEW: it never overrides Phase 1 measurements (PURPOSE.md invariant #1) and only admits cards that cite at least one Phase 1 measurement (invariant #2). Uncited cards are excluded by design and remain in the raw Phase 2 arrays (mixAndMasterChain / abletonRecommendations / secretSauce.workflowSteps), where the warn-and-keep catalogue gate flags them. Version semantics follow ADR 0003: additive changes (new optional entry field, new unit enum value) are minor; renaming/removing/retyping a field or changing range/unit semantics is a major bump to recommendations.v2.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "recommendations"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "recommendations.v1",
+      "description": "Contract version identifier. Mirrors the phase1Version convention (ADR 0002). A breaking change bumps this to recommendations.v2."
+    },
+    "recommendations": {
+      "type": "array",
+      "description": "Zero or more normalized, measurement-cited recommendations. Empty is valid: a track may yield no cited device cards.",
+      "items": { "$ref": "#/$defs/recommendation" }
+    }
+  },
+  "$defs": {
+    "recommendation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["device", "parameter", "value", "unit", "range", "cited_measurements"],
+      "properties": {
+        "device": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Ableton Live 12 device name as recommended (e.g. \"Glue Compressor\", \"EQ Eight\"). Not catalogue-rewritten — the value is whatever Phase 2 emitted, trimmed."
+        },
+        "parameter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Device parameter name as recommended (e.g. \"Attack\", \"Threshold\"). Not catalogue-rewritten."
+        },
+        "value": {
+          "description": "Normalized value. A number when a single magnitude was parsed from the Phase 2 value string (\"10 ms\" -> 10, \"-18 dB\" -> -18, \"3:1\" -> 3); otherwise the original non-numeric string (\"Sine\", \"4-Pole\", \"Auto\").",
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            { "type": "number" }
+          ]
+        },
+        "unit": {
+          "description": "Normalized unit for a numeric value, or null when the value is non-numeric / unitless. \"ratio\" denotes a compression-style ratio (value 3 == \"3:1\").",
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "enum": ["Hz", "dB", "ms", "s", "ratio", "%", "st"] }
+          ]
+        },
+        "range": {
+          "description": "Best-effort suggested working range [min, max] for the value, derived from a per-unit tolerance band around the recommended value. Null whenever no band applies (non-numeric value or unknown unit). This is a measurement-informed neighborhood, NOT a Live device hard-limit: the static Live 12 catalogue carries no min/max (see data/live12_catalogue.schema.json extraction_notes), so a hard device range cannot be supplied here. Honors invariant #4 by not pretending a precise range exists where it does not.",
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "array",
+              "items": { "type": "number" },
+              "minItems": 2,
+              "maxItems": 2
+            }
+          ]
+        },
+        "cited_measurements": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Dotted Phase 1 measurement paths that justify this recommendation (projected from the source card's phase1Fields). minItems:1 encodes the citation-chain invariant (#2): a recommendation with no Phase 1 citation is never admitted to this contract."
+        }
+      }
+    }
+  }
+}

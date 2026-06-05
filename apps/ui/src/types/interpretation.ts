@@ -135,6 +135,38 @@ export interface StyleProfile {
   authoritativeMeasurements: StyleProfileAuthoritativeMeasurements;
 }
 
+export type RecommendationUnit =
+  | "Hz"
+  | "dB"
+  | "ms"
+  | "s"
+  | "ratio"
+  | "%"
+  | "st";
+
+/**
+ * One entry of the frozen recommendations.v1 contract (ADR 0003): a normalized,
+ * citation-gated projection of a Phase 2 device card into a flat, machine-
+ * actionable shape. `value` is a number when a magnitude was parsed ("10 ms" ->
+ * 10), else the original non-numeric string ("Sine"); `unit`/`range` are null
+ * when no numeric magnitude/known unit applies. Mirrors the backend projection
+ * in apps/backend/recommendations_contract.py and the JSON Schema at
+ * apps/backend/schemas/recommendations.v1.schema.json — keep all three in sync.
+ */
+export interface RecommendationContractEntry {
+  device: string;
+  parameter: string;
+  value: string | number;
+  unit: RecommendationUnit | null;
+  range: [number, number] | null;
+  cited_measurements: string[];
+}
+
+export interface RecommendationsContract {
+  version: "recommendations.v1";
+  recommendations: RecommendationContractEntry[];
+}
+
 export interface Phase2Result {
   trackCharacter: string;
   projectSetup?: Phase2ProjectSetup;
@@ -197,6 +229,11 @@ export interface Phase2Result {
     reason: string;
   }[];
   abletonRecommendations: AbletonRecommendation[];
+  // Frozen recommendations.v1 contract (ADR 0003) — additive, derived,
+  // citation-gated normalization of the device cards above. Attached server-side
+  // for the producer_summary profile; optional because older stored results and
+  // the stem_summary profile do not carry it.
+  recommendations?: RecommendationsContract;
 }
 
 export interface StemSummaryBar {

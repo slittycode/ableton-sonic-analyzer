@@ -845,6 +845,61 @@ class ServerContractTests(unittest.TestCase):
         self.assertEqual(warnings[0]["originalValue"], "SYNTHESIS")
         self.assertEqual(warnings[0]["coercedValue"], "SOUND_DESIGN")
 
+    def test_run_interpretation_request_attaches_recommendations_contract(self) -> None:
+        # ADR 0003: the interpretation result must carry the frozen
+        # recommendations.v1 contract as an additive, derived field.
+        import recommendations_contract as rc
+
+        payload = _valid_phase2_result()
+        mock_response = unittest.mock.MagicMock()
+        mock_response.text = json.dumps(payload)
+        mock_model = unittest.mock.MagicMock()
+        mock_model.generate_content.return_value = mock_response
+        mock_client = unittest.mock.MagicMock()
+        mock_client.models = mock_model
+        with tempfile.TemporaryDirectory(prefix="asa_phase2_reccontract_") as temp_dir:
+            audio_path = Path(temp_dir) / "track.wav"
+            audio_path.write_bytes(b"fake-audio")
+            profile_config = server._resolve_interpretation_profile_config("producer_summary")
+            with (
+                patch.object(server, "_GENAI_AVAILABLE", True),
+                patch.dict(server.os.environ, {"GEMINI_API_KEY": "fake-key"}),
+                patch.object(server, "_genai") as mock_genai,
+                patch.object(server, "_genai_types") as mock_genai_types,
+            ):
+                mock_genai.Client.return_value = mock_client
+                mock_genai_types.GenerateContentConfig.return_value = unittest.mock.MagicMock()
+                execution = server._run_interpretation_request_with_profile_config(
+                    source_path=str(audio_path),
+                    filename=audio_path.name,
+                    file_size_bytes=audio_path.stat().st_size,
+                    profile_id="producer_summary",
+                    profile_config=profile_config,
+                    measurement_result={"bpm": 128},
+                    pitch_note_result=None,
+                    grounding_metadata={"profileId": "producer_summary"},
+                    model_name="gemini-3.1-pro-preview",
+                    request_id="rec-contract-test",
+                )
+
+        self.assertTrue(execution["ok"])
+        contract = execution["interpretationResult"]["recommendations"]
+        self.assertEqual(contract["version"], "recommendations.v1")
+        # Re-validate the live-attached envelope against the committed schema.
+        rc.validate_envelope(contract)
+        # mixAndMasterChain + secretSauce.workflowStep + abletonRecommendation,
+        # all three cited in _valid_phase2_result().
+        self.assertEqual(len(contract["recommendations"]), 3)
+        for entry in contract["recommendations"]:
+            self.assertTrue(entry["cited_measurements"])  # every entry is cited
+        # Spot-check the parsed master EQ band ("-1.5 dB @ 35 Hz" -> -1.5 dB).
+        eq_band = next(
+            e for e in contract["recommendations"] if e["device"] == "EQ Eight"
+        )
+        self.assertEqual(eq_band["value"], -1.5)
+        self.assertEqual(eq_band["unit"], "dB")
+        self.assertEqual(eq_band["cited_measurements"], ["spectralBalance.subBass"])
+
     def test_finalize_style_profile_authoritative_measurements_overwrites_mismatches(self) -> None:
         interpretation_result = _valid_phase2_result()
         interpretation_result["styleProfile"] = _valid_style_profile()
