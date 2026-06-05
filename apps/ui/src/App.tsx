@@ -16,6 +16,7 @@ import {
   appConfig,
   isGeminiPhase2ConfigEnabled,
   isMt3ConfigEnabled,
+  isSeparationBackendToggleEnabled,
 } from './config';
 import { getAudioMimeTypeOrDefault, isSupportedAudioFile } from './services/audioFile';
 import { analyzeAudio, monitorAnalysisRun } from './services/analyzer';
@@ -268,6 +269,9 @@ export default function App() {
   const [analysisMode, setAnalysisMode] = useState<'full' | 'standard'>('full');
   const [pitchNoteTranslationRequested, setPitchNoteTranslationRequested] = useState(true);
   const [mt3Requested, setMt3Requested] = useState(false);
+  const [separationBackendRequested, setSeparationBackendRequested] = useState<'demucs' | 'msst'>(
+    'demucs',
+  );
 
   const analysisStartedAtRef = useRef<number | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -275,6 +279,7 @@ export default function App() {
   const ignoredRunIdsRef = useRef<Set<string>>(new Set());
   const phase2ConfigEnabled = isGeminiPhase2ConfigEnabled();
   const mt3ConfigEnabled = isMt3ConfigEnabled();
+  const separationBackendToggleEnabled = isSeparationBackendToggleEnabled();
   const interpretationWillRun = interpretationRequested && phase2ConfigEnabled;
   const phase2StatusBadge = getInterpretationStatusBadge(phase2ConfigEnabled, interpretationRequested);
   const phase2HelperCopy = getInterpretationHelperCopy(phase2ConfigEnabled, interpretationRequested);
@@ -338,6 +343,10 @@ export default function App() {
       interpretationProfile: 'producer_summary',
       interpretationModel: interpretationWillRun ? selectedModel : undefined,
       mt3Mode: mt3Requested && mt3ConfigEnabled ? 'enabled' : 'off',
+      separationBackend:
+        separationBackendToggleEnabled && separationBackendRequested === 'msst'
+          ? 'msst'
+          : 'demucs',
     })
       .then((result) => {
         if (isCancelled) return;
@@ -358,7 +367,7 @@ export default function App() {
     return () => {
       isCancelled = true;
     };
-  }, [analysisMode, audioFile, interpretationWillRun, mt3Requested, mt3ConfigEnabled, pitchNoteTranslationRequested, selectedModel]);
+  }, [analysisMode, audioFile, interpretationWillRun, mt3Requested, mt3ConfigEnabled, separationBackendRequested, separationBackendToggleEnabled, pitchNoteTranslationRequested, selectedModel]);
 
   useEffect(() => {
     if (!isAnalyzing || analysisStartedAtRef.current === null) {
@@ -670,6 +679,10 @@ export default function App() {
           analysisMode,
           pitchNoteRequested: activePitchNoteRequested,
           mt3Requested,
+          separationBackend:
+            separationBackendToggleEnabled && separationBackendRequested === 'msst'
+              ? 'msst'
+              : 'demucs',
           timeoutMs: activeTimeoutMs,
           signal: ac.signal,
           interpretationRequested,
@@ -1213,6 +1226,36 @@ export default function App() {
                             <p className="text-[10px] font-mono uppercase tracking-wider">MT3 POLYPHONIC TRANSCRIPTION</p>
                             <p className="text-xs leading-snug opacity-80">
                               Experimental and heavy (separate model + weights). Extracts per-instrument MIDI via MT3 — additive only, never overrides Phase 1 measurements. Best with PITCH/NOTE TRANSLATION on; without Demucs stems it falls back to a lower-quality full-mix pass.
+                            </p>
+                          </div>
+                        </div>
+                      </label>
+                    )}
+                    {separationBackendToggleEnabled && (
+                      <label
+                        className={`mt-3 rounded-sm border px-3 py-3 transition-colors cursor-pointer ${
+                          separationBackendRequested === 'msst'
+                            ? 'border-accent bg-accent/10 text-accent'
+                            : 'border-border bg-bg-panel text-text-secondary'
+                        } ${isAnalyzing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      >
+                        <div className="flex items-start gap-3">
+                          {/* Native input (see PITCH/NOTE toggle above) so the
+                              smoke test can drive it via getByLabel().check(). */}
+                          <input
+                            type="checkbox"
+                            checked={separationBackendRequested === 'msst'}
+                            onChange={(e) =>
+                              setSeparationBackendRequested(e.target.checked ? 'msst' : 'demucs')
+                            }
+                            disabled={isAnalyzing}
+                            aria-label="MSST SEPARATION BACKEND"
+                            className="mt-0.5 h-4 w-4 accent-accent"
+                          />
+                          <div className="space-y-1">
+                            <p className="text-[10px] font-mono uppercase tracking-wider">MSST SEPARATION BACKEND</p>
+                            <p className="text-xs leading-snug opacity-80">
+                              Use the MSST/BS-RoFormer stem separator instead of Demucs. NonCommercial weights (CC-BY-NC-SA-4.0) — personal/research use only. Much slower on CPU (~30× Demucs), so expect a long wait; if the backend hasn&apos;t enabled MSST the run safely falls back to Demucs.
                             </p>
                           </div>
                         </div>

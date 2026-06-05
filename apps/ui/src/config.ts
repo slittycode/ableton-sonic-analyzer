@@ -16,6 +16,14 @@ export interface AppConfig {
    * covers WAV input, so it's an additive diagnostic, not a shipped feature.
    */
   enableBrowserLoudness: boolean;
+  /**
+   * Operator opt-in for the per-run separation-backend (Demucs|MSST) UI toggle.
+   * Default OFF. MSST weights are CC-BY-NC-SA-4.0 (NonCommercial), so the toggle
+   * is only licit for NonCommercial/personal deployments — the operator must
+   * also enable ASA_ALLOW_MSST_TOGGLE on the backend. Gates the control only;
+   * the backend independently licence-gates and degrades to Demucs if disabled.
+   */
+  enableSeparationBackendToggle: boolean;
   runtimeProfile: RuntimeProfile;
   requestHeaders: Record<string, string>;
 }
@@ -27,6 +35,7 @@ type AppConfigEnv = Partial<
     | 'VITE_ENABLE_PHASE2_GEMINI'
     | 'VITE_ENABLE_MT3'
     | 'VITE_ENABLE_BROWSER_LOUDNESS'
+    | 'VITE_ENABLE_SEPARATION_BACKEND_TOGGLE'
     | 'VITE_RUNTIME_PROFILE'
     | 'VITE_API_REQUEST_HEADERS_JSON'
   >
@@ -121,6 +130,11 @@ export function resolveAppConfig(
       overrides.VITE_ENABLE_BROWSER_LOUDNESS ?? env.VITE_ENABLE_BROWSER_LOUDNESS,
       false,
     ),
+    enableSeparationBackendToggle: parseBooleanFlag(
+      overrides.VITE_ENABLE_SEPARATION_BACKEND_TOGGLE ??
+        env.VITE_ENABLE_SEPARATION_BACKEND_TOGGLE,
+      false,
+    ),
     requestHeaders: parseRequestHeaders(
       overrides.VITE_API_REQUEST_HEADERS_JSON ?? env.VITE_API_REQUEST_HEADERS_JSON,
     ),
@@ -147,6 +161,10 @@ export function isMt3ConfigEnabled(config: AppConfig = appConfig): boolean {
 
 export function isBrowserLoudnessConfigEnabled(config: AppConfig = appConfig): boolean {
   return config.enableBrowserLoudness;
+}
+
+export function isSeparationBackendToggleEnabled(config: AppConfig = appConfig): boolean {
+  return config.enableSeparationBackendToggle;
 }
 
 export function buildConfiguredRequestInit(

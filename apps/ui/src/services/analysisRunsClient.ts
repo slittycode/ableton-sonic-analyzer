@@ -46,6 +46,12 @@ interface CreateAnalysisRunOptions extends AnalysisRunsClientOptions {
    * route entry — sending anything else returns 400 MT3_MODE_UNSUPPORTED.
    */
   mt3Mode?: 'off' | 'enabled';
+  /**
+   * Per-run separation backend. Defaults to "demucs" when omitted. The backend
+   * licence-gates "msst" (NonCommercial weights): if MSST isn't enabled there,
+   * the request safely degrades to "demucs" rather than erroring.
+   */
+  separationBackend?: 'demucs' | 'msst';
 }
 
 type EstimateAnalysisRunOptions = CreateAnalysisRunOptions;
@@ -97,6 +103,7 @@ export async function estimateAnalysisRun(
     body.append('interpretation_model', options.interpretationModel);
   }
   body.append('mt3_mode', options.mt3Mode ?? 'off');
+  body.append('separation_backend', options.separationBackend ?? 'demucs');
 
   return requestBackendEstimate(body, {
     apiBaseUrl: options.apiBaseUrl,
@@ -122,6 +129,7 @@ export async function createAnalysisRun(
     body.append('interpretation_model', options.interpretationModel);
   }
   body.append('mt3_mode', options.mt3Mode ?? 'off');
+  body.append('separation_backend', options.separationBackend ?? 'demucs');
 
   const response = await fetchJson(
     `${options.apiBaseUrl}/api/analysis-runs`,
@@ -397,6 +405,9 @@ function parseRequestedStages(value: unknown): AnalysisRunRequestedStages {
     // (older runs may not have it on requestedStages). Matches the
     // "absent unless requested" contract — the legacy default IS off.
     mt3Mode: asString(requested.mt3Mode) ?? 'off',
+    // Default to "demucs" for runs predating the field (the authoritative
+    // default backend). Mirrors the mt3Mode legacy-default handling above.
+    separationBackend: asString(requested.separationBackend) ?? 'demucs',
   };
 }
 

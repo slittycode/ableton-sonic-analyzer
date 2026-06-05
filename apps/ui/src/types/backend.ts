@@ -150,6 +150,11 @@ export interface AnalysisRunRequestedStages {
    * "not_requested" when off.
    */
   mt3Mode: string;
+  /**
+   * Per-run separation backend ("demucs" default | "msst"). Records the resolved
+   * choice after the backend's licence gate, so the UI can show which engine ran.
+   */
+  separationBackend: string;
 }
 
 export interface MeasurementAvailabilityContext {

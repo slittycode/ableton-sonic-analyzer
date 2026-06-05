@@ -41,6 +41,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from analyze_audio_io import separate_stems
 
@@ -95,6 +96,49 @@ def separation_backend_name() -> str:
     """Resolve the selected separation backend. Unknown values fall back to demucs."""
     name = (os.environ.get("ASA_SEPARATION_BACKEND") or "demucs").strip().lower()
     return name if name in {"demucs", "msst"} else "demucs"
+
+
+def msst_available() -> bool:
+    """True when the MSST backend is actually runnable on this host.
+
+    Mirrors the operator config the subprocess path requires (``ASA_MSST_PYTHON``
+    interpreter + ``ASA_MSST_ROOT`` checkout). Used to gate the user-facing
+    toggle so we never offer a backend that would just silently degrade to Demucs.
+    """
+    interpreter = os.environ.get("ASA_MSST_PYTHON")
+    root = os.environ.get("ASA_MSST_ROOT")
+    return bool(
+        interpreter and Path(interpreter).exists() and root and Path(root).is_dir()
+    )
+
+
+def msst_user_toggle_enabled() -> bool:
+    """True when an operator has opted into exposing MSST as a per-user choice.
+
+    Requires BOTH an explicit acknowledgement (``ASA_ALLOW_MSST_TOGGLE`` truthy)
+    AND a runnable install (:func:`msst_available`). The acknowledgement gate
+    exists because the MSST weights are CC-BY-NC-SA-4.0 (NonCommercial) — exposing
+    them to end users is only licit for NonCommercial/personal deployments. Default
+    off. See incorporations/msst-separation-licence-gate-2026-06-05.md.
+    """
+    flag = (os.environ.get("ASA_ALLOW_MSST_TOGGLE") or "").strip().lower()
+    return flag in {"1", "true", "yes", "on"} and msst_available()
+
+
+def normalize_separation_backend(value: Any, *, toggle_enabled: bool | None = None) -> str:
+    """Coerce a requested per-run backend to a safe ``demucs``|``msst``.
+
+    Returns ``msst`` only when it is both requested and permitted; everything else
+    (unknown values, or ``msst`` requested while the toggle is disabled) falls back
+    to ``demucs``. This makes the safe default un-bypassable by a non-UI API client.
+    Pass ``toggle_enabled`` to decide the gate explicitly (tests); otherwise it is
+    resolved from :func:`msst_user_toggle_enabled`.
+    """
+    requested = value.strip().lower() if isinstance(value, str) else ""
+    if requested == "msst":
+        allowed = msst_user_toggle_enabled() if toggle_enabled is None else toggle_enabled
+        return "msst" if allowed else "demucs"
+    return "demucs"
 
 
 def _msst_model_entry() -> dict[str, str]:

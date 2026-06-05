@@ -348,6 +348,7 @@ VITE_RUNTIME_PROFILE="local"             # frontend profile; controls API-URL fa
 VITE_API_BASE_URL="http://127.0.0.1:8100"
 VITE_API_REQUEST_HEADERS_JSON=""         # optional JSON object of headers injected on every API request (e.g. `{"X-ASA-User-Id":"beta-user-123"}` for hosted-mode beta access). Empty = no extra headers.
 VITE_ENABLE_PHASE2_GEMINI="true"
+VITE_ENABLE_SEPARATION_BACKEND_TOGGLE="false"  # operator opt-in for the per-run Demucs|MSST separation toggle in the upload UI. Default off. Only licit for NonCommercial/personal deployments (MSST weights are CC-BY-NC-SA-4.0); pair with the backend ASA_ALLOW_MSST_TOGGLE. Gates the UI control only — the backend independently licence-gates and degrades to Demucs.
 RUN_GEMINI_LIVE_SMOKE="false"    # set "true" to run live Playwright tests against real Gemini Files API
 DISABLE_HMR="false"              # set "true" for dev environments that need HMR disabled
 
@@ -370,6 +371,7 @@ ASA_MOSS_SIDECAR_URL="http://127.0.0.1:8200"  # base URL of the MOSS sidecar (ap
 ASA_MOSS_SIDECAR_TIMEOUT_SECONDS="180"   # per-request timeout for the MOSS sidecar call.
 ASA_MOSS_MODEL_ID=""                     # optional MOSS model id forwarded to the sidecar; defaults to the run's model_name.
 ASA_MOSS_SIDECAR_MODE="mock"             # sidecar-side (its own venv): `mock` (default, deterministic schema-valid Phase-1-grounded output) or `model` (a 501 licence-gated stub that executes no OpenMOSS code).
+ASA_ALLOW_MSST_TOGGLE="0"                # operator acknowledgement that exposing the NonCommercial MSST backend as a per-run user choice is licit for this deployment (personal/research only). Default off. Required (with a runnable MSST install) before the create-run `separation_backend=msst` form field is honored — otherwise it safely degrades to demucs. Pair with the frontend VITE_ENABLE_SEPARATION_BACKEND_TOGGLE. See apps/backend/separation_backend.py (msst_user_toggle_enabled / normalize_separation_backend).
 ```
 
 Phase 2 is gated by `VITE_ENABLE_PHASE2_GEMINI`. `GEMINI_API_KEY` is backend-only. `SONIC_ANALYZER_ADMIN_KEY` is backend-only and never exposed to clients.

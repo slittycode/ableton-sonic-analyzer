@@ -103,6 +103,46 @@ class AnalysisRuntimeTests(unittest.TestCase):
         self.assertEqual(snapshot["requestedStages"]["interpretationMode"], "async")
         self.assertEqual(runtime.get_run_owner_user_id(created["runId"]), "user_123")
 
+    def test_separation_backend_persists_defaults_and_coerces(self) -> None:
+        runtime = self._runtime()
+
+        def _make(separation_backend=None):
+            kwargs = dict(
+                filename="track.mp3",
+                content=b"fake-audio",
+                mime_type="audio/mpeg",
+                pitch_note_mode="off",
+                pitch_note_backend="auto",
+                interpretation_mode="off",
+                interpretation_profile="producer_summary",
+                interpretation_model=None,
+            )
+            if separation_backend is not None:
+                kwargs["separation_backend"] = separation_backend
+            return runtime.create_run(**kwargs)["runId"]
+
+        # Default -> demucs, in both the snapshot and the lightweight accessor.
+        default_id = _make()
+        self.assertEqual(
+            runtime.get_run(default_id)["requestedStages"]["separationBackend"], "demucs"
+        )
+        self.assertEqual(runtime.get_requested_separation_backend(default_id), "demucs")
+
+        # Explicit msst round-trips (route-layer gating is what restricts this;
+        # create_run itself just persists a valid enum value).
+        msst_id = _make("msst")
+        self.assertEqual(
+            runtime.get_run(msst_id)["requestedStages"]["separationBackend"], "msst"
+        )
+        self.assertEqual(runtime.get_requested_separation_backend(msst_id), "msst")
+
+        # Unknown value is coerced to the safe default, never persisted as-is.
+        bogus_id = _make("bogus")
+        self.assertEqual(
+            runtime.get_run(bogus_id)["requestedStages"]["separationBackend"], "demucs"
+        )
+        self.assertEqual(runtime.get_requested_separation_backend("nonexistent"), "demucs")
+
     def test_get_run_rejects_wrong_owner(self) -> None:
         runtime = self._runtime()
         created = runtime.create_run(

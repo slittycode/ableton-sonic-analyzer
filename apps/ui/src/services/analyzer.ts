@@ -36,6 +36,8 @@ export interface AnalyzeAudioOptions {
   analysisMode?: 'full' | 'standard';
   pitchNoteRequested?: boolean;
   mt3Requested?: boolean;
+  /** Per-run separation backend, already licence-gated by the caller. */
+  separationBackend?: 'demucs' | 'msst';
   interpretationRequested?: boolean;
   interpretationConfigEnabled?: boolean;
   timeoutMs?: number;
@@ -265,6 +267,9 @@ export async function analyzeAudio(
       interpretationModel: resolveInterpretationMode(analysisOptions) === 'off' ? null : modelName,
       mt3Mode:
         resolveMt3Requested(analysisOptions) && isMt3ConfigEnabled(appConfig) ? 'enabled' : 'off',
+      // Already licence-gated by the caller (App.tsx); the backend re-gates and
+      // degrades to demucs if MSST isn't enabled there, so this is safe to pass.
+      separationBackend: analysisOptions?.separationBackend ?? 'demucs',
     });
 
     analysisOptions?.onRunUpdate?.({

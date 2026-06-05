@@ -294,6 +294,34 @@ describe('analysisRunsClient', () => {
     expect(body.get('mt3_mode')).toBe('enabled');
   });
 
+  it('appends separation_backend (msst when chosen, demucs by default) to create-run', async () => {
+    const makeFetchSpy = () =>
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve(baseRunSnapshot),
+      } as Response);
+    const file = new File(['audio-data'], 'track.mp3', { type: 'audio/mpeg' });
+    const baseOpts = {
+      apiBaseUrl: 'http://127.0.0.1:8100',
+      pitchNoteMode: 'off',
+      pitchNoteBackend: 'auto',
+      interpretationMode: 'off',
+      interpretationProfile: 'producer_summary',
+    } as const;
+
+    const msstSpy = makeFetchSpy();
+    vi.stubGlobal('fetch', msstSpy);
+    await createAnalysisRun(file, { ...baseOpts, separationBackend: 'msst' });
+    expect((msstSpy.mock.calls[0][1].body as FormData).get('separation_backend')).toBe('msst');
+
+    const defaultSpy = makeFetchSpy();
+    vi.stubGlobal('fetch', defaultSpy);
+    await createAnalysisRun(file, baseOpts);
+    expect((defaultSpy.mock.calls[0][1].body as FormData).get('separation_backend')).toBe('demucs');
+  });
+
   it('appends mt3_mode=enabled to the estimate request when opted in', async () => {
     const fetchSpy = vi.fn().mockResolvedValue({
       ok: true,

@@ -49,6 +49,7 @@ from runtime_profile import (
 )
 from utils.cleanup import cleanup_artifacts
 import csv_export
+import separation_backend
 import transcription_pianoroll
 import upload_limits
 import url_ingest
@@ -505,7 +506,11 @@ def _run_streamed_subprocess(
     run_id: str,
     stage_key: str,
     stderr_line_handler: Any = None,
+    env: dict[str, str] | None = None,
 ) -> dict[str, Any]:
+    # When an env overlay is given, merge it onto the inherited environment so
+    # the child still has PATH etc. (e.g. per-run ASA_SEPARATION_BACKEND).
+    subprocess_env = {**os.environ, **env} if env else None
     if getattr(subprocess.run, "__module__", "").startswith("unittest.mock"):
         try:
             result = subprocess.run(
@@ -514,6 +519,7 @@ def _run_streamed_subprocess(
                 text=True,
                 check=False,
                 timeout=timeout_seconds,
+                env=subprocess_env,
             )
         except subprocess.TimeoutExpired as exc:
             return {
@@ -535,6 +541,7 @@ def _run_streamed_subprocess(
         stderr=subprocess.PIPE,
         text=True,
         bufsize=1,
+        env=subprocess_env,
     )
     _register_active_child_process(run_id, stage_key, process)
     stdout_chunks: list[str] = []
@@ -597,6 +604,30 @@ def _coerce_mt3_mode(value: Any) -> str:
     raise UnsupportedMt3ModeError(value)
 
 
+def _coerce_separation_backend(value: Any) -> str:
+    """Validate + LICENCE-GATE a route-form separation_backend.
+
+    Returns 'msst' only when both requested and permitted by the operator
+    (``ASA_ALLOW_MSST_TOGGLE`` + a runnable install); every other value —
+    including the ``Form(...)`` sentinel on direct calls, an empty/absent field,
+    an unknown string, or 'msst' while the toggle is disabled — collapses to the
+    safe authoritative default 'demucs'. Unlike mt3_mode this NEVER raises: a
+    rejected upgrade silently and safely degrades rather than failing the run,
+    matching the warn-and-keep posture around the NonCommercial MSST backend.
+    """
+    return separation_backend.normalize_separation_backend(value)
+
+
+def _separation_env_for_run(runtime: AnalysisRuntime, run_id: str) -> dict[str, str]:
+    """Per-run env overlay that pins the analyze.py subprocess separation backend.
+
+    Read from the persisted run choice (not the parent-process env) so a hosted
+    worker honours the user's selection. Always explicit so a stray
+    ASA_SEPARATION_BACKEND in the server's own environment can't leak across runs.
+    """
+    return {"ASA_SEPARATION_BACKEND": runtime.get_requested_separation_backend(run_id)}
+
+
 async def _create_analysis_run_record(
     *,
     track: UploadFile,
@@ -609,8 +640,10 @@ async def _create_analysis_run_record(
     interpretation_model: str | None,
     legacy_request_id: str | None = None,
     mt3_mode: Any = "off",
+    separation_backend: Any = "demucs",
 ) -> tuple[AnalysisRuntime, str]:
     mt3_mode = _coerce_mt3_mode(mt3_mode)
+    separation_backend = _coerce_separation_backend(separation_backend)
     temp_path: str | None = None
     runtime = get_analysis_runtime()
     analysis_mode = _resolve_analysis_mode_value(analysis_mode)
@@ -642,6 +675,7 @@ async def _create_analysis_run_record(
         interpretation_model=interpretation_model,
         legacy_request_id=legacy_request_id,
         mt3_mode=mt3_mode,
+        separation_backend=separation_backend,
     )
     return runtime, created["runId"]
 
@@ -658,6 +692,7 @@ async def _create_analysis_run_record_from_url(
     interpretation_model: str | None,
     legacy_request_id: str | None = None,
     mt3_mode: Any = "off",
+    separation_backend: Any = "demucs",
 ) -> tuple[AnalysisRuntime, str]:
     """Parallel of ``_create_analysis_run_record`` but for URL-fetched audio.
 
@@ -667,6 +702,7 @@ async def _create_analysis_run_record_from_url(
     for translating them into HTTP envelopes.
     """
     mt3_mode = _coerce_mt3_mode(mt3_mode)
+    separation_backend = _coerce_separation_backend(separation_backend)
     runtime = get_analysis_runtime()
     analysis_mode = _resolve_analysis_mode_value(analysis_mode)
     if interpretation_mode != "off":
@@ -687,6 +723,7 @@ async def _create_analysis_run_record_from_url(
         interpretation_model=interpretation_model,
         legacy_request_id=legacy_request_id,
         mt3_mode=mt3_mode,
+        separation_backend=separation_backend,
     )
     return runtime, created["runId"]
 
@@ -867,6 +904,7 @@ def _run_measurement_subprocess(
             run_id=run_id,
             stage_key="measurement",
             stderr_line_handler=handle_stderr_line,
+            env=_separation_env_for_run(runtime, run_id),
         )
     except Exception as exc:
         analysis_completed_at = _current_time()
@@ -1369,6 +1407,7 @@ def _execute_pitch_note_attempt(
             timeout_seconds=600,
             run_id=run_id,
             stage_key="pitchNoteTranslation",
+            env=_separation_env_for_run(runtime, run_id),
         )
 
         if result["returncode"] != 0:
@@ -1529,6 +1568,7 @@ def _execute_mt3_attempt(
             timeout_seconds=1800,
             run_id=run_id,
             stage_key="mt3",
+            env=_separation_env_for_run(runtime, run_id),
         )
 
         if result["returncode"] != 0:
@@ -2478,6 +2518,7 @@ async def create_analysis_run(
     interpretation_profile: str = Form("producer_summary"),
     interpretation_model: str | None = Form(None),
     mt3_mode: str = Form("off"),
+    separation_backend: str = Form("demucs"),
     x_asa_user_id: str | None = Header(None),
     x_asa_user_email: str | None = Header(None),
 ) -> JSONResponse:
@@ -2569,6 +2610,7 @@ async def create_analysis_run(
                 interpretation_profile=interpretation_profile,
                 interpretation_model=interpretation_model,
                 mt3_mode=mt3_mode,
+                separation_backend=separation_backend,
             )
         else:
             runtime, run_id = await _create_analysis_run_record(
@@ -2581,6 +2623,7 @@ async def create_analysis_run(
                 interpretation_profile=interpretation_profile,
                 interpretation_model=interpretation_model,
                 mt3_mode=mt3_mode,
+                separation_backend=separation_backend,
             )
         return JSONResponse(
             content=_normalize_run_snapshot(

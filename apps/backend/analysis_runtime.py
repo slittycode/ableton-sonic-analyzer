@@ -241,6 +241,24 @@ class AnalysisRuntime:
                 WHERE requested_mt3_mode IS NULL
                 """
             )
+            # Per-run separation backend. Default 'demucs' so existing rows (and
+            # any deployment without the NonCommercial MSST opt-in) stay on the
+            # authoritative default. The route layer enforces the licence gate;
+            # this column just records the resolved choice so a hosted worker
+            # process sees it. Mirrors the requested_mt3_mode backfill above.
+            self._ensure_column(
+                conn,
+                "analysis_runs",
+                "requested_separation_backend",
+                "TEXT",
+            )
+            conn.execute(
+                """
+                UPDATE analysis_runs
+                SET requested_separation_backend = 'demucs'
+                WHERE requested_separation_backend IS NULL
+                """
+            )
 
     @staticmethod
     def _ensure_column(
@@ -272,12 +290,18 @@ class AnalysisRuntime:
         legacy_request_id: str | None = None,
         analysis_mode: str = "full",
         mt3_mode: str = "off",
+        separation_backend: str = "demucs",
         expose_source_path_in_snapshot: bool = False,
     ) -> dict[str, Any]:
         # Validate mt3_mode here so a typed error reaches the route layer
         # rather than silently inserting an unknown enum value.
         if mt3_mode not in {"off", "enabled"}:
             raise UnsupportedMt3ModeError(mt3_mode)
+        # The route layer already gates/normalizes this (licence enforcement
+        # needs the env, which lives there). Coerce defensively so an unknown
+        # value can never persist; the gate is NOT re-evaluated here.
+        if separation_backend not in {"demucs", "msst"}:
+            separation_backend = "demucs"
         artifact_id = str(uuid4())
         created_at = _utc_now_iso()
         stored_artifact = self.artifact_storage.store_bytes(
@@ -308,10 +332,11 @@ class AnalysisRuntime:
                     requested_interpretation_profile,
                     requested_interpretation_model,
                     requested_mt3_mode,
+                    requested_separation_backend,
                     legacy_request_id,
                     created_at,
                     updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     run_id,
@@ -324,6 +349,7 @@ class AnalysisRuntime:
                     interpretation_profile,
                     interpretation_model,
                     mt3_mode,
+                    separation_backend,
                     legacy_request_id,
                     created_at,
                     created_at,
@@ -480,6 +506,22 @@ class AnalysisRuntime:
                         artifact_path.unlink(missing_ok=True)
             raise
 
+
+    def get_requested_separation_backend(self, run_id: str) -> str:
+        """The run's persisted separation backend ('demucs'|'msst').
+
+        Read at stage-execution time so a hosted worker (a separate process from
+        the route that created the run) uses the right backend. Defaults to
+        'demucs' for unknown runs or pre-column rows.
+        """
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT requested_separation_backend FROM analysis_runs WHERE id = ?",
+                (run_id,),
+            ).fetchone()
+        if row is None or row["requested_separation_backend"] not in {"demucs", "msst"}:
+            return "demucs"
+        return row["requested_separation_backend"]
 
     def get_source_artifact(self, run_id: str) -> dict[str, Any]:
         with self._connect() as conn:
@@ -669,6 +711,13 @@ class AnalysisRuntime:
             if run_row["requested_mt3_mode"] is not None
             else "off"
         )
+        # NULL on rows predating the column backfill -> default to the
+        # authoritative 'demucs' so the snapshot is always coherent.
+        requested_separation_backend = (
+            run_row["requested_separation_backend"]
+            if run_row["requested_separation_backend"] is not None
+            else "demucs"
+        )
 
         return {
             "runId": run_id,
@@ -680,6 +729,7 @@ class AnalysisRuntime:
                 "interpretationProfile": run_row["requested_interpretation_profile"],
                 "interpretationModel": run_row["requested_interpretation_model"],
                 "mt3Mode": requested_mt3_mode,
+                "separationBackend": requested_separation_backend,
             },
             "artifacts": {
                 "sourceAudio": {

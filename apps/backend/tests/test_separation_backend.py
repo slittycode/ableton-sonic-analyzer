@@ -206,5 +206,58 @@ class RunnerHelperTests(unittest.TestCase):
                 self.assertEqual(handle.getnframes(), 100)
 
 
+class ToggleGatingTests(unittest.TestCase):
+    """The NonCommercial-gated, per-user toggle helpers."""
+
+    # A real file + real dir so msst_available()'s existence checks pass.
+    _REAL_PY = os.path.realpath(__file__)  # any existing file
+    _REAL_DIR = os.path.dirname(os.path.realpath(__file__))  # any existing dir
+
+    def test_msst_available_false_when_unset(self):
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("ASA_MSST_PYTHON", None)
+            os.environ.pop("ASA_MSST_ROOT", None)
+            self.assertFalse(sb.msst_available())
+
+    def test_msst_available_true_when_configured(self):
+        with mock.patch.dict(
+            os.environ, {"ASA_MSST_PYTHON": self._REAL_PY, "ASA_MSST_ROOT": self._REAL_DIR}
+        ):
+            self.assertTrue(sb.msst_available())
+
+    def test_msst_available_false_when_paths_missing(self):
+        with mock.patch.dict(
+            os.environ,
+            {"ASA_MSST_PYTHON": "/nope/python", "ASA_MSST_ROOT": "/nope/root"},
+        ):
+            self.assertFalse(sb.msst_available())
+
+    def test_toggle_requires_both_flag_and_install(self):
+        configured = {"ASA_MSST_PYTHON": self._REAL_PY, "ASA_MSST_ROOT": self._REAL_DIR}
+        # Flag on + installed -> enabled.
+        with mock.patch.dict(os.environ, {**configured, "ASA_ALLOW_MSST_TOGGLE": "1"}):
+            self.assertTrue(sb.msst_user_toggle_enabled())
+        # Flag on but NOT installed -> disabled.
+        with mock.patch.dict(os.environ, {"ASA_ALLOW_MSST_TOGGLE": "true"}, clear=False):
+            os.environ.pop("ASA_MSST_PYTHON", None)
+            os.environ.pop("ASA_MSST_ROOT", None)
+            self.assertFalse(sb.msst_user_toggle_enabled())
+        # Installed but flag off -> disabled.
+        with mock.patch.dict(os.environ, configured, clear=False):
+            os.environ.pop("ASA_ALLOW_MSST_TOGGLE", None)
+            self.assertFalse(sb.msst_user_toggle_enabled())
+
+    def test_normalize_forces_demucs_unless_msst_permitted(self):
+        # msst only survives when explicitly permitted.
+        self.assertEqual(sb.normalize_separation_backend("msst", toggle_enabled=True), "msst")
+        self.assertEqual(sb.normalize_separation_backend("MSST", toggle_enabled=True), "msst")
+        self.assertEqual(sb.normalize_separation_backend("msst", toggle_enabled=False), "demucs")
+        # everything else collapses to the safe default.
+        for value in ("demucs", "Demucs", "bogus", "", None, 123):
+            self.assertEqual(
+                sb.normalize_separation_backend(value, toggle_enabled=True), "demucs"
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
