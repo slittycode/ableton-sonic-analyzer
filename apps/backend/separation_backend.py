@@ -59,10 +59,21 @@ _STEM_DIR_PREFIX = "sonic_analyzer_demucs_"
 # (default: ``ASA_MSST_ROOT``), matching MSST-WebUI's own ``configs/`` + ``pretrain/``
 # layout. Checkpoints are NOT vendored — the operator downloads weights from the
 # ``Sucial/MSST-WebUI`` Hugging Face repo into ``ASA_MSST_MODEL_DIR``.
+#
+# LICENCE GATE — read before promoting any of these to a product default.
+# Every checkpoint in this registry is distributed under CC-BY-NC-SA-4.0
+# (NonCommercial; the Sucial/MSST-WebUI HF repo, and MUSDB18-trained), and the
+# MSST-WebUI driver code is AGPL-3.0. This backend is therefore research /
+# personal / NonCommercial-only and is NOT promotable to a commercial default —
+# it is a strictly *worse* licence posture than the (already MUSDB-grey) Demucs
+# incumbent. The full map and rationale live in
+# incorporations/msst-separation-licence-gate-2026-06-05.md. Promotion is
+# licence-gated, not quality-gated; the gate is closed.
 _DEFAULT_MSST_MODEL = "scnet_4stem"
 _MSST_MODEL_REGISTRY: dict[str, dict[str, str]] = {
     # 4-stem parity model — fills vocals/bass/drums/other, so the product path
     # (stemAnalysis overlay, pitch/note translation, MT3) behaves like Demucs.
+    # Weights: CC-BY-NC-SA-4.0 (NonCommercial) — see the LICENCE GATE above.
     "scnet_4stem": {
         "model_type": "scnet",
         "config_relpath": "configs/multi_stem_models/config_musdb18_scnet.yaml",
@@ -71,6 +82,7 @@ _MSST_MODEL_REGISTRY: dict[str, dict[str, str]] = {
     # Strong 2-stem vocal BS-RoFormer (vocals + instrumental->other). RESEARCH /
     # A-B ONLY: it leaves bass/drums absent, so pitch/note translation + MT3 fall
     # back to the full mix. Never select this as a product-path default.
+    # Weights: CC-BY-NC-SA-4.0 (NonCommercial) — see the LICENCE GATE above.
     "bs_roformer_vocals": {
         "model_type": "bs_roformer",
         "config_relpath": "configs/vocal_models/config_vocals_bs_roformer.yaml",

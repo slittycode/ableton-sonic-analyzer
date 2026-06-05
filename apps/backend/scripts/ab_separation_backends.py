@@ -35,7 +35,40 @@ def _fmt(value: object) -> str:
     return "—" if value is None else str(value)
 
 
+def _print_reference_table(report: dict) -> None:
+    ref = report.get("referenceSet")
+    if not isinstance(ref, dict):
+        return
+    print(
+        f"\nReference-set SI-SDR — HEADLINE A/B ({ref.get('trackCount')} track(s), "
+        f"ground-truth stems, mono gain-aligned SI-SDR; NOT museval-comparable)"
+    )
+    aggregate = ref.get("aggregate", {}) if isinstance(ref.get("aggregate"), dict) else {}
+    print(f"{'backend':<10} {'meanSI-SDR(dB)':>15} {'meanRuntime(s)':>15} {'tracksScored':>13}")
+    for backend in ("demucs", "msst"):
+        block = aggregate.get(backend, {}) if isinstance(aggregate.get(backend), dict) else {}
+        print(
+            f"{backend:<10} {_fmt(block.get('meanSiSdrDb')):>15} "
+            f"{_fmt(block.get('meanRuntimeSeconds')):>15} {_fmt(block.get('tracksScored')):>13}"
+        )
+    # Per-stem aggregate, demucs vs msst side by side.
+    print(f"\n  per-stem meanSI-SDR(dB):  {'stem':<8} {'demucs':>10} {'msst':>10}")
+    d_stems = aggregate.get("demucs", {}).get("perStemMeanSiSdrDb", {}) if isinstance(aggregate.get("demucs"), dict) else {}
+    m_stems = aggregate.get("msst", {}).get("perStemMeanSiSdrDb", {}) if isinstance(aggregate.get("msst"), dict) else {}
+    for stem in ("vocals", "bass", "drums", "other"):
+        print(f"  {'':<24} {stem:<8} {_fmt(d_stems.get(stem)):>10} {_fmt(m_stems.get(stem)):>10}")
+    # Per-track headline (mean SI-SDR) so per-song wins/losses are visible.
+    print("\n  per-track meanSI-SDR(dB):")
+    for track in ref.get("tracks", []):
+        per = track.get("perBackend", {})
+        d = per.get("demucs", {}).get("quality", {}).get("meanSiSdrDb") if isinstance(per.get("demucs"), dict) else None
+        m = per.get("msst", {}).get("quality", {}).get("meanSiSdrDb") if isinstance(per.get("msst"), dict) else None
+        status = "" if (d is not None or m is not None) else f"  ({track.get('status','')})"
+        print(f"    {str(track.get('track'))[:36]:<38} demucs={_fmt(d):>8}  msst={_fmt(m):>8}{status}")
+
+
 def _print_table(report: dict) -> None:
+    _print_reference_table(report)
     print("\nSeparation A/B — synthetic smoke-test (NOT a real-music quality ranking)")
     print(f"{'backend':<10} {'status':<16} {'meanSI-SDR(dB)':>15} {'runtime(s)':>11} {'device':>8}")
     synthetic = report.get("syntheticSmokeTest", {}).get("perBackend", {})
@@ -73,6 +106,11 @@ def main() -> int:
         help="Optional directory of real audio tracks for reference-free proxies.",
     )
     parser.add_argument(
+        "-r", "--ref-dir", default=None,
+        help="Optional reference set: a dir of <track>/{mixture,vocals,bass,drums,other}.wav "
+             "with ground-truth stems, scored as true per-stem SI-SDR (the headline A/B signal).",
+    )
+    parser.add_argument(
         "-o", "--out-dir", type=Path, default=REPO_DIR / ".runtime" / "separation_ab",
         help="Report output directory. Defaults to apps/backend/.runtime/separation_ab/.",
     )
@@ -89,6 +127,7 @@ def main() -> int:
             out_dir=str(args.out_dir),
             model=args.model,
             repeats=args.repeats,
+            ref_dir=args.ref_dir,
         )
     except Exception as exc:  # noqa: BLE001
         print(json.dumps({"status": "error", "error": str(exc)}, indent=2))
