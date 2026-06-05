@@ -5,6 +5,17 @@
 # runs separation on torchaudio Hybrid Demucs (analyze_audio_io.separate_stems);
 # the MSST backend is a default-off experiment selected by ASA_SEPARATION_BACKEND=msst.
 #
+# LICENCE GATE (read before enabling, and especially before any promotion):
+#   - MSST-WebUI code is AGPL-3.0. ASA ships none of it and never imports it; the
+#     operator installs it into a SEPARATE venv and ASA shells out to it. That
+#     arms-length subprocess boundary is what keeps ASA's MIT licence intact, so
+#     it must stay a subprocess — never vendored or imported.
+#   - The model CHECKPOINTS (Sucial/MSST-WebUI HF repo, incl. the registry's
+#     scnet_4stem + bs_roformer_vocals) are CC-BY-NC-SA-4.0 — NonCommercial.
+#   => This backend is research / personal / NonCommercial-only and is NOT
+#      promotable to a commercial default. Full map + rationale:
+#      incorporations/msst-separation-licence-gate-2026-06-05.md
+#
 # Unlike requirements-mt3.txt / requirements-eval.txt, this file does NOT pin a
 # package list. MSST-WebUI pins OLDER, conflicting versions of ASA's own deps
 # (librosa==0.9.2 vs ASA 0.11.0, numpy<2 vs 2.4.3, protobuf==3.20.3 vs 7.34.0,

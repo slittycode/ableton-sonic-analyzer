@@ -169,11 +169,16 @@ def run_backend_separation(
     out_dir: str,
     *,
     repeats: int = 2,
+    warmup: bool = True,
 ) -> dict[str, Any]:
     """Separate ``mix_path`` with ``backend`` (demucs|msst); time it fairly.
 
-    Does a warm-up pass (amortizes model download/load), then takes the min
-    wall-clock over ``repeats`` timed runs. Returns the stems + runtime + status.
+    With ``warmup`` (default), does an untimed warm-up pass (amortizes model
+    download/load) then takes the min wall-clock over ``repeats`` timed runs.
+    Set ``warmup=False`` for the subprocess MSST backend, which reloads its model
+    on every call — a warm-up there buys nothing and just doubles a slow run, so
+    the single timed run honestly includes the per-call cold cost both backends
+    actually pay. Returns the stems + runtime + status.
     """
     from separation_backend import separate_stems_backend
 
@@ -182,9 +187,10 @@ def run_backend_separation(
     try:
         device = "cuda" if _torch_cuda_available() else "cpu"
         # Warm-up (untimed) — pulls weights / builds the graph.
-        warm = separate_stems_backend(mix_path, output_dir=os.path.join(out_dir, "warmup"))
-        if not warm:
-            return {"status": "error", "error": "separation returned no stems", "stems": {}}
+        if warmup:
+            warm = separate_stems_backend(mix_path, output_dir=os.path.join(out_dir, "warmup"))
+            if not warm:
+                return {"status": "error", "error": "separation returned no stems", "stems": {}}
 
         timings: list[float] = []
         stems: dict[str, str] = {}
@@ -335,14 +341,143 @@ def _reconstruction_residual_db(mix: np.ndarray | None, recovered: np.ndarray | 
     return round(10.0 * math.log10(max(res_energy, 1e-12) / mix_energy), 3)
 
 
+# --------------------------------------------------------------------------- #
+# Ground-truth reference-set evaluation (true per-stem SI-SDR)
+# --------------------------------------------------------------------------- #
+# A "reference set" is a directory of per-track subdirectories, each laid out
+# MUSDB-style with WAV files:
+#
+#     <ref_dir>/<track>/mixture.wav   (the input the backend separates)
+#     <ref_dir>/<track>/vocals.wav    (ground-truth stems, any subset of the
+#     <ref_dir>/<track>/bass.wav       canonical four; missing stems are skipped)
+#     <ref_dir>/<track>/drums.wav
+#     <ref_dir>/<track>/other.wav
+#
+# Unlike the synthetic smoke-test (toy sources), this scores each backend on
+# REAL music with REAL isolated stems, so the SI-SDR is a genuine quality
+# signal for a Demucs-vs-MSST comparison. Two honesty caveats remain:
+#   * It is gain-aligned SI-SDR on a mono downmix, NOT museval/BSSEval-v4 SDR —
+#     so the absolute numbers are NOT comparable to published MUSDB leaderboards.
+#     They ARE internally consistent (same metric, same tracks, both backends),
+#     which is exactly what an A/B needs.
+#   * WAV only (reuses _load_wav_mono); the MUSDB extraction writes WAVs.
+_MIX_BASENAMES = ("mixture", "mix")
+
+
+def _load_reference_track(track_dir: str) -> tuple[str, dict[str, np.ndarray]] | None:
+    """Load a MUSDB-style track dir: ``(mixture_path, {stem: mono ground-truth})``.
+
+    Returns ``None`` if no mixture file or no ground-truth stems are present.
+    """
+    mixture_path: str | None = None
+    for base in _MIX_BASENAMES:
+        candidate = os.path.join(track_dir, f"{base}.wav")
+        if os.path.isfile(candidate):
+            mixture_path = candidate
+            break
+    if mixture_path is None:
+        return None
+
+    known: dict[str, np.ndarray] = {}
+    for stem in _CANONICAL_STEMS:
+        stem_path = os.path.join(track_dir, f"{stem}.wav")
+        if os.path.isfile(stem_path):
+            mono = _load_wav_mono(stem_path)
+            if mono is not None:
+                known[stem] = mono
+    if not known:
+        return None
+    return mixture_path, known
+
+
+def evaluate_reference_track(track_dir: str, out_dir: str, *, repeats: int = 2) -> dict[str, Any]:
+    """True per-stem SI-SDR + runtime for both backends on one ground-truth track."""
+    name = os.path.basename(os.path.normpath(track_dir))
+    loaded = _load_reference_track(track_dir)
+    if loaded is None:
+        return {"track": name, "status": "skipped_no_reference"}
+    mixture_path, known = loaded
+
+    work = tempfile.mkdtemp(prefix="asa_sep_ab_ref_", dir=out_dir)
+    entry: dict[str, Any] = {"track": name, "perBackend": {}}
+    for backend in ("demucs", "msst"):
+        if backend == "msst" and not _msst_configured():
+            entry["perBackend"][backend] = {"status": "skipped_no_msst"}
+            continue
+        backend_dir = os.path.join(work, backend)
+        os.makedirs(backend_dir, exist_ok=True)
+        # warmup=False: one honest cold-start timed run (MSST reloads per call).
+        run = run_backend_separation(
+            backend, mixture_path, backend_dir, repeats=repeats, warmup=False
+        )
+        if run["status"] != "completed":
+            entry["perBackend"][backend] = run
+            continue
+        entry["perBackend"][backend] = {
+            "status": "completed",
+            "runtimeSeconds": run["runtimeSeconds"],
+            "device": run["device"],
+            "quality": _score_against_known(run["stems"], known),
+        }
+    return entry
+
+
+def _aggregate_reference(tracks: list[dict[str, Any]]) -> dict[str, Any]:
+    """Per-backend mean SI-SDR (overall + per stem) and mean runtime across tracks."""
+    aggregate: dict[str, Any] = {}
+    for backend in ("demucs", "msst"):
+        means: list[float] = []
+        runtimes: list[float] = []
+        per_stem: dict[str, list[float]] = {stem: [] for stem in _CANONICAL_STEMS}
+        for track in tracks:
+            block = track.get("perBackend", {}).get(backend, {})
+            if block.get("status") != "completed":
+                continue
+            quality = block.get("quality", {}) if isinstance(block.get("quality"), dict) else {}
+            if isinstance(quality.get("meanSiSdrDb"), (int, float)):
+                means.append(float(quality["meanSiSdrDb"]))
+            for stem in _CANONICAL_STEMS:
+                value = quality.get(stem, {}).get("siSdrDb") if isinstance(quality.get(stem), dict) else None
+                if isinstance(value, (int, float)):
+                    per_stem[stem].append(float(value))
+            if isinstance(block.get("runtimeSeconds"), (int, float)):
+                runtimes.append(float(block["runtimeSeconds"]))
+        aggregate[backend] = {
+            "meanSiSdrDb": round(sum(means) / len(means), 3) if means else None,
+            "perStemMeanSiSdrDb": {
+                stem: (round(sum(v) / len(v), 3) if v else None) for stem, v in per_stem.items()
+            },
+            "meanRuntimeSeconds": round(sum(runtimes) / len(runtimes), 3) if runtimes else None,
+            "tracksScored": len(means),
+        }
+    return aggregate
+
+
+def evaluate_reference_set(ref_dir: str, out_dir: str, *, repeats: int = 2) -> dict[str, Any]:
+    """Evaluate every track subdirectory under ``ref_dir`` and aggregate."""
+    track_dirs = sorted(
+        os.path.join(ref_dir, name)
+        for name in os.listdir(ref_dir)
+        if os.path.isdir(os.path.join(ref_dir, name))
+    )
+    tracks = [evaluate_reference_track(td, out_dir, repeats=repeats) for td in track_dirs]
+    return {
+        "refDir": ref_dir,
+        "trackCount": len(track_dirs),
+        "tracks": tracks,
+        "aggregate": _aggregate_reference(tracks),
+    }
+
+
 def run_ab(
     *,
     input_dir: str | None,
     out_dir: str,
     model: str | None = None,
     repeats: int = 2,
+    ref_dir: str | None = None,
 ) -> dict[str, Any]:
-    """Top-level A/B run: synthetic smoke-test + optional real-track proxies."""
+    """Top-level A/B run: ground-truth reference set (if given) + synthetic smoke-test + optional real-track proxies."""
     from datetime import datetime, timezone
 
     os.makedirs(out_dir, exist_ok=True)
@@ -359,6 +494,10 @@ def run_ab(
             "repeats": repeats,
         },
         "caveats": [
+            "Reference-set SI-SDR (when a --ref-dir is given) is the HEADLINE "
+            "signal: gain-aligned SI-SDR on a mono downmix vs real ground-truth "
+            "stems. Internally consistent for Demucs-vs-MSST, but NOT comparable "
+            "to published museval/BSSEval-v4 MUSDB leaderboard numbers.",
             "Synthetic SI-SDR is a PLUMBING smoke-test, not a real-music quality "
             "ranking: RoFormer/SCNet are trained on real spectra and may score "
             "poorly on toy synthetic sources. Do not read it as Demucs>MSST.",
@@ -366,6 +505,11 @@ def run_ab(
             "correctness (no ground-truth stems). Runtime is end-to-end wall-clock "
             "(min of repeats after a warm-up); compare same-device rows only.",
         ],
+        "referenceSet": (
+            evaluate_reference_set(ref_dir, out_dir, repeats=repeats)
+            if ref_dir and os.path.isdir(ref_dir)
+            else None
+        ),
         "syntheticSmokeTest": evaluate_synthetic(out_dir, repeats=repeats),
         "realTracks": [],
     }

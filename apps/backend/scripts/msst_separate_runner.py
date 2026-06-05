@@ -32,7 +32,6 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
-import logging
 import os
 import sys
 import time
@@ -53,29 +52,29 @@ def _eprint(message: str) -> None:
     print(message, file=sys.stderr)
 
 
-def _stderr_logger() -> logging.Logger:
-    """A logger that writes to stderr only, so MSST never pollutes stdout."""
-    logger = logging.getLogger("asa_msst_runner")
-    logger.handlers.clear()
-    handler = logging.StreamHandler(sys.stderr)
-    handler.setFormatter(logging.Formatter("[msst] %(message)s"))
-    logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
-    logger.propagate = False
-    return logger
-
-
 def _read_target_sample_rate(config_path: str) -> int:
-    """Best-effort read of ``audio.sample_rate`` from the MSST config YAML."""
-    try:
-        import yaml
+    """Best-effort read of ``audio.sample_rate`` from the MSST config YAML.
 
+    MSST configs can carry ``!!python/tuple`` tags that ``yaml.safe_load``
+    rejects, so fall back to a line regex before defaulting to 44.1 kHz.
+    """
+    try:
         with open(config_path, "r") as handle:
-            config = yaml.safe_load(handle)
-        audio = (config or {}).get("audio", {}) if isinstance(config, dict) else {}
-        sr = audio.get("sample_rate")
-        if isinstance(sr, int) and sr > 0:
-            return sr
+            text = handle.read()
+        try:
+            import yaml
+
+            config = yaml.safe_load(text)
+            audio = (config or {}).get("audio", {}) if isinstance(config, dict) else {}
+            sr = audio.get("sample_rate")
+            if isinstance(sr, int) and sr > 0:
+                return sr
+        except Exception:  # noqa: BLE001 - tagged YAML; fall back to a line regex
+            import re
+
+            match = re.search(r"^\s*sample_rate:\s*(\d+)", text, re.MULTILINE)
+            if match:
+                return int(match.group(1))
     except Exception as exc:  # noqa: BLE001
         _eprint(f"[msst] could not read sample_rate from config ({exc}); using 44100.")
     return _TARGET_SAMPLE_RATE_FALLBACK
@@ -153,14 +152,30 @@ def main() -> int:
     parser.add_argument("--device", default="auto")
     args = parser.parse_args()
 
+    # Resolve every caller-supplied path to absolute BEFORE we chdir below, so
+    # they stay valid once cwd moves into the MSST checkout.
+    args.input = os.path.abspath(args.input)
+    args.output_dir = os.path.abspath(args.output_dir)
+    args.config = os.path.abspath(args.config)
+    args.checkpoint = os.path.abspath(args.checkpoint)
+
     # Append (not prepend) the MSST checkout so its top-level ``utils`` /
     # ``inference`` packages don't shadow anything in this process unexpectedly.
     if args.msst_root not in sys.path:
         sys.path.append(args.msst_root)
 
+    # MSST reads some of its own files via paths RELATIVE to the checkout root
+    # (e.g. utils.constant loads ``data_backup/webui_config.json`` at import
+    # time), so the import fails unless cwd is the checkout. Run from there; the
+    # caller paths were just made absolute, so they survive the chdir.
+    try:
+        os.chdir(args.msst_root)
+    except OSError as exc:
+        _eprint(f"[msst] could not chdir to msst-root {args.msst_root} ({exc}).")
+        return 2
+
     os.makedirs(args.output_dir, exist_ok=True)
     target_sr = _read_target_sample_rate(args.config)
-    logger = _stderr_logger()
 
     # Force every MSST print()/tqdm/log onto stderr — stdout is the JSON contract.
     with contextlib.redirect_stdout(sys.stderr):
@@ -180,7 +195,11 @@ def main() -> int:
                 device=args.device,
                 output_format="wav",
                 store_dirs="",  # we write stems ourselves; don't let MSST emit files
-                logger=logger,
+                # No custom logger: MSSeparator builds its own via MSST's
+                # utils.logger.get_logger() (it relies on a non-stdlib
+                # ``console_handler`` attribute). Its handler targets stderr and
+                # the redirect_stdout above catches any stray stdout, so the
+                # stdout JSON contract stays clean.
             )
             load_seconds = time.perf_counter() - load_start
 
