@@ -365,6 +365,11 @@ ASA_MSST_ROOT=""                         # path to the MSST-WebUI checkout (adde
 ASA_MSST_MODEL="scnet_4stem"             # MSST model registry id in separation_backend._MSST_MODEL_REGISTRY. Default `scnet_4stem` (4-stem parity). `bs_roformer_vocals` is research/A-B-only (2-stem, leaves bass/drums empty). Unknown ids fall back to the default.
 ASA_MSST_MODEL_DIR=""                    # optional config/checkpoint root (MSST configs/ + pretrain/ layout); defaults to ASA_MSST_ROOT.
 ASA_MSST_DEVICE=""                       # optional device for MSST inference (auto|cpu|cuda|mps); defaults to auto.
+ASA_PHASE2_PROVIDER="gemini"             # Phase 2 interpretation provider: `gemini` (default, product path, unchanged) or `moss` to route the producer_summary interpretation to a self-hosted OpenMOSS MOSS-Audio FastAPI sidecar. Default-off experiment; both providers flow through the identical parse/citation/catalogue validators. STEP ONE licence gate: MOSS-Audio *weights* are Apache-2.0 but the *modeling code* has no effective licence (the GitHub repo's pyproject points at a non-existent LICENSE), so the sidecar ships no OpenMOSS code and the real-model path is a 501 stub — research-only, not promotable. See apps/backend/phase2_provider.py + docs/PHASE2_PROVIDER.md.
+ASA_MOSS_SIDECAR_URL="http://127.0.0.1:8200"  # base URL of the MOSS sidecar (apps/backend/moss_sidecar/app.py) when ASA_PHASE2_PROVIDER=moss.
+ASA_MOSS_SIDECAR_TIMEOUT_SECONDS="180"   # per-request timeout for the MOSS sidecar call.
+ASA_MOSS_MODEL_ID=""                     # optional MOSS model id forwarded to the sidecar; defaults to the run's model_name.
+ASA_MOSS_SIDECAR_MODE="mock"             # sidecar-side (its own venv): `mock` (default, deterministic schema-valid Phase-1-grounded output) or `model` (a 501 licence-gated stub that executes no OpenMOSS code).
 ```
 
 Phase 2 is gated by `VITE_ENABLE_PHASE2_GEMINI`. `GEMINI_API_KEY` is backend-only. `SONIC_ANALYZER_ADMIN_KEY` is backend-only and never exposed to clients.

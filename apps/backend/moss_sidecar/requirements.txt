@@ -1,0 +1,22 @@
+# MOSS-Audio Phase 2 sidecar — isolated venv (NOT the product venv).
+#
+# Build:
+#   python3.11 -m venv apps/backend/moss_sidecar/.venv
+#   apps/backend/moss_sidecar/.venv/bin/pip install -r apps/backend/moss_sidecar/requirements.txt
+# Run (mock mode, default):
+#   apps/backend/moss_sidecar/.venv/bin/python -m moss_sidecar.app   # from apps/backend
+#
+# Mock mode needs only FastAPI + a server. The mock interpreter is pure stdlib.
+fastapi>=0.110
+uvicorn>=0.29
+
+# --- Real MOSS-Audio model mode: NOT a pinned list, and NOT installed here. ---
+# STEP ONE licence gate (docs/PHASE2_PROVIDER.md): the MOSS-Audio modeling code
+# has no effective licence (the OpenMOSS/MOSS-Audio GitHub repo's pyproject points
+# at a LICENSE file that does not exist; only the *weights* are Apache-2.0). This
+# sidecar therefore ships NO OpenMOSS code and the model path is a 501 stub.
+#
+# A real model venv would additionally need torch + transformers + the (currently
+# unlicensed) OpenMOSS modeling code OR a cleanly-licensed runtime that can serve
+# the Apache-2.0 weights for audio-in inference. Do not add those here until the
+# licence is resolved.
