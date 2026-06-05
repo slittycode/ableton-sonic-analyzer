@@ -147,6 +147,8 @@ from server_phase2 import (  # noqa: F401 — re-exported for test backward comp
     apply_live12_catalogue_gates,
 )
 
+from recommendations_contract import build_validated_recommendations
+
 import server_samples
 
 
@@ -2007,6 +2009,23 @@ def _run_interpretation_request_with_profile_config(
                         "requestId": request_id,
                     }
                 ]
+        # Frozen recommendations.v1 contract (ADR 0003): attach a normalized,
+        # citation-gated projection of the Phase 2 device cards as an additive
+        # `recommendations` field on the interpretation result. Derived, never
+        # authoritative — it cannot override Phase 1 (invariant #1). Only the
+        # producer_summary profile carries device cards (stem_summary does not),
+        # and it degrades to absent on any error (build_validated_recommendations
+        # returns None), exactly like the catalogue gate above.
+        if profile_id == "producer_summary" and isinstance(interpretation_result, dict):
+            recommendations_envelope = build_validated_recommendations(interpretation_result)
+            if recommendations_envelope is not None:
+                interpretation_result["recommendations"] = recommendations_envelope
+            else:
+                logger.warning(
+                    "Recommendations contract projection produced no valid "
+                    "envelope (request_id=%s)",
+                    request_id,
+                )
         validation_warnings = (
             parse_validation_warnings
             + style_profile_warnings

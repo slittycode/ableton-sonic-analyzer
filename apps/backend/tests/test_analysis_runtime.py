@@ -638,6 +638,74 @@ class AnalysisRuntimeTests(unittest.TestCase):
         self.assertEqual(row["grounded_measurement_output_id"], grounding["measurementOutputId"])
         self.assertEqual(row["grounded_pitch_note_attempt_id"], pitch_note_attempt_id)
 
+    def test_run_snapshot_surfaces_recommendations_contract_verbatim(self) -> None:
+        """ADR 0003: the recommendations.v1 envelope server.py attaches to the
+        interpretation result must survive persistence and reach the run
+        snapshot (the payload behind GET /api/analysis-runs/{run_id}) unstripped.
+        This closes the chain of custody the wiring test in test_server.py starts
+        — that one stops at the helper return; this one checks the snapshot."""
+        import recommendations_contract as rc
+
+        runtime = self._runtime()
+        created = runtime.create_run(
+            filename="track.mp3",
+            content=b"fake-audio",
+            mime_type="audio/mpeg",
+            pitch_note_mode="off",
+            pitch_note_backend="auto",
+            interpretation_mode="async",
+            interpretation_profile="producer_summary",
+            interpretation_model="gemini-2.5-flash",
+        )
+        runtime.complete_measurement(
+            created["runId"],
+            payload={"bpm": 128, "key": "A minor", "durationSeconds": 184.2},
+            provenance={"schemaVersion": "measure.v1", "engineVersion": "analyze.py"},
+            diagnostics={"backendDurationMs": 1200},
+        )
+        attempt_id = runtime.create_interpretation_attempt(
+            created["runId"],
+            profile_id="producer_summary",
+            model_name="gemini-2.5-flash",
+            status="queued",
+        )
+        grounding = runtime.get_interpretation_grounding(created["runId"])
+
+        envelope = rc.build_validated_recommendations(
+            {
+                "abletonRecommendations": [
+                    {
+                        "device": "Glue Compressor",
+                        "parameter": "Attack",
+                        "value": "10 ms",
+                        "phase1Fields": ["dynamicsDetail.crestFactor"],
+                    }
+                ]
+            }
+        )
+        self.assertIsNotNone(envelope)
+        runtime.complete_interpretation_attempt(
+            attempt_id,
+            result={"trackCharacter": "Grounded summary", "recommendations": envelope},
+            provenance={},
+            diagnostics={"backendDurationMs": 250},
+            grounded_measurement_output_id=grounding["measurementOutputId"],
+            grounded_pitch_note_attempt_id=grounding["pitchNoteAttemptId"],
+        )
+
+        interpretation = runtime.get_run(created["runId"])["stages"]["interpretation"]
+        # Preferred-attempt result carries the contract verbatim ...
+        self.assertEqual(interpretation["result"]["recommendations"], envelope)
+        self.assertEqual(
+            interpretation["result"]["recommendations"]["version"],
+            "recommendations.v1",
+        )
+        # ... as does the per-profile result.
+        self.assertEqual(
+            interpretation["profiles"]["producer_summary"]["result"]["recommendations"],
+            envelope,
+        )
+
     def test_interpretation_grounding_exposes_mt3_result(self) -> None:
         """F3: get_interpretation_grounding surfaces a completed MT3 attempt so
         _execute_interpretation_attempt can forward it to Gemini. When no MT3
