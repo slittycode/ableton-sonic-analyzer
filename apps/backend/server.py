@@ -150,6 +150,11 @@ from server_phase2 import (  # noqa: F401 — re-exported for test backward comp
 from recommendations_contract import build_validated_recommendations
 
 import server_samples
+from phase2_provider import (
+    Phase2ProviderError,
+    Phase2ProviderRequest,
+    resolve_external_phase2_provider,
+)
 
 
 app = FastAPI(title="Sonic Analyzer Local API")
@@ -1834,36 +1839,43 @@ def _run_interpretation_request_with_profile_config(
     mime_type = _get_audio_mime_type(filename)
     descriptor_hooks = _build_descriptor_hooks(measurement_result)
 
-    if not _GENAI_AVAILABLE:
-        return {
-            "ok": False,
-            "statusCode": 500,
-            "errorCode": "GEMINI_NOT_INSTALLED",
-            "message": "google-genai package is not installed on the backend.",
-            "retryable": False,
-            "diagnostics": None,
-        }
+    # Phase 2 provider seam (default-off; see phase2_provider.py). None means
+    # "use the native Gemini path below", which stays byte-for-byte unchanged.
+    # An external provider (ASA_PHASE2_PROVIDER=moss) routes the SAME request to a
+    # sidecar and flows back through the identical parse/validate/citation tail.
+    external_provider = resolve_external_phase2_provider()
 
-    api_key = os.getenv("GEMINI_API_KEY", "").strip()
-    if not api_key:
-        return {
-            "ok": False,
-            "statusCode": 500,
-            "errorCode": "GEMINI_NOT_CONFIGURED",
-            "message": "GEMINI_API_KEY is not set on the backend.",
-            "retryable": False,
-            "diagnostics": None,
-        }
+    if external_provider is None:
+        if not _GENAI_AVAILABLE:
+            return {
+                "ok": False,
+                "statusCode": 500,
+                "errorCode": "GEMINI_NOT_INSTALLED",
+                "message": "google-genai package is not installed on the backend.",
+                "retryable": False,
+                "diagnostics": None,
+            }
 
-    if model_name not in ALLOWED_GEMINI_MODELS:
-        return {
-            "ok": False,
-            "statusCode": 400,
-            "errorCode": "INVALID_MODEL",
-            "message": f"model_name '{model_name}' is not allowed. Must be one of: {sorted(ALLOWED_GEMINI_MODELS)}",
-            "retryable": False,
-            "diagnostics": None,
-        }
+        api_key = os.getenv("GEMINI_API_KEY", "").strip()
+        if not api_key:
+            return {
+                "ok": False,
+                "statusCode": 500,
+                "errorCode": "GEMINI_NOT_CONFIGURED",
+                "message": "GEMINI_API_KEY is not set on the backend.",
+                "retryable": False,
+                "diagnostics": None,
+            }
+
+        if model_name not in ALLOWED_GEMINI_MODELS:
+            return {
+                "ok": False,
+                "statusCode": 400,
+                "errorCode": "INVALID_MODEL",
+                "message": f"model_name '{model_name}' is not allowed. Must be one of: {sorted(ALLOWED_GEMINI_MODELS)}",
+                "retryable": False,
+                "diagnostics": None,
+            }
 
     prompt = profile_config["buildPrompt"](
         measurement_result=measurement_result,
@@ -1872,75 +1884,107 @@ def _run_interpretation_request_with_profile_config(
         descriptor_hooks=descriptor_hooks,
         mt3_result=mt3_result,
     )
-    client = _genai.Client(
-        api_key=api_key,
-        http_options={"timeout": GEMINI_TIMEOUT_SECONDS * 1_000},
-    )
-    generate_config = _genai_types.GenerateContentConfig(
-        response_mime_type="application/json",
-        response_schema=profile_config["responseSchema"],
-    )
+    # Construct the Gemini client BEFORE the try (only when no external provider
+    # is selected) so a client-construction error propagates to the setup wrapper
+    # (INTERPRETATION_SETUP_FAILED) exactly as it did before this seam existed —
+    # not caught locally as a generate failure.
+    client = None
+    generate_config = None
+    if external_provider is None:
+        client = _genai.Client(
+            api_key=api_key,
+            http_options={"timeout": GEMINI_TIMEOUT_SECONDS * 1_000},
+        )
+        generate_config = _genai_types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=profile_config["responseSchema"],
+        )
+
     api_started_at = _current_time()
     uploaded_gemini_file = None
 
     try:
-        if file_size_bytes <= INLINE_SIZE_LIMIT:
-            flags_used.append("inline")
-            with open(source_path, "rb") as input_file:
-                audio_bytes = input_file.read()
-            audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
-            media_part = {"inline_data": {"data": audio_b64, "mime_type": mime_type}}
-
-            def _generate_inline() -> Any:
-                return client.models.generate_content(
-                    model=model_name,
-                    contents=[{"parts": [media_part, {"text": prompt}]}],
-                    config=generate_config,
+        if external_provider is not None:
+            # MOSS (or other non-Gemini) provider — default-off experiment. The
+            # provider returns a raw Phase2Result JSON string (or None for a
+            # skip) that flows through the SAME parse/citation/catalogue tail as
+            # Gemini below, guaranteeing an identical recommendation schema.
+            provider_response = external_provider.generate(
+                Phase2ProviderRequest(
+                    prompt=prompt,
+                    response_schema=profile_config["responseSchema"],
+                    phase1_result=measurement_result,
+                    model_name=model_name,
+                    request_id=request_id,
+                    source_path=source_path,
+                    filename=filename,
+                    mime_type=mime_type,
+                    file_size_bytes=file_size_bytes,
                 )
-
-            response = asyncio.run(_gemini_with_retry(_generate_inline))
-            api_completed_at = _current_time()
-            message_suffix = profile_config["successMessage"]
-        else:
-            flags_used.append("files-api")
-
-            def _upload_file() -> Any:
-                return client.files.upload(
-                    file=source_path,
-                    config=_genai_types.UploadFileConfig(
-                        mime_type=mime_type,
-                        display_name=filename,
-                    ),
-                )
-
-            upload_start = _current_time()
-            uploaded_gemini_file = asyncio.run(_gemini_with_retry(_upload_file))
-            upload_end = _current_time()
-            media_part = {
-                "file_data": {
-                    "file_uri": uploaded_gemini_file.uri,
-                    "mime_type": uploaded_gemini_file.mime_type,
-                }
-            }
-
-            def _generate_files_api() -> Any:
-                return client.models.generate_content(
-                    model=model_name,
-                    contents=[{"parts": [media_part, {"text": prompt}]}],
-                    config=generate_config,
-                )
-
-            generate_start = _current_time()
-            response = asyncio.run(_gemini_with_retry(_generate_files_api))
-            generate_end = _current_time()
-            api_completed_at = _current_time()
-            message_suffix = (
-                f"{profile_config['successMessage']} "
-                f"Upload: {int(_elapsed_ms(upload_start, upload_end))}ms, "
-                f"Generate: {int(_elapsed_ms(generate_start, generate_end))}ms"
             )
+            flags_used.append(f"phase2-provider:{external_provider.name}")
+            flags_used.extend(provider_response.flags)
+            response_text: str | None = provider_response.text
+            message_suffix = provider_response.message_suffix or profile_config["successMessage"]
+            api_completed_at = _current_time()
+        else:
+            if file_size_bytes <= INLINE_SIZE_LIMIT:
+                flags_used.append("inline")
+                with open(source_path, "rb") as input_file:
+                    audio_bytes = input_file.read()
+                audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
+                media_part = {"inline_data": {"data": audio_b64, "mime_type": mime_type}}
 
-        response_text: str | None = getattr(response, "text", None)
+                def _generate_inline() -> Any:
+                    return client.models.generate_content(
+                        model=model_name,
+                        contents=[{"parts": [media_part, {"text": prompt}]}],
+                        config=generate_config,
+                    )
+
+                response = asyncio.run(_gemini_with_retry(_generate_inline))
+                api_completed_at = _current_time()
+                message_suffix = profile_config["successMessage"]
+            else:
+                flags_used.append("files-api")
+
+                def _upload_file() -> Any:
+                    return client.files.upload(
+                        file=source_path,
+                        config=_genai_types.UploadFileConfig(
+                            mime_type=mime_type,
+                            display_name=filename,
+                        ),
+                    )
+
+                upload_start = _current_time()
+                uploaded_gemini_file = asyncio.run(_gemini_with_retry(_upload_file))
+                upload_end = _current_time()
+                media_part = {
+                    "file_data": {
+                        "file_uri": uploaded_gemini_file.uri,
+                        "mime_type": uploaded_gemini_file.mime_type,
+                    }
+                }
+
+                def _generate_files_api() -> Any:
+                    return client.models.generate_content(
+                        model=model_name,
+                        contents=[{"parts": [media_part, {"text": prompt}]}],
+                        config=generate_config,
+                    )
+
+                generate_start = _current_time()
+                response = asyncio.run(_gemini_with_retry(_generate_files_api))
+                generate_end = _current_time()
+                api_completed_at = _current_time()
+                message_suffix = (
+                    f"{profile_config['successMessage']} "
+                    f"Upload: {int(_elapsed_ms(upload_start, upload_end))}ms, "
+                    f"Generate: {int(_elapsed_ms(generate_start, generate_end))}ms"
+                )
+
+            response_text = getattr(response, "text", None)
         debug_payload = None
         parse_validation_warnings: list[dict[str, Any]] = []
         if callable(profile_config.get("parseDebugResult")):
@@ -2058,6 +2102,31 @@ def _run_interpretation_request_with_profile_config(
             "ok": True,
             "interpretationResult": interpretation_result,
             "message": message_suffix,
+            "diagnostics": diagnostics,
+        }
+    except Phase2ProviderError as exc:
+        # Non-Gemini provider (MOSS sidecar) failure → execution error dict,
+        # surfaced the same way a Gemini failure is (never a silent success).
+        diagnostics = _build_diagnostics(
+            response_ready_at=_current_time(),
+            request_id=request_id,
+            estimate={"totalLowMs": 0, "totalHighMs": 0},
+            timeout_seconds=GEMINI_TIMEOUT_SECONDS,
+            request_started_at=request_started_at,
+            analysis_started_at=api_started_at,
+            analysis_completed_at=_current_time(),
+            flags_used=flags_used,
+            file_size_bytes=file_size_bytes,
+            file_duration_seconds=None,
+            engine_version=model_name,
+            stderr=str(exc),
+        )
+        return {
+            "ok": False,
+            "statusCode": exc.status_code,
+            "errorCode": exc.error_code,
+            "message": str(exc),
+            "retryable": exc.retryable,
             "diagnostics": diagnostics,
         }
     except Exception as exc:
