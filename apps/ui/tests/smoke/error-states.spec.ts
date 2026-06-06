@@ -518,7 +518,10 @@ test('stop monitoring during interpretation preserves completed measurement with
 
   await loadFileAndClick(page);
 
-  await expect(page.getByText('Analysis Results')).toBeVisible();
+  // Interpretation is stubbed as a never-completing 'running' state, so the frontend keeps
+  // polling while this view renders. The default 5s expect timeout can be exceeded under CI
+  // load; use 30s — the results-view wait this suite already uses elsewhere (e.g. line ~461).
+  await expect(page.getByText('Analysis Results')).toBeVisible({ timeout: 30000 });
   const signalPanel = page.getByTestId('signal-panel');
   await expect(signalPanel).toBeVisible();
   await expect(signalPanel.getByText('Signal Monitor').first()).toBeVisible();
