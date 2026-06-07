@@ -18,7 +18,7 @@
 
 ## Environment And Setup
 
-- Use Node 20+.
+- Use Node 20 (per CI; no `engines` constraint in `package.json`).
 - Install dependencies: `npm install`
 - Create a local env file when needed: `cp .env.example .env`
 - Key env vars:

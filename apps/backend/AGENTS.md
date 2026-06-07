@@ -80,8 +80,8 @@ python3.11 -m venv venv
 - Run one test module:
 
 ```bash
-./venv/bin/python -m unittest tests/test_server.py
-./venv/bin/python -m unittest tests/test_analyze.py
+./venv/bin/python -m unittest tests.test_server
+./venv/bin/python -m unittest tests.test_analyze
 ```
 
 - Run one test class:
