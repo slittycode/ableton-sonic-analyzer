@@ -109,8 +109,8 @@ RUN_GEMINI_LIVE_SMOKE=true VITE_ENABLE_PHASE2_GEMINI=true GEMINI_API_KEY=your_ke
 - `src/services/phase1Picker.ts` + `phaseLabels.ts`: phase-snapshot projection helpers used by the results surface.
 - `src/services/appliedRecommendations.ts` + `userLabels.ts`: applied-recommendations tracker and persisted label state used by the audit overhaul.
 - `src/services/fieldAnalytics.ts` + `diagnosticLogs.ts`: instrumentation hooks and diagnostic log capture for the request panel.
-- `src/services/midi/`: MIDI export, preview, and quantization (`midiExport.ts`, `midiPreview.ts`, `quantization.ts`).
-- `src/services/sessionMusician/`: Session Musician helpers — `confidenceBand.ts`, `noteConversion.ts`, `renderState.ts`, `stemListeningNotes.ts`.
+- `src/services/midi/`: MIDI export, preview, and quantization (`midiExport.ts`, `midiPreview.ts`, `quantization.ts`, `types.ts`).
+- `src/services/sessionMusician/`: Session Musician helpers — `confidenceBand.ts`, `index.ts`, `noteConversion.ts`, `renderState.ts`, `stemListeningNotes.ts`.
 - `src/data/genreProfiles.ts`: genre profile definitions consumed by `mixDoctor.ts` for spectral-balance scoring and recommendations.
 - `src/types.ts` + `src/types/`: shared frontend contract types. `types.ts` re-exports through `./types/index.ts`, which re-exports `measurement.ts`, `interpretation.ts`, and `backend.ts`. `./types/samples.ts` exists but is imported directly, not through the barrel.
 - `src/hooks/`: custom React hooks — `useCpuMeter.ts`, `useGlobalDrag.ts`, `useImageZoom.ts`, `useSpectralCursorBus.tsx`.
