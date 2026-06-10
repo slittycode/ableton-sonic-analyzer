@@ -159,6 +159,13 @@ Scored by ASA's own guardrails, against the documented Gemini bar on this same t
 4. Interpretation latency ≈ 6.5 minutes on the CLI's default model (hence the 600 s
    provider timeout default).
 
+**Second track (batch check):** `DJ Metatron Prompt 1.wav` (owner's own production) through
+the same path: **30/30 cards cited, zero invented citation paths**, 30-entry envelope,
+full-surface coverage, authoritative echo exact (141.1 BPM, D Major, 5/4). 7 warn-and-keep
+catalogue annotations with the same fingerprint as VTSS (Operator / Scale / "Band 8 Gain"
+spellings) — a consistent, fixable catalogue-coverage theme rather than random noise.
+Combined: **56/56 recommendations cited across both real tracks.**
+
 **Bonus proof:** the same output was fed to the sibling repo's Gate α fidelity harness
 (`asa-ableton verify`) — its first-ever real (non-synthetic) input, previously blocked
 on Gemini credits. Result: **11/11 applied parameters landed in a structurally valid
