@@ -576,6 +576,27 @@ def infer_domain(track_context: str | None, category: str | None) -> str:
     return UNKNOWN_DOMAIN
 
 
+def coerce_phase2_payload(raw: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Accept either a bare ``Phase2Result`` or a ``phase2-export.v1`` envelope.
+
+    The backend's ``GET /api/analysis-runs/{run_id}/export/phase2`` route
+    (``phase2_export.py``) wraps the interpretation result in a versioned
+    handoff envelope ``{schemaVersion: "phase2-export.v1", ..., phase2: {...}}``
+    so one downloaded file feeds both this harness and the sibling
+    ``asa-ableton`` repo. Unwrap it here so ``--phase2`` (and a fixture-dir
+    ``phase2.json``) can be that file directly; a bare result passes through
+    unchanged.
+    """
+    schema_version = raw.get("schemaVersion")
+    if (
+        isinstance(schema_version, str)
+        and schema_version.startswith("phase2-export.")
+        and isinstance(raw.get("phase2"), Mapping)
+    ):
+        return raw["phase2"]
+    return raw
+
+
 def normalize_phase2(phase2: Mapping[str, Any]) -> list[NormalizedRec]:
     """Adapter: ``Phase2Result`` JSON -> normalized recs.
 
