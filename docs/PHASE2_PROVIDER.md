@@ -1,4 +1,47 @@
-# Phase 2 Provider Abstraction (Gemini ↔ MOSS) — STEP ONE Licence Gate + Build
+# Phase 2 Provider Abstraction (Gemini ↔ MOSS ↔ Claude) — STEP ONE Licence Gate + Build
+
+> **2026-06-10 addendum — `claude` provider.** A third provider landed:
+> `ASA_PHASE2_PROVIDER=claude` routes the interpretation to `ClaudeCliProvider`
+> (`apps/backend/phase2_provider.py`), which runs the operator's local
+> **Claude Code CLI** headless. Properties:
+> 1. **Text-only by design.** The CLI receives ONLY the built prompt (which
+>    already embeds the authoritative Phase 1 JSON + the Live 12 device
+>    catalogue) on stdin; the audio file is never sent. This is the
+>    measurements-grounded advisor mode the provider seam always documented as
+>    valid ("audio is additive").
+> 2. **Sandboxed subprocess.** `--safe-mode` (no plugins/hooks/MCP/CLAUDE.md —
+>    a live probe showed a default invocation loads the operator's entire
+>    extension stack), `--tools ""` (no tool use), `--no-session-persistence`.
+> 3. **Schema-enforced output.** The profile's Gemini-dialect `responseSchema`
+>    is converted to standard JSON Schema (`_gemini_schema_to_json_schema`) and
+>    enforced via the CLI's `--json-schema`; the validated `structured_output`
+>    is preferred, with fence-stripped `result` text as fallback. Either way the
+>    output flows through the SAME shared parse / citation / catalogue /
+>    `recommendations.v1` tail as Gemini.
+> 4. **No Gemini key, no API credits.** Auth rides the operator's existing
+>    Claude Code login. Useful when Gemini credits are exhausted, and it
+>    produces real Phase 2 JSON for research gates (e.g. asa-ableton Gate α).
+> 5. **Default-off**, like MOSS: `gemini` remains the product default; unknown
+>    env values still degrade to Gemini. Env: `ASA_CLAUDE_CLI`,
+>    `ASA_CLAUDE_MODEL`, `ASA_CLAUDE_TIMEOUT_SECONDS`.
+> 6. No licence gate applies (no third-party model code is executed; the CLI is
+>    the operator's own installed tool), but it inherits the same "research /
+>    operator convenience, not the promoted product path" status until its
+>    output quality is scored against the recommendation corpus.
+> 7. **Provider policy (explicit).** Providers are *selectable and mutually
+>    exclusive per interpretation*: exactly one of `gemini | moss | claude`
+>    produces a given result. There is NO automatic fallback between providers
+>    and NO dual-provider/ensemble review — if such a mode is ever wanted it is
+>    a separate future design (disagreement handling, latency, Gemini cost).
+>    Gemini remains implemented, available, and the default; the `claude` route
+>    exists so the owner can run the complete advice path with no Gemini key
+>    and no Gemini spend, and is not contingent on out-scoring Gemini.
+>    Deployment caveat: `claude` rides a *locally logged-in* CLI, so it serves
+>    the operator's own machine only — it is not a substitute for an API-backed
+>    provider for other users.
+> Tests: `tests/test_phase2_provider.py` (`ClaudeCliProviderTests`,
+> `GeminiSchemaConversionTests`, `ClaudeBranchIntegrationTests` — the latter
+> proves the no-`GEMINI_API_KEY` path end-to-end through the shared tail).
 
 Status: **STEP ONE complete — split verdict (weights clean, code unlicensed).
 Maintainer chose to build the default-off research experiment (option A). The
