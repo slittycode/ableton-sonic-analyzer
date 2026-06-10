@@ -46,6 +46,71 @@ _COMMIT_RE = re.compile(r"^[0-9a-f]{7,40}$")
 _FUZZY_MATCH_CUTOFF = 0.7
 
 
+def _eq8_ui_aliases() -> dict[str, str]:
+    """UI band phrasing -> source name for every EQ Eight band control.
+
+    The source extraction stores per-band params as '{n} Gain A' / '{n} Gain B'
+    (the A/B curve duality); the Phase 2 prompt catalogue sanctions the UI
+    phrasing 'Band {n} Gain'. Alias to the A curve — the one the UI edits by
+    default. 'Q' is the UI label for the source's 'Resonance'.
+    """
+    aliases: dict[str, str] = {}
+    for band in range(1, 9):
+        aliases[f"Band {band} Gain"] = f"{band} Gain A"
+        aliases[f"Band {band} Frequency"] = f"{band} Frequency A"
+        aliases[f"Band {band} Q"] = f"{band} Resonance A"
+        aliases[f"Band {band} Filter Type"] = f"{band} Filter Type A"
+        aliases[f"Band {band} On"] = f"{band} Filter On A"
+    return aliases
+
+
+# Curated UI-facing -> source-extracted parameter aliases, keyed by canonical
+# device class. The Phase 2 prompt catalogue (prompts/live12_device_catalog.json)
+# instructs the model to use Ableton's UI vocabulary, while this source
+# catalogue stores MIDI-Remote-Script internal names — without this table the
+# warn-and-keep gate flags prompt-sanctioned spellings as unverified (observed
+# live on 2026-06-10: 'Band 8 Gain', 'Oscillator A Coarse', 'Low Cut', …).
+# Entries are exact, hand-curated equivalences only; the table is consulted for
+# VALIDATION decisions and never rewrites a recommendation.
+UI_PARAMETER_ALIASES: dict[str, dict[str, str]] = {
+    "Eq8": _eq8_ui_aliases(),
+    "Operator": {
+        **{f"Oscillator {osc} Coarse": f"{osc} Coarse" for osc in "ABCD"},
+        **{f"Oscillator {osc} Fine": f"{osc} Fine" for osc in "ABCD"},
+        **{f"Oscillator {osc} Level": f"Osc-{osc} Level" for osc in "ABCD"},
+        **{f"Oscillator {osc} Waveform": f"Osc-{osc} Wave" for osc in "ABCD"},
+        # The source name carries a trailing space (upstream extraction artifact).
+        **{f"Oscillator {osc} Fixed": f"{osc} Fix On " for osc in "ABCD"},
+        # "Amp envelope" in UI terms = the carrier (osc A) envelope — the same
+        # reading the curated prompt catalogue sanctions via 'Amp Envelope *'.
+        "Amp Envelope Attack": "Ae Attack",
+        "Amp Envelope Decay": "Ae Decay",
+        "Amp Envelope Sustain": "Ae Sustain",
+        "Amp Envelope Release": "Ae Release",
+        "Filter Frequency": "Filter Freq",
+        "Filter Resonance": "Filter Res",
+        "LFO Amount": "LFO Amt",
+        "LFO Waveform": "LFO Type",
+        # Operator's unison-style control is 'Spread' (the curated catalogue
+        # uses Wavetable's 'Unison Amount' vocabulary for it).
+        "Unison Amount": "Spread",
+    },
+    "Reverb": {
+        "Low Cut": "In LoCut",
+        "High Cut": "In HiCut",
+        "Spin": "ER Spin",
+    },
+}
+
+# Real Live 12 UI controls that are not automatable DeviceParameters, so the
+# MIDI-Remote-Script extraction cannot list them. The gate recognizes them
+# (no parameter_unknown warning) but they carry no ParamSpec, so value range
+# checks are skipped.
+UI_ONLY_PARAMETERS: dict[str, frozenset[str]] = {
+    "MidiScale": frozenset({"Scale Name", "Use Current Scale"}),
+}
+
+
 class CatalogueShapeError(RuntimeError):
     """Raised when the catalogue JSON does not match the published schema."""
 
@@ -274,6 +339,40 @@ class Live12Catalogue:
         if not matches:
             return None
         return (entry.class_name, matches[0])
+
+    def resolve_ui_parameter(
+        self, device: str, parameter: str
+    ) -> tuple[str, str] | None:
+        """Resolve a curated UI-facing spelling to its source-extracted name
+        (e.g. Eq8 ``"Band 8 Gain"`` -> ``"8 Gain A"``) via the hand-curated
+        `UI_PARAMETER_ALIASES` table. Exact catalogue names resolve to
+        themselves. Returns ``(canonical_device, source_parameter)`` or
+        ``None``. Unlike `fuzzy_resolve`, every hit here is a deterministic,
+        reviewed equivalence — strong enough to drive a range check, still
+        never used to rewrite a recommendation.
+        """
+        canonical = self.canonical_device(device)
+        if canonical is None or not isinstance(parameter, str):
+            return None
+        stripped = parameter.strip()
+        if not stripped:
+            return None
+        entry = self._devices_by_class[canonical]
+        if stripped in entry._parameters_by_name:
+            return (canonical, stripped)
+        target = UI_PARAMETER_ALIASES.get(canonical, {}).get(stripped)
+        if target is not None and target in entry._parameters_by_name:
+            return (canonical, target)
+        return None
+
+    def is_ui_only_parameter(self, device: str, parameter: str) -> bool:
+        """True when `parameter` is a real Live 12 UI control on `device` that
+        the MIDI-Remote-Script extraction cannot see (not an automatable
+        DeviceParameter), e.g. the Scale device's scale selector."""
+        canonical = self.canonical_device(device)
+        if canonical is None or not isinstance(parameter, str):
+            return False
+        return parameter.strip() in UI_ONLY_PARAMETERS.get(canonical, frozenset())
 
 
 # ----- module-level singleton -----
