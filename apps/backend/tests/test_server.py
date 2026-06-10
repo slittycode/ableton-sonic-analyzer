@@ -5241,6 +5241,122 @@ class CsvExportRouteTests(unittest.TestCase):
         self.assertEqual(payload["error"]["code"], "RUN_NOT_FOUND")
 
 
+class Phase2ExportRouteTests(unittest.TestCase):
+    """Route tests for GET /api/analysis-runs/{run_id}/export/phase2.
+
+    The envelope projection logic is covered by tests/test_phase2_export.py.
+    These tests verify only the HTTP shell: status codes, error envelopes,
+    headers, and that the route pulls the stored interpretation attempt out
+    of the run snapshot.
+    """
+
+    PHASE2_RESULT = {
+        "trackCharacter": "Driving techno",
+        "abletonRecommendations": [
+            {
+                "device": "Glue Compressor",
+                "parameter": "Threshold",
+                "value": "-12 dB",
+                "phase1Fields": ["lufsIntegrated"],
+            }
+        ],
+    }
+
+    def _decode_json_response(self, response) -> dict:
+        return json.loads(response.body.decode("utf-8"))
+
+    def _make_run(self, runtime, *, with_interpretation: bool) -> str:
+        created = runtime.create_run(
+            filename="track.mp3",
+            content=b"fake-audio",
+            mime_type="audio/mpeg",
+            pitch_note_mode="off",
+            pitch_note_backend="auto",
+            interpretation_mode="sync" if with_interpretation else "off",
+            interpretation_profile="producer_summary",
+            interpretation_model=None,
+        )
+        run_id = created["runId"]
+        runtime.complete_measurement(
+            run_id,
+            payload={"bpm": 130.0, "lufsIntegrated": -9.2},
+            provenance={"schemaVersion": "measurement.v1", "engineVersion": "analyze.py"},
+            diagnostics={"backendDurationMs": 1000},
+        )
+        if with_interpretation:
+            attempt_id = runtime.create_interpretation_attempt(
+                run_id,
+                profile_id="producer_summary",
+                model_name="gemini-2.5-flash",
+            )
+            runtime.complete_interpretation_attempt(
+                attempt_id,
+                result=self.PHASE2_RESULT,
+                provenance={
+                    "schemaVersion": "interpretation.v2",
+                    "profileId": "producer_summary",
+                    "modelName": "gemini-2.5-flash",
+                },
+                diagnostics={
+                    "validationWarnings": [
+                        {"code": "RECOMMENDATION_UNVERIFIED", "path": "x"}
+                    ]
+                },
+            )
+        return run_id
+
+    def test_returns_envelope_with_attachment_disposition(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_phase2_export_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            run_id = self._make_run(runtime, with_interpretation=True)
+
+            with patch.object(server, "get_analysis_runtime", return_value=runtime):
+                response = asyncio.run(server.export_run_phase2(run_id))
+
+        self.assertEqual(response.status_code, 200)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["schemaVersion"], "phase2-export.v1")
+        self.assertEqual(payload["runId"], run_id)
+        self.assertEqual(payload["phase2"], self.PHASE2_RESULT)
+        self.assertEqual(payload["phase1"]["bpm"], 130.0)
+        self.assertEqual(
+            payload["validationWarnings"],
+            [{"code": "RECOMMENDATION_UNVERIFIED", "path": "x"}],
+        )
+        self.assertEqual(payload["provenance"]["profileId"], "producer_summary")
+        disposition = response.headers.get("content-disposition", "")
+        self.assertIn(f"{run_id}_phase2_export.json", disposition)
+
+    def test_run_without_interpretation_returns_404(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_phase2_export_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            run_id = self._make_run(runtime, with_interpretation=False)
+
+            with patch.object(server, "get_analysis_runtime", return_value=runtime):
+                response = asyncio.run(server.export_run_phase2(run_id))
+
+        self.assertEqual(response.status_code, 404)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["error"]["code"], "PHASE2_EXPORT_NOT_AVAILABLE")
+        self.assertFalse(payload["error"]["retryable"])
+
+    def test_unknown_run_returns_404(self) -> None:
+        from analysis_runtime import AnalysisRuntime
+
+        with tempfile.TemporaryDirectory(prefix="asa_phase2_export_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            with patch.object(server, "get_analysis_runtime", return_value=runtime):
+                response = asyncio.run(server.export_run_phase2("does-not-exist"))
+
+        self.assertEqual(response.status_code, 404)
+        payload = self._decode_json_response(response)
+        self.assertEqual(payload["error"]["code"], "RUN_NOT_FOUND")
+
+
 class TranscriptionPianorollRouteTests(unittest.TestCase):
     """Route tests for GET /api/analysis-runs/{run_id}/transcription/pianoroll.
 

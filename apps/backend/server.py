@@ -49,6 +49,7 @@ from runtime_profile import (
 )
 from utils.cleanup import cleanup_artifacts
 import csv_export
+import phase2_export
 import transcription_pianoroll
 import upload_limits
 import url_ingest
@@ -3128,6 +3129,66 @@ async def export_run_field_as_csv(
         media_type="text/csv; charset=utf-8",
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
+        },
+    )
+
+
+@app.get("/api/analysis-runs/{run_id}/export/phase2")
+async def export_run_phase2(
+    run_id: str,
+    x_asa_user_id: str | None = Header(None),
+    x_asa_user_email: str | None = Header(None),
+) -> JSONResponse:
+    """Export the run's Phase 2 handoff envelope (``phase2-export.v1``).
+
+    A single self-contained JSON file for downstream consumers — the
+    sibling ``asa-ableton`` ``.als`` generator and the recommendation-proof
+    harness (``scripts/evaluate_recommendations.py --phase2``). Carries the
+    stored ``producer_summary`` interpretation result verbatim (including
+    the frozen ``recommendations.v1`` envelope), the authoritative Phase 1
+    measurement payload its citations resolve against, the full
+    warn-and-keep ``validationWarnings`` trail, and the stored provenance.
+    See :mod:`phase2_export` and ``docs/ASA_ABLETON_BOUNDARY.md``.
+
+    Returns:
+        - 200 ``application/json`` with an attachment Content-Disposition.
+        - 404 ``RUN_NOT_FOUND`` if the run does not exist or is not owned
+          by the requesting user.
+        - 404 ``PHASE2_EXPORT_NOT_AVAILABLE`` if the run has no completed
+          ``producer_summary`` interpretation result to hand off.
+    """
+    user_context = _resolve_route_user_context(x_asa_user_id, x_asa_user_email)
+    if isinstance(user_context, JSONResponse):
+        return user_context
+    runtime = get_analysis_runtime()
+    try:
+        snapshot = runtime.get_run(run_id, owner_user_id=user_context.user_id)
+    except (KeyError, PermissionError):
+        return _run_not_found_response(run_id)
+
+    envelope = phase2_export.build_phase2_export(snapshot)
+    if envelope is None:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": {
+                    "code": "PHASE2_EXPORT_NOT_AVAILABLE",
+                    "message": (
+                        f"Run '{run_id}' has no completed producer_summary "
+                        f"interpretation result to export. Interpretation "
+                        f"may be off, still running, failed, or skipped."
+                    ),
+                    "retryable": False,
+                }
+            },
+        )
+
+    return JSONResponse(
+        content=envelope,
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{run_id}_phase2_export.json"'
+            ),
         },
     )
 

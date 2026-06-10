@@ -363,6 +363,25 @@ class Phase2AdapterTests(unittest.TestCase):
         self.assertEqual(recs[0].citations, ("kickDetail.fundamentalHz",))
         self.assertEqual(recs[1].domain, "master")  # mix chain defaults to master
 
+    def test_coerce_phase2_payload_unwraps_export_envelope(self):
+        """A phase2-export.v1 file (GET .../export/phase2) feeds --phase2 directly."""
+        bare = {"abletonRecommendations": [{"device": "Operator"}]}
+        envelope = {
+            "schemaVersion": "phase2-export.v1",
+            "runId": "run-123",
+            "phase1": {"bpm": 130.0},
+            "phase2": bare,
+        }
+        self.assertEqual(rev.coerce_phase2_payload(envelope), bare)
+
+    def test_coerce_phase2_payload_passes_bare_result_through(self):
+        bare = {"abletonRecommendations": [], "schemaVersion": None}
+        self.assertEqual(rev.coerce_phase2_payload(bare), bare)
+        # A result that happens to carry an unrelated schemaVersion string is
+        # NOT unwrapped — only the phase2-export.* envelope is.
+        other = {"schemaVersion": "interpretation.v2", "phase2": {"x": 1}}
+        self.assertEqual(rev.coerce_phase2_payload(other), other)
+
 
 class AuthoredFixtureCatalogTests(unittest.TestCase):
     """Regression: every committed example spec is catalog-valid."""

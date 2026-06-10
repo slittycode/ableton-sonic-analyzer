@@ -15,8 +15,11 @@ recommendation sources on the same corpus:
   * ``baseline``      — trivial no-op source (empty rec set). Runs now, no deps.
                         The floor any real source must clear.
   * ``gemini``        — score a stored ``Phase2Result`` JSON (``--phase2`` or a
-                        sibling ``phase2.json`` in the fixture dir). Producing it
-                        live needs GEMINI_API_KEY + rendered audio (needs-fixture).
+                        sibling ``phase2.json`` in the fixture dir). Either a bare
+                        result or a ``phase2-export.v1`` envelope downloaded from
+                        ``GET /api/analysis-runs/{run_id}/export/phase2`` works.
+                        Producing it live needs GEMINI_API_KEY + rendered audio
+                        (needs-fixture).
   * ``deterministic`` — score the ``abletonDevices.ts`` path. Wiring the node
                         bridge that emits normalized recs from a real Phase 1
                         fingerprint is a documented follow-on (NEEDS.md); until
@@ -86,7 +89,9 @@ def _resolve_recs(
             candidate = sibling if sibling.exists() else None
         if candidate is None or not candidate.exists():
             return None, "no Phase2Result JSON (pass --phase2 or drop phase2.json in the fixture dir)"
-        phase2 = json.loads(candidate.read_text(encoding="utf-8"))
+        phase2 = rev.coerce_phase2_payload(
+            json.loads(candidate.read_text(encoding="utf-8"))
+        )
         return rev.normalize_phase2(phase2), f"Phase2Result from {candidate.name}"
 
     if source == "deterministic":
