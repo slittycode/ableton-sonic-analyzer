@@ -24,27 +24,14 @@ jobs:
       pull-requests: read
       issues: read
       id-token: write
-    # Advisory review must not red the checks when its credential is absent.
-    # CLAUDE_CODE_OAUTH_TOKEN is a repo secret (Settings → Secrets → Actions);
-    # it was observed empty from 2026-06-09, failing every PR in ~25s before
-    # reviewing anything. With this guard the job passes with skipped steps
-    # until the owner re-adds the secret.
-    env:
-      HAS_REVIEW_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
 
     steps:
-      - name: Skip notice (no review credential configured)
-        if: env.HAS_REVIEW_TOKEN != 'true'
-        run: echo "CLAUDE_CODE_OAUTH_TOKEN secret is not set — skipping advisory review."
-
       - name: Checkout repository
-        if: env.HAS_REVIEW_TOKEN == 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
       - name: Run Claude Code Review
-        if: env.HAS_REVIEW_TOKEN == 'true'
         id: claude-review
         uses: anthropics/claude-code-action@v1
         with:
