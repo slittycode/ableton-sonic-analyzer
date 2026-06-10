@@ -28,6 +28,17 @@
 >    the operator's own installed tool), but it inherits the same "research /
 >    operator convenience, not the promoted product path" status until its
 >    output quality is scored against the recommendation corpus.
+> 7. **Provider policy (explicit).** Providers are *selectable and mutually
+>    exclusive per interpretation*: exactly one of `gemini | moss | claude`
+>    produces a given result. There is NO automatic fallback between providers
+>    and NO dual-provider/ensemble review — if such a mode is ever wanted it is
+>    a separate future design (disagreement handling, latency, Gemini cost).
+>    Gemini remains implemented, available, and the default; the `claude` route
+>    exists so the owner can run the complete advice path with no Gemini key
+>    and no Gemini spend, and is not contingent on out-scoring Gemini.
+>    Deployment caveat: `claude` rides a *locally logged-in* CLI, so it serves
+>    the operator's own machine only — it is not a substitute for an API-backed
+>    provider for other users.
 > Tests: `tests/test_phase2_provider.py` (`ClaudeCliProviderTests`,
 > `GeminiSchemaConversionTests`, `ClaudeBranchIntegrationTests` — the latter
 > proves the no-`GEMINI_API_KEY` path end-to-end through the shared tail).
