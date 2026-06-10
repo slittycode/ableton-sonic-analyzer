@@ -528,5 +528,69 @@ class CatalogueChecksIntegrationTests(unittest.TestCase):
         self.assertEqual(len(phase2["abletonRecommendations"]), 1)
 
 
+class UiAliasGateBehaviorTests(unittest.TestCase):
+    """Gate behavior for the curated UI-alias layer, against the REAL shipped
+    catalogue. These are the exact prompt-sanctioned spellings observed
+    producing parameter_unknown warnings on the 2026-06-10 live runs (VTSS +
+    DJ Metatron) — each must now be recognized silently, while genuinely
+    invented parameters keep warning. Warn-and-keep is unchanged: nothing is
+    ever rewritten or dropped.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.catalogue = Live12Catalogue.load_default()
+
+    def _events_for(self, *, device: str, parameter: str, value: str = "1"):
+        phase2 = {
+            "abletonRecommendations": [
+                _make_recommendation(device=device, parameter=parameter, value=value),
+            ],
+        }
+        events = apply_live12_catalogue_gates(
+            phase2, request_id="req-alias", catalogue=self.catalogue
+        )
+        # Warn-and-keep invariants hold in every case.
+        rec = phase2["abletonRecommendations"][0]
+        assert rec["parameter"] == parameter
+        assert len(phase2["abletonRecommendations"]) == 1
+        return events
+
+    def test_observed_live_spellings_no_longer_warn(self):
+        # The five recurring warnings from the 2026-06-10 live runs.
+        for device, parameter in (
+            ("EQ Eight", "Band 8 Gain"),
+            ("Operator", "Oscillator A Coarse"),
+            ("Operator", "Amp Envelope Decay"),
+            ("Operator", "Unison Amount"),
+            ("Reverb", "Low Cut"),
+            ("Scale", "Scale Name"),
+        ):
+            with self.subTest(device=device, parameter=parameter):
+                events = self._events_for(device=device, parameter=parameter)
+                parameter_events = [
+                    e for e in events if e["reason"] == "parameter_unknown"
+                ]
+                self.assertEqual(parameter_events, [])
+
+    def test_invented_parameter_still_warns(self):
+        events = self._events_for(
+            device="EQ Eight", parameter="Quantum Flux Compensator"
+        )
+        self.assertEqual(
+            [e["reason"] for e in events], ["parameter_unknown"]
+        )
+
+    def test_band_nine_still_warns_unless_fuzzy_close(self):
+        # "Band 9 Gain" does not alias (EQ Eight has 8 bands). It may or may
+        # not fuzzy-suppress; what must NOT happen is silent acceptance via
+        # the alias layer. Assert the alias layer itself rejects it; the gate
+        # outcome (fuzzy) is covered elsewhere.
+        self.assertIsNone(
+            self.catalogue.resolve_ui_parameter("EQ Eight", "Band 9 Gain")
+        )
+
+
+
 if __name__ == "__main__":
     unittest.main()

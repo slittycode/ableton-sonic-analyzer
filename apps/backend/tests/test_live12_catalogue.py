@@ -339,5 +339,93 @@ class DefaultCataloguePathTests(unittest.TestCase):
         )
 
 
+class UiParameterAliasTests(unittest.TestCase):
+    """Curated UI-spelling resolution (`resolve_ui_parameter`) and UI-only
+    recognition (`is_ui_only_parameter`) against the real shipped catalogue.
+
+    These are the prompt-sanctioned spellings observed warning live on
+    2026-06-10 (VTSS + DJ Metatron runs) — each must now resolve, while
+    invented parameters must keep returning None.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.catalogue = Live12Catalogue.from_path(DEFAULT_CATALOGUE_PATH)
+
+    def test_eq_eight_band_spellings_resolve_to_a_curve(self):
+        cases = {
+            "Band 8 Gain": "8 Gain A",
+            "Band 1 Frequency": "1 Frequency A",
+            "Band 3 Filter Type": "3 Filter Type A",
+            "Band 5 Q": "5 Resonance A",  # UI "Q" is the source's Resonance
+        }
+        for ui_name, source_name in cases.items():
+            with self.subTest(ui_name=ui_name):
+                self.assertEqual(
+                    self.catalogue.resolve_ui_parameter("EQ Eight", ui_name),
+                    ("Eq8", source_name),
+                )
+
+    def test_operator_spellings_resolve(self):
+        cases = {
+            "Oscillator A Coarse": "A Coarse",
+            "Oscillator B Level": "Osc-B Level",
+            "Amp Envelope Decay": "Ae Decay",
+            "Unison Amount": "Spread",
+            "Filter Frequency": "Filter Freq",
+        }
+        for ui_name, source_name in cases.items():
+            with self.subTest(ui_name=ui_name):
+                self.assertEqual(
+                    self.catalogue.resolve_ui_parameter("Operator", ui_name),
+                    ("Operator", source_name),
+                )
+
+    def test_reverb_spellings_resolve(self):
+        self.assertEqual(
+            self.catalogue.resolve_ui_parameter("Reverb", "Low Cut"),
+            ("Reverb", "In LoCut"),
+        )
+        self.assertEqual(
+            self.catalogue.resolve_ui_parameter("Reverb", "High Cut"),
+            ("Reverb", "In HiCut"),
+        )
+
+    def test_exact_source_names_resolve_to_themselves(self):
+        self.assertEqual(
+            self.catalogue.resolve_ui_parameter("EQ Eight", "8 Gain A"),
+            ("Eq8", "8 Gain A"),
+        )
+
+    def test_invented_parameters_do_not_resolve(self):
+        for device, parameter in (
+            ("EQ Eight", "Band 9 Gain"),  # EQ Eight has 8 bands
+            ("EQ Eight", "Totally Invented Knob"),
+            ("Operator", "Wavetable Position"),  # wrong-device vocabulary
+            ("Reverb", "Wander"),
+        ):
+            with self.subTest(device=device, parameter=parameter):
+                self.assertIsNone(
+                    self.catalogue.resolve_ui_parameter(device, parameter)
+                )
+
+    def test_unknown_device_does_not_resolve(self):
+        self.assertIsNone(
+            self.catalogue.resolve_ui_parameter("Not A Device", "Band 1 Gain")
+        )
+
+    def test_scale_name_is_ui_only(self):
+        # The Scale device's scale selector is a real UI control but not an
+        # automatable DeviceParameter, so the extraction cannot list it.
+        self.assertTrue(self.catalogue.is_ui_only_parameter("Scale", "Scale Name"))
+        self.assertTrue(
+            self.catalogue.is_ui_only_parameter("Scale", "Use Current Scale")
+        )
+        self.assertFalse(self.catalogue.is_ui_only_parameter("Scale", "Base"))
+        self.assertFalse(
+            self.catalogue.is_ui_only_parameter("EQ Eight", "Scale Name")
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -140,6 +140,45 @@ def _build_unverified_event(
     return event
 
 
+def _maybe_append_range_event(
+    *,
+    catalogue: Live12Catalogue,
+    canonical_device: str,
+    source_parameter: str,
+    display_parameter: str,
+    record: dict[str, Any],
+    base_path: str,
+    request_id: str,
+    events: list[dict[str, Any]],
+) -> None:
+    """Range-check `record`'s value against `source_parameter`'s spec and
+    append a value_out_of_range event when it falls outside. The event reports
+    `display_parameter` — what the recommendation actually says — so warnings
+    stay legible even when the spec was found via a UI alias."""
+    spec = catalogue.parameter_spec(canonical_device, source_parameter)
+    if spec is None or not spec.has_range():
+        return
+    numeric_value = _coerce_value_to_number(record.get("value"))
+    if numeric_value is None or spec.in_range(numeric_value):
+        return
+    events.append(
+        _build_unverified_event(
+            path=base_path,
+            reason=_REASON_VALUE_OUT_OF_RANGE,
+            message=(
+                f"Value {numeric_value} for {canonical_device!r}."
+                f"{display_parameter!r} is outside the catalogue range "
+                f"[{spec.min}, {spec.max}]. Kept as-is, but flagged "
+                "as unverified."
+            ),
+            device=canonical_device,
+            parameter=display_parameter,
+            request_id=request_id,
+            value=record.get("value"),
+        )
+    )
+
+
 def _inspect_record(
     *,
     catalogue: Live12Catalogue,
@@ -176,13 +215,35 @@ def _inspect_record(
             )
         )
     elif not catalogue.has_parameter(canonical_device, parameter):
-        # Not an exact catalogue parameter. Use fuzzy resolution ONLY to decide
-        # whether to warn: a close match means the parameter is almost certainly
-        # real under a slightly different name (e.g. "Band 1 Frequency" vs
-        # "1 Frequency A"), so keep it silently. The fuzzy *target* is NOT
-        # trusted enough to rewrite — on multi-band devices the closest lexical
-        # match is routinely the wrong instance.
-        if catalogue.fuzzy_resolve(canonical_device, parameter) is None:
+        # Not an exact catalogue parameter. Resolution ladder, most to least
+        # trusted — none of these ever rewrites the recommendation:
+        #   1. Curated UI alias (live12_catalogue.UI_PARAMETER_ALIASES): a
+        #      reviewed equivalence between the prompt catalogue's UI spelling
+        #      and the source name (e.g. "Band 8 Gain" -> "8 Gain A").
+        #      Recognized — and trusted enough to range-check against the
+        #      resolved spec.
+        #   2. UI-only control (UI_ONLY_PARAMETERS): real in Live's UI but not
+        #      an automatable DeviceParameter, so the extraction can't list it
+        #      (e.g. Scale's "Scale Name"). Recognized; no range check possible.
+        #   3. Fuzzy match: used ONLY to decide whether to warn. The fuzzy
+        #      *target* is NOT trusted enough to rewrite or range-check — on
+        #      multi-band devices the closest lexical match is routinely the
+        #      wrong instance.
+        resolved = catalogue.resolve_ui_parameter(canonical_device, parameter)
+        if resolved is not None:
+            _maybe_append_range_event(
+                catalogue=catalogue,
+                canonical_device=canonical_device,
+                source_parameter=resolved[1],
+                display_parameter=parameter,
+                record=record,
+                base_path=base_path,
+                request_id=request_id,
+                events=events,
+            )
+        elif catalogue.is_ui_only_parameter(canonical_device, parameter):
+            pass
+        elif catalogue.fuzzy_resolve(canonical_device, parameter) is None:
             events.append(
                 _build_unverified_event(
                     path=base_path,
@@ -199,27 +260,17 @@ def _inspect_record(
                 )
             )
     else:
-        # Exact parameter match — the only case where a range check is sound.
-        spec = catalogue.parameter_spec(canonical_device, parameter)
-        if spec is not None and spec.has_range():
-            numeric_value = _coerce_value_to_number(record.get("value"))
-            if numeric_value is not None and not spec.in_range(numeric_value):
-                events.append(
-                    _build_unverified_event(
-                        path=base_path,
-                        reason=_REASON_VALUE_OUT_OF_RANGE,
-                        message=(
-                            f"Value {numeric_value} for {canonical_device!r}."
-                            f"{parameter!r} is outside the catalogue range "
-                            f"[{spec.min}, {spec.max}]. Kept as-is, but flagged "
-                            "as unverified."
-                        ),
-                        device=canonical_device,
-                        parameter=parameter,
-                        request_id=request_id,
-                        value=record.get("value"),
-                    )
-                )
+        # Exact parameter match — range check directly against its spec.
+        _maybe_append_range_event(
+            catalogue=catalogue,
+            canonical_device=canonical_device,
+            source_parameter=parameter,
+            display_parameter=parameter,
+            record=record,
+            base_path=base_path,
+            request_id=request_id,
+            events=events,
+        )
 
     if require_citation:
         cited = record.get("phase1Fields")
