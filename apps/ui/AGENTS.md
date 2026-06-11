@@ -184,6 +184,7 @@ RUN_GEMINI_LIVE_SMOKE=true VITE_ENABLE_PHASE2_GEMINI=true GEMINI_API_KEY=your_ke
 ## Change Checklist
 
 - If you change backend transport or parsing, run the relevant `tests/services` file first.
+- If you add or rename a Phase 1 field, `tests/services/phase1ContractParity.test.ts` is the executable contract gate: update the parser (`src/services/backendPhase1Client.ts`), the types (`src/types/measurement.ts`), and the shared fixture (`tests/fixtures/phase1FullPayload.ts`) together.
 - If you change upload, orchestration, or rendered flow behavior, run the relevant Playwright smoke spec.
 - If you touch shared types or config, run `npm run lint` and at least one targeted test.
 - If you change app-wide behavior or build config, run `npm run verify`.
