@@ -1,0 +1,142 @@
+{
+  "schemaVersion": "recommendation-fixture.v1",
+  "id": "ukg_2step_shuffle_132",
+  "title": "UK garage — 2-step shuffle, warm sub, chopped chord stab, dub echo",
+  "genre": "uk garage",
+  "audioPath": "audio.flac",
+  "phase1FingerprintPath": "phase1_fingerprint.json",
+  "phase1Fingerprint": null,
+  "render": {
+    "sampleRateHz": 48000,
+    "bitDepth": 24,
+    "lengthSeconds": 16,
+    "bpm": 132,
+    "key": "G minor",
+    "notes": "8-bar 2-step loop (~14.5 s). Kick is NOT four-on-floor; snare on 2 and 4; hats and snare ride a 16th swing (~57%, baked into the committed MIDI — or apply Ableton's 'Swing 16ths' groove at 57%). Render the full loop to one stereo file, no export normalization."
+  },
+  "deviceSpec": {
+    "kick": [
+      {
+        "device": "Drum Rack",
+        "family": "NATIVE",
+        "role": "Sampled 2-step kick (broken, not 4/4)",
+        "parameters": [
+          { "name": "Pad Volume", "value": "-3 dB" },
+          { "name": "Pad Pitch", "value": "0" }
+        ]
+      }
+    ],
+    "bass": [
+      {
+        "device": "Operator",
+        "family": "NATIVE",
+        "role": "Warm plucky UKG sub",
+        "parameters": [
+          { "name": "Oscillator A Waveform", "value": "Sine" },
+          { "name": "Filter Type", "value": "Lowpass" },
+          { "name": "Filter Frequency", "value": "200 Hz" },
+          { "name": "Amp Envelope Decay", "value": "400 ms" },
+          { "name": "Amp Envelope Sustain", "value": "60%" },
+          { "name": "Amp Envelope Release", "value": "120 ms", "intent": "bouncy, not a drone — the bounce is what swings" }
+        ]
+      }
+    ],
+    "melody": [
+      {
+        "device": "Wavetable",
+        "family": "NATIVE",
+        "role": "Chopped organ-style chord stab",
+        "parameters": [
+          { "name": "Oscillator 1 Wavetable", "value": "Basic Shapes" },
+          { "name": "Filter Type", "value": "Lowpass" },
+          { "name": "Filter Frequency", "value": "3500 Hz" },
+          { "name": "Amp Envelope Attack", "value": "2 ms" },
+          { "name": "Amp Envelope Decay", "value": "220 ms" },
+          { "name": "Amp Envelope Sustain", "value": "0%", "intent": "stabby chop, no sustain — classic UKG organ/vocal-chop articulation" }
+        ]
+      },
+      {
+        "device": "Chorus-Ensemble",
+        "family": "NATIVE",
+        "role": "Organ warble",
+        "parameters": [
+          { "name": "Mode", "value": "Classic" },
+          { "name": "Rate", "value": "0.8 Hz" },
+          { "name": "Amount", "value": "50%" },
+          { "name": "Dry/Wet", "value": "30%" }
+        ]
+      }
+    ],
+    "groove": [
+      {
+        "device": "Drum Rack",
+        "family": "NATIVE",
+        "role": "Swung 2-step snare + shuffled hats — swing lives in the MIDI, not a device",
+        "parameters": [
+          { "name": "Pad Volume", "value": "-8 dB" },
+          { "name": "Send Level", "value": "-12 dB", "intent": "snare/hat send into the Echo return" }
+        ]
+      }
+    ],
+    "fx": [
+      {
+        "device": "Echo",
+        "family": "NATIVE",
+        "role": "Dub delay return on stabs + snare",
+        "parameters": [
+          { "name": "Sync", "value": "On" },
+          { "name": "Delay Time (L)", "value": "3/16" },
+          { "name": "Delay Time (R)", "value": "1/4" },
+          { "name": "Feedback", "value": "35%" },
+          { "name": "Filter On", "value": "On" },
+          { "name": "Filter Frequency", "value": "1200 Hz" },
+          { "name": "Stereo", "value": "60%" },
+          { "name": "Dry/Wet", "value": "100%", "intent": "on a return — 100% wet" }
+        ]
+      }
+    ],
+    "stereo": [
+      {
+        "device": "Utility",
+        "family": "NATIVE",
+        "role": "Low-end mono / top width",
+        "parameters": [
+          { "name": "Bass Mono", "value": "On" },
+          { "name": "Stereo Width", "value": "115%" }
+        ]
+      }
+    ],
+    "master": [
+      {
+        "device": "Glue Compressor",
+        "family": "NATIVE",
+        "role": "Gentle bus glue — UKG breathes, don't slam",
+        "parameters": [
+          { "name": "Threshold", "value": "-12 dB" },
+          { "name": "Ratio", "value": "2:1" },
+          { "name": "Attack", "value": "3 ms" },
+          { "name": "Release", "value": "Auto" },
+          { "name": "Makeup", "value": "2 dB" }
+        ]
+      },
+      {
+        "device": "Limiter",
+        "family": "NATIVE",
+        "role": "Master ceiling",
+        "parameters": [
+          { "name": "Ceiling", "value": "-0.3 dB" }
+        ]
+      }
+    ]
+  },
+  "measurableIntent": {
+    "bpm": { "target": 132, "tolerance": 1, "direction": "exact" },
+    "key": { "target": "G minor" },
+    "lufsIntegrated": { "target": -9, "tolerance": 2, "unit": "LUFS" },
+    "truePeak": { "target": -0.3, "tolerance": 0.4, "unit": "dBTP", "intent": "Limiter ceiling; dBTP per ADR 0002" },
+    "grooveDetail.hihatSwing": { "target": 0.45, "tolerance": 0.2, "direction": "min", "intent": "shuffled 16th hats must register; estimate — re-baseline from the render" },
+    "grooveDetail.perDrumSwing.snare": { "target": 0.4, "tolerance": 0.2, "direction": "min", "intent": "2-step snare rides the same swing" },
+    "bassDetail.grooveType": { "equals": "slight-swing", "intent": "syncopated swung sub line; categorical — re-baseline from the render" },
+    "spectralDetail.spectralCentroidMean": { "target": 2500, "tolerance": 800, "unit": "Hz", "intent": "bright, hat-and-stab-forward top" }
+  }
+}

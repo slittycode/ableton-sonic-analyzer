@@ -16,7 +16,7 @@ not Ableton renders), so their *data* is provisional pending real renders.
 
 | Sub-goal | Done? | Caveat |
 |---|---|---|
-| 1 — ground-truth corpus | ✅ 5 catalog-valid fixtures, audio + fingerprint, ingest passes | audio is **synthetic-proxy**, not Ableton |
+| 1 — ground-truth corpus | ✅ 5 catalog-valid fixtures, ingest passes | audio is **synthetic-proxy**, not Ableton; 2026-06-10 two fixtures re-authored to owner genres (`hard_techno_rumble_145`, `ukg_2step_shuffle_132`) and ship spec-only — their proxy audio/fingerprints retired with the old slugs |
 | 2 — the scorer | ✅ fully real (32 tests, self-test) | none |
 | 3 — verdict + improvement | ✅ verdict (`RECOMMENDATION_VERDICT.md`: Gemini 0.227 vs deterministic/baseline 0.000), intent-credit improvement 0.141→0.227, harness runnable | corpus numbers are on proxy audio; real-track cross-check is real |
 | 4 — UI proof | ✅ badge on `ui/` primitives, real bands (master MED, bass/melody LOW, rest NONE), `npm run verify` green | bands derived from proxy corpus |
@@ -31,10 +31,14 @@ not Ableton renders), so their *data* is provisional pending real renders.
 2. **Gemini spend already incurred** (6 live `gemini-2.5-flash` calls: 1 real track +
    5 proxy fixtures) using `VITE_GEMINI_API_KEY`. Future re-runs cost the same.
 3. **Proxy artifacts to distrust until re-rendered:** dnb BPM read half-time
-   (174→116); `acidDetail` fires on all proxies (synth is saw-heavy);
-   melodic_techno key mis-detected AND Gemini returned 0 structured cards there.
-4. **Genre confirmation** — house/techno/melodic-techno/dnb/acid were chosen as
-   owner-plausible; confirm or swap.
+   (174→116) — moot since 2026-06-10, `dnb_reese_174` retired (re-authored as
+   `ukg_2step_shuffle_132`); `acidDetail` fires on all proxies (synth is
+   saw-heavy); melodic_techno key mis-detected AND Gemini returned 0 structured
+   cards there.
+4. **Genre confirmation** — ✅ resolved 2026-06-10. Owner confirmed
+   house/melodic-techno/acid; the other two were re-authored to owner genres:
+   `techno_rumble_130` → `hard_techno_rumble_145` (hard/peak techno) and
+   `dnb_reese_174` → `ukg_2step_shuffle_132` (UK garage / 2-step).
 
 ---
 
@@ -95,10 +99,13 @@ place on citation + full-surface coverage. Confirm on real renders; the syntheti
 - Catalog-validity ingest (`validate_fixture_spec`) — runs now, gates every spec
   against `prompts/live12_device_catalog.json`.
 - **Five catalog-valid spec fixtures**, all covering the seven domains, in
-  owner-plausible electronic genres — meeting GOAL.md sub-goal 1's ≥5 *spec* target
+  owner-confirmed electronic genres — meeting GOAL.md sub-goal 1's ≥5 *spec* target
   (the renders are the remaining half): `house_sidechain_pluck_124` (house),
-  `techno_rumble_130` (techno), `melodic_techno_arp_124` (melodic techno),
-  `dnb_reese_174` (drum & bass), `acid_303_128` (acid — exercises `acidDetail`).
+  `hard_techno_rumble_145` (hard techno — the pilot),
+  `melodic_techno_arp_124` (melodic techno),
+  `ukg_2step_shuffle_132` (UK garage / 2-step — swing asserted via
+  `grooveDetail.*` / `bassDetail.grooveType`),
+  `acid_303_128` (acid — exercises `acidDetail`).
 
 ---
 
@@ -109,8 +116,9 @@ the recommendations themselves come from analyzing a real render. **This is the
 hard human dependency** — the agent writes the spec, the owner builds and renders.
 
 ### 1. Build + render the five authored fixtures
-For each of `house_sidechain_pluck_124`, `techno_rumble_130`,
-`melodic_techno_arp_124`, `dnb_reese_174`, `acid_303_128`:
+For each of `house_sidechain_pluck_124`, `hard_techno_rumble_145`,
+`melodic_techno_arp_124`, `ukg_2step_shuffle_132`, `acid_303_128`
+(start with `hard_techno_rumble_145` — the pilot, smallest spec):
 - Build the `manifest.json → deviceSpec` **exactly** in Live 12.
 - Set the project to **48 kHz / 24-bit**.
 - Render the loop to `audio.flac` in the fixture dir (no export normalization).
@@ -124,10 +132,9 @@ For each of `house_sidechain_pluck_124`, `techno_rumble_130`,
   and confirm the no-fingerprint note is gone.
 
 ### 2. Genre fit + held-out fixture
-Five specs now exist (house, techno, melodic techno, drum & bass, acid). If any of
-these are *not* genres you actually produce, say so and the agent will re-author
-that spec in a genre you make — the spec-then-dial cost is on the agent, the render
-on you.
+✅ Genre fit resolved 2026-06-10: owner confirmed house/melodic-techno/acid and the
+agent re-authored the other two to owner genres (hard techno 145, UK garage 2-step
+132) — the spec-then-dial cost stayed on the agent, the render on you.
 
 > Equivalence/overfitting note (GOAL.md sub-goal 3.3): hold out at least one
 > fixture from any tuning loop so improvements reflect quality, not memorization.
