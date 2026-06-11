@@ -1,4 +1,8 @@
 import { Phase1Result, Phase2Result } from '../types';
+import {
+  formatContractRange,
+  formatContractValue,
+} from '../services/recommendationsContract';
 
 export function downloadFile(content: string, fileName: string, contentType: string) {
   const a = document.createElement('a');
@@ -123,6 +127,22 @@ export function generateMarkdown(
     md += '| :--- | :--- | :--- | :--- | :--- |\n';
     phase2.abletonRecommendations.forEach((rec) => {
       md += `| ${rec.device} | ${rec.category} | ${rec.parameter} | ${rec.value} | ${rec.reason} |\n`;
+    });
+    md += '\n';
+  }
+
+  // recommendations.v1 (ADR 0003): the schema-validated, citation-gated
+  // projection the backend attaches to the interpretation. Every entry here
+  // cites the Phase 1 measurement(s) that justify it — the machine-checkable
+  // half of the report, alongside the raw cards above.
+  if (phase2.recommendations && phase2.recommendations.recommendations.length > 0) {
+    md += `### Validated Recommendations (${phase2.recommendations.version})\n`;
+    md += 'Schema-validated projection of the device cards above. Entries are admitted only when they cite at least one Phase 1 measurement.\n';
+    md += '| Device | Parameter | Value | Working Range | Cited Measurements |\n';
+    md += '| :--- | :--- | :--- | :--- | :--- |\n';
+    phase2.recommendations.recommendations.forEach((entry) => {
+      const range = formatContractRange(entry) ?? '—';
+      md += `| ${entry.device} | ${entry.parameter} | ${formatContractValue(entry)} | ${range} | ${entry.cited_measurements.join(', ')} |\n`;
     });
   }
 
