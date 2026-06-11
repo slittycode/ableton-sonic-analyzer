@@ -139,4 +139,47 @@ describe('generateMarkdown', () => {
     expect(markdown).not.toContain('- **Harmonic Content**:');
     expect(markdown).not.toContain('undefined');
   });
+
+  // recommendations.v1 wiring (ADR 0003): the markdown report carries the
+  // schema-validated, citation-gated projection alongside the raw cards.
+  it('renders the validated recommendations.v1 table when the envelope is present', () => {
+    const markdown = generateMarkdown(basePhase1, {
+      ...basePhase2,
+      recommendations: {
+        version: 'recommendations.v1',
+        recommendations: [
+          {
+            device: 'Drum Buss',
+            parameter: 'Drive',
+            value: 5,
+            unit: 'dB',
+            range: [2, 8],
+            cited_measurements: ['spectralBalance.lowBass', 'truePeak'],
+          },
+          {
+            device: 'Operator',
+            parameter: 'Waveform',
+            value: 'Sine',
+            unit: null,
+            range: null,
+            cited_measurements: ['key'],
+          },
+        ],
+      },
+    });
+
+    expect(markdown).toContain('### Validated Recommendations (recommendations.v1)');
+    expect(markdown).toContain('| Drum Buss | Drive | 5 dB | 2–8 dB | spectralBalance.lowBass, truePeak |');
+    expect(markdown).toContain('| Operator | Waveform | Sine | — | key |');
+  });
+
+  it('omits the validated recommendations section when the envelope is absent or empty', () => {
+    expect(generateMarkdown(basePhase1, basePhase2)).not.toContain('Validated Recommendations');
+    expect(
+      generateMarkdown(basePhase1, {
+        ...basePhase2,
+        recommendations: { version: 'recommendations.v1', recommendations: [] },
+      }),
+    ).not.toContain('Validated Recommendations');
+  });
 });

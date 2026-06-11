@@ -55,6 +55,11 @@ import { RecommendationVerificationBadge } from './RecommendationVerificationBad
 import { toConfidenceBand } from '../services/sessionMusician/confidenceBand';
 import { loadAppliedIds, toggleAppliedId } from '../services/appliedRecommendations';
 import {
+  formatContractRange,
+  formatContractValue,
+} from '../services/recommendationsContract';
+import type { RecommendationContractEntry } from '../types';
+import {
   buildArrangementViewModel,
   buildMixChainGroups,
   buildPatchCards,
@@ -235,6 +240,64 @@ function AppliedCheckbox({
     >
       {isApplied ? <Check className="w-3 h-3" /> : null}
     </button>
+  );
+}
+
+/**
+ * "Validated" chip for cards backed by the recommendations.v1 contract
+ * (ADR 0003): the backend admitted this card to the schema-validated,
+ * citation-gated envelope. Cards without it are exactly the ones the
+ * projection refused (typically: no Phase 1 citation), so the badge is the
+ * citation gate made visible. Renders nothing when no entries match.
+ */
+function ContractValidatedBadge({
+  entries,
+  testId,
+}: {
+  entries: RecommendationContractEntry[];
+  testId: string;
+}) {
+  if (entries.length === 0) return null;
+  return (
+    <span
+      data-testid={testId}
+      title="Passed the recommendations.v1 contract: schema-validated and citing at least one Phase 1 measurement."
+      className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-success/40 text-success whitespace-nowrap"
+    >
+      ✓ Validated
+    </span>
+  );
+}
+
+/**
+ * Expanded-card block listing the contract's normalized view of each backing
+ * entry: parsed value + unit and the published working range. The range is
+ * net-new information (the per-unit tolerance neighborhood the contract
+ * derives) — the raw value string already renders in the parameter grid.
+ */
+function ContractEntriesBlock({
+  entries,
+  testId,
+}: {
+  entries: RecommendationContractEntry[];
+  testId: string;
+}) {
+  if (entries.length === 0) return null;
+  return (
+    <div data-testid={testId} className="border border-success/20 bg-success/5 rounded-sm px-2 py-2">
+      <p className="text-[10px] font-mono text-success uppercase tracking-wide">
+        Validated · recommendations.v1
+      </p>
+      {entries.map((entry, idx) => {
+        const range = formatContractRange(entry);
+        return (
+          <p key={`${entry.parameter}-${idx}`} className="text-xs font-mono text-text-secondary mt-1">
+            {entry.parameter}: <span className="text-text-primary font-bold">{formatContractValue(entry)}</span>
+            {range ? ` · working range ${range}` : ''}
+          </p>
+        );
+      })}
+    </div>
   );
 }
 
@@ -745,7 +808,12 @@ export function AnalysisResults({
   const confidenceBadges = toConfidenceBadges(phase2?.confidenceNotes);
   const arrangement = buildArrangementViewModel(phase1, phase2?.arrangementOverview);
   const sonicCards = buildSonicElementCards(phase1, phase2?.sonicElements);
-  const mixGroups = buildMixChainGroups(phase1, phase2?.mixAndMasterChain, phase2?.sonicElements);
+  const mixGroups = buildMixChainGroups(
+    phase1,
+    phase2?.mixAndMasterChain,
+    phase2?.sonicElements,
+    phase2?.recommendations,
+  );
   // Audit Finding #14: per-section applied counts, derived from the
   // appliedIds Set + the rendered card lists. Keeps the progress chip in the
   // section header in sync with the per-card checkboxes without a second
@@ -2180,6 +2248,10 @@ export function AnalysisResults({
                                   trackContext={card.trackContext}
                                   category={card.category}
                                 />
+                                <ContractValidatedBadge
+                                  entries={card.contractEntries}
+                                  testId={`mix-chain-contract-badge-${card.id}`}
+                                />
                               </div>
                               {/* Audit Finding #3: primary citation visible in
                                 the collapsed header so the chain-of-custody
@@ -2252,6 +2324,11 @@ export function AnalysisResults({
                                 </div>
                               ))}
                             </div>
+
+                            <ContractEntriesBlock
+                              entries={card.contractEntries}
+                              testId={`mix-chain-contract-${card.id}`}
+                            />
 
                             <div className="border border-accent/20 bg-accent/5 rounded-sm px-2 py-2">
                               <p className="text-[10px] font-mono text-accent uppercase tracking-wide">PRO TIP</p>
@@ -2353,6 +2430,10 @@ export function AnalysisResults({
                                   trackContext={patch.trackContext}
                                   category={patch.category}
                                 />
+                                <ContractValidatedBadge
+                                  entries={patch.contractEntries}
+                                  testId={`patch-contract-badge-${patch.id}`}
+                                />
                               </div>
                               {/* Audit Finding #3: primary citation in the
                                 collapsed header so the chain-of-custody
@@ -2422,6 +2503,11 @@ export function AnalysisResults({
                                 </div>
                               ))}
                             </div>
+
+                            <ContractEntriesBlock
+                              entries={patch.contractEntries}
+                              testId={`patch-contract-${patch.id}`}
+                            />
 
                             <div className="border border-accent/20 bg-accent/5 rounded-sm px-2 py-2">
                               <p className="text-[10px] font-mono text-accent uppercase tracking-wide">PRO TIP</p>
