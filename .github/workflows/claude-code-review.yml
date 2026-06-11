@@ -12,12 +12,6 @@ on:
 
 jobs:
   claude-review:
-    # Advisory, never merge-blocking: the review runs on the subscription
-    # OAuth token (CLAUDE_CODE_OAUTH_TOKEN secret), which expires roughly
-    # yearly — an expired token must not hold PRs hostage. Refresh it with
-    # `claude setup-token` → repo Settings → Secrets and variables → Actions.
-    continue-on-error: true
-
     # Optional: Filter by PR author
     # if: |
     #   github.event.pull_request.user.login == 'external-contributor' ||
@@ -39,6 +33,14 @@ jobs:
 
       - name: Run Claude Code Review
         id: claude-review
+        # Advisory, never merge-blocking: the review runs on the subscription
+        # OAuth token (CLAUDE_CODE_OAUTH_TOKEN secret), which expires roughly
+        # yearly — an expired token must not hold PRs hostage. Step-level
+        # continue-on-error keeps the job (and the PR check) green when the
+        # step fails; job-level continue-on-error would still surface a red
+        # check. Refresh the token with `claude setup-token` → repo
+        # Settings → Secrets and variables → Actions.
+        continue-on-error: true
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
