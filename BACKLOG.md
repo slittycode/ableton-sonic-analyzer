@@ -4,7 +4,7 @@ Source: `active/sonic-architect-app` (keep in `active/` as reference). Most of t
 
 ## Shipped — Data
 - ✅ `data/genreProfiles.ts` — 35 EDM genre spectral targets, LUFS/crest factor/PLR ranges. **Landed:** [`apps/ui/src/data/genreProfiles.ts`](apps/ui/src/data/genreProfiles.ts).
-- ✅ `data/abletonDevices.ts` — 14 spectral-band → Ableton Live 12 device mappings + FX rule engine. **Landed:** [`apps/ui/src/data/abletonDevices.ts`](apps/ui/src/data/abletonDevices.ts).
+- ✅ `data/abletonDevices.ts` — 14 spectral-band → Ableton Live 12 device mappings + FX rule engine. **Landed:** [`apps/ui/src/data/abletonDevices.ts`](apps/ui/src/data/abletonDevices.ts). *Ported but demoted to a research-only scoring baseline (owner decision 2026-06-11): imported by no product code, consumed only by the recommendation-eval bridge. See the NEEDS-WIRING decision in [`apps/backend/NEEDS.md`](apps/backend/NEEDS.md).*
 
 ## Shipped — Mix Analysis
 - ✅ `services/mixDoctor.ts` + `components/MixDoctorPanel.tsx` — spectral-balance scoring against genre profiles. **Landed:** [`apps/ui/src/services/mixDoctor.ts`](apps/ui/src/services/mixDoctor.ts), [`apps/ui/src/components/MixDoctorPanel.tsx`](apps/ui/src/components/MixDoctorPanel.tsx).

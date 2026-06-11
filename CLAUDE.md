@@ -440,7 +440,7 @@ A quick map from intent to the right place to start:
 
 ## Backport Candidates
 
-The full original `sonic-architect-app` backlog is **shipped** — genre profiles, Ableton device mappings, mix doctor, eight detectors, Phase 3 audition-sample generation, and `patchSmith.ts` (Phase 3 Vital preset generation, [`apps/ui/src/services/patchSmith.ts`](apps/ui/src/services/patchSmith.ts)). See [`BACKLOG.md`](BACKLOG.md) for the landed inventory. Consult it before re-implementing genre detection, mix analysis, acid/reverb/vocal/supersaw/bass/kick detection — they're already in [`apps/backend/analyze_detection.py`](apps/backend/analyze_detection.py) and emit fields visible in `EXPECTED_TOP_LEVEL_KEYS`.
+The full original `sonic-architect-app` backlog is **shipped** — genre profiles, Ableton device mappings (`abletonDevices.ts` — ported but **research-only** since the 2026-06-11 demotion decision: a scoring baseline for the recommendation-proof harness, imported by no product code; see the NEEDS-WIRING decision in `apps/backend/NEEDS.md`), mix doctor, eight detectors, Phase 3 audition-sample generation, and `patchSmith.ts` (Phase 3 Vital preset generation, [`apps/ui/src/services/patchSmith.ts`](apps/ui/src/services/patchSmith.ts)). See [`BACKLOG.md`](BACKLOG.md) for the landed inventory. Consult it before re-implementing genre detection, mix analysis, acid/reverb/vocal/supersaw/bass/kick detection — they're already in [`apps/backend/analyze_detection.py`](apps/backend/analyze_detection.py) and emit fields visible in `EXPECTED_TOP_LEVEL_KEYS`.
 
 ## Companion Agent Docs
 

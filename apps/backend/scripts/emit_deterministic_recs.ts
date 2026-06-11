@@ -1,8 +1,10 @@
 /**
  * Deterministic recommendation source bridge (GOAL.md sub-goal 3 inner loop).
  *
- * EVAL / RESEARCH ONLY. Wraps the product's deterministic recommendation engine
- * (`apps/ui/src/data/abletonDevices.ts`) and emits the scorer's normalized rec
+ * EVAL / RESEARCH ONLY. Wraps the deterministic recommendation engine
+ * (`apps/ui/src/data/abletonDevices.ts` — itself research-only since the
+ * 2026-06-11 demotion decision; see apps/backend/NEEDS.md) and emits the
+ * scorer's normalized rec
  * shape so `scripts/evaluate_recommendations.py --source deterministic` can grade
  * the *free* path without a Gemini call. Importing the real module keeps a single
  * source of truth — no Python re-port to drift from the TS.
