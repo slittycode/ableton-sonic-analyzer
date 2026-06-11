@@ -9,6 +9,17 @@ committed golden:
 2. **Core measurement values** -- a curated set of environment-stable, high-value Phase 1
    measurements (BPM, key, loudness, true-peak, crest, spectral balance, stereo), compared
    with tolerance.
+3. **Nested key structure (``keyTree``)** -- a recursive, structure-only snapshot of every
+   nested key the analyzer emitted (dicts recurse; lists of objects record the union of
+   element keys; values reduce to type categories). This is the executable cross-app
+   contract source: the frontend parity gate
+   (``apps/ui/tests/services/phase1ContractParity.test.ts``) walks the committed keyTree
+   to demand every nested backend field exists in the frontend fixture/parser — killing
+   the silent-field-drop class (CLAUDE.md tripwires #3/#4) at the *nested* level where
+   the 2026-05-30 audit found it. Nested *value* categories are compared loosely
+   (null/bool/number/str form one class — cross-runner null flips are measurement noise);
+   container-shape changes always bite. Goldens that predate keyTree skip this gate
+   visibly until the next regeneration arms it.
 
 Why not snapshot the whole output? The fixture WAV is bit-identical across machines, but a
 different CPU/BLAS/FFT order on the CI runner produces last-bit-different floats. For most
@@ -60,6 +71,23 @@ CORE_PATHS = (
     "stereoDetail.stereoCorrelation", "stereoDetail.stereoWidth",
     "stereoDetail.subBassCorrelation", "stereoDetail.subBassMono",
 )
+
+# Dotted paths (``[]`` segment for list descent, e.g. "rhythmDetail.tempoCurve[].bpm")
+# whose keyTree subtree is recorded as "pruned" and never compared. The documented
+# one-line loosening path if arming the keyTree gate flushes out a genuinely
+# runner-unstable subtree. Deliberately empty: the fixture is synthetic and
+# deterministic, and an empty set keeps the gate honest.
+KEYTREE_PRUNE_PATHS: frozenset[str] = frozenset()
+
+# Nested scalar leaves whose categories are interchangeable in the keyTree
+# comparison: a nested rt60 flipping null<->number across runners is measurement
+# noise, not a contract change. Container<->scalar changes always bite. Top-level
+# types stay exact via the (untouched) topLevelTypes check.
+_SCALAR_CATS = frozenset({"null", "bool", "number", "str"})
+# Leaf markers for lists that record no element structure: "list" (empty at
+# baseline — nothing observable) and "scalarList" (scalar/mixed elements — no
+# droppable keys; lengths are exactly the runner-unstable quantity).
+_LIST_LEAVES = frozenset({"list", "scalarList"})
 
 # Numeric tolerance. Two numbers are equal iff
 #   abs(a-g) <= max(ABS_TOL, REL_TOL*abs(g), one rounding step at g's decimal precision).
@@ -142,6 +170,122 @@ def _dotted_get(payload: object, path: str) -> object:
     return current
 
 
+def _merge_trees(a: object, b: object) -> object:
+    """Union-merge two keyTree nodes (used across list-of-object elements).
+
+    Union rather than first-element so the recorded element structure is
+    insensitive to element order and to which element happens to carry an
+    optional key. Scalar-category conflicts prefer the non-null category
+    (deterministic for a deterministic payload, and immaterial because the
+    comparison treats all scalar categories as one class).
+    """
+    if isinstance(a, dict) and isinstance(b, dict):
+        out = dict(a)
+        for key, value in b.items():
+            out[key] = _merge_trees(out[key], value) if key in out else value
+        return out
+    if a == b:
+        return a
+    if a == "null":
+        return b
+    return a
+
+
+def _key_tree(value: object, path: str = "") -> object:
+    """Recursive, structure-only snapshot of a Phase 1 payload (no values).
+
+    Encoding (consumed by ``_compare_key_tree`` here and by the frontend
+    parity gate in apps/ui/tests/services/phase1ContractParity.test.ts):
+
+    - dict                          -> ``{key: subtree}``
+    - non-empty list of dicts       -> ``{"[]": union-merge of element trees}``
+    - empty list                    -> ``"list"`` (no element structure observable)
+    - list of scalars / mixed list  -> ``"scalarList"``
+    - scalar                        -> its ``_type_cat`` category string
+    - path in KEYTREE_PRUNE_PATHS   -> ``"pruned"`` (never compared)
+    """
+    if path in KEYTREE_PRUNE_PATHS:
+        return "pruned"
+    if isinstance(value, dict):
+        return {
+            key: _key_tree(child, f"{path}.{key}" if path else key)
+            for key, child in value.items()
+        }
+    if isinstance(value, list):
+        if not value:
+            return "list"
+        if all(isinstance(entry, dict) for entry in value):
+            merged: object = _key_tree(value[0], f"{path}[]")
+            for entry in value[1:]:
+                merged = _merge_trees(merged, _key_tree(entry, f"{path}[]"))
+            return {"[]": merged}
+        return "scalarList"
+    return _type_cat(value)
+
+
+def _tree_label(node: object) -> str:
+    if isinstance(node, dict):
+        return "list-of-objects" if "[]" in node else "dict"
+    return str(node)
+
+
+def _compare_key_tree(golden_node: object, actual_node: object, path: str = "") -> list[str]:
+    """Tree-vs-tree comparison; returns human-readable mismatch lines (empty == match).
+
+    Bites on container-shape changes (key added/removed, dict<->scalar,
+    list-of-objects<->scalars). Stays silent on the known runner-noise axes:
+    nested scalar-category flips (null<->number etc.), empty-vs-populated lists,
+    and anything under a pruned path.
+    """
+    out: list[str] = []
+    label = path or "<root>"
+    if golden_node == "pruned" or actual_node == "pruned":
+        return out
+
+    golden_is_dict = isinstance(golden_node, dict)
+    actual_is_dict = isinstance(actual_node, dict)
+
+    if golden_is_dict and actual_is_dict:
+        golden_is_list = "[]" in golden_node
+        actual_is_list = "[]" in actual_node
+        if golden_is_list != actual_is_list:
+            out.append(f"keyTree {label}: {_tree_label(golden_node)} -> {_tree_label(actual_node)}")
+            return out
+        if golden_is_list:
+            return _compare_key_tree(golden_node["[]"], actual_node["[]"], f"{path}[]")
+        golden_keys = set(golden_node)
+        actual_keys = set(actual_node)
+        for key in sorted(golden_keys - actual_keys):
+            out.append(f"keyTree {label}: key removed: {key}")
+        for key in sorted(actual_keys - golden_keys):
+            out.append(f"keyTree {label}: key added: {key}")
+        for key in sorted(golden_keys & actual_keys):
+            out.extend(
+                _compare_key_tree(golden_node[key], actual_node[key], f"{path}.{key}" if path else key)
+            )
+        return out
+
+    if golden_is_dict != actual_is_dict:
+        # Tolerated pairing: list-of-objects vs an empty-at-baseline list, in
+        # either direction (counts flipping to/from zero is runner noise).
+        dict_node = golden_node if golden_is_dict else actual_node
+        leaf_node = actual_node if golden_is_dict else golden_node
+        if isinstance(dict_node, dict) and "[]" in dict_node and leaf_node == "list":
+            return out
+        out.append(f"keyTree {label}: {_tree_label(golden_node)} -> {_tree_label(actual_node)}")
+        return out
+
+    # Both leaves.
+    if golden_node == actual_node:
+        return out
+    if golden_node in _SCALAR_CATS and actual_node in _SCALAR_CATS:
+        return out
+    if golden_node in _LIST_LEAVES and actual_node in _LIST_LEAVES:
+        return out
+    out.append(f"keyTree {label}: {_tree_label(golden_node)} -> {_tree_label(actual_node)}")
+    return out
+
+
 def _decimals(value: float) -> int:
     """Decimal places in the shortest round-trip repr (0 for ints / scientific notation)."""
     text = repr(float(value))
@@ -212,6 +356,7 @@ def build_golden(actual: dict) -> dict:
         "topLevelKeys": sorted(actual),
         "topLevelTypes": {key: _type_cat(value) for key, value in actual.items()},
         "coreValues": core,
+        "keyTree": _key_tree(actual),
     }
 
 
@@ -251,6 +396,38 @@ class Phase1GoldenRegressionTests(unittest.TestCase):
                 "Phase 1 analyze.py output drifted from the golden snapshot.\n"
                 "If this change is intentional, regenerate with "
                 f"{_UPDATE_ENV}=1 ./venv/bin/python -m unittest tests.test_phase1_golden\n\n"
+                + "\n".join(mismatches)
+            )
+
+    def test_phase1_keytree_matches_golden(self) -> None:
+        """Nested-structure gate (docstring item 3): the cross-app contract source.
+
+        Separate from the main gate so a golden that predates ``keyTree`` skips
+        VISIBLY (dormant, not silently green) until the next regeneration arms
+        it — the frontend parity gate's nested check (Gate A3) arms off the same
+        fixture key at the same moment.
+        """
+        if os.environ.get(_UPDATE_ENV):
+            self.skipTest(f"{_UPDATE_ENV} set; golden written by test_zzz_regenerate_golden")
+        if not _GOLDEN_PATH.exists():
+            self.fail(
+                f"Golden snapshot missing at {_GOLDEN_PATH}.\n"
+                f"Generate it with: {_UPDATE_ENV}=1 ./venv/bin/python -m unittest tests.test_phase1_golden"
+            )
+        golden = json.loads(_GOLDEN_PATH.read_text())
+        if "keyTree" not in golden:
+            self.skipTest(
+                "golden predates keyTree — nested-structure enforcement is DORMANT. Arm it by "
+                f"regenerating: {_UPDATE_ENV}=1 ./venv/bin/python -m unittest tests.test_phase1_golden"
+            )
+        mismatches = _compare_key_tree(golden["keyTree"], _key_tree(self.actual))
+        if mismatches:
+            self.fail(
+                "Phase 1 nested key structure drifted from the golden keyTree.\n"
+                "If this change is intentional, regenerate with "
+                f"{_UPDATE_ENV}=1 ./venv/bin/python -m unittest tests.test_phase1_golden\n"
+                "and sync the frontend (the parity gate in "
+                "apps/ui/tests/services/phase1ContractParity.test.ts names what to update).\n\n"
                 + "\n".join(mismatches)
             )
 
@@ -339,6 +516,153 @@ class GoldenComparatorMetaTests(unittest.TestCase):
         self.assertFalse(_numbers_equal(float("nan"), 1.0))
         self.assertTrue(_numbers_equal(float("inf"), float("inf")))
         self.assertFalse(_numbers_equal(float("inf"), float("-inf")))
+
+
+class KeyTreeMetaTests(unittest.TestCase):
+    """Proves the keyTree gate bites (and doesn't over-bite). Pure-Python, no analyze run."""
+
+    @staticmethod
+    def _payload() -> dict:
+        return {
+            "bpm": 135.4,
+            "reverbDetail": {
+                "rt60": 1.2,
+                "isWet": True,
+                "perBandRt60": {"low": 1.4, "highs": None},
+                "preDelayMs": 22.5,
+            },
+            "lufsCurve": {
+                "shortTerm": [{"t": 0.0, "lufs": -12.4}, {"t": 3.0, "lufs": -9.1}],
+                "momentary": [],
+            },
+            "spectralDetail": {"mfcc": [-512.4, 110.2]},
+            "hihatDetail": None,
+        }
+
+    def test_generation_shape(self) -> None:
+        self.assertEqual(
+            _key_tree(self._payload()),
+            {
+                "bpm": "number",
+                "reverbDetail": {
+                    "rt60": "number",
+                    "isWet": "bool",
+                    "perBandRt60": {"low": "number", "highs": "null"},
+                    "preDelayMs": "number",
+                },
+                "lufsCurve": {
+                    "shortTerm": {"[]": {"t": "number", "lufs": "number"}},
+                    "momentary": "list",
+                },
+                "spectralDetail": {"mfcc": "scalarList"},
+                "hihatDetail": "null",
+            },
+        )
+
+    def test_union_merge_across_heterogeneous_elements(self) -> None:
+        # An optional key carried by only one element (and null in another)
+        # must still be recorded, with the non-null category winning.
+        tree = _key_tree({"peaks": [{"time": 1.0}, {"time": 2.0, "strength": 0.5}, {"strength": None}]})
+        self.assertEqual(tree, {"peaks": {"[]": {"time": "number", "strength": "number"}}})
+
+    def test_identical_payload_matches(self) -> None:
+        self.assertEqual(_compare_key_tree(_key_tree(self._payload()), _key_tree(self._payload())), [])
+
+    def test_nested_key_removed_bites(self) -> None:
+        actual = self._payload()
+        del actual["reverbDetail"]["preDelayMs"]
+        mismatches = _compare_key_tree(_key_tree(self._payload()), _key_tree(actual))
+        self.assertEqual(mismatches, ["keyTree reverbDetail: key removed: preDelayMs"])
+
+    def test_nested_key_added_bites(self) -> None:
+        actual = self._payload()
+        actual["reverbDetail"]["earlyReflections"] = 0.4
+        mismatches = _compare_key_tree(_key_tree(self._payload()), _key_tree(actual))
+        self.assertEqual(mismatches, ["keyTree reverbDetail: key added: earlyReflections"])
+
+    def test_nested_null_to_number_is_silent(self) -> None:
+        actual = self._payload()
+        actual["reverbDetail"]["perBandRt60"]["highs"] = 0.5  # null -> number: runner noise
+        self.assertEqual(_compare_key_tree(_key_tree(self._payload()), _key_tree(actual)), [])
+
+    def test_nested_scalar_to_dict_bites(self) -> None:
+        actual = self._payload()
+        actual["reverbDetail"]["preDelayMs"] = {"median": 22.5}
+        mismatches = _compare_key_tree(_key_tree(self._payload()), _key_tree(actual))
+        self.assertEqual(mismatches, ["keyTree reverbDetail.preDelayMs: number -> dict"])
+
+    def test_nested_dict_to_null_bites(self) -> None:
+        actual = self._payload()
+        actual["reverbDetail"]["perBandRt60"] = None
+        mismatches = _compare_key_tree(_key_tree(self._payload()), _key_tree(actual))
+        self.assertEqual(mismatches, ["keyTree reverbDetail.perBandRt60: dict -> null"])
+
+    def test_list_element_key_removed_bites(self) -> None:
+        actual = self._payload()
+        actual["lufsCurve"]["shortTerm"] = [{"t": 0.0}, {"t": 3.0}]
+        mismatches = _compare_key_tree(_key_tree(self._payload()), _key_tree(actual))
+        self.assertEqual(mismatches, ["keyTree lufsCurve.shortTerm[]: key removed: lufs"])
+
+    def test_empty_actual_list_of_objects_is_silent(self) -> None:
+        # Element count flipping to zero on another runner is noise, not drift.
+        actual = self._payload()
+        actual["lufsCurve"]["shortTerm"] = []
+        self.assertEqual(_compare_key_tree(_key_tree(self._payload()), _key_tree(actual)), [])
+
+    def test_empty_golden_list_populated_later_is_silent(self) -> None:
+        actual = self._payload()
+        actual["lufsCurve"]["momentary"] = [{"t": 0.0, "lufs": -11.8}]
+        self.assertEqual(_compare_key_tree(_key_tree(self._payload()), _key_tree(actual)), [])
+
+    def test_objects_list_to_scalar_list_bites(self) -> None:
+        actual = self._payload()
+        actual["lufsCurve"]["shortTerm"] = [-12.4, -9.1]
+        mismatches = _compare_key_tree(_key_tree(self._payload()), _key_tree(actual))
+        self.assertEqual(mismatches, ["keyTree lufsCurve.shortTerm: list-of-objects -> scalarList"])
+
+    def test_scalar_list_to_objects_list_bites(self) -> None:
+        golden_payload = self._payload()
+        actual = self._payload()
+        actual["spectralDetail"]["mfcc"] = [{"band": 0, "value": -512.4}]
+        mismatches = _compare_key_tree(_key_tree(golden_payload), _key_tree(actual))
+        self.assertEqual(mismatches, ["keyTree spectralDetail.mfcc: scalarList -> list-of-objects"])
+
+    def test_pruned_path_is_silent(self) -> None:
+        golden_tree = _key_tree(self._payload())
+        golden_tree["reverbDetail"] = "pruned"
+        actual = self._payload()
+        actual["reverbDetail"] = {"completely": "different"}
+        self.assertEqual(_compare_key_tree(golden_tree, _key_tree(actual)), [])
+
+
+class BuildPhase1KeySupersetTests(unittest.TestCase):
+    """The third hand-maintained reconstruction layer, made executable.
+
+    ``_build_phase1`` in server_phase1.py rebuilds the HTTP-facing Phase 1
+    payload as an explicit dict literal — an analyze.py top-level key that is
+    never added there silently vanishes before the frontend can even see it,
+    which neither the golden gates above (analyze.py output) nor the frontend
+    parity gates (fixture/parser) can observe. This pins: every golden
+    top-level key is forwarded, plus the declared envelope additions.
+    """
+
+    def test_build_phase1_forwards_every_golden_key(self) -> None:
+        if not _GOLDEN_PATH.exists():
+            self.skipTest(f"golden snapshot missing at {_GOLDEN_PATH}")
+        from server_phase1 import _build_phase1
+
+        golden = json.loads(_GOLDEN_PATH.read_text())
+        built_keys = set(_build_phase1({}))
+        missing = sorted(set(golden["topLevelKeys"]) - built_keys)
+        self.assertEqual(
+            missing,
+            [],
+            "_build_phase1 (server_phase1.py) does not forward these analyze.py "
+            f"top-level keys, so they never reach the frontend: {missing}",
+        )
+        # The declared envelope-level additions the frontend parity gate
+        # allowlists (ENVELOPE_ADDED_KEYS in phase1ContractParity.test.ts).
+        self.assertLessEqual({"stereoWidth", "stereoCorrelation"}, built_keys)
 
 
 if __name__ == "__main__":

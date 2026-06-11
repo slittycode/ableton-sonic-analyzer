@@ -27,6 +27,432 @@
     "timeSignatureSource": "assumed_four_four",
     "truePeak": 0.0
   },
+  "keyTree": {
+    "acidDetail": {
+      "bassRhythmDensity": "number",
+      "centroidOscillationHz": "number",
+      "confidence": "number",
+      "isAcid": "bool",
+      "resonanceLevel": "number"
+    },
+    "arrangementDetail": {
+      "noveltyCurve": "scalarList",
+      "noveltyMean": "number",
+      "noveltyPeaks": "list",
+      "noveltyStdDev": "number"
+    },
+    "bassDetail": {
+      "averageDecayMs": "number",
+      "fundamentalHz": "number",
+      "grooveType": "str",
+      "swingPercent": "number",
+      "transientCount": "number",
+      "transientRatio": "number",
+      "type": "str"
+    },
+    "beatsLoudness": {
+      "accentPattern": "scalarList",
+      "beatCount": "number",
+      "beatLoudnessVariation": "number",
+      "highBandAccentPattern": "scalarList",
+      "highDominantRatio": "number",
+      "kickDominantRatio": "number",
+      "lowBandAccentPattern": "scalarList",
+      "meanBeatLoudness": "number",
+      "midBandAccentPattern": "scalarList",
+      "midDominantRatio": "number",
+      "overallAccentPattern": "scalarList",
+      "patternBeatsPerBar": "number"
+    },
+    "bpm": "number",
+    "bpmAgreement": "bool",
+    "bpmConfidence": "number",
+    "bpmDoubletime": "bool",
+    "bpmPercival": "number",
+    "bpmRawOriginal": "number",
+    "bpmSource": "str",
+    "chordDetail": {
+      "chordChangeCount": "number",
+      "chordSequence": "scalarList",
+      "chordStrength": "number",
+      "chordTimeline": {
+        "[]": {
+          "confidence": "number",
+          "endSec": "number",
+          "label": "str",
+          "labelLong": "str",
+          "startSec": "number"
+        }
+      },
+      "chordTimelineAgreement": "bool",
+      "chordTimelineSource": "str",
+      "dominantChords": "scalarList",
+      "progression": "scalarList"
+    },
+    "crestFactor": "number",
+    "danceability": {
+      "danceability": "number",
+      "dfa": "number"
+    },
+    "durationSeconds": "number",
+    "dynamicCharacter": {
+      "attackTimeStdDev": "number",
+      "dynamicComplexity": "number",
+      "logAttackTime": "number",
+      "loudnessDb": "number",
+      "loudnessVariation": "number",
+      "spectralFlatness": "number"
+    },
+    "dynamicSpread": "number",
+    "effectsDetail": {
+      "gatingDetected": "bool",
+      "gatingEventCount": "number",
+      "gatingRate": "null",
+      "gatingRegularity": "number"
+    },
+    "essentiaFeatures": {
+      "dissonance": "number",
+      "hfc": "number",
+      "spectralComplexity": "number",
+      "zeroCrossingRate": "number"
+    },
+    "genreDetail": {
+      "confidence": "number",
+      "genre": "str",
+      "genreFamily": "str",
+      "secondaryGenre": "str",
+      "topScores": {
+        "[]": {
+          "genre": "str",
+          "score": "number"
+        }
+      }
+    },
+    "grooveDetail": {
+      "hihatAccent": "scalarList",
+      "hihatSwing": "number",
+      "kickAccent": "scalarList",
+      "kickSwing": "number",
+      "perDrumSwing": {
+        "hihat": "number",
+        "kick": "number",
+        "snare": "number"
+      }
+    },
+    "hihatDetail": "null",
+    "key": "str",
+    "keyConfidence": "number",
+    "keyProfile": "str",
+    "kickDetail": {
+      "fundamentalHz": "number",
+      "harmonicRatio": "number",
+      "isDistorted": "bool",
+      "kickCount": "number",
+      "thd": "number"
+    },
+    "lufsCurve": {
+      "momentary": {
+        "[]": {
+          "lufs": "number",
+          "t": "number"
+        }
+      },
+      "shortTerm": {
+        "[]": {
+          "lufs": "number",
+          "t": "number"
+        }
+      }
+    },
+    "lufsIntegrated": "number",
+    "lufsMomentaryMax": "number",
+    "lufsRange": "number",
+    "lufsShortTermMax": "number",
+    "melodyDetail": {
+      "dominantNotes": "scalarList",
+      "midiFile": "str",
+      "noteCount": "number",
+      "notes": {
+        "[]": {
+          "duration": "number",
+          "midi": "number",
+          "onset": "number"
+        }
+      },
+      "pitchConfidence": "number",
+      "pitchRange": {
+        "max": "number",
+        "min": "number"
+      },
+      "sourceSeparated": "bool",
+      "vibratoConfidence": "number",
+      "vibratoExtent": "number",
+      "vibratoPresent": "bool",
+      "vibratoRate": "number"
+    },
+    "monoCompatible": "bool",
+    "perceptual": {
+      "roughness": "number",
+      "sharpness": "number"
+    },
+    "phase1Version": "str",
+    "pitchDetail": "null",
+    "plr": "number",
+    "reverbDetail": {
+      "isWet": "bool",
+      "measured": "bool",
+      "perBandRt60": "null",
+      "preDelayMs": "null",
+      "rt60": "null",
+      "tailEnergyRatio": "null"
+    },
+    "rhythmDetail": {
+      "beatGrid": "scalarList",
+      "beatPositions": "scalarList",
+      "downbeatConfidence": "number",
+      "downbeatSource": "str",
+      "downbeats": "scalarList",
+      "grooveAmount": "number",
+      "onsetRate": "number",
+      "phraseGrid": {
+        "phrases16Bar": "scalarList",
+        "phrases4Bar": "scalarList",
+        "phrases8Bar": "scalarList",
+        "totalBars": "number",
+        "totalPhrases8Bar": "number"
+      },
+      "tempoCurve": {
+        "[]": {
+          "bpm": "number",
+          "t": "number"
+        }
+      },
+      "tempoStability": "number"
+    },
+    "rhythmTimeline": {
+      "availableBars": "number",
+      "beatsPerBar": "number",
+      "selectionMethod": "str",
+      "stepsPerBeat": "number",
+      "windows": {
+        "[]": {
+          "bars": "number",
+          "endBar": "number",
+          "highBandSteps": "scalarList",
+          "lowBandSteps": "scalarList",
+          "midBandSteps": "scalarList",
+          "overallSteps": "scalarList",
+          "startBar": "number"
+        }
+      }
+    },
+    "sampleRate": "number",
+    "saturationDetail": {
+      "clippedSampleCount": "number",
+      "clippedSamplePercent": "number",
+      "nearClippedSampleCount": "number",
+      "nearClippedSamplePercent": "number",
+      "peakRatio95to50": "number",
+      "rmsToPeakRatioDb": "number",
+      "saturationLikely": "bool"
+    },
+    "segmentKey": {
+      "[]": {
+        "key": "str",
+        "keyConfidence": "number",
+        "segmentIndex": "number"
+      }
+    },
+    "segmentLoudness": {
+      "[]": {
+        "end": "number",
+        "lra": "number",
+        "lufs": "number",
+        "segmentIndex": "number",
+        "start": "number"
+      }
+    },
+    "segmentSpectral": {
+      "[]": {
+        "barkBands": "scalarList",
+        "segmentIndex": "number",
+        "spectralCentroid": "number",
+        "spectralRolloff": "number",
+        "stereoCorrelation": "number",
+        "stereoWidth": "number"
+      }
+    },
+    "segmentStereo": {
+      "[]": {
+        "segmentIndex": "number",
+        "stereoCorrelation": "number",
+        "stereoWidth": "number"
+      }
+    },
+    "sidechainDetail": {
+      "envelopeShape": "scalarList",
+      "envelopeShape32": "scalarList",
+      "pumpingConfidence": "number",
+      "pumpingRate": "null",
+      "pumpingRegularity": "number",
+      "pumpingStrength": "number"
+    },
+    "snareDetail": {
+      "bandHz": "scalarList",
+      "hitCount": "number",
+      "hitsPerSecond": "number",
+      "meanAttackSharpness": "number",
+      "meanBodyEnergyRatio": "number",
+      "meanCentroidHz": "number",
+      "meanDecayFrames": "number",
+      "meanDecaySeconds": "number",
+      "meanSnapEnergyRatio": "number"
+    },
+    "spectralBalance": {
+      "brilliance": "number",
+      "highs": "number",
+      "lowBass": "number",
+      "lowMids": "number",
+      "mids": "number",
+      "subBass": "number",
+      "upperMids": "number"
+    },
+    "spectralBalanceTimeSeries": {
+      "[]": {
+        "brilliance": "number",
+        "highs": "number",
+        "lowBass": "number",
+        "lowMids": "number",
+        "mids": "number",
+        "subBass": "number",
+        "t": "number",
+        "upperMids": "number"
+      }
+    },
+    "spectralDetail": {
+      "barkBands": "scalarList",
+      "chroma": "scalarList",
+      "erbBands": "scalarList",
+      "mfcc": "scalarList",
+      "spectralBandwidth": "number",
+      "spectralCentroid": "number",
+      "spectralContrast": "scalarList",
+      "spectralFlatness": "number",
+      "spectralRolloff": "number",
+      "spectralValley": "scalarList"
+    },
+    "stemAnalysis": "null",
+    "stereoDetail": {
+      "bandCorrelations": {
+        "brilliance": "number",
+        "highs": "number",
+        "lowBass": "number",
+        "lowMids": "number",
+        "mids": "number",
+        "subBass": "number",
+        "upperMids": "number"
+      },
+      "correlationCurve": {
+        "[]": {
+          "full": "number",
+          "sub": "number",
+          "t": "number"
+        }
+      },
+      "stereoCorrelation": "number",
+      "stereoWidth": "number",
+      "subBassCorrelation": "number",
+      "subBassMono": "bool"
+    },
+    "structure": {
+      "segmentCount": "number",
+      "segments": {
+        "[]": {
+          "end": "number",
+          "index": "number",
+          "start": "number"
+        }
+      }
+    },
+    "supersawDetail": {
+      "avgDetuneCents": "number",
+      "confidence": "number",
+      "isSupersaw": "bool",
+      "spectralComplexity": "number",
+      "voiceCount": "number"
+    },
+    "synthesisCharacter": {
+      "inharmonicity": "number",
+      "oddToEvenRatio": "number"
+    },
+    "textureCharacter": {
+      "highBandFlatness": "number",
+      "inharmonicity": "number",
+      "lowBandFlatness": "number",
+      "midBandFlatness": "number",
+      "textureScore": "number"
+    },
+    "timeSignature": "str",
+    "timeSignatureConfidence": "number",
+    "timeSignatureSource": "str",
+    "transcriptionDetail": "null",
+    "transientDensityDetail": {
+      "brilliance": {
+        "eventCount": "number",
+        "meanOnsetStrength": "number",
+        "onsetRatePerSecond": "number",
+        "peakOnsetStrength": "number"
+      },
+      "highs": {
+        "eventCount": "number",
+        "meanOnsetStrength": "number",
+        "onsetRatePerSecond": "number",
+        "peakOnsetStrength": "number"
+      },
+      "lowBass": {
+        "eventCount": "number",
+        "meanOnsetStrength": "number",
+        "onsetRatePerSecond": "number",
+        "peakOnsetStrength": "number"
+      },
+      "lowMids": {
+        "eventCount": "number",
+        "meanOnsetStrength": "number",
+        "onsetRatePerSecond": "number",
+        "peakOnsetStrength": "number"
+      },
+      "mids": {
+        "eventCount": "number",
+        "meanOnsetStrength": "number",
+        "onsetRatePerSecond": "number",
+        "peakOnsetStrength": "number"
+      },
+      "subBass": {
+        "eventCount": "number",
+        "meanOnsetStrength": "number",
+        "onsetRatePerSecond": "number",
+        "peakOnsetStrength": "number"
+      },
+      "upperMids": {
+        "eventCount": "number",
+        "meanOnsetStrength": "number",
+        "onsetRatePerSecond": "number",
+        "peakOnsetStrength": "number"
+      }
+    },
+    "truePeak": "number",
+    "tuningCents": "number",
+    "tuningFrequency": "number",
+    "vocalDetail": {
+      "confidence": "number",
+      "formantStrength": "number",
+      "hasVocals": "bool",
+      "mfccLikelihood": "number",
+      "stemEnergyRatio": "null",
+      "stemOtherCorrelation": "null",
+      "vocalEnergyRatio": "number"
+    }
+  },
   "topLevelKeys": [
     "acidDetail",
     "arrangementDetail",
