@@ -11,6 +11,12 @@ specifically on the chain-of-custody invariant.** Numbers below. Research note.
 > renders for an authoritative known-settings verdict.** See "Where real input is
 > needed" at the bottom and `NEEDS.md`.
 
+> **Corpus composition changed 2026-06-10, after this verdict.** Two fixtures were
+> re-authored to owner genres: `techno_rumble_130` → `hard_techno_rumble_145`
+> (hard/peak techno) and `dnb_reese_174` → `ukg_2step_shuffle_132` (UK garage /
+> 2-step). The per-fixture proxy numbers below for "techno" and "dnb" refer to the
+> retired fixtures and are not comparable to future real-render scores.
+
 ## Method
 Per fixture: proxy render → `analyze.py` (real Phase 1) → three recommendation
 sources scored by `recommendation_evaluation.score_recommendations`:

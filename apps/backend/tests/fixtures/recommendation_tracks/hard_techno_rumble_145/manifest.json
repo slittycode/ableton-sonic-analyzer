@@ -1,0 +1,133 @@
+{
+  "schemaVersion": "recommendation-fixture.v1",
+  "id": "hard_techno_rumble_145",
+  "title": "Hard techno — distorted sine kick, rumble return, driving offbeat",
+  "genre": "hard techno",
+  "audioPath": "audio.flac",
+  "phase1FingerprintPath": "phase1_fingerprint.json",
+  "phase1Fingerprint": null,
+  "render": {
+    "sampleRateHz": 48000,
+    "bitDepth": 24,
+    "lengthSeconds": 16,
+    "bpm": 145,
+    "key": "F minor",
+    "notes": "8-bar loop (~13.2 s) plus tail. The 'rumble' is the kick fed through Reverb on a return, summed with the held sub. Drum Buss sits directly on the kick chain for the distorted hard-techno character. Render the full loop to one stereo file, no export normalization."
+  },
+  "deviceSpec": {
+    "kick": [
+      {
+        "device": "Operator",
+        "family": "NATIVE",
+        "role": "Sine kick",
+        "parameters": [
+          { "name": "Oscillator A Waveform", "value": "Sine" },
+          { "name": "Filter Type", "value": "Lowpass" },
+          { "name": "Filter Frequency", "value": "150 Hz" },
+          { "name": "Amp Envelope Decay", "value": "250 ms", "intent": "tighter than 130-BPM techno; leaves room at 145" },
+          { "name": "Amp Envelope Release", "value": "50 ms" }
+        ]
+      },
+      {
+        "device": "Drum Buss",
+        "family": "NATIVE",
+        "role": "Kick distortion + sub boom",
+        "parameters": [
+          { "name": "Drive", "value": "8", "intent": "hard-techno saturation (unitless 0-10 knob)" },
+          { "name": "Crunch", "value": "30%" },
+          { "name": "Boom Frequency", "value": "45 Hz", "intent": "pins the kick fundamental the measurableIntent targets" },
+          { "name": "Boom", "value": "4" },
+          { "name": "Dry/Wet", "value": "100%" }
+        ]
+      }
+    ],
+    "bass": [
+      {
+        "device": "Operator",
+        "family": "NATIVE",
+        "role": "Held rumble sub",
+        "parameters": [
+          { "name": "Oscillator A Waveform", "value": "Sine" },
+          { "name": "Filter Frequency", "value": "120 Hz" },
+          { "name": "Amp Envelope Sustain", "value": "100%", "intent": "held sub under the reverb tail" }
+        ]
+      }
+    ],
+    "melody": [
+      {
+        "device": "Wavetable",
+        "family": "NATIVE",
+        "role": "Dark offbeat stab",
+        "parameters": [
+          { "name": "Oscillator 1 Wavetable", "value": "Basic Shapes" },
+          { "name": "Filter Type", "value": "Bandpass" },
+          { "name": "Filter Frequency", "value": "1500 Hz" },
+          { "name": "Amp Envelope Decay", "value": "150 ms" },
+          { "name": "Amp Envelope Sustain", "value": "0%", "intent": "stab, no sustain" }
+        ]
+      }
+    ],
+    "groove": [
+      {
+        "device": "Drum Rack",
+        "family": "NATIVE",
+        "role": "Driving offbeat closed hats",
+        "parameters": [
+          { "name": "Pad Volume", "value": "-8 dB" }
+        ]
+      }
+    ],
+    "fx": [
+      {
+        "device": "Reverb",
+        "family": "NATIVE",
+        "role": "Rumble tail on kick return",
+        "parameters": [
+          { "name": "Decay Time", "value": "2.5 s" },
+          { "name": "Dry/Wet", "value": "35%" }
+        ]
+      }
+    ],
+    "stereo": [
+      {
+        "device": "Utility",
+        "family": "NATIVE",
+        "role": "Low-end mono / stab width",
+        "parameters": [
+          { "name": "Bass Mono", "value": "On" },
+          { "name": "Stereo Width", "value": "105%" }
+        ]
+      }
+    ],
+    "master": [
+      {
+        "device": "Glue Compressor",
+        "family": "NATIVE",
+        "role": "Bus glue",
+        "parameters": [
+          { "name": "Threshold", "value": "-18 dB" },
+          { "name": "Ratio", "value": "4:1" },
+          { "name": "Attack", "value": "1 ms" },
+          { "name": "Release", "value": "Auto" },
+          { "name": "Makeup", "value": "3 dB" }
+        ]
+      },
+      {
+        "device": "Limiter",
+        "family": "NATIVE",
+        "role": "Master ceiling",
+        "parameters": [
+          { "name": "Ceiling", "value": "-0.3 dB" }
+        ]
+      }
+    ]
+  },
+  "measurableIntent": {
+    "bpm": { "target": 145, "tolerance": 1, "direction": "exact" },
+    "key": { "target": "F minor" },
+    "kickDetail.fundamentalHz": { "target": 45, "tolerance": 15, "unit": "Hz", "intent": "Drum Buss Boom Frequency 45 Hz" },
+    "lufsIntegrated": { "target": -7, "tolerance": 2, "unit": "LUFS", "intent": "hard techno slams" },
+    "truePeak": { "target": -0.3, "tolerance": 0.4, "unit": "dBTP", "intent": "Limiter ceiling -0.3 dB; dBTP per ADR 0002 (phase1.v2)" },
+    "spectralDetail.spectralCentroidMean": { "target": 2200, "tolerance": 700, "unit": "Hz", "intent": "brighter than dark techno — distortion adds harmonics" }
+  }
+}

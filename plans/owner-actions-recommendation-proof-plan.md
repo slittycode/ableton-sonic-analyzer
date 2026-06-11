@@ -20,8 +20,10 @@ without paying for Gemini API calls.
 - The `asa-ableton` branch is local only. Its 66 tests pass and it includes the tracked
   real VTSS fixture, Gate alpha receipt, and Gate beta generator.
 - Ableton Live is not installed on this Mac.
-- All five recommendation fixtures still use fingerprints marked `_synthetic: true`.
-  No real `audio.flac` render exists yet.
+- No real `audio.flac` render exists yet. Three fixtures still carry fingerprints
+  marked `_synthetic: true`; the two re-authored on 2026-06-10
+  (`hard_techno_rumble_145`, `ukg_2step_shuffle_132`) ship spec-only, with no
+  fingerprint until the real render.
 
 ## Important Correction
 
@@ -80,9 +82,10 @@ receipt.
 Use a Mac with Ableton Live 12. Pull both repositories and the published
 `feat/track-ii-gate-tooling` branch.
 
-Before building anything, confirm that house, techno, melodic techno, drum and bass,
-and acid techno are useful test genres for your work. If one is irrelevant, stop and
-have an agent re-author that fixture first.
+Genre fit was confirmed 2026-06-10: house, melodic techno, and acid stay; the
+techno and drum-and-bass fixtures were re-authored to owner genres as
+`hard_techno_rumble_145` (hard/peak techno) and `ukg_2step_shuffle_132`
+(UK garage / 2-step).
 
 #### 3a. Run Gate beta first
 
@@ -109,7 +112,7 @@ mapping and regenerate the probes before Track III proceeds.
 
 #### 3b. Pilot one fixture before building all five
 
-Start with `techno_rumble_130`, the smallest spec:
+Start with `hard_techno_rumble_145`, the smallest spec:
 
 1. Open its `manifest.json` and README.
 2. Build the listed device chains and values exactly.
@@ -119,7 +122,7 @@ Start with `techno_rumble_130`, the smallest spec:
 
 Return that single render to:
 
-`apps/backend/tests/fixtures/recommendation_tracks/techno_rumble_130/audio.flac`
+`apps/backend/tests/fixtures/recommendation_tracks/hard_techno_rumble_145/audio.flac`
 
 An agent should ingest and validate this pilot before the remaining four are built.
 This catches unclear instructions or an invalid measurement target before more manual
@@ -129,7 +132,7 @@ work is spent.
 
 After the pilot passes, render:
 
-1. `dnb_reese_174`
+1. `ukg_2step_shuffle_132`
 2. `acid_303_128`
 3. `house_sidechain_pluck_124`
 4. `melodic_techno_arp_124`
