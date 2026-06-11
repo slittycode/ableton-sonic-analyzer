@@ -85,8 +85,9 @@ citations**, so the chain-of-custody penalty drives its adjusted aggregate to
    #2). The rules **are** feature-triggered, so attaching the triggering measurement
    as a citation is a concrete, harness-rewarded improvement — a candidate
    sub-goal-3 "score-driven change" (frontend edit to `abletonDevices.ts` →
-   `npm run verify`). But see the dead-code finding under NEEDS-WIRING before
-   investing in this path.
+   `npm run verify`). Moot since 2026-06-11: the NEEDS-WIRING decision below
+   demoted `abletonDevices.ts` to a research-only baseline, so this candidate is
+   no longer a *product* improvement path.
 
 This is the first real signal toward the Gemini verdict — likely Gemini earns its
 place on citation + full-surface coverage. Confirm on real renders; the synthetic
@@ -169,22 +170,23 @@ factor, onset density) is the app's own projection (`analyzer.ts`); reuse it rat
 than re-deriving, and only then is the deterministic score a real verdict input
 rather than the synthetic illustration above.
 
-**FINDING — the deterministic source is currently dead code (affects sub-goal 3
-framing).** `apps/ui/src/data/abletonDevices.ts` is imported **nowhere** in the UI
-(no component, no test) — verified by grep. ASA's product recommendations come
-entirely from Gemini (`Phase2Result`); the deterministic engine is unwired,
-ported-but-unused. Consequence: a "score-driven improvement" to `abletonDevices.ts`
-(e.g. the citation-emit fix flagged above) would **not reach any user** — it would
-raise a harness number for code nobody runs, which is harness-gaming, not a product
-improvement (PURPOSE.md decision #5). So before sub-goal 3 treats the deterministic
-path as a real recommendation source, decide one of:
-1. **Wire `abletonDevices.ts` into the product** (so its recs — and any citation
-   improvement — actually reach users), then score + improve it; or
-2. **Treat it as a research-only baseline** in the three-source comparison (score
-   it, but land score-driven *product* improvements on the **Gemini** path
-   instead — which needs the `chore/...` branch + renders).
-This is the honest reason no score-driven improvement was "landed" this session:
-the only render-free candidate would have improved dead code.
+**FINDING — the deterministic source is dead code on the product path. ✅ DECIDED
+2026-06-11: demoted to research-only baseline (option 2).**
+`apps/ui/src/data/abletonDevices.ts` is imported **nowhere** in the UI (no
+component, no test) — verified by grep. ASA's product recommendations come
+entirely from the Phase 2 providers (`Phase2Result`); the deterministic engine is
+unwired, ported-but-unused. Consequence: a "score-driven improvement" to
+`abletonDevices.ts` (e.g. the citation-emit fix flagged above) would **not reach
+any user** — it would raise a harness number for code nobody runs, which is
+harness-gaming, not a product improvement (PURPOSE.md decision #5). The owner
+resolved the wire-or-demote choice: **demote**. Standing consequences:
+1. The module stays where it is as the scored free baseline in the three-source
+   comparison (its file header now records the status); it is **not** to be
+   wired into the product.
+2. Score-driven *product* improvements land on the **Phase 2 provider** path
+   instead. The citation-emit candidate above is off the table as a product
+   change (it remains a legitimate baseline-fairness tweak if the comparison
+   ever needs it).
 
 ---
 

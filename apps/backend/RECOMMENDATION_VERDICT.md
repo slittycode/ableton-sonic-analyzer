@@ -88,4 +88,7 @@ not a synthesis artifact.
 2. **`melodic_techno_arp_124` Gemini 0 recs** — investigate the parse/shape outlier
    on a real render before trusting that fixture's contribution.
 3. The deterministic `AudioFeatures` projection is approximate (not the app's
-   `analyzer.ts`); reconcile when wiring the deterministic path for real.
+   `analyzer.ts`). The wire-or-demote question was resolved 2026-06-11: the
+   deterministic engine is a research-only baseline and will not be wired into
+   the product (see `NEEDS.md`), so reconciling the projection matters only for
+   baseline fairness in this comparison, not for any product path.
