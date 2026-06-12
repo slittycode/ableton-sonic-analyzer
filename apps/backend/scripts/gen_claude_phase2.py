@@ -40,6 +40,12 @@ if str(BACKEND_DIR) not in sys.path:
 # The provider seam resolves at call time, but set it before importing server so
 # a partially-imported Gemini path can never be selected by mistake.
 os.environ["ASA_PHASE2_PROVIDER"] = "claude"
+# Headless-run defaults learned from the 2026-06-11 scoring run (overridable):
+# a thinking-enabled model spends the whole timeout deliberating before the
+# structured output starts, and the provider's 600s default assumes no thinking.
+# With thinking off, sonnet measured 300-365s per fixture.
+os.environ.setdefault("MAX_THINKING_TOKENS", "0")
+os.environ.setdefault("ASA_CLAUDE_TIMEOUT_SECONDS", "1800")
 
 import server  # noqa: E402  (path bootstrap + env above)
 

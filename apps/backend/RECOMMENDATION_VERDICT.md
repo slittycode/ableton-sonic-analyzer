@@ -80,13 +80,63 @@ recs cited and path-valid** against the real fingerprint (custody 1.000), full-s
 coverage. Consistent with the corpus verdict — Gemini's custody advantage is real,
 not a synthesis artifact.
 
+## Claude provider head-to-head (2026-06-11 — same proxy corpus, zero Gemini cost)
+
+The selectable Claude provider (`ASA_PHASE2_PROVIDER=claude`,
+`phase2_provider.ClaudeCliProvider`) was scored on the three fixtures whose proxy
+fingerprints survived the 2026-06-10 corpus re-authoring, via the exact server
+path (`server._run_interpretation_request`) and the same scorer. Generation:
+`scripts/gen_claude_phase2.py`; scoring: `--source claude` (reads the committed
+`phase2.claude.json` evidence in each fixture dir). Model `sonnet`
+(claude-sonnet-4-6), **text-only** (grounds purely on the embedded Phase 1 JSON,
+no audio), `MAX_THINKING_TOKENS=0`, 300–365 s per fixture.
+
+| Fixture | Claude | Gemini (recorded above) |
+|---|---|---|
+| acid_303_128 | **0.485** | 0.172 |
+| house_sidechain_pluck_124 | **0.424** | 0.343 |
+| melodic_techno_arp_124 | **0.424** | 0.000 (zero cards) |
+| **Mean (shared subset)** | **0.444** | 0.172 |
+
+All three Claude results are fully cited (custody penalty 1.000) with **zero**
+`validationWarnings` — both the citation-path check and the Live 12 catalogue
+gates came back clean.
+
+Findings:
+1. **The melodic_techno outlier was Gemini-side, not fixture-side.** From the
+   identical fingerprint where Gemini returned 0 structured cards, Claude
+   produced 13 rec cards + 14 chain cards + 5 workflow steps (32 envelope
+   entries) and scored 0.424. The fixture's fingerprint is interpretable.
+2. **Kick role recall 1.00 on all three** (the recorded gemini/deterministic
+   table above shows kick 0.00/0.00): Claude's kick cards name `Operator`,
+   matching the specs' source synth. Whether genuine inference or
+   electronic-genre convention, it softens the "source instrument is
+   unrecoverable from audio" ceiling — notably, Claude never heard any audio.
+3. The groove/fx/stereo zeros persist for Claude too (cards exist — `Drum Buss`
+   groove cards, a `Hybrid Reverb` that lands in `unknown` domain — but miss
+   the spec devices), consistent with the domain-attribution limitation in
+   `NEEDS.md`. Provider-agnostic and scorer-consistent.
+
+Caveats, honestly: the SYNTHETIC-PROXY warning at the top applies in full. The
+comparison is like-for-like on *inputs* (identical fingerprints, same scorer)
+but not on *modality*: Gemini received the unrepresentative proxy audio
+alongside the Phase 1 JSON, while Claude's text-only grounding may have
+shielded it from proxy-audio artifacts. Model classes also differ (sonnet vs
+gemini-2.5-flash). Re-run both on real renders before treating this as a
+provider verdict. What it does establish: the zero-Gemini-cost route produces
+fully-cited, catalogue-clean, schema-valid recommendations at
+competitive-or-better measured quality on every fixture it has seen.
+
 ## Where real input is needed (retroactive)
 1. **Real Ableton renders** of the 5 specs (48 kHz/24-bit) replace the proxies →
    makes the known-settings axes (role recall, value accuracy) authoritative. The
    proxies have artifacts: dnb BPM read half-time (174→116), `acidDetail` fires on
    all (synth is saw-heavy), melodic_techno key mis-detected.
 2. **`melodic_techno_arp_124` Gemini 0 recs** — investigate the parse/shape outlier
-   on a real render before trusting that fixture's contribution.
+   on a real render before trusting that fixture's contribution. *(Partially
+   resolved 2026-06-11: Claude produced a full 13-card result from the same
+   fingerprint — see the head-to-head section above — so the outlier is
+   Gemini-side, not fixture-side. Still verify Gemini on a real render.)*
 3. The deterministic `AudioFeatures` projection is approximate (not the app's
    `analyzer.ts`). The wire-or-demote question was resolved 2026-06-11: the
    deterministic engine is a research-only baseline and will not be wired into
