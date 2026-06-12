@@ -203,8 +203,19 @@ known-settings axes (role recall / value accuracy) — those need rendered fixtu
 so the *complete* "does Gemini recover the actual settings?" verdict remains
 render-gated.
 
-Mechanism is in place: `--source baseline|gemini|deterministic` on the same
-corpus. To deliver the **full** verdict:
+**Claude provider scored on the proxy corpus — 2026-06-11, zero Gemini cost.**
+The `--source claude` harness path plus `scripts/gen_claude_phase2.py` generated
+and scored fully-cited, zero-warning recommendations on the three
+proxy-fingerprint fixtures: **acid 0.485, house 0.424, melodic_techno 0.424**
+vs recorded Gemini 0.172 / 0.343 / 0.000 on identical fingerprints (text-only
+vs audio+JSON — full table and caveats in `RECOMMENDATION_VERDICT.md`). The
+melodic_techno "Gemini 0 recs" outlier is resolved as Gemini-side: Claude
+produced 13 cards from the same fingerprint. Evidence committed as
+`phase2.claude.json` in each fixture dir. Real-render re-runs remain the
+authoritative step for both providers.
+
+Mechanism is in place: `--source baseline|gemini|claude|deterministic` on the
+same corpus. To deliver the **full** verdict:
 1. Render the fixtures (NEEDS-FIXTURE #1–2).
 2. Wire the deterministic adapter (NEEDS-WIRING).
 3. For each fixture, produce a live Gemini `phase2.json` (needs `GEMINI_API_KEY`;

@@ -9,7 +9,7 @@ fixtures under ``tests/fixtures/recommendation_tracks/``, validates each spec is
 catalog-valid (the always-runnable half of ingest), pulls recommendations from a
 chosen **source**, and scores how well they recover the known device settings.
 
-The ``--source`` switch is the mechanism sub-goal 3 needs to compare three
+The ``--source`` switch is the mechanism sub-goal 3 needs to compare
 recommendation sources on the same corpus:
 
   * ``baseline``      — trivial no-op source (empty rec set). Runs now, no deps.
@@ -20,6 +20,12 @@ recommendation sources on the same corpus:
                         ``GET /api/analysis-runs/{run_id}/export/phase2`` works.
                         Producing it live needs GEMINI_API_KEY + rendered audio
                         (needs-fixture).
+  * ``claude``        — score a stored ``Phase2Result`` JSON from the Claude CLI
+                        provider (``--phase2`` or a sibling ``phase2.claude.json``
+                        in the fixture dir). Produce it at zero Gemini cost with
+                        ``scripts/gen_claude_phase2.py`` (text-only, grounds on the
+                        stored Phase 1 fingerprint; needs a logged-in Claude Code
+                        CLI, no API key).
   * ``deterministic`` — score the ``abletonDevices.ts`` path. Wiring the node
                         bridge that emits normalized recs from a real Phase 1
                         fingerprint is a documented follow-on (NEEDS.md); until
@@ -82,13 +88,17 @@ def _resolve_recs(
     if source == "baseline":
         return rev.normalize_baseline(fixture), "trivial baseline (empty)"
 
-    if source == "gemini":
+    if source in ("gemini", "claude"):
+        sibling_name = "phase2.json" if source == "gemini" else "phase2.claude.json"
         candidate = phase2_path
         if candidate is None and fixture.source_path is not None:
-            sibling = fixture.source_path.parent / "phase2.json"
+            sibling = fixture.source_path.parent / sibling_name
             candidate = sibling if sibling.exists() else None
         if candidate is None or not candidate.exists():
-            return None, "no Phase2Result JSON (pass --phase2 or drop phase2.json in the fixture dir)"
+            return None, (
+                f"no Phase2Result JSON (pass --phase2 or drop {sibling_name} "
+                "in the fixture dir)"
+            )
         phase2 = rev.coerce_phase2_payload(
             json.loads(candidate.read_text(encoding="utf-8"))
         )
@@ -162,11 +172,12 @@ def run_self_test() -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--source", choices=["baseline", "gemini", "deterministic"],
+    parser.add_argument("--source", choices=["baseline", "gemini", "claude", "deterministic"],
                         default="baseline", help="recommendation source to score")
     parser.add_argument("--fixture", help="limit to one fixture slug")
     parser.add_argument("--corpus-dir", type=Path, default=DEFAULT_CORPUS_DIR)
-    parser.add_argument("--phase2", type=Path, help="Phase2Result JSON for --source gemini")
+    parser.add_argument("--phase2", type=Path,
+                        help="Phase2Result JSON for --source gemini/claude")
     parser.add_argument("--recommendations", type=Path,
                         help="pre-normalized rec list JSON (overrides --source resolution)")
     parser.add_argument("--report", type=Path, help="write a markdown report to this path")

@@ -43,6 +43,25 @@
 > `GeminiSchemaConversionTests`, `ClaudeBranchIntegrationTests` — the latter
 > proves the no-`GEMINI_API_KEY` path end-to-end through the shared tail).
 
+> **2026-06-11 addendum — `claude` provider scored on the recommendation corpus.**
+> The scoring that item 6 above gated on has run: on the three proxy-fingerprint
+> fixtures, Claude (model `sonnet`, text-only) aggregates 0.485 / 0.424 / 0.424
+> vs recorded Gemini 0.172 / 0.343 / 0.000 on identical fingerprints — fully
+> cited, zero validation warnings on all three. Full table + caveats (proxy
+> corpus, text-vs-audio modality asymmetry) in
+> `apps/backend/RECOMMENDATION_VERDICT.md`. Operating notes from that run:
+> 1. **Disable extended thinking for headless calls**: a thinking-enabled model
+>    can spend the entire `ASA_CLAUDE_TIMEOUT_SECONDS` budget deliberating
+>    before the structured output starts (observed: ~5,900 thinking tokens in
+>    280 s, then timeout). Set `MAX_THINKING_TOKENS=0` in the environment;
+>    `scripts/gen_claude_phase2.py` defaults it for you.
+> 2. **Pin the model** (`ASA_CLAUDE_MODEL=sonnet`) for reproducibility; the CLI
+>    default varies by environment. With thinking off, a full producer_summary
+>    call measured 300–365 s on sonnet (~69k-token prompt).
+> 3. **Subscription session limits surface as fast CLI failures**
+>    (`CLAUDE_CLI_FAILED: You've hit your session limit · resets …`) — the
+>    provider degrades cleanly; retry after the reset.
+
 Status: **STEP ONE complete — split verdict (weights clean, code unlicensed).
 Maintainer chose to build the default-off research experiment (option A). The
 provider abstraction, the mock-capable MOSS sidecar, and the citation-accuracy

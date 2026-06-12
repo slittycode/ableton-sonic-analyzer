@@ -378,7 +378,7 @@ ASA_MOSS_MODEL_ID=""                     # optional MOSS model id forwarded to t
 ASA_MOSS_SIDECAR_MODE="mock"             # sidecar-side (its own venv): `mock` (default, deterministic schema-valid Phase-1-grounded output) or `model` (a 501 licence-gated stub that executes no OpenMOSS code).
 ASA_CLAUDE_CLI="claude"                  # path to the Claude Code CLI binary used when ASA_PHASE2_PROVIDER=claude; defaults to `claude` on PATH.
 ASA_CLAUDE_MODEL=""                      # optional model override for the claude provider (e.g. `sonnet`); empty = the CLI's default model. The subprocess runs sandboxed: --safe-mode, --tools "", --no-session-persistence, schema enforced via --json-schema.
-ASA_CLAUDE_TIMEOUT_SECONDS="600"         # per-call timeout for the claude provider subprocess (a full producer_summary prompt on the CLI default model measures ~6 min).
+ASA_CLAUDE_TIMEOUT_SECONDS="600"         # per-call timeout for the claude provider subprocess (a full producer_summary prompt on the CLI default model measures ~6 min). For headless runs also set MAX_THINKING_TOKENS=0 — a thinking-enabled model can spend the entire budget deliberating before the structured output starts (see docs/PHASE2_PROVIDER.md, 2026-06-11 addendum).
 ```
 
 Phase 2 is gated by `VITE_ENABLE_PHASE2_GEMINI`. `GEMINI_API_KEY` is backend-only. `SONIC_ANALYZER_ADMIN_KEY` is backend-only and never exposed to clients.
