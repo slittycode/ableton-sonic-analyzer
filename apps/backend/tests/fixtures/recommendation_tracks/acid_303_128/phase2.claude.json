@@ -1,0 +1,1226 @@
+{
+  "trackCharacter": "A 128.1 BPM monophonic acid-techno loop in A Minor featuring a confirmed supersaw layer (7 voices, 28.5-cent average detune) layered over a distorted high-tuned kick at 96 Hz and a punchy bass with 171 ms decay. The integrated loudness sits at -9.2 LUFS with a near-zero LRA of 0.1 LU, indicating heavy brick-wall limiting \u2014 the true peak measures 1.0 dBTP (an inter-sample over that must be corrected). The entire mix is pure mono (stereoWidth 0.0, correlation 1.0 across all bands), and the acid filter character is strong: isAcid confidence 0.69, resonanceLevel at maximum, centroid oscillating at 36 Hz. The odd-to-even harmonic ratio of 3.75 confirms dominant square/pulse synthesis character throughout.",
+  "projectSetup": {
+    "tempoBpm": 128.1,
+    "timeSignature": "4/4",
+    "sampleRate": 44100,
+    "bitDepth": 24,
+    "headroomTarget": "-18 dBFS peaks pre-master, targeting -14 LUFS short-term during mix to give headroom for the limiter chain",
+    "sessionGoal": "Rebuild a heavily-limited, pure-mono acid-techno loop with supersaw and distorted kick, then correct the measured 1.0 dBTP true-peak over before export."
+  },
+  "trackLayout": [
+    {
+      "order": 1,
+      "name": "Kick",
+      "type": "MIDI",
+      "purpose": "Distorted 96 Hz kick with high THD \u2014 synthesize via Operator with a sine-to-noise transient or drive through Saturator post-oscillator; isDistorted true confirms pre-existing clip character.",
+      "grounding": {
+        "phase1Fields": [
+          "kickDetail.fundamentalHz",
+          "kickDetail.isDistorted",
+          "kickDetail.thd",
+          "kickDetail.kickCount"
+        ],
+        "segmentIndexes": [
+          0
+        ]
+      }
+    },
+    {
+      "order": 2,
+      "name": "Acid Bass",
+      "type": "MIDI",
+      "purpose": "Punchy 113 Hz bass with maximum-resonance acid squelch (resonanceLevel 1.0, centroidOscillationHz 36) driven by Auto Filter modulation \u2014 the primary acid movement generator.",
+      "grounding": {
+        "phase1Fields": [
+          "acidDetail.isAcid",
+          "acidDetail.resonanceLevel",
+          "acidDetail.centroidOscillationHz",
+          "bassDetail.fundamentalHz",
+          "bassDetail.averageDecayMs"
+        ],
+        "segmentIndexes": [
+          0
+        ]
+      }
+    },
+    {
+      "order": 3,
+      "name": "Supersaw Pad",
+      "type": "MIDI",
+      "purpose": "7-voice supersaw layer with 28.5-cent average detune per measured supersawDetail \u2014 provides mid-range harmonic density and the dominant synthesis texture.",
+      "grounding": {
+        "phase1Fields": [
+          "supersawDetail.isSupersaw",
+          "supersawDetail.voiceCount",
+          "supersawDetail.avgDetuneCents",
+          "supersawDetail.spectralComplexity"
+        ],
+        "segmentIndexes": [
+          0
+        ]
+      }
+    },
+    {
+      "order": 4,
+      "name": "Drum Bus",
+      "type": "AUDIO",
+      "purpose": "Group bus for Kick plus any percussion \u2014 apply Drum Buss Boom at 96 Hz and light Drive to unify distorted kick character measured at THD 0.35.",
+      "grounding": {
+        "phase1Fields": [
+          "kickDetail.fundamentalHz",
+          "kickDetail.thd",
+          "kickDetail.harmonicRatio"
+        ],
+        "segmentIndexes": [
+          0
+        ]
+      }
+    },
+    {
+      "order": 5,
+      "name": "Synth Bus",
+      "type": "AUDIO",
+      "purpose": "Group bus for Acid Bass and Supersaw Pad \u2014 apply width via Utility Stereo Width since the full mix measures stereoWidth 0.0 and requires stereo expansion at the synth layer.",
+      "grounding": {
+        "phase1Fields": [
+          "stereoDetail.stereoWidth",
+          "stereoDetail.stereoCorrelation",
+          "supersawDetail.isSupersaw"
+        ],
+        "segmentIndexes": [
+          0
+        ]
+      }
+    },
+    {
+      "order": 6,
+      "name": "Master",
+      "type": "AUDIO",
+      "purpose": "Final limiter chain correcting the measured 1.0 dBTP true-peak inter-sample over; target ceiling -0.3 dBTP with True Peak enabled.",
+      "grounding": {
+        "phase1Fields": [
+          "truePeak",
+          "lufsIntegrated",
+          "plr",
+          "saturationDetail.clippedSampleCount"
+        ],
+        "segmentIndexes": [
+          0
+        ]
+      }
+    }
+  ],
+  "routingBlueprint": {
+    "sidechainSource": "",
+    "sidechainTargets": [],
+    "returns": [
+      {
+        "name": "Space Reverb",
+        "purpose": "Short algorithmic room reverb return justified by the measured completely dry source (reverbDetail.isWet false, rt60 null) \u2014 adding even a small room return on the Kick and Acid Bass will give the flat, pure-mono loop a sense of physical space without washing it out.",
+        "sendSources": [
+          "Kick",
+          "Acid Bass",
+          "Supersaw Pad"
+        ],
+        "deviceFocus": "Hybrid Reverb with small Room Size, Predelay 0 ms (source is dry \u2014 no predelay present to match), Dry/Wet 100% on the return",
+        "levelGuidance": "Send Kick at -18 dB, Acid Bass at -24 dB, Supersaw Pad at -20 dB to keep the tail below the dense mid-band energy"
+      },
+      {
+        "name": "Stereo Width",
+        "purpose": "Dedicated stereo-widening utility return justified by the measured pure-mono mix (stereoWidth 0.0, stereoCorrelation 1.0) \u2014 routing the supersaw through a chorus-ensemble or width utility return creates differentiated stereo depth for the 7-voice detuned layer without widening the kick sub.",
+        "sendSources": [
+          "Supersaw Pad"
+        ],
+        "deviceFocus": "Chorus-Ensemble in widening mode (Mode set for max stereo spread) followed by Utility Bass Mono On to protect sub frequencies below 120 Hz on this return",
+        "levelGuidance": "Send Supersaw Pad at -12 to -6 dB; blend to taste \u2014 the mono source means any width added here is fully additive"
+      }
+    ],
+    "notes": [
+      "No sidechain pumping return is warranted: measured pumpingConfidence 0.128 and pumpingRate null \u2014 sidechain ducking is not present in this track.",
+      "The pure-mono source means all width is additive \u2014 monitor in mono regularly to verify the original character is preserved.",
+      "Sub bass is already mono (subBassMono true, subBassCorrelation 1.0) so Bass Mono on the Stereo Width return is a protective measure, not a corrective one."
+    ]
+  },
+  "warpGuide": {
+    "fullTrack": {
+      "warpMode": "Complex Pro",
+      "settings": "Formants 0%, Envelope 128, Transients on",
+      "reason": "The reference loop must be preserved without pitch-shifting artifacts; Complex Pro gives the highest fidelity for a fully arranged stereo bounce at 128.1 BPM."
+    },
+    "drums": {
+      "warpMode": "Beats",
+      "settings": "Transient Loop mode, Preserve Transients on",
+      "reason": "The distorted kick at 96 Hz with THD 0.35 has sharp sub transients; Beats mode preserves their attack shape without smearing the fundamental."
+    },
+    "bass": {
+      "warpMode": "Tones",
+      "settings": "Channel set to Low",
+      "reason": "The punchy 113 Hz bass with 171 ms decay has a sustained low-end shape best preserved by Tones mode, which tracks the fundamental pitch envelope rather than slicing it."
+    },
+    "melodic": {
+      "warpMode": "Tones",
+      "settings": "Channel set to Low-Mid",
+      "reason": "The 7-voice supersaw layer has harmonically rich sustained content \u2014 Tones mode preserves the chord's spectral shape across the detuned unison stack."
+    },
+    "rationale": "This is a pure-mono, brick-wall-limited acid-techno loop with no reverb tail and flat short-term LUFS (LRA 0.1 LU). The absence of dynamic variation means warp artifacts are most audible on transient events (kick) and on the thick supersaw mid-range, so Beats for percussive stems and Tones for sustained harmonic content gives the cleanest reconstruction. Full-track reference uses Complex Pro to preserve everything in the original bounce."
+  },
+  "detectedCharacteristics": [
+    {
+      "name": "Acid 303-Style Filter Sweep",
+      "confidence": "HIGH",
+      "explanation": "acidDetail.isAcid is true with confidence 0.69, resonanceLevel at maximum 1.0, and centroidOscillationHz at 36 \u2014 consistent with a self-oscillating TB-303-style filter modulated at sub-audio rate."
+    },
+    {
+      "name": "7-Voice Supersaw Layer",
+      "confidence": "HIGH",
+      "explanation": "supersawDetail.isSupersaw is true with confidence 0.85, voiceCount 7, and avgDetuneCents 28.5 \u2014 a textbook stacked-oscillator supersaw with above-average detuning spread creating the measured spectralComplexity of 7.2."
+    },
+    {
+      "name": "Heavily Brick-Wall Limited Master",
+      "confidence": "HIGH",
+      "explanation": "lufsIntegrated -9.2 with lufsRange 0.1 LU and a true peak of 1.0 dBTP (inter-sample over) confirms extreme limiting; the crestFactor of 10.2 and peakRatio95to50 of 2.61 reinforce a heavily processed master with minimal dynamic headroom."
+    },
+    {
+      "name": "Distorted High-Tuned Kick",
+      "confidence": "HIGH",
+      "explanation": "kickDetail.fundamentalHz 96 Hz (above standard 909 range), isDistorted true, and thd 0.35 indicate a deliberately saturated kick with audible harmonic distortion; kickCount 81 confirms consistent presence throughout the 15-second clip."
+    },
+    {
+      "name": "Pure Mono Mix",
+      "confidence": "HIGH",
+      "explanation": "stereoDetail.stereoWidth is exactly 0.0 with stereoCorrelation 1.0 and bandCorrelations at 1.0 across all seven bands \u2014 the entire mix is a perfect mono file with no stereo content at any frequency."
+    }
+  ],
+  "arrangementOverview": {
+    "summary": "A 15-second single-segment acid-techno loop measured at -9.2 LUFS integrated (LRA 0.1 LU), indicating a fully sustained, non-dynamic loop intended for DJ tool or clip-launch use. The noveltyCurve shows six transient novelty peaks between 1.7 s and 14.4 s (strongest at 11.54 s with normalized strength 1.0), corresponding to regular bar-boundary renewal events within the 8-bar phrase grid rather than arrangement sections. The downbeat confidence is near zero (0.0028), so bar-1 placement should be aligned manually to the measured beat grid.",
+    "segments": [
+      {
+        "index": 0,
+        "startTime": 0,
+        "endTime": 15,
+        "lufs": -9.6,
+        "description": "Single continuous loop at -9.6 LUFS with LRA 0.1 LU \u2014 fully sustained acid-techno pattern with no arrangement transitions. The novelty curve shows repeating renewal peaks every ~1.9 s aligned to 2-bar boundaries (nearest downbeats at 1.173, 3.042, 4.923, 6.792, 8.661, 10.542, 12.411, 14.292 s), driven by the acid filter oscillation and kick accent pattern. The spectralBalanceTimeSeries shows brilliance spiking up to -14.5 dB at t=4.03 s and t=14.80 s, coinciding with the strongest novelty peaks and suggesting the supersaw high-end opens periodically.",
+        "sceneName": "Acid Loop",
+        "abletonAction": "Set clip loop length to 8 bars starting at measured downbeat 1.173 s; use 'Set 1.1.1 here' to align the clip warp marker to the first stable downbeat.",
+        "automationFocus": "Acid Bass -> Auto Filter Frequency"
+      }
+    ],
+    "noveltyNotes": "Six novelty peaks are clustered at near-2-bar intervals (1.7 s, 4.5 s, 6.9 s, 9.2 s, 11.5 s, 14.4 s strength 1.0). In Live, map each peak to a Scene launch point or automate Auto Filter Frequency upward into the peak then sweep back to create call-response acid phrases. The strongest peak at 11.54 s is a candidate for a filter-open automation breakpoint \u2014 automate Auto Filter Frequency from ~400 Hz to ~2 kHz ramping into that timestamp."
+  },
+  "sonicElements": {
+    "kick": "Distorted 96 Hz kick (kickDetail.fundamentalHz 96 Hz, isDistorted true, THD 0.35) \u2014 high-tuned above standard 909 territory, giving it a punchy mid-bass thud rather than a deep sub thump. The harmonicRatio of 0.84 indicates a reasonably clean fundamental despite the distortion, meaning the THD is adding audible upper harmonics rather than destroying the pitch. Short attack character consistent with a synthesized or heavily processed sample.",
+    "bass": "Punchy 113 Hz bass (bassDetail.type punchy, averageDecayMs 171 ms, fundamentalHz 113 Hz) with straight groove (swingPercent 0, grooveType straight). The acid detection (isAcid true, resonanceLevel 1.0) means this bass is not static \u2014 its timbre is modulated by a self-oscillating filter sweeping at 36 Hz centroid oscillation rate. The transientRatio of 0.04 is very low, confirming a sustained, dense bass texture rather than a plucked character.",
+    "melodicArp": "Pitch transcription confidence is 0.0655 \u2014 far below the 0.15 threshold for reliable note data. The melody detector reports 54 notes cycling through MIDI 47/48/45 (B3/C4/A3) in the low-mid register, but given the near-zero pitchConfidence this almost certainly reflects the acid filter sweep and supersaw harmonic motion rather than a distinct melodic line. Treat as atonal/experimental reference only \u2014 do not reconstruct a pitched melody from these note values. The supersaw and acid bass are likely the pitch-carrying elements.",
+    "grooveAndTiming": "The beat grid is locked at 128.1 BPM (bpmConfidence 3.75, tempo stabilizes to 129.2 BPM after the first two beats per rhythmDetail.tempoCurve). The downbeat confidence is 0.0028 \u2014 extremely low \u2014 meaning the bar-1 phase cannot be trusted; align the warp marker manually. Per-drum swing: kick 17.6%, snare 22.8%, hihat 20.4% (grooveDetail.perDrumSwing) \u2014 all three instruments carry slight swing, making the groove subtly humanized rather than machine-rigid. beatLoudnessVariation 0.0877 confirms minimal accent variation across beats.",
+    "effectsAndTexture": "No reverb measured (reverbDetail.isWet false, rt60 null) \u2014 the source is entirely dry. No gating detected (effectsDetail.gatingDetected false). The supersaw's spectralComplexity of 7.2 and the acid bass's maximum resonanceLevel together generate the primary textural density. The textureScore of 0.3797 with lowBandFlatness 0.3645 and midBandFlatness 0.3059 indicates a moderately complex, tonally non-flat texture dominated by the low and low-mid bands (spectralBalance.subBass -11.1 dB, lowBass -8.0 dB) relative to the heavily suppressed upper registers.",
+    "widthAndStereo": "The mix is pure mono: stereoWidth 0.0, stereoCorrelation 1.0, and all seven bandCorrelations at 1.0. This is either a mono source file or was rendered to mono during mastering. Sub-bass is already mono (subBassMono true). No width treatment is needed at the sub level, but the supersaw and acid elements will benefit from stereo expansion in the rebuild using Chorus-Ensemble or Utility Stereo Width on the Synth Bus.",
+    "harmonicContent": "Key measured as A Minor (keyConfidence 0.67 \u2014 moderate confidence). The chordTimelineAgreement is false: the librosa Viterbi decoder reads a single Am chord for the full 15 seconds (confidence 0.538) while the chord sequence and dominantChords suggest F, G, Am, Em movement. Given the disagreement and the acid/supersaw nature of the track, treat the harmonic content as A Minor-centered with possible i-VI movement (Am-F) \u2014 keep chord voicings open (sus2 or power-chord) to avoid committing to a specific progression that cannot be confirmed."
+  },
+  "mixAndMasterChain": [
+    {
+      "order": 1,
+      "device": "Operator",
+      "deviceFamily": "NATIVE",
+      "trackContext": "Kick",
+      "workflowStage": "SOUND_DESIGN",
+      "parameter": "Oscillator A Coarse",
+      "value": "C2 (MIDI note 36, ~65 Hz as base oscillator; pitch-bend up to reach the 96 Hz measured fundamental)",
+      "reason": "The kick fundamental is measured at 96 Hz, which is higher than a standard 909 kick, so setting the base oscillator near 65 Hz and tuning Coarse upward to 96 Hz reconstructs the high-tuned character.",
+      "phase1Fields": [
+        "kickDetail.fundamentalHz",
+        "kickDetail.kickCount"
+      ]
+    },
+    {
+      "order": 2,
+      "device": "Saturator",
+      "deviceFamily": "NATIVE",
+      "trackContext": "Kick",
+      "workflowStage": "SOUND_DESIGN",
+      "parameter": "Drive",
+      "value": "40\u201355% (Type: Soft Sine or Waveshaper to match THD 0.35)",
+      "reason": "The kick measures isDistorted true with THD 0.35, confirming audible harmonic saturation that must be recreated with a post-oscillator Saturator rather than leaving the kick clean.",
+      "phase1Fields": [
+        "kickDetail.isDistorted",
+        "kickDetail.thd",
+        "kickDetail.harmonicRatio"
+      ]
+    },
+    {
+      "order": 3,
+      "device": "Analog",
+      "deviceFamily": "NATIVE",
+      "trackContext": "Acid Bass",
+      "workflowStage": "SOUND_DESIGN",
+      "parameter": "Osc 1 Shape",
+      "value": "Square (odd-to-even ratio 3.75 biases strongly toward square/pulse waveform)",
+      "reason": "The synthesisCharacter.oddToEvenRatio of 3.75 is well above 2.0, indicating dominant odd-harmonic content consistent with a square wave, which is the canonical 303 oscillator shape for acid bass reconstruction.",
+      "phase1Fields": [
+        "synthesisCharacter.oddToEvenRatio",
+        "acidDetail.isAcid"
+      ]
+    },
+    {
+      "order": 4,
+      "device": "Auto Filter",
+      "deviceFamily": "NATIVE",
+      "trackContext": "Acid Bass",
+      "workflowStage": "SOUND_DESIGN",
+      "parameter": "Resonance",
+      "value": "95\u2013100% (maximum; resonanceLevel 1.0 measured)",
+      "reason": "The acid detection measures resonanceLevel at exactly 1.0 \u2014 the maximum value \u2014 so the Auto Filter Resonance must be set near maximum to recreate the self-oscillating squelch character.",
+      "phase1Fields": [
+        "acidDetail.resonanceLevel",
+        "acidDetail.confidence",
+        "acidDetail.centroidOscillationHz"
+      ]
+    },
+    {
+      "order": 5,
+      "device": "Auto Filter",
+      "deviceFamily": "NATIVE",
+      "trackContext": "Acid Bass",
+      "workflowStage": "SOUND_DESIGN",
+      "parameter": "LFO Rate",
+      "value": "36 Hz (centroidOscillationHz 36) with LFO Waveform set to Sine, LFO Amount 60\u201380%",
+      "reason": "The measured centroid oscillation rate of 36 Hz drives the filter modulation speed \u2014 setting the LFO to 36 Hz recreates the measured sub-audio filter sweep rather than a generic slow sweep.",
+      "phase1Fields": [
+        "acidDetail.centroidOscillationHz",
+        "acidDetail.isAcid",
+        "acidDetail.bassRhythmDensity"
+      ]
+    },
+    {
+      "order": 6,
+      "device": "Wavetable",
+      "deviceFamily": "NATIVE",
+      "trackContext": "Supersaw Pad",
+      "workflowStage": "SOUND_DESIGN",
+      "parameter": "Unison Amount",
+      "value": "28\u201330 cents detune (avgDetuneCents 28.5); Unison Mode set to maximum voice spread, Voices 7",
+      "reason": "The measured supersawDetail confirms 7 voices at 28.5 cents average detune \u2014 Wavetable's Unison Amount and Voices directly model this stacked-oscillator configuration.",
+      "phase1Fields": [
+        "supersawDetail.voiceCount",
+        "supersawDetail.avgDetuneCents",
+        "supersawDetail.isSupersaw"
+      ]
+    },
+    {
+      "order": 7,
+      "device": "EQ Eight",
+      "deviceFamily": "NATIVE",
+      "trackContext": "Supersaw Pad",
+      "workflowStage": "MIX",
+      "parameter": "Band 1 Filter Type",
+      "value": "High-pass at 120 Hz, Band 1 Q 0.7 \u2014 remove low-end below bass fundamental to prevent masking the 113 Hz bass",
+      "reason": "The spectralBalance shows lowBass at -8.0 dB being dominated by the bass element; high-passing the supersaw below 120 Hz prevents the two layers competing at the bass fundamental frequency.",
+      "phase1Fields": [
+        "spectralBalance.lowBass",
+        "bassDetail.fundamentalHz",
+        "supersawDetail.isSupersaw"
+      ]
+    },
+    {
+      "order": 8,
+      "device": "Drum Buss",
+      "deviceFamily": "NATIVE",
+      "trackContext": "Drum Bus",
+      "workflowStage": "MIX",
+      "parameter": "Boom Frequency",
+      "value": "96 Hz (matched to kickDetail.fundamentalHz)",
+      "reason": "Setting the Drum Buss Boom Frequency to the measured kick fundamental of 96 Hz reinforces the specific high-tuned kick pitch rather than a generic 60\u201380 Hz value.",
+      "phase1Fields": [
+        "kickDetail.fundamentalHz",
+        "kickDetail.harmonicRatio"
+      ]
+    },
+    {
+      "order": 9,
+      "device": "Utility",
+      "deviceFamily": "NATIVE",
+      "trackContext": "Synth Bus",
+      "workflowStage": "MIX",
+      "parameter": "Stereo Width",
+      "value": "120\u2013140% (source is pure mono at stereoWidth 0.0; expand synth bus only)",
+      "reason": "The entire mix measures stereoWidth 0.0 and stereoCorrelation 1.0 \u2014 adding width at the Synth Bus level via Utility Stereo Width reconstructs the spatial depth expected from a 7-voice supersaw layer without touching the mono kick.",
+      "phase1Fields": [
+        "stereoDetail.stereoWidth",
+        "stereoDetail.stereoCorrelation",
+        "supersawDetail.voiceCount"
+      ]
+    },
+    {
+      "order": 10,
+      "device": "Utility",
+      "deviceFamily": "NATIVE",
+      "trackContext": "Synth Bus",
+      "workflowStage": "MIX",
+      "parameter": "Bass Mono",
+      "value": "On (crossover ~120 Hz) \u2014 protect sub-bass mono integrity after width expansion",
+      "reason": "Although the source measures subBassMono true, the Utility width expansion at the Synth Bus could introduce sub-frequency phase divergence; Bass Mono On ensures the sub stays coherent after widening.",
+      "phase1Fields": [
+        "stereoDetail.subBassMono",
+        "stereoDetail.subBassCorrelation",
+        "stereoDetail.bandCorrelations.subBass"
+      ]
+    },
+    {
+      "order": 11,
+      "device": "EQ Eight",
+      "deviceFamily": "NATIVE",
+      "trackContext": "Master",
+      "workflowStage": "MASTER",
+      "parameter": "Band 1 Gain",
+      "value": "High-pass shelf below 30 Hz (Band 1 Filter Type high-pass, Frequency 30 Hz) to clean up sub-sub rumble before limiting",
+      "reason": "The spectralBalance.subBass reads -11.1 dB, and brick-wall limiting at 1.0 dBTP true peak is active \u2014 removing the sub-30 Hz rumble before the limiter reduces inter-sample over risk from infrasonic energy.",
+      "phase1Fields": [
+        "spectralBalance.subBass",
+        "truePeak",
+        "lufsIntegrated"
+      ]
+    },
+    {
+      "order": 12,
+      "device": "Glue Compressor",
+      "deviceFamily": "NATIVE",
+      "trackContext": "Master",
+      "workflowStage": "MASTER",
+      "parameter": "Threshold",
+      "value": "Threshold -8 dB, Ratio 2:1, Attack 10 ms, Release 200 ms, Makeup 1.5 dB",
+      "reason": "The PLR is 10.2 LU \u2014 within the 8\u201314 LU moderate mastered range \u2014 so a gentle Glue Compressor with 1\u20132 dB of gain reduction adds bus glue before the final limiter without re-crushing the already-limited transients.",
+      "phase1Fields": [
+        "plr",
+        "lufsIntegrated",
+        "crestFactor"
+      ]
+    },
+    {
+      "order": 13,
+      "device": "Limiter",
+      "deviceFamily": "NATIVE",
+      "trackContext": "Master",
+      "workflowStage": "MASTER",
+      "parameter": "Ceiling",
+      "value": "-0.3 dBTP; True Peak On; Release 150 ms",
+      "reason": "The measured truePeak of 1.0 dBTP is a confirmed inter-sample over \u2014 a true-peak limiter at -0.3 dBTP is mandatory to correct this defect before export.",
+      "phase1Fields": [
+        "truePeak",
+        "saturationDetail.clippedSampleCount",
+        "plr"
+      ]
+    }
+  ],
+  "secretSauce": {
+    "title": "Dual-Layer Acid Mono-to-Width Rebuild: Maximum-Resonance Filter Over Pure-Mono Supersaw",
+    "icon": "303+SAW",
+    "explanation": "This track's secret is the combination of three measured extremes that rarely coexist: a pure-mono mix (stereoWidth 0.0), a maximum-resonance acid filter (resonanceLevel 1.0, centroidOscillationHz 36), and a 7-voice supersaw at 28.5-cent detune \u2014 all running simultaneously at -9.2 LUFS with 0.1 LU of dynamic range. The reconstruction trick is to build the acid filter sweep and supersaw in mono first (matching the measured source), then deliberately open stereo width only at the Synth Bus level after the acid character is locked in. This preserves the driving, laser-focused mono low-end while giving the mid-range supersaw stack the stereo depth that a 7-voice unison layer naturally produces.",
+    "implementationSteps": [
+      "Build Acid Bass in Analog with square oscillator, Auto Filter at max Resonance, LFO Rate 36 Hz",
+      "Build Supersaw in Wavetable with 7 voices and 28.5-cent Unison Amount",
+      "Confirm both are mono at this stage \u2014 match the measured stereoWidth 0.0 source",
+      "Route both to Synth Bus, apply Utility Stereo Width 120\u2013140% with Bass Mono On at 120 Hz",
+      "Add Chorus-Ensemble on the Space Reverb return, send Supersaw Pad only",
+      "Bus drums separately, set Drum Buss Boom at 96 Hz",
+      "Master chain: EQ Eight HP at 30 Hz \u2192 Glue Compressor \u2192 Limiter at -0.3 dBTP True Peak On"
+    ],
+    "workflowSteps": [
+      {
+        "step": 1,
+        "trackContext": "Acid Bass",
+        "device": "Analog",
+        "parameter": "Osc 1 Shape",
+        "value": "Square",
+        "instruction": "Set Osc 1 to Square waveform to match the measured odd-to-even harmonic ratio of 3.75, which confirms dominant odd-harmonic (square/pulse) synthesis character in the acid bass layer.",
+        "measurementJustification": "synthesisCharacter.oddToEvenRatio 3.75 is well above 2.0 \u2014 classic square-wave territory; the 303 oscillator is canonically a square wave and this measurement confirms it.",
+        "phase1Fields": [
+          "synthesisCharacter.oddToEvenRatio",
+          "acidDetail.isAcid"
+        ]
+      },
+      {
+        "step": 2,
+        "trackContext": "Acid Bass",
+        "device": "Auto Filter",
+        "parameter": "Resonance",
+        "value": "95\u2013100%",
+        "instruction": "Set Resonance to maximum to recreate the measured resonanceLevel of 1.0 \u2014 self-oscillation at the filter cutoff is what produces the characteristic 303 squelch that the acid detection confirmed.",
+        "measurementJustification": "acidDetail.resonanceLevel is exactly 1.0 \u2014 the analyzer's maximum value \u2014 confirming a fully self-oscillating filter state that requires maximum Resonance to recreate.",
+        "phase1Fields": [
+          "acidDetail.resonanceLevel",
+          "acidDetail.confidence"
+        ]
+      },
+      {
+        "step": 3,
+        "trackContext": "Acid Bass",
+        "device": "Auto Filter",
+        "parameter": "LFO Rate",
+        "value": "36 Hz",
+        "instruction": "Set the Auto Filter LFO Rate to 36 Hz (unsynced, free-running) to match the measured centroid oscillation frequency; this sub-audio modulation rate creates the fast pitch-like filter movement characteristic of this track.",
+        "measurementJustification": "acidDetail.centroidOscillationHz is 36 Hz \u2014 a precise sub-audio oscillation rate that distinguishes this acid line from slow-filter or tempo-synced approaches.",
+        "phase1Fields": [
+          "acidDetail.centroidOscillationHz",
+          "acidDetail.bassRhythmDensity"
+        ]
+      },
+      {
+        "step": 4,
+        "trackContext": "Supersaw Pad",
+        "device": "Wavetable",
+        "parameter": "Unison Amount",
+        "value": "28\u201330 cents, Voices 7",
+        "instruction": "Configure Wavetable Unison with 7 voices and set Unison Amount to 28\u201330 cents to match the measured avgDetuneCents of 28.5 across 7 voices \u2014 this is the exact detuning spread that produces the measured spectralComplexity of 7.2.",
+        "measurementJustification": "supersawDetail.avgDetuneCents 28.5 and supersawDetail.voiceCount 7 are directly actionable Wavetable parameters \u2014 this is the most measurement-precise step in the rebuild.",
+        "phase1Fields": [
+          "supersawDetail.avgDetuneCents",
+          "supersawDetail.voiceCount",
+          "supersawDetail.spectralComplexity"
+        ]
+      },
+      {
+        "step": 5,
+        "trackContext": "Synth Bus",
+        "device": "Utility",
+        "parameter": "Stereo Width",
+        "value": "120\u2013140%",
+        "instruction": "After confirming the Acid Bass and Supersaw are locked in mono (matching the pure-mono source), expand the Synth Bus via Utility Stereo Width to 120\u2013140% \u2014 this is the deliberate departure from the mono source that gives the rebuild a modern stereo presentation while keeping kick and sub in mono.",
+        "measurementJustification": "stereoDetail.stereoWidth 0.0 and stereoDetail.stereoCorrelation 1.0 confirm the source is pure mono; expanding at the synth bus rather than globally protects the kick's mono punch while letting the 7-voice supersaw breathe.",
+        "phase1Fields": [
+          "stereoDetail.stereoWidth",
+          "stereoDetail.stereoCorrelation",
+          "supersawDetail.voiceCount"
+        ]
+      },
+      {
+        "step": 6,
+        "trackContext": "Master",
+        "device": "Limiter",
+        "parameter": "Ceiling",
+        "value": "-0.3 dBTP; True Peak On",
+        "instruction": "Place the Limiter last in the master chain with True Peak enabled and Ceiling at -0.3 dBTP to correct the measured 1.0 dBTP inter-sample over \u2014 this is a mandatory correction, not a stylistic loudness move.",
+        "measurementJustification": "truePeak 1.0 dBTP is a confirmed inter-sample over (0.0 dBTP is full scale, so 1.0 is an over); True Peak mode catches the inter-sample reconstruction peaks that a standard sample-peak limiter misses.",
+        "phase1Fields": [
+          "truePeak",
+          "saturationDetail.clippedSampleCount",
+          "plr"
+        ]
+      }
+    ]
+  },
+  "confidenceNotes": [
+    {
+      "field": "BPM",
+      "value": "128.1 BPM (stabilizes to 129.2 after beat 3)",
+      "reason": "bpmConfidence is 3.75 (above 0.4 threshold \u2014 high confidence). The tempoCurve shows a brief ramp from 139.7 BPM at t=0.55 s down to stable 129.2 BPM by t=1.4 s; this is likely a warp artifact at the loop head. No double/half-time correction was applied. The rebuild uses 128.1 BPM as the session tempo (global measurement) and notes the stable internal grid of 129.2 BPM after beat 2."
+    },
+    {
+      "field": "Bar-1 / Downbeat Phase",
+      "value": "Downbeat confidence: 0.0028 (near zero)",
+      "reason": "rhythmDetail.downbeatConfidence is 0.0028 \u2014 effectively zero, consistent with a four-on-the-floor or dense-kick pattern where every beat carries similar kick energy, making beat-1 phase ambiguous. The beat grid positions are reliable; only the bar-1 assignment is uncertain. All bar-aligned arrangement moves should be verified by ear before committing in the session."
+    },
+    {
+      "field": "Time Signature",
+      "value": "4/4 (assumed)",
+      "reason": "timeSignatureConfidence is 0.0 and timeSignatureSource is onset_autocorrelation_low_margin \u2014 the meter could not be determined from the signal with any confidence. The patternBeatsPerBar of 4 and the 32-beat kick accent pattern are consistent with 4/4, but this is an inference, not a measurement. Use 4/4 as the working assumption."
+    },
+    {
+      "field": "Key / Harmonic Content",
+      "value": "A Minor (keyConfidence 0.67) \u2014 moderate confidence only",
+      "reason": "keyConfidence is 0.67, just below the 0.70 threshold for committed key moves. The chordTimelineAgreement is false \u2014 the Viterbi chord timeline reads Am for the full clip (confidence 0.538) while the chord sequence engine detects F, G, Am, Em movement. The acid filter sweep and supersaw harmonics make reliable harmonic analysis difficult. Treat A Minor as the best available reading; use sus2 or open voicings rather than hard-committing to diatonic chord shapes."
+    },
+    {
+      "field": "Melody / Pitch Transcription",
+      "value": "54 notes detected but pitchConfidence 0.0655 \u2014 unreliable",
+      "reason": "melodyDetail.pitchConfidence is 0.0655, far below the 0.15 reliability threshold. The reported note cluster around MIDI 47/48/45 (B3/C4/A3) almost certainly reflects the acid filter sweep harmonic motion rather than a discrete melodic layer. No OPTIONAL_PITCH_NOTE_TRANSLATION_RESULT_JSON was provided (null). These notes should be treated as experimental reference scaffolding only, not reconstructed as a melody."
+    },
+    {
+      "field": "Genre Classification",
+      "value": "genreDetail.genre 'pop' at confidence 0.40 \u2014 not credible; acid-techno reading preferred",
+      "reason": "The top genre score is 'pop' (0.80) but genreDetail.confidence is only 0.40 (low). The third-ranked genre is 'acid-techno' (score 0.758) and fourth is 'dub-techno' (0.737), which align far better with the measured acidDetail, supersawDetail, and kick character. The rebuild plan uses acid-techno as the working genre context \u2014 the classifier likely failed on this track due to the short 15-second duration."
+    },
+    {
+      "field": "Sidechain Pumping",
+      "value": "No sidechain routing recommended \u2014 pumpingConfidence 0.128, pumpingRate null",
+      "reason": "sidechainDetail.pumpingConfidence is 0.128 (well below the 0.20 minimum threshold for recommending a sidechain card). pumpingRate is null. No sidechain compressor routing is warranted; any apparent volume modulation in the source is not detectable as a pumping pattern."
+    },
+    {
+      "field": "Acid Filter Centroid Oscillation Accuracy",
+      "value": "centroidOscillationHz 36 Hz \u2014 treat as approximate",
+      "reason": "The centroidOscillationHz value of 36 Hz is a spectral centroid oscillation estimate, not a direct LFO rate measurement from the synthesis engine. Use it as a starting-point LFO rate (\u00b15 Hz) and fine-tune by ear when matching the acid sweep character in the rebuild."
+    }
+  ],
+  "abletonRecommendations": [
+    {
+      "device": "Auto Filter",
+      "deviceFamily": "NATIVE",
+      "trackContext": "Acid Bass",
+      "workflowStage": "SOUND_DESIGN",
+      "category": "EFFECTS",
+      "parameter": "Resonance",
+      "value": "95\u2013100%; Filter Type Lowpass; Drive 20\u201330%",
+      "reason": "The measured acidDetail.resonanceLevel is exactly 1.0 \u2014 the maximum measured value \u2014 confirming a fully self-oscillating 303-style filter that requires near-maximum Auto Filter Resonance to recreate the squelch character confirmed at confidence 0.69.",
+      "advancedTip": "Add Drive in the Auto Filter to add grit that matches the measured THD from the co-incident distorted kick character bleeding into the bus; keep Envelope Amount at 0 and rely solely on the LFO for the oscillation measured at 36 Hz.",
+      "phase1Fields": [
+        "acidDetail.resonanceLevel",
+        "acidDetail.confidence",
+        "acidDetail.isAcid"
+      ]
+    },
+    {
+      "device": "Auto Filter",
+      "deviceFamily": "NATIVE",
+      "trackContext": "Acid Bass",
+      "workflowStage": "SOUND_DESIGN",
+      "category": "EFFECTS",
+      "parameter": "LFO Rate",
+      "value": "36 Hz (free-running, unsynced); LFO Waveform Sine; LFO Amount 70%",
+      "reason": "The acidDetail.centroidOscillationHz measures 36 Hz \u2014 a precise sub-audio rate that defines this track's filter animation speed; syncing to tempo would produce a different, slower sweep inconsistent with the measured 36 Hz oscillation.",
+      "advancedTip": "At 128.1 BPM a quarter note is 468 ms (60000/128.1), so 36 Hz is approximately 11 LFO cycles per quarter note \u2014 far faster than any tempo-synced division. Confirm the free-running LFO is not quantized to the grid when setting the rate.",
+      "phase1Fields": [
+        "acidDetail.centroidOscillationHz",
+        "acidDetail.bassRhythmDensity",
+        "bpm"
+      ]
+    },
+    {
+      "device": "Wavetable",
+      "deviceFamily": "NATIVE",
+      "trackContext": "Supersaw Pad",
+      "workflowStage": "SOUND_DESIGN",
+      "category": "SYNTHESIS",
+      "parameter": "Unison Amount",
+      "value": "28\u201330 cents; Voices 7; Unison Mode Classic",
+      "reason": "supersawDetail.avgDetuneCents is exactly 28.5 cents across 7 measured voices \u2014 this is a directly actionable Wavetable Unison configuration that produces the measured spectralComplexity of 7.2.",
+      "advancedTip": "Use a sawtooth wavetable as the primary oscillator shape to complement the measured square-wave acid bass (synthesisCharacter.oddToEvenRatio 3.75 dominates the bass; the supersaw's even harmonics fill the mid-range gap). Set a gentle high-pass on Oscillator 2 to avoid stacking low-end over the 113 Hz bass fundamental.",
+      "phase1Fields": [
+        "supersawDetail.avgDetuneCents",
+        "supersawDetail.voiceCount",
+        "supersawDetail.spectralComplexity"
+      ]
+    },
+    {
+      "device": "Saturator",
+      "deviceFamily": "NATIVE",
+      "trackContext": "Kick",
+      "workflowStage": "SOUND_DESIGN",
+      "category": "EFFECTS",
+      "parameter": "Drive",
+      "value": "40\u201355%; Type Soft Sine",
+      "reason": "kickDetail.isDistorted is true and thd measures 0.35 \u2014 audible harmonic distortion is present and must be recreated with a post-oscillator Saturator rather than leaving the kick clean; kickDetail.harmonicRatio of 0.84 indicates the fundamental is still present beneath the THD, so Soft Sine preserves pitch while adding harmonics.",
+      "advancedTip": "Do not stack Drum Buss Crunch on top of this Saturator: the harmonicRatio of 0.84 is above 0.5, which means the kick is already clean-dominant \u2014 adding Drum Buss Crunch would introduce unwanted grit beyond the measured THD character.",
+      "phase1Fields": [
+        "kickDetail.isDistorted",
+        "kickDetail.thd",
+        "kickDetail.harmonicRatio"
+      ]
+    },
+    {
+      "device": "Drum Buss",
+      "deviceFamily": "NATIVE",
+      "trackContext": "Drum Bus",
+      "workflowStage": "MIX",
+      "category": "DYNAMICS",
+      "parameter": "Boom Frequency",
+      "value": "96 Hz (matched to measured kickDetail.fundamentalHz)",
+      "reason": "The kick fundamental is measured at 96 Hz \u2014 above the standard 909 60\u201380 Hz range \u2014 so setting Drum Buss Boom Frequency to 96 Hz reinforces the specific measured pitch of this kick rather than applying a generic low-end boost.",
+      "advancedTip": "Keep Boom amount modest (30\u201340%) since the kick already measures isDistorted true; excessive Boom at 96 Hz will compound the THD 0.35 distortion and push the Drum Bus toward the inter-sample overs already present at the master truePeak 1.0 dBTP.",
+      "phase1Fields": [
+        "kickDetail.fundamentalHz",
+        "kickDetail.isDistorted",
+        "truePeak"
+      ]
+    },
+    {
+      "device": "Compressor",
+      "deviceFamily": "NATIVE",
+      "trackContext": "Acid Bass",
+      "workflowStage": "MIX",
+      "category": "DYNAMICS",
+      "parameter": "Attack",
+      "value": "2\u20134 ms Attack, Release 120\u2013150 ms, Ratio 4:1, Threshold -14 dB",
+      "reason": "bassDetail.type is punchy with averageDecayMs 171 ms \u2014 punchy basses benefit from a fast-attack Compressor to catch transients; the 171 ms decay maps to a Release of approximately 120\u2013150 ms so the compressor recovers before the next note onset at bassDetail.bassRhythmDensity 3.1 onsets/second.",
+      "advancedTip": "At 128.1 BPM a 16th note is 117 ms (quarter 468 ms / 4); a Release of 150 ms returns gain before the next 16th-note onset. Confirm the compressor is not over-pumping by watching the gain-reduction meter \u2014 target 2\u20134 dB of GR maximum to tighten without squashing the acid filter movement.",
+      "phase1Fields": [
+        "bassDetail.averageDecayMs",
+        "bassDetail.type",
+        "acidDetail.bassRhythmDensity"
+      ]
+    },
+    {
+      "device": "Utility",
+      "deviceFamily": "NATIVE",
+      "trackContext": "Synth Bus",
+      "workflowStage": "MIX",
+      "category": "STEREO",
+      "parameter": "Stereo Width",
+      "value": "120\u2013140%",
+      "reason": "The full mix stereoWidth is exactly 0.0 with stereoCorrelation 1.0 \u2014 the source is pure mono; a 7-voice supersaw at 28.5-cent detune naturally produces stereo spread when rendered by Wavetable, so expanding the Synth Bus to 120\u2013140% recovers the stereo character that was collapsed in the original mastered file.",
+      "advancedTip": "Apply Utility width only on the Synth Bus, not globally, so the kick and bass remain mono-locked and the expansion does not introduce phase issues at low frequencies. Cross-check in mono after widening by temporarily setting Stereo Width back to 0% \u2014 the sum should not lose perceived loudness by more than 0.5 dB.",
+      "phase1Fields": [
+        "stereoDetail.stereoWidth",
+        "stereoDetail.stereoCorrelation",
+        "supersawDetail.voiceCount"
+      ]
+    },
+    {
+      "device": "Scale",
+      "deviceFamily": "NATIVE",
+      "trackContext": "Supersaw Pad",
+      "workflowStage": "ARRANGEMENT",
+      "category": "MIDI",
+      "parameter": "Scale Name",
+      "value": "Natural Minor; Base A (A Minor per measured key)",
+      "reason": "keyConfidence is 0.67 \u2014 just below the 0.70 commit threshold, but the key A Minor is consistently reported across both the global key measurement and the per-segment key; use Scale to loosely constrain the MIDI notes with Use Current Scale as a safety net rather than hard-locking.",
+      "advancedTip": "Because keyConfidence is 0.67 (not above 0.70), enable Use Current Scale rather than hard-coding Scale Name and Base \u2014 this lets you override the key per-clip if the chord timeline reveals an F Major or G Major movement without touching the Scale device. The chordTimelineAgreement is false, so stay flexible.",
+      "phase1Fields": [
+        "key",
+        "keyConfidence",
+        "chordDetail.chordTimelineAgreement"
+      ]
+    },
+    {
+      "device": "EQ Eight",
+      "deviceFamily": "NATIVE",
+      "trackContext": "Supersaw Pad",
+      "workflowStage": "MIX",
+      "category": "EQ",
+      "parameter": "Band 1 Filter Type",
+      "value": "High-pass at 120 Hz, Q 0.7 \u2014 roll off below bass fundamental to prevent masking",
+      "reason": "spectralBalance.lowBass is -8.0 dB (the dominant band alongside subBass at -11.1 dB) and bassDetail.fundamentalHz is 113 Hz \u2014 without a high-pass on the supersaw, both elements compete in the same 100\u2013150 Hz register, blurring the punch of the measured punchy bass type.",
+      "advancedTip": "Set the high-pass at 120 Hz rather than 100 Hz because the bass fundamental measured at 113 Hz gives a 7 Hz safety margin; lowering to 100 Hz would cut into the bass's own harmonic overtones if the two tracks are not perfectly gain-staged.",
+      "phase1Fields": [
+        "spectralBalance.lowBass",
+        "bassDetail.fundamentalHz",
+        "supersawDetail.isSupersaw"
+      ]
+    },
+    {
+      "device": "Hybrid Reverb",
+      "deviceFamily": "NATIVE",
+      "trackContext": "Return:Space Reverb",
+      "workflowStage": "MIX",
+      "category": "EFFECTS",
+      "parameter": "Predelay",
+      "value": "0 ms; Decay 0.8\u20131.2 s; High Cut 4 kHz",
+      "reason": "reverbDetail.isWet is false and reverbDetail.preDelayMs is null \u2014 the source is completely dry, so Predelay on the return should be 0 ms to avoid an artificial pre-echo that would not match the dry source character. A short Decay of 0.8\u20131.2 s adds just enough space without clouding the dense mid-range from the spectralBalance.",
+      "advancedTip": "Since the spectralBalance shows upperMids at -32.1 dB and highs at -29.4 dB are already suppressed, set High Cut to 4 kHz on the Hybrid Reverb to keep the reverb tail from adding artificial brightness above the naturally dark spectral centroid mean of 1143.7 Hz.",
+      "phase1Fields": [
+        "reverbDetail.isWet",
+        "reverbDetail.preDelayMs",
+        "spectralDetail.spectralCentroidMean"
+      ]
+    },
+    {
+      "device": "Limiter",
+      "deviceFamily": "NATIVE",
+      "trackContext": "Master",
+      "workflowStage": "MASTER",
+      "category": "MASTERING",
+      "parameter": "Ceiling",
+      "value": "-0.3 dBTP; True Peak On; Release 150 ms",
+      "reason": "The measured truePeak is 1.0 dBTP \u2014 a confirmed inter-sample over (0.0 dBTP is full scale, so 1.0 is 1 dB above) that must be corrected before export; a Limiter with True Peak enabled and Ceiling -0.3 dBTP catches inter-sample reconstruction peaks that a standard sample-peak ceiling misses.",
+      "advancedTip": "Enable True Peak (not just sample-peak limiting) because the inter-sample over at 1.0 dBTP was measured in the reconstructed waveform, not at a sample boundary \u2014 standard Ceiling limiting would not catch it. Set Release to 150 ms to match the PLR of 10.2 LU (moderate mastered range); slower release avoids audible pumping given the already-limited dynamic range (LRA 0.1 LU).",
+      "phase1Fields": [
+        "truePeak",
+        "plr",
+        "lufsIntegrated"
+      ]
+    },
+    {
+      "device": "Chorus-Ensemble",
+      "deviceFamily": "NATIVE",
+      "trackContext": "Return:Stereo Width",
+      "workflowStage": "MIX",
+      "category": "EFFECTS",
+      "parameter": "Mode",
+      "value": "Ensemble (maximum stereo spread mode); Rate 0.8 Hz; Amount 40%; Dry/Wet 100%",
+      "reason": "The source stereoWidth is 0.0 and the supersaw measures 7 voices at 28.5-cent detune \u2014 a Chorus-Ensemble on the dedicated Stereo Width return creates the natural pitch-spread stereo image that a real 7-voice detuned supersaw would produce, without touching the mono kick bus.",
+      "advancedTip": "Keep Rate below 1 Hz (try 0.8 Hz) so the chorus modulation rate does not audibly clash with the 36 Hz acid LFO from the Acid Bass; at higher rates the two modulation sources can create beating artifacts in the 200\u2013400 Hz shared register.",
+      "phase1Fields": [
+        "stereoDetail.stereoWidth",
+        "supersawDetail.voiceCount",
+        "acidDetail.centroidOscillationHz"
+      ]
+    }
+  ],
+  "audioObservations": {
+    "soundDesignFingerprint": "A dense, pure-mono acid-techno loop built from three interlocking synthesis layers: a distorted, high-pitched synthesized kick with a short punch and audible harmonic crunch, a maximum-resonance acid bass with fast sub-audio filter oscillation, and a thick 7-voice supersaw chord pad filling the mid-register. The overall timbre is dark and mid-heavy with almost no high-frequency content above 5 kHz, consistent with the spectral centroid mean of 1143.7 Hz and the suppressed upperMids and highs in the spectral balance. The complete absence of stereo image gives the loop a focused, tunneling mono presence.",
+    "elementCharacter": [
+      {
+        "element": "Kick",
+        "description": "Short, punchy transient with a perceptible mid-bass thump rather than a deep sub kick \u2014 consistent with the 96 Hz fundamental. The distortion is audible but not harsh: it adds a gritty click at the transient apex before the tone body. Tail is brief (under 100 ms perceptually), reinforcing the punchy classification."
+      },
+      {
+        "element": "Acid Bass",
+        "description": "The dominant textural element: a thick, monophonic bass line with a continuously self-oscillating filter creating a fast, vocal-like squelch. The resonance is so high that the filter almost contributes its own pitch \u2014 a thin, whistling tone rides above the bass body. The filter sweep is fast and rhythmic, feeling almost tremolo-like at the measured 36 Hz modulation rate, creating a tonal shimmer rather than a slow cinematic sweep."
+      },
+      {
+        "element": "Supersaw Pad",
+        "description": "A sustained, harmonically dense chord layer occupying the 200\u20132000 Hz range. The seven voices are perceptibly spread in pitch \u2014 you can hear the beating between detuned oscillators as a slow chorus pulse underlying the static chord. The sound is warm and slightly nasal, lacking high-frequency air, which matches the dark spectral balance (highs at -29.4 dB average). No modulation or movement beyond the detuning beat."
+      },
+      {
+        "element": "Closed Hi-Hat / Percussion",
+        "description": "Very short closed hat events (meanDecaySeconds 0.048 s \u2014 approximately 48 ms) punctuate the groove with a dry, snappy character. The high snap ratio (0.803) means the transient dominates over the body \u2014 these hats sound more like a metallic click than a traditional open hat swish. They sit high in the mix at 7860 Hz center but are quiet relative to the bass-heavy balance."
+      }
+    ],
+    "productionSignatures": [
+      "Pure mono across all frequency bands \u2014 every element is center-panned with no stereo information at any frequency",
+      "Extreme brick-wall limiting with 0.1 LU dynamic range \u2014 consistent with a DJ-tool or stem master optimized for peak loudness rather than dynamics",
+      "Fast sub-audio filter modulation (36 Hz) on the acid bass creating a tremolo-like tonal animation that is characteristic of TB-303 style overdrive at high resonance",
+      "Dark spectral profile with deliberate suppression above 5 kHz \u2014 the brilliance band averages -21.8 dB, giving the track a vintage, analog-filtered quality",
+      "Repeating 2-bar renewal pattern in the novelty curve suggesting a looped 8-bar phrase structure designed for clip-launch use"
+    ],
+    "mixContext": "The mix is extremely flat in dynamics (LRA 0.1 LU) and mono across the full spectrum, suggesting this is a finished loop master or DJ tool rather than a stem for further arrangement. The low-end is dense (subBass -11.1 dB, lowBass -8.0 dB) relative to an almost silent upper register, making the mix dark and punchy. The lack of reverb (isWet false) keeps every element dry and immediate. The measured inter-sample over at 1.0 dBTP suggests the original was run hot through a hard clipper before export."
+  },
+  "styleProfile": {
+    "genre": "Techno",
+    "subGenre": "Acid Techno",
+    "mood": [
+      "Dark",
+      "Driving",
+      "Hypnotic",
+      "Distorted",
+      "Relentless"
+    ],
+    "instruments": [
+      "Synthesized Kick (96 Hz distorted)",
+      "Acid Bass (303-style, maximum resonance)",
+      "Supersaw Pad (7-voice, 28.5-cent detune)",
+      "Closed Hi-Hat"
+    ],
+    "productionTechniques": [
+      "Brick-wall limiting to -9.2 LUFS",
+      "Maximum-resonance acid filter sweep at 36 Hz modulation",
+      "7-voice supersaw stacking",
+      "Kick distortion / saturation (THD 0.35)",
+      "Pure mono mix (stereoWidth 0.0)"
+    ],
+    "description": "Hard-driving acid techno loop at 128.1 BPM in A Minor. Characterized by a distorted high-tuned kick at 96 Hz, a self-oscillating 303-style acid bass at maximum resonance, and a thick 7-voice supersaw pad. The mix is pure mono, extremely limited, and dark-spectral \u2014 a DJ tool designed for maximum punch and loop compatibility.",
+    "generationPrompt": "Acid techno loop, 128 BPM, A Minor, distorted high-tuned kick, TB-303 acid bass at maximum resonance with fast sub-audio filter sweep, 7-voice supersaw pad, dark mix, pure mono, heavily limited, no reverb, industrial-hypnotic feel",
+    "authoritativeMeasurements": {
+      "bpm": 128.1,
+      "key": "A Minor",
+      "timeSignature": "4/4"
+    }
+  },
+  "recommendations": {
+    "version": "recommendations.v1",
+    "recommendations": [
+      {
+        "device": "Auto Filter",
+        "parameter": "Resonance",
+        "value": 95.0,
+        "unit": null,
+        "range": null,
+        "cited_measurements": [
+          "acidDetail.resonanceLevel",
+          "acidDetail.confidence",
+          "acidDetail.isAcid"
+        ]
+      },
+      {
+        "device": "Auto Filter",
+        "parameter": "LFO Rate",
+        "value": 36.0,
+        "unit": "Hz",
+        "range": [
+          28.8,
+          43.2
+        ],
+        "cited_measurements": [
+          "acidDetail.centroidOscillationHz",
+          "acidDetail.bassRhythmDensity",
+          "bpm"
+        ]
+      },
+      {
+        "device": "Wavetable",
+        "parameter": "Unison Amount",
+        "value": 28.0,
+        "unit": null,
+        "range": null,
+        "cited_measurements": [
+          "supersawDetail.avgDetuneCents",
+          "supersawDetail.voiceCount",
+          "supersawDetail.spectralComplexity"
+        ]
+      },
+      {
+        "device": "Saturator",
+        "parameter": "Drive",
+        "value": 40.0,
+        "unit": null,
+        "range": null,
+        "cited_measurements": [
+          "kickDetail.isDistorted",
+          "kickDetail.thd",
+          "kickDetail.harmonicRatio"
+        ]
+      },
+      {
+        "device": "Drum Buss",
+        "parameter": "Boom Frequency",
+        "value": 96.0,
+        "unit": "Hz",
+        "range": [
+          76.8,
+          115.2
+        ],
+        "cited_measurements": [
+          "kickDetail.fundamentalHz",
+          "kickDetail.isDistorted",
+          "truePeak"
+        ]
+      },
+      {
+        "device": "Compressor",
+        "parameter": "Attack",
+        "value": 4.0,
+        "unit": "ratio",
+        "range": [
+          3.0,
+          5.0
+        ],
+        "cited_measurements": [
+          "bassDetail.averageDecayMs",
+          "bassDetail.type",
+          "acidDetail.bassRhythmDensity"
+        ]
+      },
+      {
+        "device": "Utility",
+        "parameter": "Stereo Width",
+        "value": 120.0,
+        "unit": null,
+        "range": null,
+        "cited_measurements": [
+          "stereoDetail.stereoWidth",
+          "stereoDetail.stereoCorrelation",
+          "supersawDetail.voiceCount"
+        ]
+      },
+      {
+        "device": "Scale",
+        "parameter": "Scale Name",
+        "value": "Natural Minor; Base A (A Minor per measured key)",
+        "unit": null,
+        "range": null,
+        "cited_measurements": [
+          "key",
+          "keyConfidence",
+          "chordDetail.chordTimelineAgreement"
+        ]
+      },
+      {
+        "device": "EQ Eight",
+        "parameter": "Band 1 Filter Type",
+        "value": 120.0,
+        "unit": "Hz",
+        "range": [
+          96.0,
+          144.0
+        ],
+        "cited_measurements": [
+          "spectralBalance.lowBass",
+          "bassDetail.fundamentalHz",
+          "supersawDetail.isSupersaw"
+        ]
+      },
+      {
+        "device": "Hybrid Reverb",
+        "parameter": "Predelay",
+        "value": 0.0,
+        "unit": "ms",
+        "range": [
+          0.0,
+          0.0
+        ],
+        "cited_measurements": [
+          "reverbDetail.isWet",
+          "reverbDetail.preDelayMs",
+          "spectralDetail.spectralCentroidMean"
+        ]
+      },
+      {
+        "device": "Limiter",
+        "parameter": "Ceiling",
+        "value": -0.3,
+        "unit": "dB",
+        "range": [
+          -3.3,
+          2.7
+        ],
+        "cited_measurements": [
+          "truePeak",
+          "plr",
+          "lufsIntegrated"
+        ]
+      },
+      {
+        "device": "Chorus-Ensemble",
+        "parameter": "Mode",
+        "value": 0.8,
+        "unit": "Hz",
+        "range": [
+          0.64,
+          0.96
+        ],
+        "cited_measurements": [
+          "stereoDetail.stereoWidth",
+          "supersawDetail.voiceCount",
+          "acidDetail.centroidOscillationHz"
+        ]
+      },
+      {
+        "device": "Operator",
+        "parameter": "Oscillator A Coarse",
+        "value": 2.0,
+        "unit": null,
+        "range": null,
+        "cited_measurements": [
+          "kickDetail.fundamentalHz",
+          "kickDetail.kickCount"
+        ]
+      },
+      {
+        "device": "Saturator",
+        "parameter": "Drive",
+        "value": 40.0,
+        "unit": null,
+        "range": null,
+        "cited_measurements": [
+          "kickDetail.isDistorted",
+          "kickDetail.thd",
+          "kickDetail.harmonicRatio"
+        ]
+      },
+      {
+        "device": "Analog",
+        "parameter": "Osc 1 Shape",
+        "value": 3.75,
+        "unit": null,
+        "range": null,
+        "cited_measurements": [
+          "synthesisCharacter.oddToEvenRatio",
+          "acidDetail.isAcid"
+        ]
+      },
+      {
+        "device": "Auto Filter",
+        "parameter": "Resonance",
+        "value": 95.0,
+        "unit": null,
+        "range": null,
+        "cited_measurements": [
+          "acidDetail.resonanceLevel",
+          "acidDetail.confidence",
+          "acidDetail.centroidOscillationHz"
+        ]
+      },
+      {
+        "device": "Auto Filter",
+        "parameter": "LFO Rate",
+        "value": 36.0,
+        "unit": "Hz",
+        "range": [
+          28.8,
+          43.2
+        ],
+        "cited_measurements": [
+          "acidDetail.centroidOscillationHz",
+          "acidDetail.isAcid",
+          "acidDetail.bassRhythmDensity"
+        ]
+      },
+      {
+        "device": "Wavetable",
+        "parameter": "Unison Amount",
+        "value": 28.0,
+        "unit": null,
+        "range": null,
+        "cited_measurements": [
+          "supersawDetail.voiceCount",
+          "supersawDetail.avgDetuneCents",
+          "supersawDetail.isSupersaw"
+        ]
+      },
+      {
+        "device": "EQ Eight",
+        "parameter": "Band 1 Filter Type",
+        "value": 120.0,
+        "unit": "Hz",
+        "range": [
+          96.0,
+          144.0
+        ],
+        "cited_measurements": [
+          "spectralBalance.lowBass",
+          "bassDetail.fundamentalHz",
+          "supersawDetail.isSupersaw"
+        ]
+      },
+      {
+        "device": "Drum Buss",
+        "parameter": "Boom Frequency",
+        "value": 96.0,
+        "unit": "Hz",
+        "range": [
+          76.8,
+          115.2
+        ],
+        "cited_measurements": [
+          "kickDetail.fundamentalHz",
+          "kickDetail.harmonicRatio"
+        ]
+      },
+      {
+        "device": "Utility",
+        "parameter": "Stereo Width",
+        "value": 120.0,
+        "unit": null,
+        "range": null,
+        "cited_measurements": [
+          "stereoDetail.stereoWidth",
+          "stereoDetail.stereoCorrelation",
+          "supersawDetail.voiceCount"
+        ]
+      },
+      {
+        "device": "Utility",
+        "parameter": "Bass Mono",
+        "value": 120.0,
+        "unit": "Hz",
+        "range": [
+          96.0,
+          144.0
+        ],
+        "cited_measurements": [
+          "stereoDetail.subBassMono",
+          "stereoDetail.subBassCorrelation",
+          "stereoDetail.bandCorrelations.subBass"
+        ]
+      },
+      {
+        "device": "EQ Eight",
+        "parameter": "Band 1 Gain",
+        "value": 30.0,
+        "unit": "Hz",
+        "range": [
+          24.0,
+          36.0
+        ],
+        "cited_measurements": [
+          "spectralBalance.subBass",
+          "truePeak",
+          "lufsIntegrated"
+        ]
+      },
+      {
+        "device": "Glue Compressor",
+        "parameter": "Threshold",
+        "value": 2.0,
+        "unit": "ratio",
+        "range": [
+          1.0,
+          3.0
+        ],
+        "cited_measurements": [
+          "plr",
+          "lufsIntegrated",
+          "crestFactor"
+        ]
+      },
+      {
+        "device": "Limiter",
+        "parameter": "Ceiling",
+        "value": -0.3,
+        "unit": "dB",
+        "range": [
+          -3.3,
+          2.7
+        ],
+        "cited_measurements": [
+          "truePeak",
+          "saturationDetail.clippedSampleCount",
+          "plr"
+        ]
+      },
+      {
+        "device": "Analog",
+        "parameter": "Osc 1 Shape",
+        "value": "Square",
+        "unit": null,
+        "range": null,
+        "cited_measurements": [
+          "synthesisCharacter.oddToEvenRatio",
+          "acidDetail.isAcid"
+        ]
+      },
+      {
+        "device": "Auto Filter",
+        "parameter": "Resonance",
+        "value": 95.0,
+        "unit": null,
+        "range": null,
+        "cited_measurements": [
+          "acidDetail.resonanceLevel",
+          "acidDetail.confidence"
+        ]
+      },
+      {
+        "device": "Auto Filter",
+        "parameter": "LFO Rate",
+        "value": 36.0,
+        "unit": "Hz",
+        "range": [
+          28.8,
+          43.2
+        ],
+        "cited_measurements": [
+          "acidDetail.centroidOscillationHz",
+          "acidDetail.bassRhythmDensity"
+        ]
+      },
+      {
+        "device": "Wavetable",
+        "parameter": "Unison Amount",
+        "value": 28.0,
+        "unit": null,
+        "range": null,
+        "cited_measurements": [
+          "supersawDetail.avgDetuneCents",
+          "supersawDetail.voiceCount",
+          "supersawDetail.spectralComplexity"
+        ]
+      },
+      {
+        "device": "Utility",
+        "parameter": "Stereo Width",
+        "value": 120.0,
+        "unit": null,
+        "range": null,
+        "cited_measurements": [
+          "stereoDetail.stereoWidth",
+          "stereoDetail.stereoCorrelation",
+          "supersawDetail.voiceCount"
+        ]
+      },
+      {
+        "device": "Limiter",
+        "parameter": "Ceiling",
+        "value": -0.3,
+        "unit": "dB",
+        "range": [
+          -3.3,
+          2.7
+        ],
+        "cited_measurements": [
+          "truePeak",
+          "saturationDetail.clippedSampleCount",
+          "plr"
+        ]
+      }
+    ]
+  }
+}
