@@ -576,6 +576,7 @@ export function parsePhase1Result(value: unknown): Phase1Result {
     expectNumber(spectralBalance, "mids", "spectralBalance.mids");
 
   return {
+    phase1Version: toOptionalStringOrNull(phase1.phase1Version),
     bpm: expectNumber(phase1, "bpm"),
     bpmConfidence: expectNumber(phase1, "bpmConfidence"),
     bpmPercival: toNumber(phase1.bpmPercival),

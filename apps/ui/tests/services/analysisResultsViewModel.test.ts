@@ -823,4 +823,129 @@ describe('analysisResultsViewModel helpers', () => {
     expect(masterCeilingDb(0)).toBeCloseTo(-0.3, 5);
     expect(masterCeilingDb(null)).toBeCloseTo(-0.3, 5);
   });
+
+  // recommendations.v1 wiring (ADR 0003): cards backed by the validated
+  // envelope expose their contract entries; cards the projection refused
+  // (uncited) and synthetic frontend-derived cards expose none.
+  it('buildMixChainGroups attaches contract entries to the matching card only', () => {
+    const groups = buildMixChainGroups(
+      measurement,
+      [
+        {
+          order: 1,
+          device: 'Drum Buss',
+          parameter: 'Drive',
+          value: '6 dB',
+          reason: 'Adds drum bite and transient character.',
+          phase1Fields: ['spectralBalance.lowBass'],
+        },
+        {
+          order: 2,
+          device: 'EQ Eight',
+          parameter: 'Low Cut',
+          value: '30 Hz',
+          reason: 'Cleans up sub energy in bass layers.',
+          // No phase1Fields — the backend projection excludes uncited cards,
+          // so this card has no envelope entry to pair with.
+        },
+      ],
+      undefined,
+      {
+        version: 'recommendations.v1',
+        recommendations: [
+          {
+            device: 'Drum Buss',
+            parameter: 'Drive',
+            value: 6,
+            unit: 'dB',
+            range: [3, 9],
+            cited_measurements: ['spectralBalance.lowBass'],
+          },
+        ],
+      },
+    );
+
+    const cards = groups.flatMap((group) => group.cards);
+    const drumBuss = cards.find((card) => card.device === 'Drum Buss');
+    const eqEight = cards.find((card) => card.device === 'EQ Eight');
+    const limiter = cards.find((card) => card.device === 'Limiter');
+
+    expect(drumBuss?.contractEntries).toHaveLength(1);
+    expect(drumBuss?.contractEntries[0]).toMatchObject({ value: 6, unit: 'dB', range: [3, 9] });
+    expect(eqEight?.contractEntries).toEqual([]);
+    // The synthetic limiter fallback is frontend-derived and never entered
+    // the backend projection.
+    expect(limiter?.contractEntries).toEqual([]);
+  });
+
+  it('buildPatchCards merges contract entries across grouped items and leaves synthetic cards empty', () => {
+    const phase2: Phase2Result = {
+      trackCharacter: 'Character.',
+      detectedCharacteristics: [],
+      arrangementOverview: { summary: 'Summary', segments: [] },
+      sonicElements: {
+        kick: 'Kick.',
+        bass: 'Bass.',
+        melodicArp: 'Arp.',
+        grooveAndTiming: 'Groove.',
+        effectsAndTexture: 'FX.',
+      },
+      mixAndMasterChain: [],
+      secretSauce: { title: 'Sauce', explanation: 'Explain', implementationSteps: ['Step'] },
+      confidenceNotes: [],
+      abletonRecommendations: [
+        {
+          device: 'Wavetable',
+          category: 'SYNTHESIS',
+          parameter: 'Position',
+          value: '0.5',
+          reason: 'Builds the lead supersaw character.',
+          phase1Fields: ['key'],
+        },
+        {
+          device: 'Wavetable',
+          category: 'SYNTHESIS',
+          parameter: 'Unison Voices',
+          value: '5',
+          reason: 'Thickens the supersaw stack.',
+          phase1Fields: ['stereoWidth'],
+        },
+      ],
+      recommendations: {
+        version: 'recommendations.v1',
+        recommendations: [
+          {
+            device: 'Wavetable',
+            parameter: 'Position',
+            value: 0.5,
+            unit: null,
+            range: null,
+            cited_measurements: ['key'],
+          },
+          {
+            device: 'Wavetable',
+            parameter: 'Unison Voices',
+            value: 5,
+            unit: null,
+            range: null,
+            cited_measurements: ['stereoWidth'],
+          },
+        ],
+      },
+    } as Phase2Result;
+
+    const cards = buildPatchCards(measurement, phase2);
+    const wavetable = cards.find((card) => card.device === 'Wavetable');
+    expect(wavetable?.contractEntries).toHaveLength(2);
+    expect(wavetable?.contractEntries.map((entry) => entry.parameter)).toEqual([
+      'Position',
+      'Unison Voices',
+    ]);
+
+    // Synthetic cards (stereo width fallback, MIDI Clip Guide) are
+    // frontend-derived and carry no contract entries.
+    const synthetic = cards.filter((card) => card.device !== 'Wavetable');
+    expect(synthetic.length).toBeGreaterThan(0);
+    expect(synthetic.every((card) => card.contractEntries.length === 0)).toBe(true);
+  });
 });

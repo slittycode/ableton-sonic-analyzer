@@ -1,0 +1,185 @@
+/**
+ * recommendations.v1 consumer (ADR 0003). The backend projects the three
+ * Phase 2 device-card arrays into a frozen, schema-validated, citation-gated
+ * envelope (`apps/backend/recommendations_contract.py`) and attaches it to
+ * the producer_summary interpretation as `Phase2Result.recommendations`.
+ * This service is the UI-side reader: it indexes that envelope so render
+ * surfaces can pair each raw device card with its validated contract entry —
+ * a card with a match is provably schema-checked AND cites at least one
+ * Phase 1 measurement; a card without one is exactly an uncited card the
+ * contract refused to admit.
+ *
+ * Matching is by (device, parameter, normalized value). Device + parameter
+ * alone is ambiguous when Phase 2 emits the same pair twice with different
+ * values, and pairing the wrong entry would surface a confidently-wrong
+ * working range — the failure mode the warn-only catalogue gate exists to
+ * prevent. The value parser below is therefore a deliberate TS mirror of the
+ * backend's `parse_value` (same cross-boundary duplication pattern as
+ * audio_mime.py / audioFile.ts): both sides must normalize "4 kHz" to the
+ * same (4000, "Hz") or the pairing silently misses. Keep the two in sync.
+ */
+
+import type {
+  RecommendationContractEntry,
+  RecommendationsContract,
+  RecommendationUnit,
+} from '../types';
+
+/**
+ * A numeric magnitude extracted from a free-text value string. `unit` is the
+ * backend's internal lowercase token ("hz", "db", "ms", "s", "ratio", "pct",
+ * "st", or "" for unitless) — not the display unit.
+ */
+export interface ParsedRecommendationValue {
+  number: number;
+  unit: string;
+}
+
+// Internal token -> contract display unit. "" (unitless) is absent on
+// purpose: the contract emits `unit: null` there.
+const DISPLAY_UNIT: Record<string, RecommendationUnit> = {
+  hz: 'Hz',
+  db: 'dB',
+  ms: 'ms',
+  s: 's',
+  ratio: 'ratio',
+  pct: '%',
+  st: 'st',
+};
+
+// Longer unit tokens must precede their prefixes in the alternation (`st`
+// before `s`, `sec`/`semitones` before `s`, `ms` before `s`) so first-match
+// wins — same ordering constraint as the backend `_VALUE_RE`.
+const VALUE_RE = /(-?\d+(?:\.\d+)?)\s*(khz|hz|db|ms|sec|semitones?|st|s|%|:1|x)?/i;
+
+const RATIO_RE = /(-?\d+(?:\.\d+)?)\s*:\s*1\b/;
+
+function normalizeUnit(raw: string): string {
+  if (raw === 'khz' || raw === 'hz') return 'hz';
+  if (raw === 'db') return 'db';
+  if (raw === 'ms') return 'ms';
+  if (raw === 's' || raw === 'sec') return 's';
+  if (raw === '%') return 'pct';
+  if (raw === 'st' || raw === 'semitone' || raw === 'semitones') return 'st';
+  if (raw === ':1' || raw === 'x') return 'ratio';
+  return '';
+}
+
+/**
+ * Extract a numeric magnitude + normalized unit token from a free-text value
+ * string. Handles "4 kHz", "-15 dB", "200 ms", "3:1", "30%", "0.6", "+12st".
+ * Returns null for non-numeric values ("Sine", "Auto"). Mirror of the
+ * backend `parse_value` — see module docstring.
+ */
+export function parseRecommendationValue(
+  text: string | number | null | undefined,
+): ParsedRecommendationValue | null {
+  if (text === null || text === undefined) return null;
+  if (typeof text === 'number') {
+    return Number.isFinite(text) ? { number: text, unit: '' } : null;
+  }
+  const s = text.trim();
+  if (!s) return null;
+  const ratioMatch = s.match(RATIO_RE);
+  if (ratioMatch) {
+    return { number: Number.parseFloat(ratioMatch[1]), unit: 'ratio' };
+  }
+  const match = s.match(VALUE_RE);
+  if (!match) return null;
+  let number = Number.parseFloat(match[1]);
+  const rawUnit = (match[2] ?? '').toLowerCase();
+  const unit = normalizeUnit(rawUnit);
+  if (unit === 'hz' && rawUnit.startsWith('k')) {
+    number *= 1000;
+  }
+  return { number, unit };
+}
+
+/**
+ * Pairing key for one device card / contract entry. Numeric values key on
+ * the parsed magnitude + display unit so "4 kHz" (raw card) and
+ * `{value: 4000, unit: "Hz"}` (contract entry) collide; non-numeric values
+ * key on the lowercased string.
+ */
+function pairingKey(device: string, parameter: string, valueKey: string): string {
+  return `${device.trim().toLowerCase()}\u0000${parameter.trim().toLowerCase()}\u0000${valueKey}`;
+}
+
+function entryValueKey(entry: RecommendationContractEntry): string {
+  if (typeof entry.value === 'number') {
+    return `${entry.value}|${entry.unit ?? ''}`;
+  }
+  return entry.value.trim().toLowerCase();
+}
+
+function rawValueKey(value: string | number | null | undefined): string {
+  const parsed = parseRecommendationValue(value);
+  if (parsed !== null) {
+    return `${parsed.number}|${DISPLAY_UNIT[parsed.unit] ?? ''}`;
+  }
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+export type RecommendationsContractIndex = Map<string, RecommendationContractEntry[]>;
+
+/**
+ * Index a recommendations.v1 envelope for card pairing. Returns an empty
+ * index for null/undefined (older stored results and the stem_summary
+ * profile carry no envelope) so callers can pass `phase2.recommendations`
+ * straight through.
+ */
+export function buildRecommendationsContractIndex(
+  contract: RecommendationsContract | null | undefined,
+): RecommendationsContractIndex {
+  const index: RecommendationsContractIndex = new Map();
+  if (!contract || !Array.isArray(contract.recommendations)) return index;
+  for (const entry of contract.recommendations) {
+    const key = pairingKey(entry.device, entry.parameter, entryValueKey(entry));
+    const bucket = index.get(key);
+    if (bucket) {
+      bucket.push(entry);
+    } else {
+      index.set(key, [entry]);
+    }
+  }
+  return index;
+}
+
+/**
+ * Find the contract entries backing one raw Phase 2 device card. Empty array
+ * means the card was not admitted to the contract (typically: no Phase 1
+ * citation) — render sites use presence as the "validated" signal.
+ */
+export function findContractEntries(
+  index: RecommendationsContractIndex,
+  card: { device: string; parameter: string; value: string },
+): RecommendationContractEntry[] {
+  if (!card.device || !card.parameter) return [];
+  const key = pairingKey(card.device, card.parameter, rawValueKey(card.value));
+  return index.get(key) ?? [];
+}
+
+/** Strip float noise from contract numbers ("4699.999999999999" → "4700"). */
+function formatContractNumber(value: number): string {
+  return String(Number(value.toFixed(4)));
+}
+
+/** Display string for an entry's normalized value: "250 Hz", "0.6", "Sine". */
+export function formatContractValue(entry: RecommendationContractEntry): string {
+  if (typeof entry.value === 'number') {
+    const unitSuffix = entry.unit ? ` ${entry.unit}` : '';
+    return `${formatContractNumber(entry.value)}${unitSuffix}`;
+  }
+  return entry.value;
+}
+
+/**
+ * Display string for an entry's working range ("200–300 Hz"), or null when
+ * the contract published no range (non-numeric value or unknown unit).
+ */
+export function formatContractRange(entry: RecommendationContractEntry): string | null {
+  if (!entry.range) return null;
+  const [low, high] = entry.range;
+  const unitSuffix = entry.unit ? ` ${entry.unit}` : '';
+  return `${formatContractNumber(low)}–${formatContractNumber(high)}${unitSuffix}`;
+}

@@ -1,9 +1,20 @@
-import { AbletonRecommendation, Phase1Result, Phase2Result } from "../types";
+import {
+  AbletonRecommendation,
+  Phase1Result,
+  Phase2Result,
+  RecommendationContractEntry,
+  RecommendationsContract,
+} from "../types";
 import {
   type ConfidenceBand,
   getConfidenceBand,
   toConfidenceBand,
 } from "../services/sessionMusician/confidenceBand";
+import {
+  buildRecommendationsContractIndex,
+  findContractEntries,
+  type RecommendationsContractIndex,
+} from "../services/recommendationsContract";
 
 export interface ConfidenceBadgeViewModel {
   label: string;
@@ -144,6 +155,15 @@ export interface MixChainCardViewModel {
    * don't render an empty block.
    */
   phase1Fields: string[];
+  /**
+   * recommendations.v1 (ADR 0003) entries backing this card — the
+   * schema-validated, citation-gated projection of the same raw device card.
+   * Empty when the card was not admitted to the contract (no Phase 1
+   * citation, no usable value) or when the envelope is absent (older stored
+   * results, stem_summary). Synthetic frontend-derived cards are always
+   * empty: they never passed through the backend projection.
+   */
+  contractEntries: RecommendationContractEntry[];
 }
 
 export interface MixChainGroupViewModel {
@@ -173,6 +193,8 @@ export interface PatchCardViewModel {
    * across the items that group into this single patch card. Deduplicated.
    */
   phase1Fields: string[];
+  /** See MixChainCardViewModel.contractEntries — merged across the grouped items. */
+  contractEntries: RecommendationContractEntry[];
 }
 
 /**
@@ -925,6 +947,8 @@ function makeLimiterFallbackCard(phase1: Phase1Result, nextOrder: number) {
     // it consumes to derive its parameters, so the CitationBlock shows what
     // makes this fallback specific to *this* track.
     phase1Fields: ["truePeak", "lufsIntegrated", "stereoWidth"],
+    // Frontend-derived, never passed through the backend projection.
+    contractEntries: [],
   };
 }
 
@@ -990,9 +1014,11 @@ export function buildMixChainGroups(
   phase1: Phase1Result,
   chain: Phase2Result["mixAndMasterChain"] | undefined,
   sonicElements?: Phase2Result["sonicElements"],
+  recommendations?: RecommendationsContract | null,
 ): MixChainGroupViewModel[] {
   if (!Array.isArray(chain) || chain.length === 0) return [];
 
+  const contractIndex = buildRecommendationsContractIndex(recommendations);
   const total = chain.length;
 
   const cards = chain.map((item, index) => {
@@ -1031,6 +1057,7 @@ export function buildMixChainGroups(
       // backend Phase 2 schema, enforced by server_phase2.py + phase2Validator)
       // so the CitationBlock above each card has structured citations.
       phase1Fields: Array.isArray(item.phase1Fields) ? [...item.phase1Fields] : [],
+      contractEntries: findContractEntries(contractIndex, item),
       group,
       highEndCues: highEnd.cues,
     } satisfies MixChainCardViewModel & { group: ProcessingGroup; highEndCues: string[] };
@@ -1159,6 +1186,8 @@ function buildStereoWidthPatchCard(
     // Audit Finding #2: synthetic stereo-width card cites the fields it
     // consumes when generating its parameter recommendations.
     phase1Fields: ['stereoWidth', 'stereoCorrelation', 'truePeak'],
+    // Frontend-derived, never passed through the backend projection.
+    contractEntries: [],
   };
 }
 
@@ -1173,6 +1202,7 @@ export function buildPatchCards(
   const melodyInsights = buildMelodyInsights(phase1);
   const recommendations = Array.isArray(phase2.abletonRecommendations) ? phase2.abletonRecommendations : [];
   const grouped = groupRecommendationsByDevice(recommendations);
+  const contractIndex = buildRecommendationsContractIndex(phase2.recommendations);
 
   // Audit Finding #1B (overlap): Gemini sometimes emits the same device in
   // both `mixAndMasterChain` (processing) and `abletonRecommendations`
@@ -1241,6 +1271,13 @@ export function buildPatchCards(
       ),
     );
 
+    // Contract entries merged across the grouped items, mirroring the
+    // phase1Fields merge above. Set-dedupe works on entry object identity:
+    // the index hands back the same envelope objects for identical cards.
+    const mergedContractEntries = Array.from(
+      new Set(group.items.flatMap((item) => findContractEntries(contractIndex, item))),
+    );
+
     return {
       id: `patch-${index}-${group.device}`,
       device: group.device,
@@ -1256,6 +1293,7 @@ export function buildPatchCards(
       ),
       transcriptionDerived: midiFocused,
       phase1Fields: mergedPhase1Fields,
+      contractEntries: mergedContractEntries,
     };
   });
 
@@ -1288,6 +1326,8 @@ export function buildPatchCards(
         melodyInsights.source === 'transcription'
           ? ['transcriptionDetail.averageConfidence', 'key', 'bpm']
           : ['melodyDetail.pitchConfidence', 'key', 'bpm'],
+      // Frontend-derived, never passed through the backend projection.
+      contractEntries: [],
     });
   }
 
