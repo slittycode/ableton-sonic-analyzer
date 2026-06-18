@@ -273,6 +273,11 @@ export default function App() {
   const abortControllerRef = useRef<AbortController | null>(null);
   const currentRunIdRef = useRef<string | null>(null);
   const ignoredRunIdsRef = useRef<Set<string>>(new Set());
+  // Set when the user stops monitoring; consulted by the run's onError to
+  // suppress any error banner for the stopped run. The per-run id guard
+  // (shouldIgnoreRun) can't cover this alone — clearActiveRunState nulls
+  // currentRunIdRef, so a late rejection would read shouldIgnoreRun(null).
+  const userStoppedRef = useRef(false);
   const phase2ConfigEnabled = isGeminiPhase2ConfigEnabled();
   const mt3ConfigEnabled = isMt3ConfigEnabled();
   const interpretationWillRun = interpretationRequested && phase2ConfigEnabled;
@@ -543,6 +548,7 @@ export default function App() {
 
     startRenderBenchmarkCycle(window);
     ignoredRunIdsRef.current.clear();
+    userStoppedRef.current = false;
 
     const ac = new AbortController();
     abortControllerRef.current = ac;
@@ -628,6 +634,12 @@ export default function App() {
           const err = rawError instanceof Error ? rawError : new Error(String(rawError));
           const backendError = err instanceof BackendClientError ? err : null;
           const isCancelled = backendError?.code === 'USER_CANCELLED';
+
+          // The user stopped this run: suppress any error it emits, including a
+          // non-cancelled rejection that loses the race with the stop handler.
+          if (userStoppedRef.current) {
+            return;
+          }
 
           if (shouldIgnoreRun(currentRunIdRef.current)) {
             return;
@@ -756,6 +768,7 @@ export default function App() {
   };
 
   const handleStopAnalysis = useCallback(async () => {
+    userStoppedRef.current = true;
     const runId = currentRunIdRef.current ?? activeRunId;
     if (runId) {
       ignoredRunIdsRef.current.add(runId);

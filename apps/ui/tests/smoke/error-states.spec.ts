@@ -516,11 +516,22 @@ test('stop monitoring during interpretation preserves completed measurement with
     });
   });
 
-  await loadFileAndClick(page);
+  // Stop calls POST .../interrupt. Mock it so the stop sequence resolves
+  // promptly and deterministically — left unmocked it hits the dead backend
+  // and handleStopAnalysis stalls on that network failure before it clears
+  // run state, which races the assertions below.
+  await page.route('**/api/analysis-runs/run_stop_monitoring/interrupt', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(buildRunSnapshot('run_stop_monitoring')),
+    });
+  });
 
+  await loadFileAndClick(page);
   // Interpretation is stubbed as a never-completing 'running' state, so the frontend keeps
   // polling while this view renders. The default 5s expect timeout can be exceeded under CI
-  // load; use 30s — the results-view wait this suite already uses elsewhere (e.g. line ~461).
+  // load; use 30s — the results-view wait this suite already uses elsewhere.
   await expect(page.getByText('Analysis Results')).toBeVisible({ timeout: 30000 });
   const signalPanel = page.getByTestId('signal-panel');
   await expect(signalPanel).toBeVisible();
@@ -538,7 +549,10 @@ test('stop monitoring during interpretation preserves completed measurement with
   await expect(stopButton).toBeVisible();
   await stopButton.click();
 
-  await expect(page.locator('div.p-3.bg-error\\/10')).toHaveCount(0);
-  await expect(page.getByText('Analysis Results')).toHaveCount(0);
+  // Wait for the settled post-stop view first: the estimate card only returns
+  // after handleStopAnalysis has cleared run state and React has flushed.
+  // Asserting banner-absence before this positive signal races the unmount.
   await expect(page.getByText(/Estimated local analysis/i)).toBeVisible();
+  await expect(page.getByText('Analysis Results')).toHaveCount(0);
+  await expect(page.locator('div.p-3.bg-error\\/10')).toHaveCount(0);
 });
