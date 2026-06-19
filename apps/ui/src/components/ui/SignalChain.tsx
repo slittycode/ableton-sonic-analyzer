@@ -100,7 +100,7 @@ export const SignalChain = React.forwardRef<HTMLDivElement, SignalChainProps>(
                     {stage.statusLabel && (
                       <span
                         className={cn(
-                          'font-mono text-[10px] uppercase tracking-[0.16em] tabular-nums',
+                          'font-mono text-meta uppercase tracking-[0.16em] tabular-nums',
                           stage.status === 'success' && 'text-success',
                           stage.status === 'active' && 'text-accent',
                           stage.status === 'queued' && 'text-text-muted',

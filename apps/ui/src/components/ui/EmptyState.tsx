@@ -44,12 +44,12 @@ export const EmptyState = React.forwardRef<HTMLDivElement, EmptyStateProps>(
       >
         {icon && <div className="opacity-70">{icon}</div>}
         {title && (
-          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-text-primary">
+          <p className="font-mono text-eyebrow uppercase tracking-[0.16em] text-text-primary">
             {title}
           </p>
         )}
         {description && (
-          <p className="font-mono text-[11px] leading-snug text-text-secondary max-w-prose">
+          <p className="font-mono text-eyebrow leading-snug text-text-secondary max-w-prose">
             {description}
           </p>
         )}

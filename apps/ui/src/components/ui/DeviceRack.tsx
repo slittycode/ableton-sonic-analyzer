@@ -86,7 +86,7 @@ export const DeviceRack = React.forwardRef<HTMLDivElement, DeviceRackProps>(
             <LedIndicator status={statusToLedTone(resolvedStatus)} />
             <span className="truncate">{name}</span>
             {subtitle && (
-              <span className="text-text-secondary normal-case tracking-[0.04em] text-[10px] truncate">
+              <span className="text-text-secondary normal-case tracking-[0.04em] text-meta truncate">
                 {subtitle}
               </span>
             )}

@@ -20,8 +20,8 @@ const pillVariants = cva(
         ghost: 'border-transparent',
       },
       size: {
-        xs: 'px-1.5 py-0.5 text-[9px]',
-        sm: 'px-2 py-0.5 text-[10px]',
+        xs: 'px-1.5 py-0.5 text-micro',
+        sm: 'px-2 py-0.5 text-meta',
       },
     },
     compoundVariants: [
