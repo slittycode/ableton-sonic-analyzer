@@ -126,6 +126,21 @@ export function FileUpload({
                 : 'border-border bg-bg-card hover:border-text-secondary/50 hover:bg-bg-card-hover'
           } ${isLoading || isDemoLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
           onClick={() => !isLoading && !isDemoLoading && document.getElementById('audio-upload')?.click()}
+          role="button"
+          tabIndex={isLoading || isDemoLoading ? -1 : 0}
+          aria-label="Upload audio file: drag and drop, or activate to browse"
+          aria-disabled={isLoading || isDemoLoading}
+          onKeyDown={(event) => {
+            // Only the dropzone itself drives browse; ignore keys bubbling up
+            // from the nested Load Demo button so the two don't collide.
+            if (event.target !== event.currentTarget) return;
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              if (!isLoading && !isDemoLoading) {
+                document.getElementById('audio-upload')?.click();
+              }
+            }
+          }}
         >
           <input
             type="file"

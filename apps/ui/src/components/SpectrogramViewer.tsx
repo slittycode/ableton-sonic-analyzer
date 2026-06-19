@@ -313,6 +313,8 @@ export function SpectrogramViewer({
         />
         <canvas
           ref={canvasRefCallback}
+          role="img"
+          aria-label="Spectrogram: frequency content over time"
           className={`absolute inset-0 w-full h-full ${isZoomed ? 'cursor-grab active:cursor-grabbing' : 'cursor-crosshair'}`}
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}

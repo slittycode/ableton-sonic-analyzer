@@ -118,6 +118,17 @@ body {
   isolation: isolate;
 }
 
+/* Visible keyboard focus for every interactive element, driven by the
+   --ring-focus token (defined since the start but previously unused).
+   :focus-visible only matches keyboard interaction, so pointer clicks stay
+   ring-free. :where() keeps specificity at zero so components with their own
+   focus styling (Button, Checkbox) continue to win. */
+:where(a, button, input, select, textarea, summary, [role='button'], [tabindex]:not([tabindex='-1'])):focus-visible {
+  outline: none;
+  box-shadow: var(--ring-focus);
+  border-radius: 2px;
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar {
   width: 12px;
