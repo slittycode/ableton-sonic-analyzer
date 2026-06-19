@@ -25,17 +25,56 @@ import { MiniHeatmap } from './MiniHeatmap';
 import { ConfidenceBandBadge } from './sessionMusician/ConfidenceBandBadge';
 import { MixDoctorPanel } from './MixDoctorPanel';
 import {
+  Button,
+  DataTable,
   DeltaBadge,
-  OutlinePillButton,
-  StatusBadge,
+  DeviceRack,
+  EmptyState,
+  MetricBar,
+  MetricBarRow,
+  MetricTile,
+  Pill,
   TokenBadgeList,
-} from './MeasurementPrimitives';
-import { DataTable, DeviceRack, EmptyState, MetricBar, MetricBarRow, MetricTile } from './ui';
+  type Tone,
+} from './ui';
 import { Sparkline } from './Sparkline';
 import { SpectralCursorProvider } from '../hooks/useSpectralCursorBus';
 import { formatDisplayText, getTextRoleClassName } from '../utils/displayText';
 import { HarmonyLanes } from './HarmonyLanes';
 import { StructureLanes } from './StructureLanes';
+
+// Local adapter over the canonical ui/Pill. The dashboard's detail rows use a
+// compact label/tone/compact status chip in ~17 places (and chordToneForLabel
+// still emits the legacy off-palette tones); this maps those onto the token
+// palette in one spot so the call sites stay untouched ahead of the Phase 5
+// split. Not a competing primitive — just local sugar over Pill.
+type LegacyBadgeTone = Tone | 'muted' | 'info' | 'violet';
+const PILL_TONE_FOR_LEGACY: Record<LegacyBadgeTone, Tone> = {
+  accent: 'accent',
+  success: 'success',
+  warning: 'warning',
+  error: 'error',
+  neutral: 'neutral',
+  muted: 'neutral',
+  info: 'neutral',
+  violet: 'neutral',
+};
+
+function StatusBadge({
+  label,
+  tone = 'neutral',
+  compact = false,
+}: {
+  label: React.ReactNode;
+  tone?: LegacyBadgeTone;
+  compact?: boolean;
+}) {
+  return (
+    <Pill tone={PILL_TONE_FOR_LEGACY[tone]} size={compact ? 'xs' : 'sm'}>
+      {label}
+    </Pill>
+  );
+}
 
 interface MeasurementDashboardProps {
   phase1: Phase1Result;
@@ -1457,7 +1496,7 @@ export function MeasurementDashboard({
                   items={[
                     { label: phase1.genreDetail.genreFamily, tone: 'accent' },
                     ...(phase1.genreDetail.secondaryGenre
-                      ? [{ label: phase1.genreDetail.secondaryGenre, tone: 'muted' as const }]
+                      ? [{ label: phase1.genreDetail.secondaryGenre, tone: 'neutral' as const }]
                       : []),
                   ]}
                 />
@@ -2026,12 +2065,14 @@ export function MeasurementDashboard({
                   </React.Fragment>
                 ) : (
                   <React.Fragment key={kind}>
-                    <OutlinePillButton
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       onClick={() => handleGenerate(kind)}
                       disabled={generating.has(kind)}
-                      tone="accent"
-                      label={generating.has(kind) ? `${label}...` : `Generate ${label}`}
-                    />
+                    >
+                      {generating.has(kind) ? `${label}...` : `Generate ${label}`}
+                    </Button>
                   </React.Fragment>
                 ),
               )}
