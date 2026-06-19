@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Phase1Result } from '../types';
-import { LaneContainer, LaneRow, StatsBar, TimeRuler } from './MeasurementPrimitives';
+import { LaneContainer, LaneRow, StatsBar, TimeRuler } from './ui';
 
 interface StructureLanesProps {
   phase1: Phase1Result;
