@@ -41,12 +41,10 @@ import { Mt3TranscriptionPanel } from './Mt3TranscriptionPanel';
 import { StemListeningNotesPanel } from './StemListeningNotesPanel';
 import { hasStemListeningNotesContent } from '../services/sessionMusician';
 import {
-  AccentMetricCard,
-  MetricBar,
   StatusBadge,
   TokenBadgeList,
 } from './MeasurementPrimitives';
-import { Button, DeviceRack, MetricTile, Pill, SectionHeader } from './ui';
+import { Button, DeviceRack, MetricBar, MetricTile, Pill, SectionHeader } from './ui';
 import { PhaseSourceBadge } from './PhaseSourceBadge';
 import { StickyNav, type StickyNavSection } from './StickyNav';
 import { CitationBlock, CitationHeadline } from './CitationBlock';
@@ -1365,16 +1363,22 @@ export function AnalysisResults({
         {styleProfile ? (
           <>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <AccentMetricCard
+              <MetricTile
+                accent="accent"
+                size="xl"
                 label="Tempo"
                 value={styleProfile.authoritativeMeasurements.bpm ?? '—'}
                 unit={styleProfile.authoritativeMeasurements.bpm != null ? 'BPM' : undefined}
               />
-              <AccentMetricCard
+              <MetricTile
+                accent="accent"
+                size="xl"
                 label="Key"
                 value={styleProfile.authoritativeMeasurements.key ?? '—'}
               />
-              <AccentMetricCard
+              <MetricTile
+                accent="accent"
+                size="xl"
                 label="Meter"
                 value={styleProfile.authoritativeMeasurements.timeSignature ?? '—'}
               />
@@ -1560,11 +1564,11 @@ export function AnalysisResults({
           />
 
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            <AccentMetricCard label="Tempo" value={projectSetup.tempoBpm} unit="BPM" />
-            <AccentMetricCard label="Meter" value={projectSetup.timeSignature} />
-            <AccentMetricCard label="Sample Rate" value={`${projectSetup.sampleRate} Hz`} />
-            <AccentMetricCard label="Bit Depth" value={`${projectSetup.bitDepth}-bit`} />
-            <AccentMetricCard label="Headroom" value={projectSetup.headroomTarget} />
+            <MetricTile accent="accent" size="xl" label="Tempo" value={projectSetup.tempoBpm} unit="BPM" />
+            <MetricTile accent="accent" size="xl" label="Meter" value={projectSetup.timeSignature} />
+            <MetricTile accent="accent" size="xl" label="Sample Rate" value={`${projectSetup.sampleRate} Hz`} />
+            <MetricTile accent="accent" size="xl" label="Bit Depth" value={`${projectSetup.bitDepth}-bit`} />
+            <MetricTile accent="accent" size="xl" label="Headroom" value={projectSetup.headroomTarget} />
           </div>
 
           <div className="rounded-sm border border-border bg-bg-card p-4">

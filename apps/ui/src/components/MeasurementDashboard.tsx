@@ -26,14 +26,11 @@ import { ConfidenceBandBadge } from './sessionMusician/ConfidenceBandBadge';
 import { MixDoctorPanel } from './MixDoctorPanel';
 import {
   DeltaBadge,
-  MetricBar,
-  MetricBarRow,
   OutlinePillButton,
   StatusBadge,
-  StyledDataTable,
   TokenBadgeList,
 } from './MeasurementPrimitives';
-import { DeviceRack, EmptyState, MetricTile } from './ui';
+import { DataTable, DeviceRack, EmptyState, MetricBar, MetricBarRow, MetricTile } from './ui';
 import { Sparkline } from './Sparkline';
 import { SpectralCursorProvider } from '../hooks/useSpectralCursorBus';
 import { formatDisplayText, getTextRoleClassName } from '../utils/displayText';
@@ -2226,7 +2223,7 @@ export function MeasurementDashboard({
                 Segment Stereo
               </span>
             </div>
-            <StyledDataTable
+            <DataTable
               data={phase1.segmentStereo}
               columns={[
                 {
