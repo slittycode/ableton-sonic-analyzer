@@ -12,7 +12,7 @@ import {
 
 // Four-tone traffic-light ladder so the producer can distinguish all four
 // bands at a glance: green → orange → amber → red, best to worst. The
-// vocabulary mirrors what `MeasurementPrimitives`, `DiagnosticLog`, and
+// vocabulary mirrors what `ui/Pill`, `DiagnosticLog`, and
 // `FileUpload` already use for severity across the app — success = ready,
 // accent = active, warning = caution, error = critical. All four CSS
 // variables are defined in `apps/ui/src/index.css`; no new theme tokens

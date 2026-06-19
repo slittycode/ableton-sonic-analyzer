@@ -20,6 +20,15 @@ export {
   emptyStateVariants,
   type EmptyStateProps,
 } from './EmptyState';
+export {
+  LaneContainer,
+  LaneRow,
+  TimeRuler,
+  StatsBar,
+  type LaneRowProps,
+  type TimeRulerProps,
+  type StatsBarItem,
+} from './Lane';
 export { LedIndicator, type LedIndicatorProps } from './LedIndicator';
 export { MetricBar, type MetricBarProps } from './MetricBar';
 export { MetricBarRow, type MetricBarRowProps } from './MetricBarRow';

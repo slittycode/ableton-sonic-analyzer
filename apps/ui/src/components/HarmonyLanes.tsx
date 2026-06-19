@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Phase1Result } from '../types';
-import { LaneContainer, LaneRow, StatsBar } from './MeasurementPrimitives';
+import { LaneContainer, LaneRow, StatsBar } from './ui';
 import { analyzeChord, deduplicateChords, getChordColor } from '../utils/chordTheory';
 
 interface HarmonyLanesProps {
