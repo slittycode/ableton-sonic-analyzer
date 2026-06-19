@@ -76,7 +76,7 @@ export function BrowserLoudnessPanel({ phase1, audioFile, className }: BrowserLo
       className={className}
     >
       <div className="space-y-3">
-        <p className="max-w-xl font-mono text-[11px] leading-snug text-text-secondary">
+        <p className="max-w-xl font-mono text-eyebrow leading-snug text-text-secondary">
           Measures this track&apos;s LUFS in your browser (asa-dsp / WASM) and compares
           it to the authoritative Phase 1 Essentia reading. A parity diagnostic —
           Phase 1 stays the source of truth. WAV input only; true peak is omitted
@@ -96,14 +96,14 @@ export function BrowserLoudnessPanel({ phase1, audioFile, className }: BrowserLo
         )}
 
         {state.kind === "unsupported" && (
-          <p className="font-mono text-[11px] text-text-secondary">
+          <p className="font-mono text-eyebrow text-text-secondary">
             Browser loudness currently decodes WAV only. This source isn&apos;t a WAV
             (FLAC/MP3 decoding is a planned follow-up), so there&apos;s nothing to compare.
           </p>
         )}
 
         {state.kind === "unavailable" && (
-          <p className="font-mono text-[11px] text-text-secondary">
+          <p className="font-mono text-eyebrow text-text-secondary">
             The browser loudness core isn&apos;t available. Build
             <span className="text-text-primary"> packages/loudness-spectro-wasm</span> and set
             <span className="text-text-primary"> VITE_BROWSER_LOUDNESS_WASM_URL</span> to enable it.
@@ -111,7 +111,7 @@ export function BrowserLoudnessPanel({ phase1, audioFile, className }: BrowserLo
         )}
 
         {state.kind === "error" && (
-          <p className="font-mono text-[11px] text-error" role="alert">
+          <p className="font-mono text-eyebrow text-error" role="alert">
             {state.message}
           </p>
         )}
@@ -119,7 +119,7 @@ export function BrowserLoudnessPanel({ phase1, audioFile, className }: BrowserLo
         {state.kind === "done" && (
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="font-mono text-[11px] text-text-secondary">
+              <span className="font-mono text-eyebrow text-text-secondary">
                 Integrated delta (browser − Essentia):
               </span>
               <Pill
@@ -130,12 +130,12 @@ export function BrowserLoudnessPanel({ phase1, audioFile, className }: BrowserLo
                   ? "n/a"
                   : `${state.report.integratedDelta >= 0 ? "+" : ""}${state.report.integratedDelta.toFixed(2)} LU`}
               </Pill>
-              <span className="font-mono text-[10px] text-text-secondary/70">
+              <span className="font-mono text-meta text-text-secondary/70">
                 tolerance ±{state.report.toleranceLu} LU
               </span>
             </div>
 
-            <table className="w-full font-mono text-[11px]">
+            <table className="w-full font-mono text-eyebrow">
               <thead>
                 <tr className="text-text-secondary/60">
                   <th className="text-left font-normal">Metric</th>

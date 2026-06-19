@@ -42,7 +42,7 @@ export function Phase2ConsistencyReport({ report, hideWhenClean = false }: Phase
       return null;
     }
     return (
-      <div className="text-[10px] font-mono uppercase tracking-wide text-success/70">
+      <div className="text-meta font-mono uppercase tracking-wide text-success/70">
         CONSISTENCY OK
       </div>
     );
@@ -54,7 +54,7 @@ export function Phase2ConsistencyReport({ report, hideWhenClean = false }: Phase
 
   return (
     <div className="space-y-3">
-      <div className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+      <div className="text-meta font-mono uppercase tracking-wide text-text-secondary">
         {userErrorCount} error(s), {userWarningCount} warning(s) across{' '}
         {report.summary.checkedFields} checked fields
       </div>
@@ -66,7 +66,7 @@ export function Phase2ConsistencyReport({ report, hideWhenClean = false }: Phase
               {['Severity', 'Type', 'Field', 'Detail'].map((label) => (
                 <th
                   key={label}
-                  className="px-2 py-1 text-left text-[10px] font-mono uppercase tracking-wide text-text-secondary font-normal"
+                  className="px-2 py-1 text-left text-meta font-mono uppercase tracking-wide text-text-secondary font-normal"
                 >
                   {label}
                 </th>

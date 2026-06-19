@@ -74,7 +74,7 @@ export function StickyNav({ sections }: StickyNavProps) {
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         {/* Audit N10: was "Device Chain" — confusing because "device chain" in
             Ableton means a track's effects routing, not section navigation. */}
-        <p className="text-[10px] font-mono uppercase tracking-[0.28em] text-text-secondary">Sections</p>
+        <p className="text-meta font-mono uppercase tracking-[0.28em] text-text-secondary">Sections</p>
         {/* Audit quick-hit: previously `overflow-x-auto` + `min-w-max` so the
           pill row scrolled horizontally. macOS hides scrollbars by default so
           the last pill (e.g. "MEASUREMENTS") looked clipped — no affordance
@@ -106,7 +106,7 @@ export function StickyNav({ sections }: StickyNavProps) {
                   title={isDisabled ? section.disabledReason : undefined}
                   aria-disabled={isDisabled || undefined}
                   data-disabled={isDisabled || undefined}
-                  className={`rounded-sm border px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.16em] whitespace-nowrap transition-colors ${
+                  className={`rounded-sm border px-3 py-1.5 text-meta font-mono uppercase tracking-[0.16em] whitespace-nowrap transition-colors ${
                     isDisabled
                       ? 'border-border/60 bg-bg-card/40 text-text-secondary/40 cursor-not-allowed'
                       : isActive

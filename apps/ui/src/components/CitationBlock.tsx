@@ -116,13 +116,13 @@ export function CitationBlock({
       className={`rounded-sm border border-border bg-bg-panel/60 px-3 py-2 space-y-1.5 ${className ?? ''}`}
     >
       <div className="flex items-start justify-between gap-3">
-        <p className="text-[9px] font-mono uppercase tracking-[0.18em] text-text-secondary/80">
+        <p className="text-micro font-mono uppercase tracking-[0.18em] text-text-secondary/80">
           Grounded in
         </p>
         {band && pillClass && resolvedConfidence !== null && (
           <span
             data-testid="citation-confidence-pill"
-            className={`inline-flex items-center px-1.5 py-0.5 rounded border text-[9px] font-mono uppercase tracking-wide ${pillClass}`}
+            className={`inline-flex items-center px-1.5 py-0.5 rounded border text-micro font-mono uppercase tracking-wide ${pillClass}`}
             title={band.copy}
           >
             {formatBandPillLabel(band, resolvedConfidence)}
@@ -134,7 +134,7 @@ export function CitationBlock({
           <div
             key={row.path}
             data-testid={`citation-row-${row.path}`}
-            className="flex items-baseline justify-between gap-3 text-[10px] font-mono"
+            className="flex items-baseline justify-between gap-3 text-meta font-mono"
           >
             <dt className="text-text-secondary truncate" title={row.path}>
               {row.label}
@@ -201,7 +201,7 @@ export function CitationHeadline({
       data-testid={testId}
       className={`inline-flex items-baseline gap-1.5 min-w-0 ${className ?? ''}`}
     >
-      <span className="text-text-secondary text-[9px] font-mono uppercase tracking-[0.15em] whitespace-nowrap">
+      <span className="text-text-secondary text-micro font-mono uppercase tracking-[0.15em] whitespace-nowrap">
         {label}
       </span>
       <span className="text-text-primary text-xs font-mono tabular-nums font-semibold whitespace-nowrap">
@@ -210,7 +210,7 @@ export function CitationHeadline({
       {band && pillClass && confidence !== null && (
         <span
           data-testid={`${testId}-pill`}
-          className={`inline-flex items-center px-1 py-0 rounded border text-[9px] font-mono uppercase tracking-wide whitespace-nowrap ${pillClass}`}
+          className={`inline-flex items-center px-1 py-0 rounded border text-micro font-mono uppercase tracking-wide whitespace-nowrap ${pillClass}`}
           title={band.copy}
         >
           {formatBandPillLabel(band, confidence)}

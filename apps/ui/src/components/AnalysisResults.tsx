@@ -262,7 +262,7 @@ function ContractValidatedBadge({
     <span
       data-testid={testId}
       title="Passed the recommendations.v1 contract: schema-validated and citing at least one Phase 1 measurement."
-      className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-success/40 text-success whitespace-nowrap"
+      className="text-micro font-mono uppercase px-1.5 py-0.5 rounded border border-success/40 text-success whitespace-nowrap"
     >
       ✓ Validated
     </span>
@@ -285,7 +285,7 @@ function ContractEntriesBlock({
   if (entries.length === 0) return null;
   return (
     <div data-testid={testId} className="border border-success/20 bg-success/5 rounded-sm px-2 py-2">
-      <p className="text-[10px] font-mono text-success uppercase tracking-wide">
+      <p className="text-meta font-mono text-success uppercase tracking-wide">
         Validated · recommendations.v1
       </p>
       {entries.map((entry, idx) => {
@@ -327,7 +327,7 @@ function SourcesToggle({ sources, showSources, onToggle }: { sources?: string[];
       </Button>
       <Collapsible isOpen={showSources}>
         <div className="mt-2 text-xs text-text-secondary/70 font-mono">
-          <span className="text-[10px] uppercase tracking-wide text-text-secondary/50">Based on:</span>
+          <span className="text-meta uppercase tracking-wide text-text-secondary/50">Based on:</span>
           <ul className="mt-1 space-y-0.5">
             {sources.map((source, idx) => (
               <li key={idx} className="flex items-start gap-2">
@@ -436,7 +436,7 @@ function lowConfidenceIndicator(show: boolean) {
   if (!show) return null;
   return (
     <span
-      className="text-[10px] font-mono text-warning"
+      className="text-meta font-mono text-warning"
       title={LOW_CONFIDENCE_TITLE}
       aria-label="Low confidence"
     >
@@ -484,7 +484,7 @@ function MetaBadgeList({ items }: { items: MetaBadgeItem[] }) {
         <span
           key={`${item.label}-${item.value}`}
           title={item.label}
-          className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-border text-text-secondary whitespace-nowrap"
+          className="text-micro font-mono uppercase px-1.5 py-0.5 rounded border border-border text-text-secondary whitespace-nowrap"
         >
           {item.value}
         </span>
@@ -1008,7 +1008,7 @@ export function AnalysisResults({
                     every other confidence surface. */}
                 <ConfidenceBandBadge variant="compact" confidence={phase1.bpmConfidence} />
                 {phase1.bpmSource && (
-                  <span className="block text-[8px] font-mono uppercase tracking-wide text-text-secondary/50">
+                  <span className="block text-nano font-mono uppercase tracking-wide text-text-secondary/50">
                     {phase1.bpmSource.replace(/_/g, ' ')}
                   </span>
                 )}
@@ -1103,7 +1103,7 @@ export function AnalysisResults({
                     {characteristicPills.map((item, idx) => (
                       <span
                         key={`${item.name}-${idx}`}
-                        className={`inline-flex items-center px-2 py-1 rounded-sm border text-[9px] font-mono uppercase tracking-wide ${characteristicPillClass(item.confidence)}`}
+                        className={`inline-flex items-center px-2 py-1 rounded-sm border text-micro font-mono uppercase tracking-wide ${characteristicPillClass(item.confidence)}`}
                       >
                         {shortenCharacteristicName(item.name)}
                       </span>
@@ -1133,16 +1133,16 @@ export function AnalysisResults({
             </>
           }
         />
-        <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+        <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
           Interpretive guidance generated from DSP measurements. Not a ground-truth measurement.
         </p>
         {phase2StatusMessage && !phase2 && (
-          <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+          <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
             {phase2StatusMessage}
           </p>
         )}
         {!hasRenderablePhase2Content && !phase2StatusMessage && (
-          <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+          <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
             Draft — AI interpretation is incomplete or unavailable.
           </p>
         )}
@@ -1186,7 +1186,7 @@ export function AnalysisResults({
                   : allValidationWarningsAreAdjustments ? 'Interpretation Adjustments' : 'Interpretation Caution'}
               </h2>
               <p
-                className={`text-[10px] font-mono uppercase tracking-[0.16em] ${
+                className={`text-meta font-mono uppercase tracking-[0.16em] ${
                   isMixed
                     ? 'text-text-secondary'
                     : allValidationWarningsAreAdjustments ? 'text-accent/80' : 'text-warning/80'
@@ -1200,7 +1200,7 @@ export function AnalysisResults({
               </p>
             </div>
             <span
-              className={`text-[10px] font-mono uppercase px-2 py-1 rounded border ${
+              className={`text-meta font-mono uppercase px-2 py-1 rounded border ${
                 isMixed
                   ? 'border-border text-text-secondary'
                   : allValidationWarningsAreAdjustments
@@ -1228,7 +1228,7 @@ export function AnalysisResults({
                 <div className="flex flex-wrap gap-1.5">
                   {warning.code && (
                     <span
-                      className={`text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border ${
+                      className={`text-micro font-mono uppercase px-1.5 py-0.5 rounded border ${
                         warning.tone === 'adjustment'
                           ? 'border-accent/30 text-accent'
                           : 'border-warning/30 text-warning'
@@ -1239,7 +1239,7 @@ export function AnalysisResults({
                   )}
                   {warning.count > 1 && (
                     <span
-                      className={`text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border ${
+                      className={`text-micro font-mono uppercase px-1.5 py-0.5 rounded border ${
                         warning.tone === 'adjustment'
                           ? 'border-accent/25 text-accent/90'
                           : 'border-warning/25 text-warning/90'
@@ -1251,7 +1251,7 @@ export function AnalysisResults({
                 </div>
                 <div className="space-y-1">
                   <p
-                    className={`text-[10px] font-mono uppercase tracking-[0.16em] ${
+                    className={`text-meta font-mono uppercase tracking-[0.16em] ${
                       warning.tone === 'adjustment' ? 'text-accent/85' : 'text-warning/85'
                     }`}
                   >
@@ -1266,7 +1266,7 @@ export function AnalysisResults({
                     {warning.mappings.map((m, mIdx) => (
                       <div
                         key={`${warning.key}-mapping-${mIdx}`}
-                        className="flex flex-wrap items-center gap-1.5 text-[9px] font-mono text-text-secondary"
+                        className="flex flex-wrap items-center gap-1.5 text-micro font-mono text-text-secondary"
                       >
                         {(m.originalValue || m.coercedValue) && (
                           <>
@@ -1293,7 +1293,7 @@ export function AnalysisResults({
                   </div>
                 ) : (
                   <div className="flex flex-wrap gap-1.5">
-                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-border text-text-secondary">
+                    <span className="text-micro font-mono px-1.5 py-0.5 rounded border border-border text-text-secondary">
                       Result-level warning
                     </span>
                   </div>
@@ -1315,7 +1315,7 @@ export function AnalysisResults({
           {confidenceBadges.map((badge, idx) =>
             badge.band ? (
               <span key={`${badge.label}-${idx}`} className="inline-flex items-center gap-2">
-                <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary/80">
+                <span className="text-meta font-mono uppercase tracking-wide text-text-secondary/80">
                   {badge.label}:
                 </span>
                 <ConfidenceBandBadge variant="compact" band={badge.band} />
@@ -1331,7 +1331,7 @@ export function AnalysisResults({
             title={formatDisplayText('Track Character', 'title')}
             titleRole="section-title"
             rightSlot={
-              <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">AI INTERP</span>
+              <span className="text-meta font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">AI INTERP</span>
             }
           />
           <p data-text-role="body" className={textRoleClassName('body', 'opacity-80')}>
@@ -1345,11 +1345,11 @@ export function AnalysisResults({
           title="Style Profile"
           rightSlot={
             styleProfileSectionState === 'ready' ? (
-              <span className="text-[10px] font-mono bg-bg-panel border border-accent/30 text-accent px-2 py-1 rounded font-bold">
+              <span className="text-meta font-mono bg-bg-panel border border-accent/30 text-accent px-2 py-1 rounded font-bold">
                 STRUCTURED
               </span>
             ) : (
-              <span className="text-[10px] font-mono bg-bg-panel border border-border text-text-secondary px-2 py-1 rounded font-bold">
+              <span className="text-meta font-mono bg-bg-panel border border-border text-text-secondary px-2 py-1 rounded font-bold">
                 {styleProfileSectionState === 'disabled'
                   ? 'DISABLED'
                   : styleProfileSectionState === 'pending'
@@ -1382,22 +1382,22 @@ export function AnalysisResults({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="rounded-sm border border-border bg-bg-card p-4 space-y-3">
-                <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+                <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
                   Genre
                 </p>
                 <div className="flex flex-wrap gap-1.5">
-                  <span className="text-[10px] font-mono rounded-sm border border-accent/30 bg-accent/5 px-2 py-1 text-accent">
+                  <span className="text-meta font-mono rounded-sm border border-accent/30 bg-accent/5 px-2 py-1 text-accent">
                     {styleProfile.genre}
                   </span>
                   {styleProfile.subGenre && (
-                    <span className="text-[10px] font-mono rounded-sm border border-border px-2 py-1 text-text-secondary">
+                    <span className="text-meta font-mono rounded-sm border border-border px-2 py-1 text-text-secondary">
                       {styleProfile.subGenre}
                     </span>
                   )}
                 </div>
                 {styleProfile.mood.length > 0 && (
                   <div className="space-y-2">
-                    <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+                    <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
                       Mood
                     </p>
                     <TokenBadgeList
@@ -1410,7 +1410,7 @@ export function AnalysisResults({
               <div className="rounded-sm border border-border bg-bg-card p-4 space-y-3">
                 {styleProfile.instruments.length > 0 && (
                   <div className="space-y-2">
-                    <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+                    <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
                       Instruments
                     </p>
                     <TokenBadgeList
@@ -1420,7 +1420,7 @@ export function AnalysisResults({
                 )}
                 {styleProfile.productionTechniques.length > 0 && (
                   <div className="space-y-2">
-                    <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+                    <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
                       Production Techniques
                     </p>
                     <TokenBadgeList
@@ -1433,7 +1433,7 @@ export function AnalysisResults({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="rounded-sm border border-border bg-bg-card p-4 space-y-2">
-                <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+                <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
                   Style Read
                 </p>
                 <p className="text-xs font-mono text-text-secondary leading-relaxed">
@@ -1441,7 +1441,7 @@ export function AnalysisResults({
                 </p>
               </div>
               <div className="rounded-sm border border-accent/20 bg-accent/5 p-4 space-y-2">
-                <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-accent">
+                <p className="text-meta font-mono uppercase tracking-[0.18em] text-accent">
                   Reusable Prompt
                 </p>
                 <p className="text-xs font-mono text-text-secondary leading-relaxed">
@@ -1453,7 +1453,7 @@ export function AnalysisResults({
         ) : (
           <div className="rounded-sm border border-border bg-bg-card p-4 space-y-3">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-border text-text-secondary">
+              <span className="text-micro font-mono uppercase px-1.5 py-0.5 rounded border border-border text-text-secondary">
                 {styleProfileSectionState === 'disabled'
                   ? 'DISABLED'
                   : styleProfileSectionState === 'pending'
@@ -1473,7 +1473,7 @@ export function AnalysisResults({
                     : 'The model returned an invalid style profile, so ASA ignored it. See interpretation warnings above.'}
             </p>
             {styleProfileSectionState === 'disabled' && phase2StatusMessage && (
-              <p className="text-[10px] font-mono uppercase tracking-[0.16em] text-text-secondary/80">
+              <p className="text-meta font-mono uppercase tracking-[0.16em] text-text-secondary/80">
                 {phase2StatusMessage}
               </p>
             )}
@@ -1486,14 +1486,14 @@ export function AnalysisResults({
           <ResultsSectionHeader
             title="Audio Observations"
             rightSlot={
-              <span className="text-[10px] font-mono bg-bg-panel border border-border text-text-secondary px-2 py-1 rounded font-bold">
+              <span className="text-meta font-mono bg-bg-panel border border-border text-text-secondary px-2 py-1 rounded font-bold">
                 Perceptual / Audio-Derived
               </span>
             }
           />
 
           <div className="rounded-sm border border-accent/20 bg-accent/5 p-4 space-y-2">
-            <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-accent">
+            <p className="text-meta font-mono uppercase tracking-[0.18em] text-accent">
               Sound Design Fingerprint
             </p>
             <p className="text-xs font-mono text-text-secondary leading-relaxed">
@@ -1508,7 +1508,7 @@ export function AnalysisResults({
                   key={`${item.element}-${index}`}
                   className="rounded-sm border border-border bg-bg-card p-4 space-y-2"
                 >
-                  <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+                  <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
                     {item.element}
                   </p>
                   <p className="text-xs font-mono text-text-secondary leading-relaxed">
@@ -1521,14 +1521,14 @@ export function AnalysisResults({
 
           {audioObservations.productionSignatures.length > 0 && (
             <div className="space-y-2">
-              <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+              <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
                 Production Signatures
               </p>
               <div className="flex flex-wrap gap-1.5">
                 {audioObservations.productionSignatures.map((signature, index) => (
                   <span
                     key={`${signature}-${index}`}
-                    className="text-[10px] font-mono rounded-sm border border-accent/30 bg-accent/5 px-2 py-1 text-accent"
+                    className="text-meta font-mono rounded-sm border border-accent/30 bg-accent/5 px-2 py-1 text-accent"
                   >
                     {truncateAtSentenceBoundary(signature, 140)}
                   </span>
@@ -1538,7 +1538,7 @@ export function AnalysisResults({
           )}
 
           <div className="rounded-sm border border-border bg-bg-card p-4 space-y-2">
-            <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+            <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
               Mix Context
             </p>
             <p className="text-xs font-mono text-text-secondary leading-relaxed">
@@ -1553,7 +1553,7 @@ export function AnalysisResults({
           <ResultsSectionHeader
             title="Project Setup"
             rightSlot={
-              <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">
+              <span className="text-meta font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">
                 LIVE 12 V2
               </span>
             }
@@ -1568,7 +1568,7 @@ export function AnalysisResults({
           </div>
 
           <div className="rounded-sm border border-border bg-bg-card p-4">
-            <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+            <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
               Session Goal
             </p>
             <p className="mt-2 text-xs font-mono text-text-secondary leading-relaxed">
@@ -1583,7 +1583,7 @@ export function AnalysisResults({
           <ResultsSectionHeader
             title="Track Layout"
             rightSlot={
-              <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">
+              <span className="text-meta font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">
                 SCAFFOLD
               </span>
             }
@@ -1594,7 +1594,7 @@ export function AnalysisResults({
               <div key={`${item.order}-${item.name}`} className="rounded-sm border border-border bg-bg-card p-4 space-y-3">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="w-6 h-6 rounded-sm bg-bg-panel border border-border text-accent font-mono text-[10px] flex items-center justify-center">
+                    <span className="w-6 h-6 rounded-sm bg-bg-panel border border-border text-accent font-mono text-meta flex items-center justify-center">
                       {item.order}
                     </span>
                     <div className="min-w-0">
@@ -1646,7 +1646,7 @@ export function AnalysisResults({
           <ResultsSectionHeader
             title="Routing Blueprint"
             rightSlot={
-              <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">
+              <span className="text-meta font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">
                 SIGNAL MAP
               </span>
             }
@@ -1665,7 +1665,7 @@ export function AnalysisResults({
                 {routingBlueprint.sidechainTargets.map((target) => (
                   <span
                     key={target}
-                    className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-accent/30 bg-accent/5 text-accent"
+                    className="text-micro font-mono uppercase px-1.5 py-0.5 rounded border border-accent/30 bg-accent/5 text-accent"
                   >
                     {target}
                   </span>
@@ -1682,7 +1682,7 @@ export function AnalysisResults({
                     <h3 data-text-role="item-title" className={getTextRoleClassName('item-title')}>
                       {returnTrack.name}
                     </h3>
-                    <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-border text-text-secondary">
+                    <span className="text-micro font-mono uppercase px-1.5 py-0.5 rounded border border-border text-text-secondary">
                       {returnTrack.deviceFocus}
                     </span>
                   </div>
@@ -1702,7 +1702,7 @@ export function AnalysisResults({
 
           {routingBlueprint.notes.length > 0 && (
             <div className="rounded-sm border border-border bg-bg-card p-4 space-y-2">
-              <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">Routing Notes</p>
+              <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">Routing Notes</p>
               {routingBlueprint.notes.map((note, index) => (
                 <p key={`${note}-${index}`} className="text-xs font-mono text-text-secondary leading-relaxed">
                   {truncateAtSentenceBoundary(note, 220)}
@@ -1718,7 +1718,7 @@ export function AnalysisResults({
           <ResultsSectionHeader
             title="Warp Guide"
             rightSlot={
-              <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">
+              <span className="text-meta font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">
                 CLIP PREP
               </span>
             }
@@ -1728,13 +1728,13 @@ export function AnalysisResults({
             {warpTargets.map(({ label, target }) => (
               <div key={label} className="rounded-sm border border-border bg-bg-card p-4 space-y-3">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">{label}</p>
-                  <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-accent/30 bg-accent/5 text-accent">
+                  <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">{label}</p>
+                  <span className="text-micro font-mono uppercase px-1.5 py-0.5 rounded border border-accent/30 bg-accent/5 text-accent">
                     {target.warpMode}
                   </span>
                 </div>
                 {target.settings && (
-                  <p className="text-[10px] font-mono text-text-secondary uppercase tracking-wide">
+                  <p className="text-meta font-mono text-text-secondary uppercase tracking-wide">
                     {target.settings}
                   </p>
                 )}
@@ -1746,7 +1746,7 @@ export function AnalysisResults({
           </div>
 
           <div className="rounded-sm border border-border bg-bg-card p-4">
-            <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">Why These Modes</p>
+            <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">Why These Modes</p>
             <p className="mt-2 text-xs font-mono text-text-secondary leading-relaxed">
               {truncateAtSentenceBoundary(warpGuide.rationale, 320)}
             </p>
@@ -1759,7 +1759,7 @@ export function AnalysisResults({
           <ResultsSectionHeader
             title="Detected Characteristics"
             rightSlot={
-              <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">AI INTERP</span>
+              <span className="text-meta font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">AI INTERP</span>
             }
           />
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1806,7 +1806,7 @@ export function AnalysisResults({
           <ResultsSectionHeader
             title="Arrangement Overview"
             rightSlot={
-              <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">TIMELINE</span>
+              <span className="text-meta font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">TIMELINE</span>
             }
           />
 
@@ -1822,7 +1822,7 @@ export function AnalysisResults({
                 {arrangement.segments.map((segment, segmentIndex) => (
                   <div
                     key={segment.id}
-                    className="absolute top-0 bottom-0 px-2 py-1 border-r border-bg-app/30 text-[10px] font-mono text-white flex items-center justify-center text-center overflow-hidden"
+                    className="absolute top-0 bottom-0 px-2 py-1 border-r border-bg-app/30 text-meta font-mono text-white flex items-center justify-center text-center overflow-hidden"
                     style={{
                       left: `${segment.leftPercent}%`,
                       width: `${segment.widthPercent}%`,
@@ -1840,7 +1840,7 @@ export function AnalysisResults({
                     className="absolute top-0 bottom-0 pointer-events-none"
                     style={{ left: `${marker.leftPercent}%` }}
                   >
-                    <div className="absolute -top-5 -translate-x-1/2 bg-bg-panel border border-border rounded px-1 py-[1px] text-[9px] font-mono text-text-secondary whitespace-nowrap">
+                    <div className="absolute -top-5 -translate-x-1/2 bg-bg-panel border border-border rounded px-1 py-[1px] text-micro font-mono text-text-secondary whitespace-nowrap">
                       {marker.label}
                     </div>
                     <div className="h-full w-px bg-accent/90" />
@@ -1848,7 +1848,7 @@ export function AnalysisResults({
                 ))}
               </div>
 
-              <div className="flex items-center justify-between mt-2 text-[10px] font-mono text-text-secondary">
+              <div className="flex items-center justify-between mt-2 text-meta font-mono text-text-secondary">
                 <span>0s</span>
                 <span>{arrangement.totalDuration.toFixed(1)}s</span>
               </div>
@@ -1858,7 +1858,7 @@ export function AnalysisResults({
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <div className="h-px bg-border/60 flex-1" />
-                  <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+                  <span className="text-meta font-mono uppercase tracking-wide text-text-secondary">
                     NOVELTY EVENTS
                   </span>
                   <div className="h-px bg-border/60 flex-1" />
@@ -1900,7 +1900,7 @@ export function AnalysisResults({
                         <span className="text-xs">{isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}</span>
                         <span className="text-xs font-mono text-text-primary truncate">{segment.name}</span>
                         <span
-                          className="text-[10px] font-mono px-1.5 py-0.5 rounded border whitespace-nowrap"
+                          className="text-meta font-mono px-1.5 py-0.5 rounded border whitespace-nowrap"
                           style={{
                             backgroundColor: withAlpha(segmentColor, '22'),
                             borderColor: withAlpha(segmentColor, '66'),
@@ -1912,11 +1912,11 @@ export function AnalysisResults({
                       </div>
                       <div className="flex items-center gap-2">
                         {lufsDeltaLabel && (
-                          <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border whitespace-nowrap ${lufsDeltaClass}`}>
+                          <span className={`text-micro font-mono px-1.5 py-0.5 rounded border whitespace-nowrap ${lufsDeltaClass}`}>
                             {lufsDeltaLabel}
                           </span>
                         )}
-                        <span className="text-[10px] font-mono text-text-secondary whitespace-nowrap">
+                        <span className="text-meta font-mono text-text-secondary whitespace-nowrap">
                           {segment.startTime.toFixed(1)}s - {segment.endTime.toFixed(1)}s
                         </span>
                       </div>
@@ -1929,10 +1929,10 @@ export function AnalysisResults({
                         </p>
                         {segment.spectralNote && (
                           <div className="border border-border/70 rounded-sm bg-bg-panel/50 px-2 py-2 space-y-1">
-                            <span className="inline-flex text-[9px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded border border-accent/40 text-accent">
+                            <span className="inline-flex text-micro font-mono uppercase tracking-wide px-1.5 py-0.5 rounded border border-accent/40 text-accent">
                               SPECTRAL NOTE
                             </span>
-                            <p className="text-[11px] text-text-secondary/90 font-mono leading-relaxed">
+                            <p className="text-eyebrow text-text-secondary/90 font-mono leading-relaxed">
                               {segment.spectralNote}
                             </p>
                           </div>
@@ -1941,30 +1941,30 @@ export function AnalysisResults({
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                             {segment.sceneName && (
                               <div className="border border-border/70 rounded-sm bg-bg-panel/50 px-2 py-2 space-y-1">
-                                <span className="inline-flex text-[9px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded border border-border text-text-secondary">
+                                <span className="inline-flex text-micro font-mono uppercase tracking-wide px-1.5 py-0.5 rounded border border-border text-text-secondary">
                                   Scene
                                 </span>
-                                <p className="text-[11px] text-text-secondary/90 font-mono leading-relaxed">
+                                <p className="text-eyebrow text-text-secondary/90 font-mono leading-relaxed">
                                   {segment.sceneName}
                                 </p>
                               </div>
                             )}
                             {segment.abletonAction && (
                               <div className="border border-border/70 rounded-sm bg-bg-panel/50 px-2 py-2 space-y-1">
-                                <span className="inline-flex text-[9px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded border border-border text-text-secondary">
+                                <span className="inline-flex text-micro font-mono uppercase tracking-wide px-1.5 py-0.5 rounded border border-border text-text-secondary">
                                   Ableton Action
                                 </span>
-                                <p className="text-[11px] text-text-secondary/90 font-mono leading-relaxed">
+                                <p className="text-eyebrow text-text-secondary/90 font-mono leading-relaxed">
                                   {segment.abletonAction}
                                 </p>
                               </div>
                             )}
                             {segment.automationFocus && (
                               <div className="border border-border/70 rounded-sm bg-bg-panel/50 px-2 py-2 space-y-1">
-                                <span className="inline-flex text-[9px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded border border-border text-text-secondary">
+                                <span className="inline-flex text-micro font-mono uppercase tracking-wide px-1.5 py-0.5 rounded border border-border text-text-secondary">
                                   Automation Focus
                                 </span>
-                                <p className="text-[11px] text-text-secondary/90 font-mono leading-relaxed">
+                                <p className="text-eyebrow text-text-secondary/90 font-mono leading-relaxed">
                                   {segment.automationFocus}
                                 </p>
                               </div>
@@ -2028,7 +2028,7 @@ export function AnalysisResults({
             title={formatDisplayText('Sonic Elements & Reconstruction', 'title')}
             titleRole="section-title"
             rightSlot={
-              <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">COLLAPSIBLE</span>
+              <span className="text-meta font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">COLLAPSIBLE</span>
             }
           />
 
@@ -2056,7 +2056,7 @@ export function AnalysisResults({
                           </h3>
                           {card.id === 'harmonicContent' && lowConfidenceIndicator(chordsAreApproximate)}
                           {card.transcriptionDerived && (
-                            <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-accent/40 text-accent whitespace-nowrap">
+                            <span className="text-micro font-mono uppercase px-1.5 py-0.5 rounded border border-accent/40 text-accent whitespace-nowrap">
                               Transcription-derived
                             </span>
                           )}
@@ -2106,7 +2106,7 @@ export function AnalysisResults({
                         {card.measurements.map((measurement, idx) => (
                           <div
                             key={`${card.id}-measurement-${idx}`}
-                            className="flex items-center justify-between text-[11px] font-mono border border-border rounded-sm px-2 py-1 bg-bg-panel/40"
+                            className="flex items-center justify-between text-eyebrow font-mono border border-border rounded-sm px-2 py-1 bg-bg-panel/40"
                           >
                             <span className="text-text-secondary truncate pr-2">
                               {measurement.icon} {measurement.label}
@@ -2117,7 +2117,7 @@ export function AnalysisResults({
 
                         {card.isWidthAndStereo && (
                           <div className="mt-3 border border-border rounded-sm p-2 bg-bg-panel/40">
-                            <div className="flex items-center justify-between text-[10px] font-mono text-text-secondary mb-1">
+                            <div className="flex items-center justify-between text-meta font-mono text-text-secondary mb-1">
                               <span>L</span>
                               <span>R</span>
                             </div>
@@ -2128,7 +2128,7 @@ export function AnalysisResults({
                                 style={calculateStereoBandStyle(phase1.stereoWidth)}
                               />
                             </div>
-                            <p className="text-[10px] font-mono text-text-secondary mt-1">
+                            <p className="text-meta font-mono text-text-secondary mt-1">
                               Width band: {phase1.stereoWidth.toFixed(2)} around center
                             </p>
                           </div>
@@ -2164,7 +2164,7 @@ export function AnalysisResults({
                     {mixAppliedCount} of {mixCardCount} applied
                   </Pill>
                 )}
-                <span className="text-[10px] font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">SIGNAL FLOW</span>
+                <span className="text-meta font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">SIGNAL FLOW</span>
               </div>
             }
           />
@@ -2241,7 +2241,7 @@ export function AnalysisResults({
                                 >
                                   {card.device}
                                 </h4>
-                                <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-border text-text-secondary whitespace-nowrap">
+                                <span className="text-micro font-mono uppercase px-1.5 py-0.5 rounded border border-border text-text-secondary whitespace-nowrap">
                                   {card.category}
                                 </span>
                                 <RecommendationVerificationBadge
@@ -2319,7 +2319,7 @@ export function AnalysisResults({
                                   key={`${card.id}-parameter-${idx}`}
                                   className="border border-border rounded-sm px-2 py-1 bg-bg-panel/40"
                                 >
-                                  <p className="text-[10px] font-mono uppercase text-text-secondary">{parameter.label}</p>
+                                  <p className="text-meta font-mono uppercase text-text-secondary">{parameter.label}</p>
                                   <p className="text-xs font-mono text-text-primary font-bold">{parameter.value}</p>
                                 </div>
                               ))}
@@ -2331,7 +2331,7 @@ export function AnalysisResults({
                             />
 
                             <div className="border border-accent/20 bg-accent/5 rounded-sm px-2 py-2">
-                              <p className="text-[10px] font-mono text-accent uppercase tracking-wide">PRO TIP</p>
+                              <p className="text-meta font-mono text-accent uppercase tracking-wide">PRO TIP</p>
                               <p className="text-xs font-mono text-text-secondary mt-1 leading-relaxed">
                                 {truncateAtSentenceBoundary(card.proTip, 320)}
                               </p>
@@ -2419,11 +2419,11 @@ export function AnalysisResults({
                                   {patch.device}
                                 </h4>
                                 {patch.transcriptionDerived && (
-                                  <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-accent/40 text-accent whitespace-nowrap">
+                                  <span className="text-micro font-mono uppercase px-1.5 py-0.5 rounded border border-accent/40 text-accent whitespace-nowrap">
                                     Transcription-derived
                                   </span>
                                 )}
-                                <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-border text-text-secondary whitespace-nowrap">
+                                <span className="text-micro font-mono uppercase px-1.5 py-0.5 rounded border border-border text-text-secondary whitespace-nowrap">
                                   {patch.category}
                                 </span>
                                 <RecommendationVerificationBadge
@@ -2498,7 +2498,7 @@ export function AnalysisResults({
                                   key={`${patch.id}-parameter-${idx}`}
                                   className="border border-border rounded-sm px-2 py-1 bg-bg-panel/40"
                                 >
-                                  <p className="text-[10px] font-mono uppercase text-text-secondary">{parameter.label}</p>
+                                  <p className="text-meta font-mono uppercase text-text-secondary">{parameter.label}</p>
                                   <p className="text-xs font-mono text-text-primary font-bold">{parameter.value}</p>
                                 </div>
                               ))}
@@ -2510,7 +2510,7 @@ export function AnalysisResults({
                             />
 
                             <div className="border border-accent/20 bg-accent/5 rounded-sm px-2 py-2">
-                              <p className="text-[10px] font-mono text-accent uppercase tracking-wide">PRO TIP</p>
+                              <p className="text-meta font-mono text-accent uppercase tracking-wide">PRO TIP</p>
                               <p className="text-xs font-mono text-text-secondary mt-1 leading-relaxed">
                                 {truncateAtSentenceBoundary(patch.proTip, 320)}
                               </p>
@@ -2541,7 +2541,7 @@ export function AnalysisResults({
                 {formatDisplayText('Secret Sauce Protocol', 'title')}
               </h2>
             </div>
-            <span className="text-[10px] font-mono bg-accent/20 text-accent px-2 py-1 rounded-sm border border-accent/30">
+            <span className="text-meta font-mono bg-accent/20 text-accent px-2 py-1 rounded-sm border border-accent/30">
               CONFIDENTIAL
             </span>
           </div>
@@ -2594,7 +2594,7 @@ export function AnalysisResults({
                         {truncateAtSentenceBoundary(step.instruction, 220)}
                       </p>
                       <div className="border border-accent/20 bg-accent/5 rounded-sm px-2 py-2">
-                        <p className="text-[10px] font-mono text-accent uppercase tracking-wide">
+                        <p className="text-meta font-mono text-accent uppercase tracking-wide">
                           Measurement Reason
                         </p>
                         <p className="text-xs font-mono text-text-secondary mt-1 leading-relaxed">

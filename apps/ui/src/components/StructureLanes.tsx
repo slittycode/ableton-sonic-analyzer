@@ -36,7 +36,7 @@ export function StructureLanes({ phase1 }: StructureLanesProps) {
 
   if (!hasSegments && !hasSpectral && !hasNovelty) {
     return (
-      <p className="text-[11px] font-mono text-text-secondary opacity-60">
+      <p className="text-eyebrow font-mono text-text-secondary opacity-60">
         No structural data available for this track.
       </p>
     );
@@ -100,7 +100,7 @@ export function StructureLanes({ phase1 }: StructureLanesProps) {
                   }}
                   title={`Seg ${i} • ${fmt(seg.lufs, 1)} LUFS`}
                 >
-                  <span className="text-[9px] font-mono font-semibold truncate px-1" style={{ color }}>
+                  <span className="text-micro font-mono font-semibold truncate px-1" style={{ color }}>
                     {i}
                   </span>
                 </div>
@@ -158,8 +158,8 @@ export function StructureLanes({ phase1 }: StructureLanesProps) {
               opacity="0.7"
             />
           </svg>
-          <div className="absolute right-1 top-0.5 text-[7px] font-mono text-[#444]">{fmt(lufsMax, 1)}</div>
-          <div className="absolute right-1 bottom-0.5 text-[7px] font-mono text-[#444]">{fmt(lufsMin, 1)}</div>
+          <div className="absolute right-1 top-0.5 text-pico font-mono text-[#444]">{fmt(lufsMax, 1)}</div>
+          <div className="absolute right-1 bottom-0.5 text-pico font-mono text-[#444]">{fmt(lufsMin, 1)}</div>
         </LaneRow>
       )}
 
@@ -177,8 +177,8 @@ export function StructureLanes({ phase1 }: StructureLanesProps) {
       {hasSpectral && (
         <LaneRow label="Spectral" height="h-[36px]">
           <SpectralLane values={spectral.map((s) => s.spectralCentroid ?? 0)} color="#8a64ff" />
-          <div className="absolute right-1 top-0.5 text-[7px] font-mono text-[#444]">High</div>
-          <div className="absolute right-1 bottom-0.5 text-[7px] font-mono text-[#444]">Low</div>
+          <div className="absolute right-1 top-0.5 text-pico font-mono text-[#444]">High</div>
+          <div className="absolute right-1 bottom-0.5 text-pico font-mono text-[#444]">Low</div>
         </LaneRow>
       )}
 

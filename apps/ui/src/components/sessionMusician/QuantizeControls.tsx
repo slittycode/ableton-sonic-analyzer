@@ -21,7 +21,7 @@ export function QuantizeControls({ value, onChange, disabled = false }: Quantize
     <div className="flex flex-wrap items-center gap-4 p-3 border border-border rounded-sm bg-bg-panel/40">
       <div className="flex items-center gap-2">
         <Grid3X3 className="w-3.5 h-3.5 text-text-secondary" />
-        <span className="text-[10px] font-mono uppercase text-text-secondary">Quantize</span>
+        <span className="text-meta font-mono uppercase text-text-secondary">Quantize</span>
       </div>
 
       <div className="flex items-center gap-1">
@@ -30,7 +30,7 @@ export function QuantizeControls({ value, onChange, disabled = false }: Quantize
             key={grid}
             onClick={() => onChange({ ...value, grid })}
             disabled={disabled}
-            className={`px-2 py-1 text-[10px] font-mono rounded border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+            className={`px-2 py-1 text-meta font-mono rounded border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
               value.grid === grid
                 ? 'border-accent text-accent bg-accent/10'
                 : 'border-border text-text-secondary bg-bg-card hover:bg-bg-panel'
@@ -43,7 +43,7 @@ export function QuantizeControls({ value, onChange, disabled = false }: Quantize
 
       <div className="flex items-center gap-2 ml-auto">
         <SlidersHorizontal className="w-3.5 h-3.5 text-text-secondary" />
-        <span className="text-[10px] font-mono uppercase text-text-secondary">Swing</span>
+        <span className="text-meta font-mono uppercase text-text-secondary">Swing</span>
         <input
           type="range"
           min={0}
@@ -53,7 +53,7 @@ export function QuantizeControls({ value, onChange, disabled = false }: Quantize
           disabled={swingDisabled}
           className="w-20 h-1 accent-accent disabled:opacity-30"
         />
-        <span className="text-[10px] font-mono text-text-secondary w-8 text-right">
+        <span className="text-meta font-mono text-text-secondary w-8 text-right">
           {value.swing}%
         </span>
       </div>

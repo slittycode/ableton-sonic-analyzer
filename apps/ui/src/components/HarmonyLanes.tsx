@@ -21,7 +21,7 @@ export function HarmonyLanes({ phase1 }: HarmonyLanesProps) {
 
   if (!hasChord && !hasSegmentKeys && !hasPitch) {
     return (
-      <p className="text-[11px] font-mono text-text-secondary opacity-60">
+      <p className="text-eyebrow font-mono text-text-secondary opacity-60">
         No harmonic data available for this track.
       </p>
     );
@@ -71,7 +71,7 @@ export function HarmonyLanes({ phase1 }: HarmonyLanesProps) {
                     {c}
                   </div>
                   {analysis && (
-                    <div className="text-[7px] font-mono text-[#666] uppercase">
+                    <div className="text-pico font-mono text-[#666] uppercase">
                       {analysis.numeral}
                     </div>
                   )}
@@ -94,7 +94,7 @@ export function HarmonyLanes({ phase1 }: HarmonyLanesProps) {
                   className="flex-1 flex items-center justify-center border-r border-[#333] last:border-r-0"
                   style={{ backgroundColor: `${color}26` }}
                 >
-                  <span className="text-[11px] font-mono font-semibold" style={{ color }}>
+                  <span className="text-eyebrow font-mono font-semibold" style={{ color }}>
                     {c}
                   </span>
                 </div>
@@ -118,7 +118,7 @@ export function HarmonyLanes({ phase1 }: HarmonyLanesProps) {
                   className="flex-1 flex items-center justify-center border-r border-[#2a2a2a] last:border-r-0"
                   style={{ backgroundColor: `${color}18` }}
                 >
-                  <span className="text-[8px] font-mono" style={{ color }}>
+                  <span className="text-nano font-mono" style={{ color }}>
                     {segKey}
                     {typeof conf === 'number' && (
                       <span className="opacity-50"> · {formatNum(conf, 2)}</span>
@@ -137,17 +137,17 @@ export function HarmonyLanes({ phase1 }: HarmonyLanesProps) {
           <div className="flex items-center gap-4 px-3 h-full overflow-x-auto">
             {Object.entries(phase1.pitchDetail.stems).map(([name, stem]) => (
               <div key={name} className="flex items-center gap-1 flex-shrink-0">
-                <span className="text-[8px] font-mono text-[#555] uppercase">{name}</span>
-                <span className="text-[9px] font-mono text-[#aaa]">
+                <span className="text-nano font-mono text-[#555] uppercase">{name}</span>
+                <span className="text-micro font-mono text-[#aaa]">
                   {stem.medianPitchHz !== null ? `${stem.medianPitchHz} Hz` : '—'}
                 </span>
                 {stem.pitchRangeLowHz !== null && stem.pitchRangeHighHz !== null && (
-                  <span className="text-[7px] font-mono text-[#444]">
+                  <span className="text-pico font-mono text-[#444]">
                     {stem.pitchRangeLowHz}–{stem.pitchRangeHighHz}
                   </span>
                 )}
                 {typeof stem.voicedFramePercent === 'number' && (
-                  <span className="text-[9px] font-mono text-[#00ff9d]">
+                  <span className="text-micro font-mono text-[#00ff9d]">
                     {stem.voicedFramePercent}%
                   </span>
                 )}

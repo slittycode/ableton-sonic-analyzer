@@ -216,7 +216,7 @@ function UnavailableMeasurementCard({
       className="border-dashed border-border-light/60 bg-bg-surface-dark/40"
     >
       {detail ? (
-        <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-text-secondary/60">
+        <p className="text-meta font-mono uppercase tracking-[0.12em] text-text-secondary/60">
           {detail}
         </p>
       ) : null}
@@ -396,7 +396,7 @@ const BarChart = ({
 
   return (
     <div className="space-y-1.5">
-      <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-text-secondary">
+      <span className="text-meta font-mono uppercase tracking-[0.16em] text-text-secondary">
         {label}
       </span>
       <div className="flex gap-1 items-end rounded-sm border border-border-light/60 bg-bg-surface-dark/80 p-2">
@@ -439,7 +439,7 @@ const HorizontalDominance = ({
 
   return (
     <div className="space-y-1">
-      <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+      <span className="text-meta font-mono uppercase tracking-wide text-text-secondary">
         Beat Dominance
       </span>
       <div className="flex h-5 gap-px overflow-hidden rounded-sm">
@@ -459,7 +459,7 @@ const HorizontalDominance = ({
           title={`High: ${formatNumber(highRatio, 2)}`}
         />
       </div>
-      <div className="flex justify-between text-[9px] text-text-secondary gap-1">
+      <div className="flex justify-between text-micro text-text-secondary gap-1">
         <span>K {formatNumber(kickRatio, 2)}</span>
         <span>M {formatNumber(midRatio, 2)}</span>
         <span>H {formatNumber(highRatio, 2)}</span>
@@ -482,7 +482,7 @@ const SimpleTable = <T extends object>({
           {columns.map((col) => (
             <th
               key={col.key}
-              className="px-2 py-1 text-left text-[10px] font-mono uppercase tracking-wide text-text-secondary font-normal"
+              className="px-2 py-1 text-left text-meta font-mono uppercase tracking-wide text-text-secondary font-normal"
             >
               {col.label}
             </th>
@@ -671,20 +671,20 @@ const ComparativeMetricTile = ({
       className="bg-bg-surface-dark border border-border rounded-sm p-3"
     >
       <span
-        className="text-[10px] font-mono uppercase tracking-wider block"
+        className="text-meta font-mono uppercase tracking-wider block"
         style={{ color: `${cfg.color}80` }}
       >
         {metricKey === 'onsetRate' ? 'Onset Rate' : metricKey}
       </span>
       <div className="flex items-baseline gap-1 mt-1">
         <span
-          className="text-[22px] font-display font-extrabold tabular-nums"
+          className="text-value-lg font-display font-extrabold tabular-nums"
           style={{ color: cfg.color }}
         >
           {cfg.unit === '/sec' ? value.toFixed(1) : displayValue}
         </span>
         {cfg.unit === '/sec' && (
-          <span className="text-[9px] font-mono" style={{ color: `${cfg.color}60` }}>
+          <span className="text-micro font-mono" style={{ color: `${cfg.color}60` }}>
             /sec
           </span>
         )}
@@ -714,7 +714,7 @@ const ComparativeMetricTile = ({
         />
         <div className="flex justify-between mt-1">
           {cfg.zones.map((z) => (
-            <span key={z} className="text-[6px] font-mono text-[#444]">
+            <span key={z} className="text-pico font-mono text-[#444]">
               {z}
             </span>
           ))}
@@ -792,11 +792,11 @@ const RhythmGridPanel = ({ phase1 }: { phase1: Phase1Result }) => {
     >
       <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+          <span className="text-meta font-mono uppercase tracking-wide text-text-secondary">
             Rhythm Grid
           </span>
           {isAssumedMeter(phase1) && (
-            <span className="inline-flex items-center rounded-sm border border-[#3a2b1c] bg-[#20160c] px-2 py-1 text-[10px] font-mono uppercase tracking-[0.14em] text-[#d8a15d]">
+            <span className="inline-flex items-center rounded-sm border border-[#3a2b1c] bg-[#20160c] px-2 py-1 text-meta font-mono uppercase tracking-[0.14em] text-[#d8a15d]">
               Assumed 4/4
             </span>
           )}
@@ -810,7 +810,7 @@ const RhythmGridPanel = ({ phase1 }: { phase1: Phase1Result }) => {
                     type="button"
                     onClick={() => setSelectedWindowBars(window.bars)}
                     data-testid={`rhythm-grid-window-${window.bars}`}
-                    className={`rounded-sm border px-2 py-1 text-[10px] font-mono uppercase tracking-[0.14em] transition-colors ${
+                    className={`rounded-sm border px-2 py-1 text-meta font-mono uppercase tracking-[0.14em] transition-colors ${
                       isActive
                         ? 'border-accent/50 bg-accent/10 text-accent'
                         : 'border-[#2a2a2a] bg-[#111111] text-text-secondary hover:border-accent/30 hover:text-text-primary'
@@ -823,7 +823,7 @@ const RhythmGridPanel = ({ phase1 }: { phase1: Phase1Result }) => {
             </div>
           )}
         </div>
-        <p className="max-w-[360px] text-[10px] font-mono uppercase tracking-[0.14em] text-[#6d6d6d]">
+        <p className="max-w-[360px] text-meta font-mono uppercase tracking-[0.14em] text-[#6d6d6d]">
           DSP band-energy lanes. Frequency-band proxies, not isolated stems.
         </p>
       </div>
@@ -836,7 +836,7 @@ const RhythmGridPanel = ({ phase1 }: { phase1: Phase1Result }) => {
               <div
                 key={`bar-header-${barNumber}`}
                 data-testid={`rhythm-grid-bar-${barNumber}`}
-                className="rounded-sm border border-border-light bg-bg-surface-dark px-2 py-2 text-center text-[10px] font-mono text-text-secondary"
+                className="rounded-sm border border-border-light bg-bg-surface-dark px-2 py-2 text-center text-meta font-mono text-text-secondary"
                 style={{ width: `${barCellWidth}px` }}
               >
                 {barNumber}
@@ -849,12 +849,12 @@ const RhythmGridPanel = ({ phase1 }: { phase1: Phase1Result }) => {
               <div key={lane.label} className="flex items-start gap-3">
                 <div className="flex min-h-[42px] w-[136px] shrink-0 flex-col justify-center rounded-sm border border-border bg-bg-surface-dark px-3 py-2">
                   <span
-                    className="text-[10px] font-mono uppercase tracking-[0.12em]"
+                    className="text-meta font-mono uppercase tracking-[0.12em]"
                     style={{ color: lane.labelColor }}
                   >
                     {lane.label}
                   </span>
-                  <span className="mt-1 text-[8px] font-mono uppercase tracking-[0.12em] text-[#5f5f5f]">
+                  <span className="mt-1 text-nano font-mono uppercase tracking-[0.12em] text-[#5f5f5f]">
                     {lane.helper}
                   </span>
                 </div>
@@ -961,10 +961,10 @@ const SidechainEnvelope = ({
   return (
     <div className="flex h-full flex-col rounded-sm border border-border-light bg-bg-surface-dark px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
       <div className="flex items-start justify-between gap-3">
-        <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+        <span className="text-meta font-mono uppercase tracking-wide text-text-secondary">
           Sidechain Envelope
         </span>
-        <span className="text-[8px] font-mono text-[#a78bfa75]">
+        <span className="text-nano font-mono text-[#a78bfa75]">
           {pumpingRate ?? 'n/a'} · {strengthLabel}
         </span>
       </div>
@@ -996,7 +996,7 @@ const SidechainEnvelope = ({
       </svg>
       <div className="mt-3 grid grid-cols-2 gap-3">
         <div className="rounded-sm border border-border-light bg-bg-surface-dark px-3 py-2">
-          <span className="block text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+          <span className="block text-meta font-mono uppercase tracking-wide text-text-secondary">
             Confidence
           </span>
           <span className="mt-1 block text-sm font-display font-bold text-text-primary">
@@ -1004,7 +1004,7 @@ const SidechainEnvelope = ({
           </span>
         </div>
         <div className="rounded-sm border border-border-light bg-bg-surface-dark px-3 py-2">
-          <span className="block text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+          <span className="block text-meta font-mono uppercase tracking-wide text-text-secondary">
             Regularity
           </span>
           <span className="mt-1 block text-sm font-display font-bold text-text-primary">
@@ -1044,14 +1044,14 @@ const EffectsFieldPanel = ({
       <div className="flex h-full flex-col rounded-sm border border-border-light bg-bg-surface-dark px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <span className="block text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+            <span className="block text-meta font-mono uppercase tracking-wide text-text-secondary">
               Effects Field
             </span>
-            <span className="mt-1 block text-[11px] font-mono uppercase tracking-[0.2em] text-[#fbbf24]">
+            <span className="mt-1 block text-eyebrow font-mono uppercase tracking-[0.2em] text-[#fbbf24]">
               Gate Active
             </span>
           </div>
-          <span className="text-[8px] font-mono text-[#fbbf2480]">{rateLabel}</span>
+          <span className="text-nano font-mono text-[#fbbf2480]">{rateLabel}</span>
         </div>
 
         <div className="mt-4 grid grid-cols-8 gap-1.5">
@@ -1075,7 +1075,7 @@ const EffectsFieldPanel = ({
 
         <div className="mt-4 grid grid-cols-2 gap-3">
           <div className="rounded-sm border border-border-light bg-bg-surface-dark px-3 py-2">
-            <span className="block text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+            <span className="block text-meta font-mono uppercase tracking-wide text-text-secondary">
               Gate Events
             </span>
             <span className="mt-1 block text-sm font-display font-bold text-text-primary">
@@ -1083,7 +1083,7 @@ const EffectsFieldPanel = ({
             </span>
           </div>
           <div className="rounded-sm border border-border-light bg-bg-surface-dark px-3 py-2">
-            <span className="block text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+            <span className="block text-meta font-mono uppercase tracking-wide text-text-secondary">
               Gate Regularity
             </span>
             <div className="mt-2 h-[6px] rounded-full bg-[#1c1a12]">
@@ -1108,24 +1108,24 @@ const EffectsFieldPanel = ({
     <div className="flex h-full flex-col rounded-sm border border-border-light bg-bg-surface-dark px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <span className="block text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+          <span className="block text-meta font-mono uppercase tracking-wide text-text-secondary">
             Pump Matrix
           </span>
-          <span className="mt-1 block text-[11px] font-mono uppercase tracking-[0.2em] text-[#a78bfa]">
+          <span className="mt-1 block text-eyebrow font-mono uppercase tracking-[0.2em] text-[#a78bfa]">
             No Gating Effect
           </span>
         </div>
-        <span className="text-[8px] font-mono text-[#8c8c8c]">{rateLabel}</span>
+        <span className="text-nano font-mono text-[#8c8c8c]">{rateLabel}</span>
       </div>
 
       <div className="mt-4 space-y-3">
         {fallbackRows.map((row) => (
           <div key={row.label}>
             <div className="mb-1 flex items-center justify-between">
-              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+              <span className="text-meta font-mono uppercase tracking-wide text-text-secondary">
                 {row.label}
               </span>
-              <span className="text-[8px] font-mono" style={{ color: `${row.color}cc` }}>
+              <span className="text-nano font-mono" style={{ color: `${row.color}cc` }}>
                 {Math.round(row.value * 100)}%
               </span>
             </div>
@@ -1157,10 +1157,10 @@ const PhraseStructureTimeline = ({ phraseGrid }: { phraseGrid: PhraseGrid }) => 
   return (
     <div className="rounded-sm border border-border bg-bg-surface-dark px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
       <div className="mb-3 flex items-center justify-between">
-        <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+        <span className="text-meta font-mono uppercase tracking-wide text-text-secondary">
           Phrase Structure
         </span>
-        <span className="text-[8px] font-mono uppercase tracking-[0.18em] text-[#666]">
+        <span className="text-nano font-mono uppercase tracking-[0.18em] text-[#666]">
           {total} bars
         </span>
       </div>
@@ -1174,7 +1174,7 @@ const PhraseStructureTimeline = ({ phraseGrid }: { phraseGrid: PhraseGrid }) => 
               className="grid grid-cols-[28px_minmax(0,1fr)] items-center gap-2"
             >
               <span
-                className="text-[9px] font-mono font-bold uppercase tracking-[0.18em]"
+                className="text-micro font-mono font-bold uppercase tracking-[0.18em]"
                 style={{ color: `${tier.color}bb` }}
               >
                 {tier.label}
@@ -1354,17 +1354,17 @@ export function MeasurementDashboard({
                   )}
                 </div>
                 {phase1.bpmDoubletime === true && phase1.bpmRawOriginal != null && (
-                  <span className="block text-[8px] font-mono uppercase tracking-wide text-warning/80">
+                  <span className="block text-nano font-mono uppercase tracking-wide text-warning/80">
                     corrected from {formatNumber(phase1.bpmRawOriginal, 1)}
                   </span>
                 )}
                 {phase1.bpmPercival !== undefined && phase1.bpmPercival !== null && (
-                  <span className="block text-[8px] font-mono uppercase tracking-wide text-text-secondary/50">
+                  <span className="block text-nano font-mono uppercase tracking-wide text-text-secondary/50">
                     Percival {formatNumber(phase1.bpmPercival, 1)}
                   </span>
                 )}
                 {phase1.bpmSource != null && phase1.bpmSource !== 'rhythm_extractor' && (
-                  <span className="block text-[8px] font-mono uppercase tracking-wide text-text-secondary/50">
+                  <span className="block text-nano font-mono uppercase tracking-wide text-text-secondary/50">
                     Source {phase1.bpmSource.replace(/_/g, ' ')}
                   </span>
                 )}
@@ -1379,7 +1379,7 @@ export function MeasurementDashboard({
             footer={
               <div className="space-y-2">
                 {phase1.keyProfile && (
-                  <span className="block text-[8px] font-mono uppercase tracking-wide text-text-secondary/50">
+                  <span className="block text-nano font-mono uppercase tracking-wide text-text-secondary/50">
                     Profile {phase1.keyProfile}
                   </span>
                 )}
@@ -1410,11 +1410,11 @@ export function MeasurementDashboard({
                   </div>
                   <div className="space-y-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-[8px] font-mono uppercase tracking-wide text-text-secondary/60">
+                      <span className="text-nano font-mono uppercase tracking-wide text-text-secondary/60">
                         Arrangement
                       </span>
                       {phase1.sampleRate !== undefined && phase1.sampleRate !== null && (
-                        <span className="text-[8px] font-mono uppercase tracking-wide text-text-secondary/50 tabular-nums">
+                        <span className="text-nano font-mono uppercase tracking-wide text-text-secondary/50 tabular-nums">
                           {(phase1.sampleRate / 1000).toFixed(1)} kHz
                         </span>
                       )}
@@ -1450,7 +1450,7 @@ export function MeasurementDashboard({
               <div className="min-w-0">
                 <div className="flex items-center gap-2 mb-1">
                   <div className={`w-2 h-2 rounded-full bg-accent ${phase1.genreDetail.confidence > 0.8 ? 'animate-pulse' : ''}`} />
-                  <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">Genre Classification</span>
+                  <span className="text-meta font-mono uppercase tracking-wide text-text-secondary">Genre Classification</span>
                 </div>
                 <span className="text-lg font-display font-bold text-text-primary capitalize block truncate">
                   {phase1.genreDetail.genre}
@@ -1466,7 +1466,7 @@ export function MeasurementDashboard({
                 />
               </div>
               <div className="shrink-0 text-right">
-                <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">Conf</span>
+                <span className="text-meta font-mono uppercase tracking-wide text-text-secondary">Conf</span>
                 <span className="text-sm font-display font-bold text-text-primary ml-1.5 tabular-nums">
                   {Math.round(phase1.genreDetail.confidence * 100)}%
                 </span>
@@ -1476,7 +1476,7 @@ export function MeasurementDashboard({
             {/* Genre fingerprint — top scores as horizontal bars */}
             {phase1.genreDetail.topScores && phase1.genreDetail.topScores.length > 0 && (
               <div className="mt-3 pt-3 border-t border-border/50 space-y-1.5">
-                <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">Genre Fingerprint</span>
+                <span className="text-meta font-mono uppercase tracking-wide text-text-secondary">Genre Fingerprint</span>
                 <div className="space-y-1">
                   {phase1.genreDetail.topScores.slice(0, 5).map((score, i) => {
                     const maxScore = phase1.genreDetail!.topScores[0]?.score || 1;
@@ -1484,7 +1484,7 @@ export function MeasurementDashboard({
                     const color = ['#ff6b00', '#fb923c', '#f59e0b', '#fdba74', '#fed7aa'][i] ?? '#fb923c';
                     return (
                       <div key={`${score.genre}-${i}`} className="flex items-center gap-2">
-                        <span className="text-[8px] font-mono text-text-secondary/70 w-20 truncate text-right capitalize">
+                        <span className="text-nano font-mono text-text-secondary/70 w-20 truncate text-right capitalize">
                           {score.genre}
                         </span>
                         <MetricBar
@@ -1496,7 +1496,7 @@ export function MeasurementDashboard({
                           className="flex-1"
                           heightClassName="h-2"
                         />
-                        <span className="text-[8px] font-mono text-text-secondary/50 tabular-nums w-8 text-right">
+                        <span className="text-nano font-mono text-text-secondary/50 tabular-nums w-8 text-right">
                           {(score.score * 100).toFixed(0)}
                         </span>
                       </div>
@@ -1511,8 +1511,8 @@ export function MeasurementDashboard({
         {/* Tuning Detail */}
         {(phase1.tuningFrequency !== undefined && phase1.tuningFrequency !== null) && (
           <div className="flex items-center gap-3 px-1 flex-wrap">
-            <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">Tuning</span>
-            <span className="text-[9px] font-mono text-text-secondary/70 tabular-nums">
+            <span className="text-meta font-mono uppercase tracking-wide text-text-secondary">Tuning</span>
+            <span className="text-micro font-mono text-text-secondary/70 tabular-nums">
               {formatNumber(phase1.tuningFrequency, 1)} Hz
             </span>
             {phase1.tuningCents !== undefined && phase1.tuningCents !== null && (
@@ -1541,7 +1541,7 @@ export function MeasurementDashboard({
                 className="absolute top-0 bottom-0 border-l border-dashed border-text-secondary/25 z-10"
                 style={{ left: `${lufsToPercent(ref.lufs)}%` }}
               >
-                <span className="absolute -top-0.5 left-0.5 text-[7px] font-mono text-text-secondary/40 leading-none">
+                <span className="absolute -top-0.5 left-0.5 text-pico font-mono text-text-secondary/40 leading-none">
                   {ref.label}
                 </span>
               </div>
@@ -1564,7 +1564,7 @@ export function MeasurementDashboard({
               <span className="text-sm font-mono font-bold text-text-primary tabular-nums">
                 {formatNumber(phase1.lufsIntegrated, 1)}
               </span>
-              <span className="text-[7px] font-mono text-text-secondary/50 ml-1">LUFS</span>
+              <span className="text-pico font-mono text-text-secondary/50 ml-1">LUFS</span>
             </motion.div>
           </div>
 
@@ -1594,7 +1594,7 @@ export function MeasurementDashboard({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {/* Left — Headroom Diagram */}
             <div className="bg-bg-surface-dark border border-border-light border-l-2 border-accent rounded-sm p-4 flex flex-col items-center shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-              <span className="mb-3 self-start text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+              <span className="mb-3 self-start text-meta font-mono uppercase tracking-wide text-text-secondary">
                 Headroom
               </span>
               <div className="relative w-8 bg-bg-panel border border-border/30 rounded-sm" style={{ height: 180 }}>
@@ -1610,7 +1610,7 @@ export function MeasurementDashboard({
                     className="absolute left-0 right-0 border-t border-dashed border-text-secondary/18"
                     style={{ top: `${((3 - tick.value) / 51) * 100}%` }}
                   >
-                    <span className="absolute -left-11 -top-1.5 text-[7px] font-mono text-text-secondary/35">
+                    <span className="absolute -left-11 -top-1.5 text-pico font-mono text-text-secondary/35">
                       {tick.label}
                     </span>
                   </div>
@@ -1621,7 +1621,7 @@ export function MeasurementDashboard({
                     className="absolute left-0 right-0 border-t-2 border-error/70 z-10"
                     style={{ top: `${Math.max(0, Math.min(100, ((3 - phase1.truePeak) / 51) * 100))}%` }}
                   >
-                    <span className="absolute left-7 -top-1.5 text-[7px] font-mono text-error/70 whitespace-nowrap">
+                    <span className="absolute left-7 -top-1.5 text-pico font-mono text-error/70 whitespace-nowrap">
                       TP {formatNumber(phase1.truePeak, 1)}
                     </span>
                   </div>
@@ -1631,7 +1631,7 @@ export function MeasurementDashboard({
                   className="absolute left-0 right-0 border-t-2 border-accent/70 z-10"
                   style={{ top: `${Math.max(0, Math.min(100, ((3 - phase1.lufsIntegrated) / 51) * 100))}%` }}
                 >
-                  <span className="absolute left-7 -top-1.5 text-[7px] font-mono text-accent/70 whitespace-nowrap">
+                  <span className="absolute left-7 -top-1.5 text-pico font-mono text-accent/70 whitespace-nowrap">
                     INT {formatNumber(phase1.lufsIntegrated, 1)}
                   </span>
                 </div>
@@ -1654,12 +1654,12 @@ export function MeasurementDashboard({
                       bottom: `${100 - Math.max(0, Math.min(100, ((3 - phase1.lufsIntegrated) / 51) * 100))}%`,
                     }}
                   >
-                    <span className="text-[9px] font-mono text-accent font-bold whitespace-nowrap">
+                    <span className="text-micro font-mono text-accent font-bold whitespace-nowrap">
                       PLR {formatNumber(phase1.plr, 1)}
                     </span>
                   </div>
                 )}
-                <span className="absolute left-1/2 bottom-1 -translate-x-1/2 text-[7px] font-mono uppercase tracking-wide text-text-secondary/35">
+                <span className="absolute left-1/2 bottom-1 -translate-x-1/2 text-pico font-mono uppercase tracking-wide text-text-secondary/35">
                   floor
                 </span>
               </div>
@@ -1677,7 +1677,7 @@ export function MeasurementDashboard({
                   <MetricTile size="xl"
                     label={tile.label}
                     value={formatNumber(tile.value!, tile.decimals)}
-                    unit={tile.suffix ? <span className="text-[8px] font-mono text-text-secondary/45">{tile.suffix}</span> : undefined}
+                    unit={tile.suffix ? <span className="text-nano font-mono text-text-secondary/45">{tile.suffix}</span> : undefined}
                     className="min-h-[110px]"
                   />
                 </div>
@@ -1780,7 +1780,7 @@ export function MeasurementDashboard({
             <div className="grid gap-4 lg:grid-cols-2">
               {dynamicCharacter ? (
                 <div className="space-y-3 rounded-sm border border-border-light/60 bg-bg-surface-dark/70 p-4">
-                  <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-text-secondary block">
+                  <span className="text-meta font-mono uppercase tracking-[0.16em] text-text-secondary block">
                     Dynamics
                   </span>
                   <MetricBarRow
@@ -1825,7 +1825,7 @@ export function MeasurementDashboard({
               )}
               {textureCharacter ? (
                 <div className="space-y-3 rounded-sm border border-border-light/60 bg-bg-surface-dark/70 p-4">
-                  <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-text-secondary block">
+                  <span className="text-meta font-mono uppercase tracking-[0.16em] text-text-secondary block">
                     Texture
                   </span>
                   <MetricBarRow
@@ -1881,15 +1881,15 @@ export function MeasurementDashboard({
             <MetricTile size="xl"
               label="Dynamics & Texture"
               value={dynamicsTextureFallback.title}
-              unit={<span className="text-[8px] font-mono uppercase tracking-wide text-text-secondary/45">Unavailable</span>}
+              unit={<span className="text-nano font-mono uppercase tracking-wide text-text-secondary/45">Unavailable</span>}
               accent="warning"
               footer={
                 <div className="space-y-2">
-                  <p className="text-[10px] font-mono uppercase tracking-[0.14em] text-text-secondary/70">
+                  <p className="text-meta font-mono uppercase tracking-[0.14em] text-text-secondary/70">
                     {dynamicsTextureFallback.description}
                   </p>
                   {dynamicsTextureFallback.detail ? (
-                    <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-text-secondary/55">
+                    <p className="text-meta font-mono uppercase tracking-[0.12em] text-text-secondary/55">
                       {dynamicsTextureFallback.detail}
                     </p>
                   ) : null}
@@ -2010,7 +2010,7 @@ export function MeasurementDashboard({
         {apiBaseUrl && runId && (
           <div data-testid="spectral-enhancements-toolbar" className="border-t border-border pt-3">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mr-1">
+              <span className="text-meta font-mono uppercase tracking-wide text-text-secondary mr-1">
                 Enhancements
               </span>
               {([
@@ -2222,7 +2222,7 @@ export function MeasurementDashboard({
         {phase1.segmentStereo && phase1.segmentStereo.length > 0 && (
           <>
             <div className="border-t border-border pt-3 mt-3">
-              <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+              <span className="text-meta font-mono uppercase tracking-wide text-text-secondary">
                 Segment Stereo
               </span>
             </div>
@@ -2327,7 +2327,7 @@ export function MeasurementDashboard({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {phase1.grooveDetail && (
                 <div className="bg-bg-surface-dark border border-border rounded-sm p-3">
-                  <div className="text-[10px] font-mono uppercase tracking-wide text-text-secondary mb-3">
+                  <div className="text-meta font-mono uppercase tracking-wide text-text-secondary mb-3">
                     Swing
                   </div>
                   <div className="space-y-3">
@@ -2338,13 +2338,13 @@ export function MeasurementDashboard({
                       <div key={s.label}>
                         <div className="mb-1.5 flex items-center justify-between gap-3">
                           <span
-                            className="text-[10px] font-mono uppercase tracking-[0.12em]"
+                            className="text-meta font-mono uppercase tracking-[0.12em]"
                             style={{ color: `${s.color}80` }}
                           >
                             {s.label}
                           </span>
                           <span
-                            className="text-[10px] font-mono font-bold"
+                            className="text-meta font-mono font-bold"
                             style={{ color: s.color }}
                           >
                             {formatNumber(s.value, 2)}
@@ -2373,19 +2373,19 @@ export function MeasurementDashboard({
                   />
                   <div className="mt-3 grid grid-cols-3 gap-3">
                     <div>
-                      <span className="block text-[10px] font-mono text-text-secondary">Beat Count</span>
+                      <span className="block text-meta font-mono text-text-secondary">Beat Count</span>
                       <span className="text-sm font-display font-bold text-text-primary">
                         {formatNumber(phase1.beatsLoudness.beatCount, 0)}
                       </span>
                     </div>
                     <div>
-                      <span className="block text-[10px] font-mono text-text-secondary">Mean Loud</span>
+                      <span className="block text-meta font-mono text-text-secondary">Mean Loud</span>
                       <span className="text-sm font-display font-bold text-text-primary">
                         {formatNumber(phase1.beatsLoudness.meanBeatLoudness, 2)}
                       </span>
                     </div>
                     <div>
-                      <span className="block text-[10px] font-mono text-text-secondary">Variation</span>
+                      <span className="block text-meta font-mono text-text-secondary">Variation</span>
                       <span className="text-sm font-display font-bold text-text-primary">
                         {formatNumber(phase1.beatsLoudness.beatLoudnessVariation, 2)}
                       </span>
@@ -2400,7 +2400,7 @@ export function MeasurementDashboard({
         {(phase1.sidechainDetail ||
           (phase1.effectsDetail && phase1.effectsDetail.gatingDetected)) && (
           <div className="border-t border-border pt-3 space-y-2">
-            <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary block">
+            <span className="text-meta font-mono uppercase tracking-wide text-text-secondary block">
               Sidechain & Effects
             </span>
             <div className="rounded-sm border border-border bg-bg-surface-dark p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
@@ -2585,7 +2585,7 @@ export function MeasurementDashboard({
           {phase1.effectsDetail && (
             <div className="bg-bg-surface-dark border border-border-light border-l-2 border-accent rounded-sm p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] space-y-3">
               <div className="flex items-start justify-between gap-3">
-                <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+                <span className="text-meta font-mono uppercase tracking-wide text-text-secondary">
                   Effects
                 </span>
                 {phase1.effectsDetail.gatingDetected !== undefined &&
@@ -2632,7 +2632,7 @@ export function MeasurementDashboard({
           {phase1.vocalDetail && (
             <div className="bg-bg-surface-dark border border-border-light border-l-2 border-accent rounded-sm p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] space-y-3">
               <div className="flex items-start justify-between gap-3">
-                <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+                <span className="text-meta font-mono uppercase tracking-wide text-text-secondary">
                   Vocals
                 </span>
                 <StatusBadge
@@ -2667,7 +2667,7 @@ export function MeasurementDashboard({
           {phase1.acidDetail && (
             <div className="bg-bg-surface-dark border border-border-light border-l-2 border-accent rounded-sm p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] space-y-3">
               <div className="flex items-start justify-between gap-3">
-                <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+                <span className="text-meta font-mono uppercase tracking-wide text-text-secondary">
                   Acid
                 </span>
                 <StatusBadge
@@ -2702,7 +2702,7 @@ export function MeasurementDashboard({
           {phase1.supersawDetail && (
             <div className="bg-bg-surface-dark border border-border-light border-l-2 border-accent rounded-sm p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] space-y-3">
               <div className="flex items-start justify-between gap-3">
-                <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+                <span className="text-meta font-mono uppercase tracking-wide text-text-secondary">
                   Supersaw
                 </span>
                 <StatusBadge
@@ -2728,7 +2728,7 @@ export function MeasurementDashboard({
                 value={
                   <span className="font-mono tabular-nums">
                     {formatNumber(phase1.supersawDetail.avgDetuneCents, 1)}
-                    <span className="ml-1 text-[10px] text-text-secondary/50">cents</span>
+                    <span className="ml-1 text-meta text-text-secondary/50">cents</span>
                   </span>
                 }
               />
@@ -2738,7 +2738,7 @@ export function MeasurementDashboard({
           {phase1.bassDetail && (
             <div className="bg-bg-surface-dark border border-border-light border-l-2 border-accent rounded-sm p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] space-y-3">
               <div className="flex items-start justify-between gap-3">
-                <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+                <span className="text-meta font-mono uppercase tracking-wide text-text-secondary">
                   Bass Character
                 </span>
                 <StatusBadge label={phase1.bassDetail.type} tone="accent" compact />
@@ -2748,7 +2748,7 @@ export function MeasurementDashboard({
                 value={
                   <span className="font-mono tabular-nums">
                     {formatNumber(phase1.bassDetail.averageDecayMs, 0)}
-                    <span className="ml-1 text-[10px] text-text-secondary/50">ms</span>
+                    <span className="ml-1 text-meta text-text-secondary/50">ms</span>
                   </span>
                 }
               />
@@ -2767,7 +2767,7 @@ export function MeasurementDashboard({
                   value={
                     <span className="font-mono tabular-nums">
                       {formatNumber(phase1.bassDetail.fundamentalHz, 1)}
-                      <span className="ml-1 text-[10px] text-text-secondary/50">Hz</span>
+                      <span className="ml-1 text-meta text-text-secondary/50">Hz</span>
                     </span>
                   }
                 />
@@ -2778,7 +2778,7 @@ export function MeasurementDashboard({
           {phase1.kickDetail && (
             <div className="bg-bg-surface-dark border border-border-light border-l-2 border-accent rounded-sm p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] space-y-3">
               <div className="flex items-start justify-between gap-3">
-                <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+                <span className="text-meta font-mono uppercase tracking-wide text-text-secondary">
                   Kick
                 </span>
                 <StatusBadge
@@ -2801,7 +2801,7 @@ export function MeasurementDashboard({
                   value={
                     <span className="font-mono tabular-nums">
                       {formatNumber(phase1.kickDetail.fundamentalHz, 1)}
-                      <span className="ml-1 text-[10px] text-text-secondary/50">Hz</span>
+                      <span className="ml-1 text-meta text-text-secondary/50">Hz</span>
                     </span>
                   }
                 />
@@ -2812,7 +2812,7 @@ export function MeasurementDashboard({
           {phase1.reverbDetail && (
             <div className="bg-bg-surface-dark border border-border-light border-l-2 border-accent rounded-sm p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] space-y-3">
               <div className="flex items-start justify-between gap-3">
-                <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+                <span className="text-meta font-mono uppercase tracking-wide text-text-secondary">
                   Reverb
                 </span>
                 <StatusBadge

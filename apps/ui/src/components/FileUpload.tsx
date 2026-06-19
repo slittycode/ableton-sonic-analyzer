@@ -139,7 +139,7 @@ export function FileUpload({
             <UploadCloud className="w-6 h-6 text-text-secondary group-hover:text-accent transition-colors" />
           </div>
           <p className="text-sm font-bold mb-1 tracking-wide text-text-primary">Drop Audio Here</p>
-          <p className="text-[10px] text-text-secondary font-mono uppercase tracking-wider">or click to browse</p>
+          <p className="text-meta text-text-secondary font-mono uppercase tracking-wider">or click to browse</p>
           <div className="mt-4 flex gap-1.5">
             {['MP3', 'WAV', 'FLAC', 'AIFF'].map((fmt) => (
               <Pill key={fmt} tone="neutral" variant="outline" size="xs">
@@ -161,7 +161,7 @@ export function FileUpload({
             </Button>
           </div>
           {fileError && (
-            <div className="mt-3 flex items-center gap-2 text-error text-[10px] font-mono uppercase tracking-wider" role="alert">
+            <div className="mt-3 flex items-center gap-2 text-error text-meta font-mono uppercase tracking-wider" role="alert">
               <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
               {fileError}
             </div>
@@ -181,12 +181,12 @@ export function FileUpload({
                 <p className="font-bold text-sm tracking-tight truncate max-w-[200px] md:max-w-xs">
                   {selectedFile.name}
                 </p>
-                <p className="text-[10px] text-text-secondary font-mono uppercase tracking-wider flex items-center mt-1">
+                <p className="text-meta text-text-secondary font-mono uppercase tracking-wider flex items-center mt-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-success mr-2" aria-hidden />
                   Ready • {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
                 </p>
                 {fileSizeWarning && (
-                  <p className="text-[10px] text-warning font-mono uppercase tracking-wider flex items-center mt-1">
+                  <p className="text-meta text-warning font-mono uppercase tracking-wider flex items-center mt-1">
                     <AlertTriangle className="w-3 h-3 shrink-0 mr-1.5" />
                     {fileSizeWarning}
                   </p>

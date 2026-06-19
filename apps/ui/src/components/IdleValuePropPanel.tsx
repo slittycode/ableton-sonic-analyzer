@@ -24,7 +24,7 @@ export function IdleValuePropPanel() {
       data-testid="idle-value-prop"
       className="h-full flex flex-col rounded-sm m-2 min-h-[260px] overflow-hidden bg-bg-app/40 border border-border/40 p-5 md:p-6"
     >
-      <p className="text-[10px] font-mono uppercase tracking-[0.22em] text-accent">
+      <p className="text-meta font-mono uppercase tracking-[0.22em] text-accent">
         Upload a track. Get specific Ableton.
       </p>
 
@@ -67,7 +67,7 @@ export function IdleValuePropPanel() {
         </li>
       </ul>
 
-      <p className="mt-auto pt-4 text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary/70">
+      <p className="mt-auto pt-4 text-meta font-mono uppercase tracking-[0.18em] text-text-secondary/70">
         ← Drop audio in the panel on the left, or click <span className="text-accent">Load Demo Track</span>.
       </p>
     </div>
@@ -91,17 +91,17 @@ function VisualPlaceholder() {
     >
       <span className="flex flex-col items-center gap-1">
         <AudioWaveform className="w-5 h-5 text-accent/70" aria-hidden="true" />
-        <span className="text-[8px] font-mono uppercase tracking-wider">Audio</span>
+        <span className="text-nano font-mono uppercase tracking-wider">Audio</span>
       </span>
       <MoveRight className="w-3.5 h-3.5 opacity-40" aria-hidden="true" />
       <span className="flex flex-col items-center gap-1">
         <Activity className="w-5 h-5 text-accent/70" aria-hidden="true" />
-        <span className="text-[8px] font-mono uppercase tracking-wider">Measure</span>
+        <span className="text-nano font-mono uppercase tracking-wider">Measure</span>
       </span>
       <MoveRight className="w-3.5 h-3.5 opacity-40" aria-hidden="true" />
       <span className="flex flex-col items-center gap-1">
         <Sliders className="w-5 h-5 text-accent/70" aria-hidden="true" />
-        <span className="text-[8px] font-mono uppercase tracking-wider">Live 12</span>
+        <span className="text-nano font-mono uppercase tracking-wider">Live 12</span>
       </span>
     </div>
   );

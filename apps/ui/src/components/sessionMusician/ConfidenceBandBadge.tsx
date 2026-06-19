@@ -87,7 +87,7 @@ export function ConfidenceBandBadge({
 
   const pill = (
     <span
-      className={`inline-flex items-center px-2 py-1 rounded border text-[10px] font-mono uppercase tracking-wide ${pillClass}`}
+      className={`inline-flex items-center px-2 py-1 rounded border text-meta font-mono uppercase tracking-wide ${pillClass}`}
     >
       {pillText}
     </span>
@@ -107,7 +107,7 @@ export function ConfidenceBandBadge({
   return (
     <div className="space-y-2" data-testid={testId}>
       {pill}
-      <p className="text-[11px] font-mono text-text-secondary/90 leading-relaxed">
+      <p className="text-eyebrow font-mono text-text-secondary/90 leading-relaxed">
         {copyText}
       </p>
     </div>

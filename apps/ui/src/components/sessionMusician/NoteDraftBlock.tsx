@@ -136,7 +136,7 @@ export function NoteDraftBlock({
         Stem note draft
       </h3>
       {subtitle && (
-        <p className="text-[11px] font-mono text-text-secondary/90 leading-relaxed">
+        <p className="text-eyebrow font-mono text-text-secondary/90 leading-relaxed">
           {subtitle}
         </p>
       )}
@@ -153,7 +153,7 @@ export function NoteDraftBlock({
       >
         {headerBlock}
         {notice && (
-          <p className="text-[11px] font-mono text-text-secondary leading-relaxed">{notice}</p>
+          <p className="text-eyebrow font-mono text-text-secondary leading-relaxed">{notice}</p>
         )}
       </section>
     );
@@ -236,7 +236,7 @@ export function NoteDraftBlock({
         </button>
       )}
 
-      <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+      <div className="flex flex-wrap items-center gap-2 text-meta font-mono uppercase tracking-wide text-text-secondary">
         <span>{countLabel}</span>
         <span className="opacity-50">|</span>
         <span>Range: {rangeText}</span>
@@ -252,13 +252,13 @@ export function NoteDraftBlock({
 
       {renderState === 'stem-aware' && transcriptionDetail.stemsTranscribed.length > 0 && (
         <div className="flex items-center gap-1 flex-wrap">
-          <span className="text-[10px] font-mono uppercase text-text-secondary mr-1">Stems:</span>
+          <span className="text-meta font-mono uppercase text-text-secondary mr-1">Stems:</span>
           {transcriptionDetail.stemsTranscribed.map((stem) => (
             <button
               key={stem}
               type="button"
               onClick={() => setStemFilter((prev) => (prev === stem ? null : stem))}
-              className={`px-2 py-1 rounded border text-[10px] font-mono uppercase transition-colors ${
+              className={`px-2 py-1 rounded border text-meta font-mono uppercase transition-colors ${
                 stemFilter === stem
                   ? 'border-accent text-accent bg-accent/10'
                   : 'border-border bg-bg-panel/40 text-text-secondary hover:text-text-primary'
@@ -271,7 +271,7 @@ export function NoteDraftBlock({
             <button
               type="button"
               onClick={() => setStemFilter(null)}
-              className="px-2 py-1 rounded border border-border bg-bg-panel/40 text-[10px] font-mono uppercase text-text-secondary hover:text-text-primary transition-colors"
+              className="px-2 py-1 rounded border border-border bg-bg-panel/40 text-meta font-mono uppercase text-text-secondary hover:text-text-primary transition-colors"
             >
               All
             </button>
@@ -286,7 +286,7 @@ export function NoteDraftBlock({
           className="flex items-center gap-2 px-2 py-1 rounded border border-border bg-bg-card w-fit"
           title="Drag to hide notes below this per-note confidence"
         >
-          <span className="text-[10px] font-mono uppercase text-text-secondary">Confidence</span>
+          <span className="text-meta font-mono uppercase text-text-secondary">Confidence</span>
           <input
             type="range"
             min={0}
@@ -296,14 +296,14 @@ export function NoteDraftBlock({
             onChange={(event) => setConfidenceThreshold(Number(event.target.value))}
             className="w-24 h-1 accent-accent"
           />
-          <span className="text-[10px] font-mono text-text-secondary w-8 text-right">
+          <span className="text-meta font-mono text-text-secondary w-8 text-right">
             {Math.round(confidenceThreshold * 100)}%
           </span>
         </div>
       )}
 
       {sliderEmptiedNotes && (
-        <p className="text-[11px] font-mono text-warning/90 leading-relaxed">
+        <p className="text-eyebrow font-mono text-warning/90 leading-relaxed">
           Confidence slider filtered every note. Lower the threshold to see and export anything.
         </p>
       )}
@@ -322,22 +322,22 @@ export function NoteDraftBlock({
       />
 
       <div className="rounded-sm border border-border/60 bg-bg-card p-3 space-y-2">
-        <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+        <p className="text-meta font-mono uppercase tracking-wide text-text-secondary">
           {STAYS_USEFUL_HEADLINE}
         </p>
-        <p className="text-[11px] font-mono text-text-secondary leading-relaxed">
+        <p className="text-eyebrow font-mono text-text-secondary leading-relaxed">
           {STAYS_USEFUL_DETAIL}
         </p>
         <div className="flex flex-wrap gap-2 pt-1">
-          <span className="px-2 py-1 rounded-sm border border-border text-[10px] font-mono text-text-primary bg-bg-panel/40">
+          <span className="px-2 py-1 rounded-sm border border-border text-meta font-mono text-text-primary bg-bg-panel/40">
             Range: {rangeText}
           </span>
           {dominantNames.length > 0 && (
-            <span className="px-2 py-1 rounded-sm border border-border text-[10px] font-mono text-text-primary bg-bg-panel/40">
+            <span className="px-2 py-1 rounded-sm border border-border text-meta font-mono text-text-primary bg-bg-panel/40">
               Most-played: {dominantNames.join(', ')}
             </span>
           )}
-          <span className="px-2 py-1 rounded-sm border border-border text-[10px] font-mono text-text-primary bg-bg-panel/40">
+          <span className="px-2 py-1 rounded-sm border border-border text-meta font-mono text-text-primary bg-bg-panel/40">
             Avg note length: {avgLength}
           </span>
         </div>

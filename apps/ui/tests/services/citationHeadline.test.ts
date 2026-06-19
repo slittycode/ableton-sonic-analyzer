@@ -168,7 +168,7 @@ describe('CitationHeadline', () => {
     expect(html).not.toContain('kickDetail.crestFactor');
   });
 
-  it('renders compact-header class hooks (text-[9px] eyebrow, text-xs tabular-nums value)', () => {
+  it('renders compact-header class hooks (text-micro eyebrow, text-xs tabular-nums value)', () => {
     // Lightweight assertion on typography classes — the headline must read as
     // "small uppercase label + larger weighted value" to signal authority
     // alongside the device h4 in the card title row.
@@ -180,7 +180,7 @@ describe('CitationHeadline', () => {
       }),
     );
 
-    expect(html).toContain('text-[9px]');
+    expect(html).toContain('text-micro');
     expect(html).toContain('text-xs');
     expect(html).toContain('tabular-nums');
     expect(html).toContain('font-semibold');

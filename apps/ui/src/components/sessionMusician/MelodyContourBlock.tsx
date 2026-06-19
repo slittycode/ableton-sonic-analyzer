@@ -66,7 +66,7 @@ export function MelodyContourBlock({
       <h3 className="text-xs font-mono uppercase tracking-wide text-text-primary">
         Melody contour
       </h3>
-      <p className="text-[11px] font-mono text-text-secondary/90 leading-relaxed">{SUBTITLE}</p>
+      <p className="text-eyebrow font-mono text-text-secondary/90 leading-relaxed">{SUBTITLE}</p>
     </div>
   );
 
@@ -78,7 +78,7 @@ export function MelodyContourBlock({
         className="space-y-3 rounded-sm border border-border bg-bg-panel/30 p-4"
       >
         {headerBlock}
-        <p className="text-[11px] font-mono text-text-secondary leading-relaxed">
+        <p className="text-eyebrow font-mono text-text-secondary leading-relaxed">
           {RAN_WITH_NO_RESULT_NOTICE}
         </p>
       </section>
@@ -118,7 +118,7 @@ export function MelodyContourBlock({
         testId="melody-contour-band"
       />
 
-      <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+      <div className="flex flex-wrap items-center gap-2 text-meta font-mono uppercase tracking-wide text-text-secondary">
         <span>{noteCount} NOTES</span>
         <span className="opacity-50">|</span>
         <span>MIDI range: {rangeText}</span>
@@ -148,10 +148,10 @@ export function MelodyContourBlock({
       />
 
       <div className="rounded-sm border border-border/60 bg-bg-card p-3 space-y-1">
-        <p className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+        <p className="text-meta font-mono uppercase tracking-wide text-text-secondary">
           Melody metadata
         </p>
-        <p className="text-[11px] font-mono text-text-secondary leading-relaxed">
+        <p className="text-eyebrow font-mono text-text-secondary leading-relaxed">
           Melody MIDI: {melodyDetail.midiFile ? 'available' : 'none'} · Vibrato: {vibratoLabel}
         </p>
       </div>

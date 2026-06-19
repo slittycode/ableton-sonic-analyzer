@@ -349,7 +349,7 @@ export function AnalysisStatusPanel({
     const nonRetryableHint =
       errorMarkedNonRetryable && stage.error?.code ? (
         <span
-          className="font-mono text-[9px] uppercase tracking-wider text-error/70 truncate max-w-[8rem]"
+          className="font-mono text-micro uppercase tracking-wider text-error/70 truncate max-w-[8rem]"
           title={stage.error?.message ?? stage.error.code}
         >
           {stage.error.code}
@@ -423,7 +423,7 @@ export function AnalysisStatusPanel({
     >
       <div className="space-y-3">
         {/* Audit Finding #6: primary readout. The stage diagnostic message
-            used to render at `text-[9px] text-secondary/50` below the percent
+            used to render at `text-micro text-secondary/50` below the percent
             — sized as background fluff. During a 4–5 minute Phase 2 wait the
             producer would tab away and miss any actual signal about what's
             happening. Now it sits at the top of the device body as the visual
@@ -436,7 +436,7 @@ export function AnalysisStatusPanel({
           data-testid="status-panel-primary-readout"
         >
           {progress.activeStageKey && (
-            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-secondary/80 mb-1">
+            <p className="font-mono text-meta uppercase tracking-[0.18em] text-text-secondary/80 mb-1">
               {STAGE_LABELS[progress.activeStageKey]}
               {progress.tone === 'failed' ? ' · failure' : null}
             </p>

@@ -141,7 +141,7 @@ export function SamplePlayback({
       }
     >
       <div className="space-y-3">
-        <p className="font-mono text-[11px] leading-snug text-text-secondary max-w-xl">
+        <p className="font-mono text-eyebrow leading-snug text-text-secondary max-w-xl">
           Short clips derived from Phase 1 measurements (and Phase 2 context when
           available) so you can ear-check the measurement chain. These are not
           Ableton-accurate reconstructions — follow Phase 2 in Live for the
@@ -149,7 +149,7 @@ export function SamplePlayback({
         </p>
 
         {!measurementCompleted && (
-          <p className="font-mono text-[11px] text-text-secondary">
+          <p className="font-mono text-eyebrow text-text-secondary">
             Measurements still running — audition samples become available once
             Phase 1 completes.
           </p>
@@ -168,13 +168,13 @@ export function SamplePlayback({
         )}
 
         {status.kind === 'generating' && (
-          <p className="font-mono text-[11px] text-text-secondary">
+          <p className="font-mono text-eyebrow text-text-secondary">
             Rendering audition clips…
           </p>
         )}
 
         {status.kind === 'error' && (
-          <p className="font-mono text-[11px] text-error" role="alert">
+          <p className="font-mono text-eyebrow text-error" role="alert">
             {status.message}
           </p>
         )}
@@ -265,7 +265,7 @@ function SampleCard({ sample, runId, apiBaseUrl }: SampleCardProps) {
   return (
     <Panel variant="surface" padding="md">
       <div className="flex items-baseline justify-between gap-3 mb-2">
-        <span className="font-mono text-[12px] text-text-primary">{sample.label}</span>
+        <span className="font-mono text-body-sm text-text-primary">{sample.label}</span>
         <Pill tone={tone} size="xs">{label}</Pill>
       </div>
       {audioUrl ? (
@@ -277,13 +277,13 @@ function SampleCard({ sample, runId, apiBaseUrl }: SampleCardProps) {
           aria-label={`Audition sample: ${sample.label}`}
         />
       ) : (
-        <p className="font-mono text-[11px] text-text-muted">Audio stream unavailable.</p>
+        <p className="font-mono text-eyebrow text-text-muted">Audio stream unavailable.</p>
       )}
-      <p className="font-mono text-[11px] text-text-secondary mt-2">
+      <p className="font-mono text-eyebrow text-text-secondary mt-2">
         {sample.cites.rationale}
       </p>
       {sample.cites.phase1Fields.length > 0 && (
-        <p className="font-mono text-[11px] text-text-muted mt-1">
+        <p className="font-mono text-eyebrow text-text-muted mt-1">
           Cites:{' '}
           {sample.cites.phase1Fields.map((field, idx) => (
             <React.Fragment key={field}>
@@ -296,7 +296,7 @@ function SampleCard({ sample, runId, apiBaseUrl }: SampleCardProps) {
         </p>
       )}
       {midiUrl && (
-        <p className="font-mono text-[11px] text-text-muted mt-1">
+        <p className="font-mono text-eyebrow text-text-muted mt-1">
           <a
             href={midiUrl}
             className="text-accent underline underline-offset-2 hover:text-accent/80"

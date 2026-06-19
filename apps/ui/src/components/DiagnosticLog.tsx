@@ -73,8 +73,8 @@ export function DiagnosticLog({ logs, defaultExpanded }: DiagnosticLogProps) {
       >
         <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
         System Diagnostics
-        <span className="ml-2 text-[10px]">{isExpanded ? '▾' : '▸'}</span>
-        <span className="ml-auto text-[10px] text-text-secondary/50">{logs.length} {logs.length === 1 ? 'entry' : 'entries'}</span>
+        <span className="ml-2 text-meta">{isExpanded ? '▾' : '▸'}</span>
+        <span className="ml-auto text-meta text-text-secondary/50">{logs.length} {logs.length === 1 ? 'entry' : 'entries'}</span>
       </button>
       {isExpanded && (
         <div className="bg-bg-surface-darker border border-border rounded-sm p-4 font-mono text-xs overflow-x-auto relative shadow-inner">
@@ -89,7 +89,7 @@ export function DiagnosticLog({ logs, defaultExpanded }: DiagnosticLogProps) {
                   <div className="flex flex-wrap items-center gap-3 text-accent/80 group-hover:text-accent">
                     <span className="opacity-50">[{new Date(log.timestamp).toLocaleTimeString()}]</span>
                     <span className="font-bold tracking-wide uppercase">&gt;&gt; {log.phase}</span>
-                    <span className={`px-2 py-1 rounded-sm border text-[10px] ${statusClass(log.status)}`}>
+                    <span className={`px-2 py-1 rounded-sm border text-meta ${statusClass(log.status)}`}>
                       {statusLabel(log.status)}
                     </span>
                   </div>
@@ -162,7 +162,7 @@ export function DiagnosticLog({ logs, defaultExpanded }: DiagnosticLogProps) {
                     </div>
                   )}
                   {log.stageKey === 'interpretation' && log.validationError && (
-                    <div className="pl-2 pt-2 text-[10px] font-mono uppercase tracking-wide text-error">
+                    <div className="pl-2 pt-2 text-meta font-mono uppercase tracking-wide text-error">
                       CONSISTENCY CHECK FAILED: {log.validationError}
                     </div>
                   )}

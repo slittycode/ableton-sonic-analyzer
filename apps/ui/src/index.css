@@ -68,8 +68,9 @@
   --space-rail-h: 0.875rem;
 
   /* --- Type-scale lock: the ONLY sanctioned font sizes. Arbitrary
-     text-[Npx] under src/components/** is banned by
+     text-[Npx] under src/** is banned by
      scripts/check-style-discipline.mjs. --- */
+  --text-pico: 0.4375rem;   /* 7px — finest dense viz / grid labels */
   --text-nano: 0.5rem;      /* 8px — dense meter / axis labels */
   --text-micro: 0.5625rem;  /* 9px — compact eyebrows, pill xs */
   --text-meta: 0.625rem;

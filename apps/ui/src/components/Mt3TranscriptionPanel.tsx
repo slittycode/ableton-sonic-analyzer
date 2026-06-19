@@ -132,7 +132,7 @@ export function Mt3TranscriptionPanel({
           <span className="w-2 h-2 bg-accent rounded-full flex-shrink-0" />
           {formatDisplayText('MT3 polyphonic transcription', 'title')}
         </h2>
-        <span className="text-[10px] font-mono bg-bg-panel border border-accent/30 text-accent px-2 py-1 rounded font-bold">
+        <span className="text-meta font-mono bg-bg-panel border border-accent/30 text-accent px-2 py-1 rounded font-bold">
           BEST EFFORT
         </span>
       </div>
