@@ -4,13 +4,45 @@ Pure-builder tests only; the HTTP shell (status codes, ownership, headers)
 is covered by Phase2ExportRouteTests in tests/test_server.py.
 """
 
+import copy
+import json
 import sys
 import unittest
 from pathlib import Path
 
+import jsonschema
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import phase2_export  # noqa: E402
+import recommendations_contract  # noqa: E402
+
+
+FIXTURE_PATH = (
+    Path(__file__).resolve().parent
+    / "fixtures"
+    / "phase2_export"
+    / "asa_ableton_gate_alpha.phase2-export.json"
+)
+EXPORT_SCHEMA_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "schemas"
+    / "phase2-export.v1.schema.json"
+)
+
+
+def _load_json(path: Path) -> dict:
+    with path.open("r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def _validate_asa_ableton_handoff(envelope: dict) -> None:
+    schema = _load_json(EXPORT_SCHEMA_PATH)
+    jsonschema.Draft202012Validator.check_schema(schema)
+    jsonschema.Draft202012Validator(schema).validate(envelope)
+    recommendations_contract.validate_envelope(
+        envelope["phase2"]["recommendations"]
+    )
 
 
 def _snapshot(
@@ -195,6 +227,109 @@ class BuildPhase2ExportTests(unittest.TestCase):
         )
         self.assertIsNotNone(envelope)
         self.assertIsNone(envelope["phase1"])
+
+
+class AsaAbletonHandoffContractTests(unittest.TestCase):
+    def test_committed_gate_alpha_fixture_exists(self) -> None:
+        self.assertTrue(
+            FIXTURE_PATH.is_file(),
+            f"missing committed asa-ableton handoff fixture: {FIXTURE_PATH}",
+        )
+
+    def test_fixture_matches_the_export_builder_field_for_field(self) -> None:
+        fixture = _load_json(FIXTURE_PATH)
+        snapshot = _snapshot(
+            result=fixture["phase2"],
+            diagnostics={"validationWarnings": fixture["validationWarnings"]},
+            provenance=fixture["provenance"],
+            measurement_result=fixture["phase1"],
+        )
+        snapshot["runId"] = fixture["runId"]
+
+        exported = phase2_export.build_phase2_export(
+            snapshot,
+            exported_at=fixture["exportedAt"],
+        )
+
+        self.assertEqual(exported, fixture)
+
+    def test_fixture_satisfies_both_handoff_contracts(self) -> None:
+        _validate_asa_ableton_handoff(_load_json(FIXTURE_PATH))
+
+    def test_envelope_shape_drift_is_rejected(self) -> None:
+        fixture = _load_json(FIXTURE_PATH)
+        for mutation, field in (("remove", "phase1"), ("add", "unexpected")):
+            with self.subTest(mutation=mutation, field=field):
+                drifted = copy.deepcopy(fixture)
+                if mutation == "remove":
+                    drifted.pop(field)
+                else:
+                    drifted[field] = True
+                with self.assertRaises(jsonschema.ValidationError):
+                    _validate_asa_ableton_handoff(drifted)
+
+    def test_gate_alpha_raw_card_field_drift_is_rejected(self) -> None:
+        fixture = _load_json(FIXTURE_PATH)
+        for field in ("device", "parameter", "value", "trackContext", "phase1Fields"):
+            with self.subTest(field=field):
+                drifted = copy.deepcopy(fixture)
+                drifted["phase2"]["abletonRecommendations"][0].pop(field)
+                with self.assertRaises(jsonschema.ValidationError):
+                    _validate_asa_ableton_handoff(drifted)
+
+    def test_normalized_dedupe_and_citation_field_drift_is_rejected(self) -> None:
+        fixture = _load_json(FIXTURE_PATH)
+        for field in ("device", "parameter", "value", "cited_measurements"):
+            with self.subTest(field=field):
+                drifted = copy.deepcopy(fixture)
+                drifted["phase2"]["recommendations"]["recommendations"][0].pop(field)
+                with self.assertRaises(jsonschema.ValidationError):
+                    _validate_asa_ableton_handoff(drifted)
+
+    def test_duplicate_cards_and_their_citations_survive_the_handoff(self) -> None:
+        fixture = _load_json(FIXTURE_PATH)
+        phase2 = fixture["phase2"]
+        raw_cards = [
+            *phase2["mixAndMasterChain"],
+            *phase2["abletonRecommendations"],
+            *phase2["secretSauce"]["workflowSteps"],
+        ]
+        duplicate = [
+            card
+            for card in raw_cards
+            if (card["device"], card["parameter"], card["value"])
+            == ("EQ Eight", "Low Shelf Gain", "-1.5 dB")
+        ]
+
+        self.assertEqual(len(duplicate), 2)
+        self.assertEqual(
+            [card["phase1Fields"] for card in duplicate],
+            [["spectralBalance.subBass"], ["spectralBalance.subBass"]],
+        )
+
+    def test_warning_and_provenance_payloads_are_not_reconstructed(self) -> None:
+        fixture = _load_json(FIXTURE_PATH)
+        snapshot = _snapshot(
+            result=fixture["phase2"],
+            diagnostics={"validationWarnings": fixture["validationWarnings"]},
+            provenance=fixture["provenance"],
+            measurement_result=fixture["phase1"],
+        )
+        snapshot["runId"] = fixture["runId"]
+
+        exported = phase2_export.build_phase2_export(
+            snapshot,
+            exported_at=fixture["exportedAt"],
+        )
+
+        attempt = snapshot["stages"]["interpretation"]["profiles"][
+            "producer_summary"
+        ]
+        self.assertIs(exported["provenance"], attempt["provenance"])
+        self.assertEqual(
+            exported["validationWarnings"],
+            attempt["diagnostics"]["validationWarnings"],
+        )
 
 
 if __name__ == "__main__":

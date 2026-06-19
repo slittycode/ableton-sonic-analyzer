@@ -109,13 +109,12 @@ Targets you author before rendering are **estimates**; the stored
 4. **Render the loop** (Export Audio/Video) to `audio.flac` (or `.wav`) in the
    fixture dir. **Do not normalize on export** — measured LUFS / true-peak is part
    of the answer key.
-5. **Ingest it** to validate catalog-validity and store the Phase 1 fingerprint:
+5. **Ingest it** with the one-command workflow. This validates the render and
+   catalog, stores the canonical Phase 1 fingerprint, checks measurable intent,
+   generates Claude + deterministic recommendations, scores all sources, and
+   refreshes the verification artifact:
    ```bash
-   # catalog-validity (runs without the render):
-   ./venv/bin/python scripts/evaluate_recommendations.py --fixture <slug> --source baseline
-   # store the fingerprint from the render (one-liner; see NEEDS.md for the helper):
-   ./venv/bin/python analyze.py tests/fixtures/recommendation_tracks/<slug>/audio.flac --yes \
-       > tests/fixtures/recommendation_tracks/<slug>/phase1_fingerprint.json
+   ./venv/bin/python scripts/intake_recommendation_fixture.py --fixture <slug>
    ```
 6. **Confirm** the measured fingerprint plausibly matches `measurableIntent`
    (e.g. BPM, kick fundamental). Adjust the manifest's intent targets to the

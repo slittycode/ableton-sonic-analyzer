@@ -123,14 +123,14 @@ For each of `house_sidechain_pluck_124`, `hard_techno_rumble_145`,
 - Build the `manifest.json → deviceSpec` **exactly** in Live 12.
 - Set the project to **48 kHz / 24-bit**.
 - Render the loop to `audio.flac` in the fixture dir (no export normalization).
-- Store the fingerprint:
+- Run the one-command intake. It stores the canonical fingerprint, checks every
+  `measurableIntent` target, generates Claude + deterministic recommendations,
+  scores Claude/deterministic/baseline, and refreshes the UI verification data:
   ```bash
-  ./venv/bin/python analyze.py \
-    tests/fixtures/recommendation_tracks/<slug>/audio.flac --yes \
-    > tests/fixtures/recommendation_tracks/<slug>/phase1_fingerprint.json
+  ./venv/bin/python scripts/intake_recommendation_fixture.py --fixture <slug>
   ```
-- Re-run `scripts/evaluate_recommendations.py --fixture <slug> --source baseline`
-  and confirm the no-fingerprint note is gone.
+- A failed measurable-intent check keeps the new fingerprint for diagnosis but
+  does not publish new score or verification evidence.
 
 ### 2. Genre fit + held-out fixture
 ✅ Genre fit resolved 2026-06-10: owner confirmed house/melodic-techno/acid and the
@@ -289,12 +289,6 @@ the band; `NONE`/`LOW` must never render as a confident badge (invariant #4).
 # Confirm the harness is green (no venv needed — pure stdlib):
 cd apps/backend && python3.11 -m unittest tests.test_recommendation_evaluation
 python3.11 scripts/evaluate_recommendations.py --self-test
-# Deterministic source (Node 23+, no npm install needed):
-node scripts/emit_deterministic_recs.ts <audio_features.json> > /tmp/det.json
-python3.11 scripts/evaluate_recommendations.py --fixture <slug> \
-  --source deterministic --recommendations /tmp/det.json
-# Full picture once a render exists:
-python3.11 scripts/evaluate_recommendations.py --source gemini \
-  --fixture <slug> --phase2 <phase2.json> --report /tmp/rec_eval.md \
-  --verification-artifact /tmp/verification.json
+# Full Claude/deterministic/baseline picture once a real render exists:
+./venv/bin/python scripts/intake_recommendation_fixture.py --fixture <slug>
 ```

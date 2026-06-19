@@ -8,6 +8,7 @@ the needs-fixture corpus audio.
 
 from __future__ import annotations
 
+import json
 import unittest
 from pathlib import Path
 
@@ -373,6 +374,57 @@ class Phase2AdapterTests(unittest.TestCase):
             "phase2": bare,
         }
         self.assertEqual(rev.coerce_phase2_payload(envelope), bare)
+
+    def test_stored_execution_wrapper_recovers_interpretation_cards(self):
+        bare = {
+            "abletonRecommendations": [
+                {
+                    "device": "Operator",
+                    "trackContext": "Kick",
+                    "category": "SYNTHESIS",
+                    "parameter": "Amp Envelope Decay",
+                    "value": "250 ms",
+                    "phase1Fields": ["kickDetail.fundamentalHz"],
+                }
+            ],
+            "mixAndMasterChain": [],
+        }
+        execution = {
+            "ok": True,
+            "interpretationResult": bare,
+            "message": "Phase 2 interpretation complete.",
+        }
+
+        recs = rev.normalize_stored_phase2_payload(execution)
+
+        self.assertEqual(len(recs), 1)
+        self.assertEqual(recs[0].device, "Operator")
+
+    def test_melodic_techno_archived_invalid_json_is_a_hard_error(self):
+        archived = (
+            FIXTURE_ROOT
+            / "melodic_techno_arp_124"
+            / "phase2.gemini.invalid-json.execution.json"
+        )
+        payload = json.loads(archived.read_text(encoding="utf-8"))
+
+        with self.assertRaisesRegex(
+            rev.Phase2PayloadError,
+            "Gemini returned invalid JSON",
+        ):
+            rev.normalize_stored_phase2_payload(payload)
+
+    def test_genuinely_cardless_phase2_payload_is_a_hard_error(self):
+        payload = {
+            "abletonRecommendations": [],
+            "mixAndMasterChain": [],
+        }
+
+        with self.assertRaisesRegex(
+            rev.Phase2PayloadError,
+            "zero structured recommendation cards",
+        ):
+            rev.normalize_stored_phase2_payload(payload)
 
     def test_coerce_phase2_payload_passes_bare_result_through(self):
         bare = {"abletonRecommendations": [], "schemaVersion": None}
