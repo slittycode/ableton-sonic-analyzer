@@ -1,8 +1,9 @@
 # The ASA ↔ asa-ableton Boundary
 
 **Status:** living contract doc. Backed by `apps/backend/phase2_export.py`,
-`GET /api/analysis-runs/{run_id}/export/phase2`, and the envelope-freeze test in
-`apps/backend/tests/test_phase2_export.py`.
+`GET /api/analysis-runs/{run_id}/export/phase2`, the committed
+`phase2-export.v1` schema and Gate alpha fixture, and the executable handoff
+gate in `apps/backend/tests/test_phase2_export.py`.
 
 ## The two repos
 
@@ -50,6 +51,23 @@ require a version bump):
   "phase2": { "…producer_summary interpretation result, verbatim…" }
 }
 ```
+
+The CI-visible handoff gate can also be run locally:
+
+```bash
+cd apps/backend
+./venv/bin/python -m unittest tests.test_phase2_export.AsaAbletonHandoffContractTests
+```
+
+It validates the committed
+`tests/fixtures/phase2_export/asa_ableton_gate_alpha.phase2-export.json` against
+`schemas/phase2-export.v1.schema.json` and the nested
+`recommendations.v1.schema.json`. The gate fails if the top-level envelope
+changes, if Gate alpha loses `device`, `parameter`, `value`, `trackContext`, or
+`phase1Fields`, or if the normalized recommendation loses a dedupe key or its
+`cited_measurements`. The golden fixture also locks warning and provenance
+pass-through and includes the duplicate recommendation case Gate alpha must
+dedupe without losing either citation trail.
 
 Field semantics:
 

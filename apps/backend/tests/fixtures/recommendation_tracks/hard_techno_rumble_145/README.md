@@ -22,6 +22,13 @@ brighter `spectralDetail.spectralCentroidMean` than dark techno — distortion
 adds harmonics — so an equivalent reconstruction by a different device path
 still earns credit.
 
+Once `audio.flac` is in this directory, run the complete pilot intake from
+`apps/backend`:
+
+```bash
+./venv/bin/python scripts/intake_recommendation_fixture.py
+```
+
 Covers all seven production domains. **This is the pilot fixture** — smallest
 spec; build and render this one first per
 `plans/owner-actions-recommendation-proof-plan.md` §3b.

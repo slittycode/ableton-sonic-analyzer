@@ -1,0 +1,141 @@
+{
+  "schemaVersion": "phase2-export.v1",
+  "runId": "run-gate-alpha-contract",
+  "exportedAt": "2026-06-19T00:00:00+00:00",
+  "provenance": {
+    "schemaVersion": "interpretation.v2",
+    "profileId": "producer_summary",
+    "modelName": "claude-cli",
+    "promptVersion": "producer_summary.phase_abcd2.current",
+    "groundedMeasurementRunId": "run-gate-alpha-contract",
+    "groundedMeasurementOutputId": "measurement-output-contract",
+    "groundedPitchNoteAttemptId": "pitch-attempt-contract"
+  },
+  "validationWarnings": [
+    {
+      "code": "RECOMMENDATION_UNVERIFIED",
+      "path": "abletonRecommendations[0].parameter",
+      "message": "Catalogue check could not verify this parameter.",
+      "reason": "parameter_unknown"
+    },
+    {
+      "code": "COERCED_TRACK_CONTEXT",
+      "path": "mixAndMasterChain[0].trackContext",
+      "originalValue": "Mix Bus",
+      "coercedValue": "Master"
+    }
+  ],
+  "phase1": {
+    "phase1Version": "phase1.v2",
+    "bpm": 128.0,
+    "lufsIntegrated": -9.2,
+    "truePeak": 0.4,
+    "spectralBalance": {
+      "subBass": -11.1
+    },
+    "dynamicsDetail": {
+      "crestFactor": 10.2
+    }
+  },
+  "phase2": {
+    "trackCharacter": "Fixture for the asa-ableton Gate alpha handoff contract.",
+    "mixAndMasterChain": [
+      {
+        "order": 1,
+        "device": "EQ Eight",
+        "deviceFamily": "NATIVE",
+        "trackContext": "Master",
+        "workflowStage": "MIXING",
+        "parameter": "Low Shelf Gain",
+        "value": "-1.5 dB",
+        "reason": "Trim the measured sub-bass excess.",
+        "phase1Fields": [
+          "spectralBalance.subBass"
+        ]
+      }
+    ],
+    "abletonRecommendations": [
+      {
+        "device": "Glue Compressor",
+        "deviceFamily": "NATIVE",
+        "trackContext": "Master",
+        "workflowStage": "MASTERING",
+        "category": "DYNAMICS",
+        "parameter": "Threshold",
+        "value": "-12 dB",
+        "reason": "Control the measured crest factor without replacing it.",
+        "advancedTip": "Match gain before judging.",
+        "phase1Fields": [
+          "dynamicsDetail.crestFactor",
+          "lufsIntegrated"
+        ]
+      }
+    ],
+    "secretSauce": {
+      "title": "Sub cleanup",
+      "explanation": "Repeat the cited EQ move in the workflow card.",
+      "implementationSteps": [
+        "Apply the cited EQ move."
+      ],
+      "workflowSteps": [
+        {
+          "step": 1,
+          "trackContext": "Master",
+          "device": "EQ Eight",
+          "parameter": "Low Shelf Gain",
+          "value": "-1.5 dB",
+          "instruction": "Apply the same move already present in the mix chain.",
+          "measurementJustification": "The sub-bass band is elevated.",
+          "phase1Fields": [
+            "spectralBalance.subBass"
+          ]
+        }
+      ]
+    },
+    "recommendations": {
+      "version": "recommendations.v1",
+      "recommendations": [
+        {
+          "device": "Glue Compressor",
+          "parameter": "Threshold",
+          "value": -12.0,
+          "unit": "dB",
+          "range": [
+            -15.0,
+            -9.0
+          ],
+          "cited_measurements": [
+            "dynamicsDetail.crestFactor",
+            "lufsIntegrated"
+          ]
+        },
+        {
+          "device": "EQ Eight",
+          "parameter": "Low Shelf Gain",
+          "value": -1.5,
+          "unit": "dB",
+          "range": [
+            -4.5,
+            1.5
+          ],
+          "cited_measurements": [
+            "spectralBalance.subBass"
+          ]
+        },
+        {
+          "device": "EQ Eight",
+          "parameter": "Low Shelf Gain",
+          "value": -1.5,
+          "unit": "dB",
+          "range": [
+            -4.5,
+            1.5
+          ],
+          "cited_measurements": [
+            "spectralBalance.subBass"
+          ]
+        }
+      ]
+    }
+  }
+}

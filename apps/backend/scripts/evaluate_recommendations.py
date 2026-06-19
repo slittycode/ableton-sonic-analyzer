@@ -99,10 +99,16 @@ def _resolve_recs(
                 f"no Phase2Result JSON (pass --phase2 or drop {sibling_name} "
                 "in the fixture dir)"
             )
-        phase2 = rev.coerce_phase2_payload(
-            json.loads(candidate.read_text(encoding="utf-8"))
+        try:
+            raw_phase2 = json.loads(candidate.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise rev.Phase2PayloadError(
+                f"{candidate.name} is not valid JSON: {exc}"
+            ) from exc
+        return (
+            rev.normalize_stored_phase2_payload(raw_phase2),
+            f"Phase2Result from {candidate.name}",
         )
-        return rev.normalize_phase2(phase2), f"Phase2Result from {candidate.name}"
 
     if source == "deterministic":
         if fixture.source_path is not None:
@@ -217,7 +223,14 @@ def main() -> int:
             print("  [note] no Phase 1 fingerprint — citation path-validity will SKIP "
                   "(render the audio and store phase1_fingerprint.json; see NEEDS.md)")
 
-        recs, note = _resolve_recs(fixture, args.source, args.phase2, args.recommendations)
+        try:
+            recs, note = _resolve_recs(
+                fixture, args.source, args.phase2, args.recommendations
+            )
+        except rev.Phase2PayloadError as exc:
+            any_failure = True
+            print(f"  [FAIL] unusable {args.source} output: {exc}")
+            continue
         if recs is None:
             print(f"  [SKIP] {note}")
             continue

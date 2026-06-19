@@ -576,24 +576,50 @@ def infer_domain(track_context: str | None, category: str | None) -> str:
     return UNKNOWN_DOMAIN
 
 
-def coerce_phase2_payload(raw: Mapping[str, Any]) -> Mapping[str, Any]:
-    """Accept either a bare ``Phase2Result`` or a ``phase2-export.v1`` envelope.
+class Phase2PayloadError(ValueError):
+    """A stored provider payload cannot supply recommendations to the harness."""
+
+
+def coerce_phase2_payload(raw: Any) -> Mapping[str, Any]:
+    """Extract a bare ``Phase2Result`` from any stored Phase 2 artifact.
 
     The backend's ``GET /api/analysis-runs/{run_id}/export/phase2`` route
     (``phase2_export.py``) wraps the interpretation result in a versioned
     handoff envelope ``{schemaVersion: "phase2-export.v1", ..., phase2: {...}}``
     so one downloaded file feeds both this harness and the sibling
-    ``asa-ableton`` repo. Unwrap it here so ``--phase2`` (and a fixture-dir
-    ``phase2.json``) can be that file directly; a bare result passes through
-    unchanged.
+    ``asa-ableton`` repo. Historical recommendation-proof runs instead stored
+    the direct server execution wrapper ``{ok, interpretationResult, message}``.
+    Unwrap both forms so ``--phase2`` can consume the evidence as stored.
+
+    A direct execution wrapper with a null result is a failed provider output,
+    even when the historical wrapper says ``ok: true``. Reject it explicitly so
+    the harness cannot misreport a parse failure as a legitimate zero score.
     """
+    if not isinstance(raw, Mapping):
+        raise Phase2PayloadError("Phase 2 payload must be a JSON object.")
+
+    if "interpretationResult" in raw:
+        interpretation_result = raw.get("interpretationResult")
+        if isinstance(interpretation_result, Mapping):
+            return interpretation_result
+        message = raw.get("message")
+        detail = (
+            message.strip()
+            if isinstance(message, str) and message.strip()
+            else "no reason provided"
+        )
+        raise Phase2PayloadError(
+            f"Stored Phase 2 execution produced no interpretation result: {detail}"
+        )
+
     schema_version = raw.get("schemaVersion")
-    if (
-        isinstance(schema_version, str)
-        and schema_version.startswith("phase2-export.")
-        and isinstance(raw.get("phase2"), Mapping)
-    ):
-        return raw["phase2"]
+    if isinstance(schema_version, str) and schema_version.startswith("phase2-export."):
+        phase2 = raw.get("phase2")
+        if isinstance(phase2, Mapping):
+            return phase2
+        raise Phase2PayloadError(
+            f"{schema_version} payload is missing its Phase2Result object."
+        )
     return raw
 
 
@@ -629,6 +655,24 @@ def normalize_phase2(phase2: Mapping[str, Any]) -> list[NormalizedRec]:
                 citations=_citations(item.get("phase1Fields")),
                 family=item.get("deviceFamily"),
             )
+        )
+    return recs
+
+
+def normalize_stored_phase2_payload(raw: Any) -> list[NormalizedRec]:
+    """Normalize a stored provider artifact and require scoreable cards.
+
+    The no-op baseline is allowed to be empty, but a Gemini/Claude artifact is
+    evidence of a provider run. Treating a null, mis-shaped, or genuinely empty
+    provider result as an ordinary recommendation set turns parser failures into
+    misleading zero scores.
+    """
+    phase2 = coerce_phase2_payload(raw)
+    recs = normalize_phase2(phase2)
+    if not recs:
+        raise Phase2PayloadError(
+            "Phase 2 payload contains zero structured recommendation cards; "
+            "expected at least one abletonRecommendations or mixAndMasterChain item."
         )
     return recs
 

@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "interpretationResult": null,
+  "message": "Phase 2 advisory skipped because Gemini returned invalid JSON.",
+  "diagnostics": {
+    "requestId": "verdict-melodic_techno_arp_124",
+    "backendDurationMs": 259826.73,
+    "engineVersion": "gemini-2.5-flash",
+    "estimatedLowMs": 0,
+    "estimatedHighMs": 0,
+    "timeoutSeconds": 300,
+    "timings": {
+      "totalMs": 259845.27,
+      "analysisMs": 259826.73,
+      "serverOverheadMs": 18.54,
+      "flagsUsed": [
+        "inline"
+      ],
+      "fileSizeBytes": 4459394,
+      "fileDurationSeconds": null,
+      "msPerSecondOfAudio": null
+    }
+  }
+}

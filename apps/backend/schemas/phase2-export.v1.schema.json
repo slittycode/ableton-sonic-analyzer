@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ableton-sonic-analyzer.local/schemas/phase2-export.v1.schema.json",
+  "title": "ASA to asa-ableton Phase 2 Export v1",
+  "description": "Executable handoff contract for Gate alpha. It freezes the export envelope and the raw recommendation fields asa-ableton uses for mapping, citation custody, track-aware fidelity checks, and deduplication.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "runId",
+    "exportedAt",
+    "provenance",
+    "validationWarnings",
+    "phase1",
+    "phase2"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "phase2-export.v1"
+    },
+    "runId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "exportedAt": {
+      "type": "string",
+      "minLength": 1
+    },
+    "provenance": {
+      "oneOf": [
+        { "type": "object" },
+        { "type": "null" }
+      ]
+    },
+    "validationWarnings": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "phase1": {
+      "oneOf": [
+        { "type": "object" },
+        { "type": "null" }
+      ]
+    },
+    "phase2": {
+      "$ref": "#/$defs/phase2Result"
+    }
+  },
+  "$defs": {
+    "rawRecommendation": {
+      "type": "object",
+      "required": [
+        "device",
+        "parameter",
+        "value",
+        "trackContext",
+        "phase1Fields"
+      ],
+      "properties": {
+        "device": { "type": "string", "minLength": 1 },
+        "parameter": { "type": "string", "minLength": 1 },
+        "value": { "type": "string" },
+        "trackContext": { "type": "string" },
+        "phase1Fields": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "phase2Result": {
+      "type": "object",
+      "required": [
+        "mixAndMasterChain",
+        "abletonRecommendations",
+        "secretSauce",
+        "recommendations"
+      ],
+      "properties": {
+        "mixAndMasterChain": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/rawRecommendation" }
+        },
+        "abletonRecommendations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/rawRecommendation" }
+        },
+        "secretSauce": {
+          "type": "object",
+          "required": ["workflowSteps"],
+          "properties": {
+            "workflowSteps": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/rawRecommendation" }
+            }
+          }
+        },
+        "recommendations": {
+          "type": "object"
+        }
+      }
+    }
+  }
+}
