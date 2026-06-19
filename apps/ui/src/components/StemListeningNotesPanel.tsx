@@ -51,13 +51,13 @@ export function StemListeningNotesPanel({ stemSummary }: StemListeningNotesPanel
           <span className="w-2 h-2 bg-accent rounded-full flex-shrink-0" />
           {formatDisplayText('Stem listening notes', 'title')}
         </h2>
-        <span className="text-[10px] font-mono bg-bg-panel border border-accent/30 text-accent px-2 py-1 rounded font-bold">
+        <span className="text-meta font-mono bg-bg-panel border border-accent/30 text-accent px-2 py-1 rounded font-bold">
           BEST EFFORT
         </span>
       </div>
 
       <div className="rounded-sm border border-accent/20 bg-accent/5 p-4 space-y-2">
-        <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-accent">
+        <p className="text-meta font-mono uppercase tracking-[0.18em] text-accent">
           What this is for
         </p>
         <p className="text-xs font-mono text-text-secondary leading-relaxed">
@@ -75,7 +75,7 @@ export function StemListeningNotesPanel({ stemSummary }: StemListeningNotesPanel
           {uncertaintyFlags.map((flag, index) => (
             <span
               key={`${flag}-${index}`}
-              className="text-[10px] font-mono rounded-sm border border-warning/30 bg-warning/10 px-2 py-1 text-warning"
+              className="text-meta font-mono rounded-sm border border-warning/30 bg-warning/10 px-2 py-1 text-warning"
             >
               {flag}
             </span>
@@ -105,7 +105,7 @@ export function StemListeningNotesPanel({ stemSummary }: StemListeningNotesPanel
                     {truncateAtSentenceBoundary(stem.summary, 220)}
                   </p>
                 </div>
-                <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-accent/30 bg-accent/5 text-accent">
+                <span className="text-micro font-mono uppercase px-1.5 py-0.5 rounded border border-accent/30 bg-accent/5 text-accent">
                   {stem.stem}
                 </span>
               </div>
@@ -117,10 +117,10 @@ export function StemListeningNotesPanel({ stemSummary }: StemListeningNotesPanel
                     className="rounded-sm border border-border/80 bg-bg-panel/50 p-3 space-y-2"
                   >
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+                      <span className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
                         Bars {bar.barStart}-{bar.barEnd}
                       </span>
-                      <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border border-border text-text-secondary">
+                      <span className="text-micro font-mono uppercase px-1.5 py-0.5 rounded border border-border text-text-secondary">
                         {bar.uncertaintyLevel} certainty
                       </span>
                     </div>
@@ -145,7 +145,7 @@ export function StemListeningNotesPanel({ stemSummary }: StemListeningNotesPanel
               </div>
 
               <div className="space-y-2">
-                <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+                <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
                   Global pattern
                 </p>
                 <div className="space-y-1">
@@ -175,7 +175,7 @@ export function StemListeningNotesPanel({ stemSummary }: StemListeningNotesPanel
                   {stem.uncertaintyFlags.map((flag, index) => (
                     <span
                       key={`${stem.stem}-flag-${index}`}
-                      className="text-[10px] font-mono rounded-sm border border-warning/30 bg-warning/10 px-2 py-1 text-warning"
+                      className="text-meta font-mono rounded-sm border border-warning/30 bg-warning/10 px-2 py-1 text-warning"
                     >
                       {flag}
                     </span>

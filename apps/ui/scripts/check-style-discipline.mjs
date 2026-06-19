@@ -12,8 +12,9 @@
  *
  * Why this exists: a 2026-05-13 pass removed hardcoded hex, but it silently
  * returned because nothing enforced the rule. This guard is that enforcement.
- * ENFORCED_DIRS is widened directory-by-directory as the UI overhaul clears
- * each area, so the guard can never regress what it has already cleaned.
+ * Each rule's enforced roots (rule.dirs) are widened phase-by-phase as the UI
+ * overhaul clears each area, so the guard can never regress what it cleaned.
+ * Phase 1 widened arbitrary-text-size to all of src/; raw-hex stays at ui/.
  *
  * Out of scope (allowlisted):
  *   - *.stories.tsx — dev-only Storybook artifacts, not shipped UI.
@@ -29,9 +30,6 @@ const here = dirname(fileURLToPath(import.meta.url));
 const uiRoot = join(here, '..');
 const srcRoot = join(uiRoot, 'src');
 
-// Directories currently held to the discipline. Widen as overhaul phases land.
-const ENFORCED_DIRS = [join(srcRoot, 'components', 'ui')];
-
 // Basenames exempt anywhere within enforced dirs.
 const ALLOWLIST = new Set([
   'colorScales.ts',
@@ -46,15 +44,18 @@ const ALLOWLIST = new Set([
   'PianoRollCanvas.tsx',
 ]);
 
+// Each rule names the roots it enforces; widen per-rule as cleanup lands.
 const RULES = [
   {
     id: 'arbitrary-text-size',
     re: /text-\[[0-9.]+(?:px|rem|em)\]/g,
+    dirs: [srcRoot],
     hint: 'use a --text-* scale token (e.g. text-meta, text-eyebrow, text-body-sm)',
   },
   {
     id: 'raw-hex-color',
     re: /#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b/g,
+    dirs: [join(srcRoot, 'components', 'ui')],
     hint: 'use a semantic color token (var(--color-*) or a Tailwind color utility)',
   },
 ];
@@ -77,12 +78,15 @@ function walk(dir) {
 }
 
 const violations = [];
-for (const dir of ENFORCED_DIRS) {
-  for (const file of walk(dir)) {
-    if (ALLOWLIST.has(basename(file))) continue;
-    const lines = readFileSync(file, 'utf8').split('\n');
-    lines.forEach((line, i) => {
-      for (const rule of RULES) {
+for (const rule of RULES) {
+  const seen = new Set();
+  for (const dir of rule.dirs) {
+    for (const file of walk(dir)) {
+      if (ALLOWLIST.has(basename(file))) continue;
+      if (seen.has(file)) continue; // overlapping roots → scan each file once
+      seen.add(file);
+      const lines = readFileSync(file, 'utf8').split('\n');
+      lines.forEach((line, i) => {
         rule.re.lastIndex = 0;
         let m;
         while ((m = rule.re.exec(line)) !== null) {
@@ -94,8 +98,8 @@ for (const dir of ENFORCED_DIRS) {
             hint: rule.hint,
           });
         }
-      }
-    });
+      });
+    }
   }
 }
 

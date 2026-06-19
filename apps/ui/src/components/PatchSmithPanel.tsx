@@ -77,7 +77,7 @@ export function PatchSmithPanel({ phase1, className }: PatchSmithPanelProps) {
       className={className}
     >
       <div className="space-y-3">
-        <p className="max-w-xl font-mono text-[11px] leading-snug text-text-secondary">
+        <p className="max-w-xl font-mono text-eyebrow leading-snug text-text-secondary">
           A Vital preset derived from this track&apos;s measured synthesis character —
           every parameter cites the Phase 1 measurement behind it. A starting point
           to load and play, not an exact reconstruction.
@@ -101,7 +101,7 @@ export function PatchSmithPanel({ phase1, className }: PatchSmithPanelProps) {
               <Pill tone={CONFIDENCE_TONE[manifest.overallConfidence]} variant="outline">
                 {CONFIDENCE_LABEL[manifest.overallConfidence]}
               </Pill>
-              <span className="font-mono text-[10px] text-text-secondary">
+              <span className="font-mono text-meta text-text-secondary">
                 {citationCount} cited parameter{citationCount === 1 ? "" : "s"}
               </span>
             </div>
@@ -111,23 +111,23 @@ export function PatchSmithPanel({ phase1, className }: PatchSmithPanelProps) {
                 {manifest.citations.map((c) => (
                   <li key={c.vitalParam} className="border-l-2 border-border-light pl-3">
                     <div className="flex flex-wrap items-baseline gap-2">
-                      <span className="font-mono text-[11px] text-text-primary">{c.label}</span>
-                      <span className="font-mono text-[11px] text-accent">{c.display}</span>
+                      <span className="font-mono text-eyebrow text-text-primary">{c.label}</span>
+                      <span className="font-mono text-eyebrow text-accent">{c.display}</span>
                       <Pill tone={CONFIDENCE_TONE[c.confidence]} variant="outline">
                         {c.confidence}
                       </Pill>
                     </div>
-                    <p className="font-mono text-[10px] leading-snug text-text-secondary">
+                    <p className="font-mono text-meta leading-snug text-text-secondary">
                       {c.rationale}
                     </p>
-                    <p className="font-mono text-[9px] text-text-secondary/70">
+                    <p className="font-mono text-micro text-text-secondary/70">
                       cites {c.phase1Fields.join(", ")}
                     </p>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="font-mono text-[11px] text-text-secondary">
+              <p className="font-mono text-eyebrow text-text-secondary">
                 No strong synthesis cues were measured — the preset is a neutral
                 single-oscillator starting point.
               </p>
@@ -138,7 +138,7 @@ export function PatchSmithPanel({ phase1, className }: PatchSmithPanelProps) {
                 {manifest.hedges.map((hedge, index) => (
                   <li
                     key={index}
-                    className="font-mono text-[10px] leading-snug text-warning"
+                    className="font-mono text-meta leading-snug text-warning"
                   >
                     ⚠ {hedge}
                   </li>

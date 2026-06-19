@@ -14,7 +14,7 @@ export function PhaseSourceBadge({ source, className = "" }: PhaseSourceBadgePro
 
   return (
     <span
-      className={`inline-flex items-center rounded-sm border px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-[0.2em] ${toneClass} ${className}`.trim()}
+      className={`inline-flex items-center rounded-sm border px-1.5 py-0.5 text-meta font-mono uppercase tracking-[0.2em] ${toneClass} ${className}`.trim()}
     >
       {label}
     </span>

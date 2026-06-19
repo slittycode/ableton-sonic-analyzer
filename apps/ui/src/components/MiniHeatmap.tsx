@@ -23,7 +23,7 @@ export function MiniHeatmap({
 }: MiniHeatmapProps) {
   return (
     <div className="space-y-1">
-      <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+      <span className="text-meta font-mono uppercase tracking-wide text-text-secondary">
         {title}
       </span>
       <div className="space-y-px">
@@ -33,7 +33,7 @@ export function MiniHeatmap({
           const range = maxVal - minVal || 1;
           return (
             <div key={row.label} className="flex items-center gap-1">
-              <span className="text-[8px] font-mono text-text-secondary/60 w-14 text-right shrink-0 uppercase">
+              <span className="text-nano font-mono text-text-secondary/60 w-14 text-right shrink-0 uppercase">
                 {row.label}
               </span>
               <div className="flex gap-px flex-1">
@@ -61,7 +61,7 @@ export function MiniHeatmap({
           {cellLabels.map((label) => (
             <span
               key={label}
-              className="flex-1 text-center text-[7px] font-mono text-text-secondary/40"
+              className="flex-1 text-center text-pico font-mono text-text-secondary/40"
             >
               {label}
             </span>

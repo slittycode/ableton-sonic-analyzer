@@ -76,7 +76,7 @@ export function TranscriptionPianorollBlock({ apiBaseUrl, runId, options }: Prop
   if (state.kind === 'loading') {
     return (
       <div className="space-y-2" data-testid="transcription-pianoroll-loading">
-        <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+        <span className="text-meta font-mono uppercase tracking-wide text-text-secondary">
           Transcription Pianoroll · loading
         </span>
         <div className="rounded-sm border border-border bg-bg-panel h-[200px] animate-pulse" />
@@ -87,7 +87,7 @@ export function TranscriptionPianorollBlock({ apiBaseUrl, runId, options }: Prop
   if (state.kind === 'error') {
     return (
       <div className="space-y-2" data-testid="transcription-pianoroll-error">
-        <span className="text-[10px] font-mono uppercase tracking-wide text-text-secondary">
+        <span className="text-meta font-mono uppercase tracking-wide text-text-secondary">
           Transcription Pianoroll
         </span>
         <div className="rounded-sm border border-border bg-bg-panel p-3 text-xs text-text-secondary">

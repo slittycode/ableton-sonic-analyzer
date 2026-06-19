@@ -86,7 +86,7 @@ export function StatusBadge({
     <span
       className={[
         'inline-flex items-center rounded-sm border font-mono uppercase tracking-[0.18em]',
-        compact ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-1 text-[10px]',
+        compact ? 'px-1.5 py-0.5 text-micro' : 'px-2 py-1 text-meta',
         BADGE_TONE_CLASSES[tone],
         className,
       ]
@@ -179,7 +179,7 @@ export function MetricBar({
         />
       </div>
       {(leftLabel || rightLabel) && (
-        <div className="flex items-center justify-between text-[8px] font-mono text-text-secondary/50">
+        <div className="flex items-center justify-between text-nano font-mono text-text-secondary/50">
           <span>{leftLabel ?? ''}</span>
           <span>{rightLabel ?? ''}</span>
         </div>
@@ -326,7 +326,7 @@ export function TokenBadgeList({ items, className = '' }: TokenBadgeListProps) {
         <span
           key={`${item.label}-${index}`}
           className={[
-            'inline-flex items-center rounded-sm border px-2 py-1 text-[10px] font-mono tracking-wide',
+            'inline-flex items-center rounded-sm border px-2 py-1 text-meta font-mono tracking-wide',
             BADGE_TONE_CLASSES[item.tone ?? 'muted'],
           ].join(' ')}
         >
@@ -470,7 +470,7 @@ export function OutlinePillButton({
       onClick={onClick}
       disabled={disabled}
       className={[
-        'rounded-sm border px-2 py-0.5 text-[10px] font-mono uppercase tracking-wide transition-colors disabled:opacity-50 disabled:cursor-not-allowed',
+        'rounded-sm border px-2 py-0.5 text-meta font-mono uppercase tracking-wide transition-colors disabled:opacity-50 disabled:cursor-not-allowed',
         BADGE_TONE_CLASSES[resolvedTone],
         !active && !done ? 'hover:border-accent/30 hover:text-text-primary' : '',
         className,
@@ -503,7 +503,7 @@ export function LaneRow({ label, height = 'h-8', children }: LaneRowProps) {
   return (
     <div className={`flex ${height} border-b border-[#2a2a2a] last:border-b-0`}>
       <div className="w-[72px] min-w-[72px] bg-[#252525] flex items-center px-2 border-r border-[#333]">
-        <span className="text-[8px] font-mono text-[#777] uppercase tracking-[0.5px] truncate">
+        <span className="text-nano font-mono text-[#777] uppercase tracking-[0.5px] truncate">
           {label}
         </span>
       </div>
@@ -530,8 +530,8 @@ export function TimeRuler({
 
   return (
     <div className="flex items-center h-6 bg-[#222] border-b border-[#333] px-2 gap-3">
-      <span className="text-[9px] font-mono text-accent uppercase tracking-[1px]">{label}</span>
-      <div className="flex-1 flex justify-between text-[8px] font-mono text-[#555]">
+      <span className="text-micro font-mono text-accent uppercase tracking-[1px]">{label}</span>
+      <div className="flex-1 flex justify-between text-nano font-mono text-[#555]">
         {markers.map((m, i) => (
           <span key={i}>{m}</span>
         ))}
@@ -551,9 +551,9 @@ export function StatsBar({ items }: { items: StatsBarItem[] }) {
     <div className="flex h-7 bg-[#222] border-t border-[#333] px-2 items-center gap-4">
       {items.map((item, i) => (
         <div key={i} className="flex items-center gap-1">
-          <span className="text-[8px] font-mono text-[#555] uppercase">{item.label}</span>
+          <span className="text-nano font-mono text-[#555] uppercase">{item.label}</span>
           <span
-            className="text-[10px] font-mono tabular-nums"
+            className="text-meta font-mono tabular-nums"
             style={{ color: item.color || '#e6e6e6' }}
           >
             {item.value}

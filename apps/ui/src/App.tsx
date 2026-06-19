@@ -1027,7 +1027,7 @@ export default function App() {
                 value={selectedModel}
                 onChange={(e) => setSelectedModel(e.target.value)}
                 disabled={phase2ModelSelectorDisabled}
-                className="appearance-none bg-transparent border-none text-text-secondary/70 hover:text-text-primary text-[10px] font-mono py-0 pl-0 pr-4 rounded-sm focus:outline-none focus:text-text-primary cursor-pointer disabled:opacity-50 transition-colors"
+                className="appearance-none bg-transparent border-none text-text-secondary/70 hover:text-text-primary text-meta font-mono py-0 pl-0 pr-4 rounded-sm focus:outline-none focus:text-text-primary cursor-pointer disabled:opacity-50 transition-colors"
               >
                 {MODELS.map((model) => (
                   <option key={model.id} value={model.id}>
@@ -1038,7 +1038,7 @@ export default function App() {
               {phase2StatusBadge && (
                 <span
                   data-testid="phase2-status-badge"
-                  className="text-[10px] font-mono text-text-secondary uppercase"
+                  className="text-meta font-mono text-text-secondary uppercase"
                 >
                   {phase2StatusBadge}
                 </span>
@@ -1081,11 +1081,11 @@ export default function App() {
                       >
                         <div className="rounded-sm border border-border bg-bg-panel px-3 py-3 space-y-2">
                           <div className="flex items-center justify-between gap-3">
-                            <p className="text-[10px] font-mono uppercase tracking-wider text-text-secondary">Analyzed</p>
+                            <p className="text-meta font-mono uppercase tracking-wider text-text-secondary">Analyzed</p>
                             {(() => {
                               const formatted = formatTrackDuration(phase1ForRender?.durationSeconds);
                               return formatted ? (
-                                <span className="text-[10px] font-mono text-text-secondary uppercase tracking-wider shrink-0">
+                                <span className="text-meta font-mono text-text-secondary uppercase tracking-wider shrink-0">
                                   {formatted}
                                 </span>
                               ) : null;
@@ -1122,7 +1122,7 @@ export default function App() {
                           // Audit N9: re-expanded post-results — give the user a way back
                           // to the compact view without having to clear the file.
                           <div className="mb-3 flex items-center justify-between gap-3">
-                            <p className="text-[10px] font-mono uppercase tracking-wider text-text-secondary">
+                            <p className="text-meta font-mono uppercase tracking-wider text-text-secondary">
                               Editing analysis settings
                             </p>
                             <Button
@@ -1145,7 +1145,7 @@ export default function App() {
                     <div className="mt-4 rounded-sm border border-border bg-bg-panel px-3 py-3">
                       <div className="flex items-center justify-between gap-3">
                         <div className="space-y-1">
-                          <p className="text-[10px] font-mono uppercase tracking-wider text-text-secondary">ANALYSIS MODE</p>
+                          <p className="text-meta font-mono uppercase tracking-wider text-text-secondary">ANALYSIS MODE</p>
                           {/* Audit revised #4: helper paragraphs in the
                               Input Source panel were all-caps mono walls.
                               Switched to sans-serif sentence case (eyebrow
@@ -1159,7 +1159,7 @@ export default function App() {
                           value={analysisMode}
                           onChange={(e) => setAnalysisMode(e.target.value as 'full' | 'standard')}
                           disabled={isAnalyzing}
-                          className="appearance-none bg-bg-card border border-border text-text-primary text-[10px] font-mono py-1.5 pl-2 pr-6 rounded-sm focus:outline-none focus:border-accent cursor-pointer disabled:opacity-50"
+                          className="appearance-none bg-bg-card border border-border text-text-primary text-meta font-mono py-1.5 pl-2 pr-6 rounded-sm focus:outline-none focus:border-accent cursor-pointer disabled:opacity-50"
                         >
                           <option value="full">Full</option>
                           <option value="standard">Standard</option>
@@ -1193,7 +1193,7 @@ export default function App() {
                           className="mt-0.5 h-4 w-4 accent-accent"
                         />
                         <div className="space-y-1">
-                          <p className="text-[10px] font-mono uppercase tracking-wider">STEM PITCH/NOTE TRANSLATION</p>
+                          <p className="text-meta font-mono uppercase tracking-wider">STEM PITCH/NOTE TRANSLATION</p>
                           {/* Audit revised #4: see ANALYSIS MODE helper above. */}
                           <p className="text-xs leading-snug opacity-80">
                             Optional. Slower and heavier. Turns on the stem-aware note draft (Demucs + torchcrepe on bass and lead). When off, the measurement-layer melody contour and Gemini stem listening notes can still appear when those stages run.
@@ -1223,7 +1223,7 @@ export default function App() {
                             className="mt-0.5 h-4 w-4 accent-accent"
                           />
                           <div className="space-y-1">
-                            <p className="text-[10px] font-mono uppercase tracking-wider">MT3 POLYPHONIC TRANSCRIPTION</p>
+                            <p className="text-meta font-mono uppercase tracking-wider">MT3 POLYPHONIC TRANSCRIPTION</p>
                             <p className="text-xs leading-snug opacity-80">
                               Experimental and heavy (separate model + weights). Extracts per-instrument MIDI via MT3 — additive only, never overrides Phase 1 measurements. Best with PITCH/NOTE TRANSLATION on; without Demucs stems it falls back to a lower-quality full-mix pass.
                             </p>
@@ -1250,11 +1250,11 @@ export default function App() {
                         />
                         <div className="space-y-1">
                           <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-[10px] font-mono uppercase tracking-wider">AI INTERPRETATION</p>
+                            <p className="text-meta font-mono uppercase tracking-wider">AI INTERPRETATION</p>
                             {phase2StatusBadge && (
                               <span
                                 data-testid="phase2-status-inline"
-                                className="text-[10px] font-mono uppercase tracking-wider opacity-80"
+                                className="text-meta font-mono uppercase tracking-wider opacity-80"
                               >
                                 {phase2StatusBadge}
                               </span>
@@ -1271,7 +1271,7 @@ export default function App() {
                       <div className="flex items-center justify-between gap-3">
                         <label
                           htmlFor="phase2-model-mobile"
-                          className="text-[10px] font-mono uppercase tracking-wider text-text-secondary"
+                          className="text-meta font-mono uppercase tracking-wider text-text-secondary"
                         >
                           Interpretation Model
                         </label>
@@ -1281,7 +1281,7 @@ export default function App() {
                           value={selectedModel}
                           onChange={(e) => setSelectedModel(e.target.value)}
                           disabled={phase2ModelSelectorDisabled}
-                          className="min-w-0 flex-1 appearance-none bg-bg-card border border-border text-text-primary text-[10px] font-mono py-1 pl-2 pr-6 rounded-sm focus:outline-none focus:border-accent cursor-pointer disabled:opacity-50"
+                          className="min-w-0 flex-1 appearance-none bg-bg-card border border-border text-text-primary text-meta font-mono py-1 pl-2 pr-6 rounded-sm focus:outline-none focus:border-accent cursor-pointer disabled:opacity-50"
                         >
                           {MODELS.map((model) => (
                             <option key={model.id} value={model.id}>
@@ -1300,7 +1300,7 @@ export default function App() {
                           className="mt-3 rounded-sm border border-border hover:border-accent/30 bg-bg-panel p-3 space-y-2 transition-colors"
                         >
                           <div className="flex items-center justify-between">
-                            <p className="text-[10px] font-mono text-text-secondary uppercase tracking-wider">Estimated local analysis</p>
+                            <p className="text-meta font-mono text-text-secondary uppercase tracking-wider">Estimated local analysis</p>
                             <p className="text-xs font-mono font-bold tracking-wider text-text-primary">
                               {isEstimateLoading
                                 ? 'Calculating...'
@@ -1311,7 +1311,7 @@ export default function App() {
                           </div>
                           {estimateError && (
                             <p
-                              className={`text-[10px] font-mono text-warning ${
+                              className={`text-meta font-mono text-warning ${
                                 estimateWrongService ? 'leading-relaxed' : 'uppercase tracking-wider'
                               }`}
                             >
@@ -1398,7 +1398,7 @@ export default function App() {
                     <button
                       onClick={() => handleStartAnalysis()}
                       disabled={isAnalyzing}
-                      className="px-2 py-1 bg-accent/20 text-accent border border-accent/30 rounded-sm hover:bg-accent/30 transition-colors uppercase tracking-wider text-[10px] disabled:opacity-50"
+                      className="px-2 py-1 bg-accent/20 text-accent border border-accent/30 rounded-sm hover:bg-accent/30 transition-colors uppercase tracking-wider text-meta disabled:opacity-50"
                     >
                       Retry
                     </button>
@@ -1475,13 +1475,13 @@ export default function App() {
           <div className="absolute inset-0 bg-bg-app/85 backdrop-blur-sm" />
           <div className="relative flex h-full items-center justify-center p-6">
             <div className="w-full max-w-2xl rounded-sm border border-accent/40 bg-bg-panel/90 px-8 py-10 text-center shadow-[0_0_30px_rgba(255,136,0,0.18)]">
-              <p className="text-[11px] font-mono uppercase tracking-[0.3em] text-text-secondary">
+              <p className="text-eyebrow font-mono uppercase tracking-[0.3em] text-text-secondary">
                 Global Input
               </p>
               <p className="mt-4 text-3xl font-display font-bold uppercase tracking-[0.12em] text-accent">
                 Drop Audio Here
               </p>
-              <p className="mt-3 text-[11px] font-mono uppercase tracking-[0.18em] text-text-secondary">
+              <p className="mt-3 text-eyebrow font-mono uppercase tracking-[0.18em] text-text-secondary">
                 Release to replace the current track
               </p>
             </div>
