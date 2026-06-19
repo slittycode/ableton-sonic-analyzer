@@ -40,11 +40,7 @@ import { TranscriptionPianorollBlock } from './TranscriptionPianorollBlock';
 import { Mt3TranscriptionPanel } from './Mt3TranscriptionPanel';
 import { StemListeningNotesPanel } from './StemListeningNotesPanel';
 import { hasStemListeningNotesContent } from '../services/sessionMusician';
-import {
-  StatusBadge,
-  TokenBadgeList,
-} from './MeasurementPrimitives';
-import { Button, DeviceRack, MetricBar, MetricTile, Pill, SectionHeader } from './ui';
+import { Button, DeviceRack, MetricBar, MetricTile, Pill, SectionHeader, TokenBadgeList } from './ui';
 import { PhaseSourceBadge } from './PhaseSourceBadge';
 import { StickyNav, type StickyNavSection } from './StickyNav';
 import { CitationBlock, CitationHeadline } from './CitationBlock';
@@ -1048,7 +1044,7 @@ export function AnalysisResults({
             icon={<Clock className="w-3.5 h-3.5 text-accent/60" />}
             label="METER"
             value={phase1.timeSignature}
-            footer={<StatusBadge label={meterStatusLabel(phase1)} tone="muted" compact />}
+            footer={<Pill tone="neutral" size="xs">{meterStatusLabel(phase1)}</Pill>}
           />
 
           {/* CHARACTER — genre primary, characteristic pills secondary */}
@@ -1066,7 +1062,7 @@ export function AnalysisResults({
                     items={[
                       { label: phase1.genreDetail.genreFamily, tone: 'accent' },
                       ...(phase1.genreDetail.secondaryGenre
-                        ? [{ label: phase1.genreDetail.secondaryGenre, tone: 'muted' as const }]
+                        ? [{ label: phase1.genreDetail.secondaryGenre, tone: 'neutral' as const }]
                         : []),
                     ]}
                   />
@@ -1418,7 +1414,7 @@ export function AnalysisResults({
                       Instruments
                     </p>
                     <TokenBadgeList
-                      items={styleProfile.instruments.map((item) => ({ label: item, tone: 'muted' as const }))}
+                      items={styleProfile.instruments.map((item) => ({ label: item, tone: 'neutral' as const }))}
                     />
                   </div>
                 )}
@@ -1428,7 +1424,7 @@ export function AnalysisResults({
                       Production Techniques
                     </p>
                     <TokenBadgeList
-                      items={styleProfile.productionTechniques.map((item) => ({ label: item, tone: 'violet' as const }))}
+                      items={styleProfile.productionTechniques.map((item) => ({ label: item, tone: 'neutral' as const }))}
                     />
                   </div>
                 )}

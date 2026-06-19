@@ -1,10 +1,6 @@
 import React from 'react';
 import type { MixDoctorReport, MixDynamicsIssue, MixIssue } from '../services/mixDoctor';
-import {
-  DeltaBadge,
-  StatusBadge,
-} from './MeasurementPrimitives';
-import { DataTable, MetricTile, Panel } from './ui';
+import { DataTable, DeltaBadge, MetricTile, Panel, Pill } from './ui';
 import { getTextRoleClassName } from '../utils/displayText';
 
 interface MixDoctorPanelProps {
@@ -59,17 +55,16 @@ export function MixDoctorPanel({ report }: MixDoctorPanelProps) {
           accent="accent"
           label="Target Genre"
           value={report.genreName}
-          footer={<StatusBadge label={report.genreId} tone="muted" compact />}
+          footer={<Pill tone="neutral" size="xs">{report.genreId}</Pill>}
         />
         <MetricTile
           size="md"
           accent="accent"
           label="Health Score"
           value={
-            <StatusBadge
-              label={`${report.overallScore}/100`}
-              tone={toneForScore(report.overallScore)}
-            />
+            <Pill tone={toneForScore(report.overallScore)}>
+              {`${report.overallScore}/100`}
+            </Pill>
           }
         />
         <MetricTile
@@ -111,7 +106,7 @@ export function MixDoctorPanel({ report }: MixDoctorPanelProps) {
             },
           ].map((item) => (
             <Panel key={item.label} variant="surface" padding="md">
-              <StatusBadge label={item.label} tone={item.tone} compact />
+              <Pill tone={item.tone} size="xs">{item.label}</Pill>
               <p className="mt-2 text-sm leading-5 text-text-primary">{item.message}</p>
             </Panel>
           ))}
@@ -176,7 +171,7 @@ export function MixDoctorPanel({ report }: MixDoctorPanelProps) {
                 label: 'Issue',
                 render: (row) => (
                   <div className="flex justify-start">
-                    <StatusBadge label={row.issue} tone={toneForMixIssue(row.issue)} compact />
+                    <Pill tone={toneForMixIssue(row.issue)} size="xs">{row.issue}</Pill>
                   </div>
                 ),
               },
