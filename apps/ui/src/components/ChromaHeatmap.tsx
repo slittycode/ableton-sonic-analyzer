@@ -175,6 +175,8 @@ export function ChromaHeatmap({ data }: ChromaHeatmapProps) {
       <div className="rounded-sm overflow-hidden border border-border bg-bg-panel">
         <canvas
           ref={canvasRef}
+          role="img"
+          aria-label="Chroma heatmap: pitch-class energy over time"
           className="w-full cursor-crosshair"
           style={{ height: canvasHeight }}
           onMouseMove={handleMouseMove}

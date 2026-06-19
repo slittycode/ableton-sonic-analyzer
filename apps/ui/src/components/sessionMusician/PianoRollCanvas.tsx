@@ -140,6 +140,8 @@ export function PianoRollCanvas({
     <div className="rounded-sm border border-border overflow-hidden">
       <canvas
         ref={canvasRef}
+        role="img"
+        aria-label="Piano roll of detected notes"
         data-testid={testId}
         className="w-full"
         style={{ height }}

@@ -59,6 +59,7 @@ export const Sparkline = React.memo(function Sparkline({
   return (
     <canvas
       ref={canvasRef}
+      aria-hidden="true"
       className={className}
       style={{ width, height, display: 'block' }}
     />
