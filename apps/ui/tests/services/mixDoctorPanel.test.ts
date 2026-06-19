@@ -127,9 +127,9 @@ describe('MixDoctorPanel', () => {
     );
 
     expect(html).toContain('86/100');
-    expect(html).toContain('border-success/30 bg-success/10');
-    expect(html).toContain('border-warning/30 bg-warning/10');
-    expect(html).toContain('border-error/30 bg-error/10');
+    expect(html).toContain('bg-success/20');
+    expect(html).toContain('bg-warning/20');
+    expect(html).toContain('bg-error/20');
     expect(html).toContain('-1.8');
   });
 

@@ -9,6 +9,7 @@ export {
   type DataTableColumn,
   type DataTableProps,
 } from './DataTable';
+export { DeltaBadge, type DeltaBadgeProps } from './DeltaBadge';
 export {
   DeviceRack,
   deviceRackVariants,
@@ -41,4 +42,5 @@ export {
   type SignalStageStatus,
 } from './SignalChain';
 export { TimeReadout, type TimeReadoutProps } from './TimeReadout';
+export { TokenBadgeList, type TokenBadgeListProps } from './TokenBadgeList';
 export { Tooltip, TooltipProvider, type TooltipProps } from './Tooltip';
