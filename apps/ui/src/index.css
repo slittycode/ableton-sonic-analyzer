@@ -15,7 +15,12 @@
   
   --color-text-primary: #e6e6e6;
   --color-text-secondary: #aaaaaa;
-  --color-text-muted: #777777;
+  /* Lifted #777 -> #8a8a8a (Phase 3b contrast): clears WCAG AA (~4.6:1) for
+     small text on the dark device surfaces (#222 and below) where all muted
+     text actually sits, while staying clearly below --color-text-secondary so
+     the Ableton grey ladder stays open. Do not use muted text on the lighter
+     #444 bg-card surface — it does not meet AA there; use text-secondary. */
+  --color-text-muted: #8a8a8a;
   
   --color-accent: #ff8800;
   --color-accent-glow: rgba(255, 136, 0, 0.15);
