@@ -39,14 +39,14 @@ export const TimeReadout = React.forwardRef<HTMLSpanElement, TimeReadoutProps>(
       <span
         ref={ref}
         className={cn(
-          'tabular-mono inline-flex items-baseline gap-1.5 text-[11px] text-text-primary',
+          'tabular-mono inline-flex items-baseline gap-1.5 text-eyebrow text-text-primary',
           className,
         )}
         {...rest}
       >
         <span>{elapsedLabel}</span>
         {hasEstimate && (
-          <span className="text-text-muted text-[9px] uppercase tracking-[0.14em]">
+          <span className="text-text-muted text-micro uppercase tracking-[0.14em]">
             est {estimateLabel}
           </span>
         )}

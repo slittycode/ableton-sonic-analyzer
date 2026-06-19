@@ -51,7 +51,7 @@ export function Tooltip({
           sideOffset={6}
           className={cn(
             'z-50 max-w-xs px-3 py-2 rounded-sm border border-border bg-bg-card shadow-md',
-            'font-mono text-[11px] text-text-primary leading-snug',
+            'font-mono text-eyebrow text-text-primary leading-snug',
             'animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0',
             className,
           )}

@@ -40,9 +40,9 @@ const buttonVariants = cva(
         ],
       },
       size: {
-        sm: 'px-2 py-1 text-[10px]',
-        md: 'px-3 py-1.5 text-[11px]',
-        lg: 'px-6 py-2.5 text-[12px]',
+        sm: 'px-2 py-1 text-meta',
+        md: 'px-3 py-1.5 text-eyebrow',
+        lg: 'px-6 py-2.5 text-body-sm',
       },
       iconOnly: {
         true: '!gap-0',

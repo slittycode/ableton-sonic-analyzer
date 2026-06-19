@@ -37,7 +37,7 @@ export const LedIndicator = React.forwardRef<HTMLSpanElement, LedIndicatorProps>
           {...rest}
         >
           <span className={ledVariants({ status, size })} aria-hidden />
-          <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-text-secondary">
+          <span className="font-mono text-meta uppercase tracking-[0.16em] text-text-secondary">
             {label}
           </span>
         </span>

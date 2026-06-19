@@ -67,7 +67,11 @@
   --space-title-strip-h: 1.5rem;
   --space-rail-h: 0.875rem;
 
-  /* --- Type-scale lock (bans arbitrary text-[Npx] in components/ui/) --- */
+  /* --- Type-scale lock: the ONLY sanctioned font sizes. Arbitrary
+     text-[Npx] under src/components/** is banned by
+     scripts/check-style-discipline.mjs. --- */
+  --text-nano: 0.5rem;      /* 8px — dense meter / axis labels */
+  --text-micro: 0.5625rem;  /* 9px — compact eyebrows, pill xs */
   --text-meta: 0.625rem;
   --text-eyebrow: 0.6875rem;
   --text-body-sm: 0.75rem;

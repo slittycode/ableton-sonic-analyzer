@@ -29,9 +29,9 @@ const valueSizeClass: Record<NonNullable<MetricTileProps['size']>, string> = {
 };
 
 const unitSizeClass: Record<NonNullable<MetricTileProps['size']>, string> = {
-  sm: 'text-[9px]',
-  md: 'text-[10px]',
-  lg: 'text-[11px]',
+  sm: 'text-micro',
+  md: 'text-meta',
+  lg: 'text-eyebrow',
   xl: 'text-xs',
 };
 
@@ -77,7 +77,7 @@ export const MetricTile = React.forwardRef<HTMLDivElement, MetricTileProps>(
             {icon && <span className="text-text-secondary shrink-0">{icon}</span>}
             <span
               data-text-role="eyebrow"
-              className="font-mono text-[10px] uppercase tracking-[0.16em] text-text-secondary truncate"
+              className="font-mono text-meta uppercase tracking-[0.16em] text-text-secondary truncate"
             >
               {label}
             </span>

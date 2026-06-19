@@ -79,7 +79,7 @@ export const MetricBar = React.forwardRef<HTMLDivElement, MetricBarProps>(functi
         />
       </div>
       {(leftLabel || rightLabel) && (
-        <div className="flex items-center justify-between text-[8px] font-mono text-text-secondary/50">
+        <div className="flex items-center justify-between text-nano font-mono text-text-secondary/50">
           <span>{leftLabel ?? ''}</span>
           <span>{rightLabel ?? ''}</span>
         </div>

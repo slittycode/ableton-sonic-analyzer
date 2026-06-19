@@ -87,12 +87,12 @@ export const Checkbox = React.forwardRef<
       {box}
       <span className="flex flex-col gap-0.5">
         {label && (
-          <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-text-primary">
+          <span className="font-mono text-eyebrow uppercase tracking-[0.14em] text-text-primary">
             {label}
           </span>
         )}
         {description && (
-          <span className="font-mono text-[10px] text-text-secondary leading-snug">
+          <span className="font-mono text-meta text-text-secondary leading-snug">
             {description}
           </span>
         )}
