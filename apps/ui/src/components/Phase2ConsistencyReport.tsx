@@ -1,5 +1,6 @@
 import React from 'react';
 
+import { DataTable, type DataTableColumn } from './ui';
 import type { ValidationReport, ValidationViolation } from '../services/phase2Validator';
 
 interface Phase2ConsistencyReportProps {
@@ -26,6 +27,19 @@ function truncateDetail(message: string): string {
 function severityClass(severity: ValidationViolation['severity']): string {
   return severity === 'ERROR' ? 'text-error' : 'text-warning';
 }
+
+const violationColumns: DataTableColumn<ValidationViolation>[] = [
+  {
+    key: 'severity',
+    label: 'Severity',
+    render: (v) => (
+      <span className={`font-mono ${severityClass(v.severity)}`}>{v.severity}</span>
+    ),
+  },
+  { key: 'type', label: 'Type', render: (v) => formatViolationType(v.type) },
+  { key: 'field', label: 'Field', render: (v) => v.field },
+  { key: 'detail', label: 'Detail', render: (v) => truncateDetail(v.message) },
+];
 
 export function Phase2ConsistencyReport({ report, hideWhenClean = false }: Phase2ConsistencyReportProps) {
   // Audit Finding #1E: dev-audience violations (currently NEW_FIELD_UNCITED
@@ -59,43 +73,7 @@ export function Phase2ConsistencyReport({ report, hideWhenClean = false }: Phase
         {report.summary.checkedFields} checked fields
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm border-collapse">
-          <thead>
-            <tr className="border-b border-border">
-              {['Severity', 'Type', 'Field', 'Detail'].map((label) => (
-                <th
-                  key={label}
-                  className="px-2 py-1 text-left text-meta font-mono uppercase tracking-wide text-text-secondary font-normal"
-                >
-                  {label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {userVisible.map((violation, rowIndex) => (
-              <tr
-                key={`${violation.field}-${violation.type}-${rowIndex}`}
-                className={`border-b border-border ${
-                  rowIndex % 2 === 0 ? 'bg-bg-secondary' : ''
-                }`}
-              >
-                <td className={`px-2 py-1 text-sm font-mono ${severityClass(violation.severity)}`}>
-                  {violation.severity}
-                </td>
-                <td className="px-2 py-1 text-sm text-text-primary">
-                  {formatViolationType(violation.type)}
-                </td>
-                <td className="px-2 py-1 text-sm text-text-primary">{violation.field}</td>
-                <td className="px-2 py-1 text-sm text-text-primary">
-                  {truncateDetail(violation.message)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable data={userVisible} columns={violationColumns} />
     </div>
   );
 }
