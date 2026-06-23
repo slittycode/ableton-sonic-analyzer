@@ -69,6 +69,11 @@ import {
   getTextRoleClassName,
   type TextRole,
 } from '../utils/displayText';
+import { MetaBadgeList, ResultsSectionHeader, textRoleClassName } from './analysisResults/shared';
+import { AudioObservationsSection } from './analysisResults/AudioObservationsSection';
+import { ProjectSetupSection } from './analysisResults/ProjectSetupSection';
+import { TrackLayoutSection } from './analysisResults/TrackLayoutSection';
+import { RoutingBlueprintSection } from './analysisResults/RoutingBlueprintSection';
 
 export interface AnalysisResultsProps {
   phase1: Phase1Result | null;
@@ -384,48 +389,6 @@ function withAlpha(hexColor: string, alphaHex: string): string {
 
 const LOW_CONFIDENCE_TITLE = "Low confidence — treat this as approximate.";
 
-function textRoleClassName(role: TextRole, className = ''): string {
-  return [getTextRoleClassName(role), className].filter(Boolean).join(' ');
-}
-
-interface ResultsSectionHeaderProps {
-  title: React.ReactNode;
-  rightSlot?: React.ReactNode;
-  titleRole?: TextRole;
-  titleClassName?: string;
-  className?: string;
-}
-
-/**
- * Thin wrapper around the SectionHeader primitive — preserves the
- * (title, rightSlot, titleRole, titleClassName, className) API the rest of
- * AnalysisResults expects while letting the primitive own the actual layout
- * + LED indicator + data-text-role propagation. The static accent dot
- * (`<span class="w-2 h-2 bg-accent rounded-full">`) is upgraded to the
- * pulsing `.led-indicator--active` glyph that every other DeviceRack /
- * SectionHeader in the migration uses.
- */
-function ResultsSectionHeader({
-  title,
-  rightSlot,
-  titleRole,
-  titleClassName,
-  className,
-}: ResultsSectionHeaderProps) {
-  return (
-    <SectionHeader
-      title={title}
-      titleRole={titleRole}
-      titleClassName={titleClassName}
-      action={rightSlot}
-      variant="underline"
-      size="md"
-      ledTone="accent"
-      className={className}
-    />
-  );
-}
-
 function lowConfidenceIndicator(show: boolean) {
   if (!show) return null;
   return (
@@ -437,11 +400,6 @@ function lowConfidenceIndicator(show: boolean) {
       ⚠
     </span>
   );
-}
-
-interface MetaBadgeItem {
-  label: string;
-  value?: string | null;
 }
 
 interface InterpretationWarningMapping {
@@ -462,30 +420,6 @@ interface GroupedInterpretationWarning {
 }
 
 type StyleProfileSectionState = 'ready' | 'dropped' | 'omitted' | 'disabled' | 'pending';
-
-function MetaBadgeList({ items }: { items: MetaBadgeItem[] }) {
-  const visibleItems = items.filter((item) => typeof item.value === 'string' && item.value.trim().length > 0);
-  if (visibleItems.length === 0) return null;
-
-  // Audit N8: previously each chip rendered as `Family: Native` /
-  // `Context: Acid bass` / `Stage: Sound design`. The `Label:` prefix read
-  // as a JSON-key column header — engineering-flavour. The chip content
-  // alone (`Acid bass`) is enough; we keep `item.label` only for the React
-  // key. Tooltip preserves the original label for users who want context.
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {visibleItems.map((item) => (
-        <span
-          key={`${item.label}-${item.value}`}
-          title={item.label}
-          className="text-micro font-mono uppercase px-1.5 py-0.5 rounded border border-border text-text-secondary whitespace-nowrap"
-        >
-          {item.value}
-        </span>
-      ))}
-    </div>
-  );
-}
 
 // Audit Finding #2: `GroundingBadgeList` (9px monospace field-path pills) was
 // retired in favor of the structured `CitationBlock` primitive. The component
@@ -1482,235 +1416,19 @@ export function AnalysisResults({
       </section>
 
       {audioObservations && (
-        <section id="section-audio-observations" className="space-y-6 scroll-mt-24">
-          <ResultsSectionHeader
-            title="Audio Observations"
-            rightSlot={
-              <span className="text-meta font-mono bg-bg-panel border border-border text-text-secondary px-2 py-1 rounded font-bold">
-                Perceptual / Audio-Derived
-              </span>
-            }
-          />
-
-          <div className="rounded-sm border border-accent/20 bg-accent/5 p-4 space-y-2">
-            <p className="text-meta font-mono uppercase tracking-[0.18em] text-accent">
-              Sound Design Fingerprint
-            </p>
-            <p className="text-xs font-mono text-text-secondary leading-relaxed">
-              {truncateAtSentenceBoundary(audioObservations.soundDesignFingerprint, 320)}
-            </p>
-          </div>
-
-          {audioObservations.elementCharacter.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {audioObservations.elementCharacter.map((item, index) => (
-                <div
-                  key={`${item.element}-${index}`}
-                  className="rounded-sm border border-border bg-bg-card p-4 space-y-2"
-                >
-                  <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
-                    {item.element}
-                  </p>
-                  <p className="text-xs font-mono text-text-secondary leading-relaxed">
-                    {truncateAtSentenceBoundary(item.description, 220)}
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {audioObservations.productionSignatures.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
-                Production Signatures
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {audioObservations.productionSignatures.map((signature, index) => (
-                  <span
-                    key={`${signature}-${index}`}
-                    className="text-meta font-mono rounded-sm border border-accent/30 bg-accent/5 px-2 py-1 text-accent"
-                  >
-                    {truncateAtSentenceBoundary(signature, 140)}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="rounded-sm border border-border bg-bg-card p-4 space-y-2">
-            <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
-              Mix Context
-            </p>
-            <p className="text-xs font-mono text-text-secondary leading-relaxed">
-              {truncateAtSentenceBoundary(audioObservations.mixContext, 280)}
-            </p>
-          </div>
-        </section>
+        <AudioObservationsSection audioObservations={audioObservations} />
       )}
 
       {projectSetup && (
-        <section id="section-project-setup" className="space-y-6 scroll-mt-24">
-          <ResultsSectionHeader
-            title="Project Setup"
-            rightSlot={
-              <span className="text-meta font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">
-                LIVE 12 V2
-              </span>
-            }
-          />
-
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            <MetricTile accent="accent" size="xl" label="Tempo" value={projectSetup.tempoBpm} unit="BPM" />
-            <MetricTile accent="accent" size="xl" label="Meter" value={projectSetup.timeSignature} />
-            <MetricTile accent="accent" size="xl" label="Sample Rate" value={`${projectSetup.sampleRate} Hz`} />
-            <MetricTile accent="accent" size="xl" label="Bit Depth" value={`${projectSetup.bitDepth}-bit`} />
-            <MetricTile accent="accent" size="xl" label="Headroom" value={projectSetup.headroomTarget} />
-          </div>
-
-          <div className="rounded-sm border border-border bg-bg-card p-4">
-            <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
-              Session Goal
-            </p>
-            <p className="mt-2 text-xs font-mono text-text-secondary leading-relaxed">
-              {truncateAtSentenceBoundary(projectSetup.sessionGoal, 320)}
-            </p>
-          </div>
-        </section>
+        <ProjectSetupSection projectSetup={projectSetup} />
       )}
 
       {trackLayout.length > 0 && (
-        <section id="section-track-layout" className="space-y-6 scroll-mt-24">
-          <ResultsSectionHeader
-            title="Track Layout"
-            rightSlot={
-              <span className="text-meta font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">
-                SCAFFOLD
-              </span>
-            }
-          />
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {trackLayout.map((item) => (
-              <div key={`${item.order}-${item.name}`} className="rounded-sm border border-border bg-bg-card p-4 space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="w-6 h-6 rounded-sm bg-bg-panel border border-border text-accent font-mono text-meta flex items-center justify-center">
-                      {item.order}
-                    </span>
-                    <div className="min-w-0">
-                      <h3
-                        data-text-role="item-title"
-                        className={textRoleClassName('item-title', 'truncate')}
-                      >
-                        {item.name}
-                      </h3>
-                      <p data-text-role="eyebrow" className={getTextRoleClassName('eyebrow')}>
-                        {item.type}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                <p data-text-role="body" className={textRoleClassName('body')}>
-                  {truncateAtSentenceBoundary(item.purpose, 220)}
-                </p>
-                {/* Audit Finding #2: replaced the legacy GroundingBadgeList
-                    (9px field-path pills) with the structured CitationBlock
-                    primitive, finishing the chain-of-custody visual treatment
-                    that already lands on Mix Chain / Patches / Sonic cards.
-                    Segment indexes (Track Layout-only) ride as a synthetic
-                    extra row at the bottom of the block. */}
-                <CitationBlock
-                  phase1={phase1}
-                  fields={item.grounding.phase1Fields}
-                  extraRows={
-                    Array.isArray(item.grounding.segmentIndexes) &&
-                    item.grounding.segmentIndexes.length > 0
-                      ? [
-                          {
-                            label: 'Active in segments',
-                            value: item.grounding.segmentIndexes.join(' · '),
-                          },
-                        ]
-                      : undefined
-                  }
-                  testId={`track-layout-citation-${item.order ?? 0}-${item.name}`}
-                />
-              </div>
-            ))}
-          </div>
-        </section>
+        <TrackLayoutSection trackLayout={trackLayout} phase1={phase1} />
       )}
 
       {routingBlueprint && (
-        <section id="section-routing-blueprint" className="space-y-6 scroll-mt-24">
-          <ResultsSectionHeader
-            title="Routing Blueprint"
-            rightSlot={
-              <span className="text-meta font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">
-                SIGNAL MAP
-              </span>
-            }
-          />
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="rounded-sm border border-border bg-bg-card p-4 space-y-2">
-              <p data-text-role="eyebrow" className={getTextRoleClassName('eyebrow')}>Sidechain Source</p>
-              <p data-text-role="item-title" className={getTextRoleClassName('item-title')}>
-                {routingBlueprint.sidechainSource ?? 'Not specified'}
-              </p>
-            </div>
-            <div className="rounded-sm border border-border bg-bg-card p-4 space-y-2 md:col-span-2">
-              <p data-text-role="eyebrow" className={getTextRoleClassName('eyebrow')}>Sidechain Targets</p>
-              <div className="flex flex-wrap gap-1.5">
-                {routingBlueprint.sidechainTargets.map((target) => (
-                  <span
-                    key={target}
-                    className="text-micro font-mono uppercase px-1.5 py-0.5 rounded border border-accent/30 bg-accent/5 text-accent"
-                  >
-                    {target}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {routingBlueprint.returns.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {routingBlueprint.returns.map((returnTrack) => (
-                <div key={returnTrack.name} className="rounded-sm border border-border bg-bg-card p-4 space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <h3 data-text-role="item-title" className={getTextRoleClassName('item-title')}>
-                      {returnTrack.name}
-                    </h3>
-                    <span className="text-micro font-mono uppercase px-1.5 py-0.5 rounded border border-border text-text-secondary">
-                      {returnTrack.deviceFocus}
-                    </span>
-                  </div>
-                  <p data-text-role="body" className={textRoleClassName('body')}>
-                    {truncateAtSentenceBoundary(returnTrack.purpose, 220)}
-                  </p>
-                  <MetaBadgeList
-                    items={[
-                      { label: 'Sends', value: returnTrack.sendSources.join(', ') },
-                      { label: 'Level', value: returnTrack.levelGuidance },
-                    ]}
-                  />
-                </div>
-              ))}
-            </div>
-          )}
-
-          {routingBlueprint.notes.length > 0 && (
-            <div className="rounded-sm border border-border bg-bg-card p-4 space-y-2">
-              <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">Routing Notes</p>
-              {routingBlueprint.notes.map((note, index) => (
-                <p key={`${note}-${index}`} className="text-xs font-mono text-text-secondary leading-relaxed">
-                  {truncateAtSentenceBoundary(note, 220)}
-                </p>
-              ))}
-            </div>
-          )}
-        </section>
+        <RoutingBlueprintSection routingBlueprint={routingBlueprint} />
       )}
 
       {warpGuide && (
