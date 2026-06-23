@@ -46,7 +46,6 @@ import { StickyNav, type StickyNavSection } from './StickyNav';
 import { CitationBlock, CitationHeadline } from './CitationBlock';
 import { ConfidenceBandBadge } from './sessionMusician/ConfidenceBandBadge';
 import { RecommendationVerificationBadge } from './RecommendationVerificationBadge';
-import { toConfidenceBand } from '../services/sessionMusician/confidenceBand';
 import { loadAppliedIds, toggleAppliedId } from '../services/appliedRecommendations';
 import {
   formatContractRange,
@@ -74,6 +73,8 @@ import { AudioObservationsSection } from './analysisResults/AudioObservationsSec
 import { ProjectSetupSection } from './analysisResults/ProjectSetupSection';
 import { TrackLayoutSection } from './analysisResults/TrackLayoutSection';
 import { RoutingBlueprintSection } from './analysisResults/RoutingBlueprintSection';
+import { WarpGuideSection } from './analysisResults/WarpGuideSection';
+import { DetectedCharacteristicsSection } from './analysisResults/DetectedCharacteristicsSection';
 
 export interface AnalysisResultsProps {
   phase1: Phase1Result | null;
@@ -781,15 +782,6 @@ export function AnalysisResults({
     phase1.transcription?.mt3 && phase1.transcription.mt3.tracks.length > 0
       ? phase1.transcription.mt3
       : null;
-  const warpTargets = warpGuide
-    ? [
-        { label: 'Full Track', target: warpGuide.fullTrack },
-        { label: 'Drums', target: warpGuide.drums },
-        { label: 'Bass', target: warpGuide.bass },
-        { label: 'Melodic', target: warpGuide.melodic },
-        ...(warpGuide.vocals ? [{ label: 'Vocals', target: warpGuide.vocals }] : []),
-      ]
-    : [];
   const characteristicPills = Array.isArray(phase2?.detectedCharacteristics)
     ? phase2.detectedCharacteristics.slice(0, 4)
     : [];
@@ -1432,91 +1424,11 @@ export function AnalysisResults({
       )}
 
       {warpGuide && (
-        <section id="section-warp-guide" className="space-y-6 scroll-mt-24">
-          <ResultsSectionHeader
-            title="Warp Guide"
-            rightSlot={
-              <span className="text-meta font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">
-                CLIP PREP
-              </span>
-            }
-          />
-
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-            {warpTargets.map(({ label, target }) => (
-              <div key={label} className="rounded-sm border border-border bg-bg-card p-4 space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">{label}</p>
-                  <span className="text-micro font-mono uppercase px-1.5 py-0.5 rounded border border-accent/30 bg-accent/5 text-accent">
-                    {target.warpMode}
-                  </span>
-                </div>
-                {target.settings && (
-                  <p className="text-meta font-mono text-text-secondary uppercase tracking-wide">
-                    {target.settings}
-                  </p>
-                )}
-                <p className="text-xs font-mono text-text-secondary leading-relaxed">
-                  {truncateAtSentenceBoundary(target.reason, 220)}
-                </p>
-              </div>
-            ))}
-          </div>
-
-          <div className="rounded-sm border border-border bg-bg-card p-4">
-            <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">Why These Modes</p>
-            <p className="mt-2 text-xs font-mono text-text-secondary leading-relaxed">
-              {truncateAtSentenceBoundary(warpGuide.rationale, 320)}
-            </p>
-          </div>
-        </section>
+        <WarpGuideSection warpGuide={warpGuide} />
       )}
 
       {Array.isArray(phase2?.detectedCharacteristics) && phase2.detectedCharacteristics.length > 0 && (
-        <div className="space-y-6">
-          <ResultsSectionHeader
-            title="Detected Characteristics"
-            rightSlot={
-              <span className="text-meta font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">AI INTERP</span>
-            }
-          />
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {phase2.detectedCharacteristics.map((item, idx) => (
-              <div
-                key={idx}
-                className="bg-bg-card border rounded-sm p-4 flex flex-col transition-all hover:border-accent/40 group relative overflow-hidden border-accent/30"
-              >
-                <div className="absolute top-0 left-0 w-1 h-full bg-accent"></div>
-                <div className="flex items-center justify-between mb-3 pl-2">
-                  <h3
-                    data-text-role="item-title"
-                    className={textRoleClassName('item-title', 'truncate pr-2')}
-                  >
-                    {item.name}
-                  </h3>
-                  {/* Audit Finding #4: Detected Characteristics cards used
-                    to render a HIGH/MED/LOW string pill with bespoke
-                    success/warning/error tones. Replaced with the canonical
-                    ConfidenceBandBadge so the same vocabulary (Solid /
-                    Workable / Rough / Unreliable) reads across every
-                    confidence surface in the UI. toConfidenceBand maps
-                    Gemini's HIGH→solid (0.9), MED→workable (0.6),
-                    LOW→rough (0.3) — middle of each band so the percent
-                    label reads as an honest hedge. */}
-                  {(() => {
-                    const band = toConfidenceBand(item.confidence);
-                    return band ? (
-                      <ConfidenceBandBadge variant="compact" band={band} />
-                    ) : null;
-                  })()}
-                </div>
-                <p className="text-xs text-text-secondary leading-relaxed font-mono opacity-80 border-t border-border/50 pt-2 mt-2 pl-2">
-                  {truncateAtSentenceBoundary(item.explanation, 600)}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
+        <DetectedCharacteristicsSection characteristics={phase2.detectedCharacteristics} />
       )}
 
       {arrangement && (
