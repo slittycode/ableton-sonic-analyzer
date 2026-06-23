@@ -1,6 +1,6 @@
 import type { Phase2Result } from '../../types';
 import { truncateAtSentenceBoundary } from '../analysisResultsViewModel';
-import { MetricTile } from '../ui';
+import { MetricTile, Panel, Pill } from '../ui';
 import { ResultsSectionHeader } from './shared';
 
 type ProjectSetup = NonNullable<Phase2Result['projectSetup']>;
@@ -11,9 +11,9 @@ export function ProjectSetupSection({ projectSetup }: { projectSetup: ProjectSet
       <ResultsSectionHeader
         title="Project Setup"
         rightSlot={
-          <span className="text-meta font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">
+          <Pill tone="neutral" variant="outline" size="sm">
             LIVE 12 V2
-          </span>
+          </Pill>
         }
       />
 
@@ -25,14 +25,14 @@ export function ProjectSetupSection({ projectSetup }: { projectSetup: ProjectSet
         <MetricTile accent="accent" size="xl" label="Headroom" value={projectSetup.headroomTarget} />
       </div>
 
-      <div className="rounded-sm border border-border bg-bg-card p-4">
+      <Panel variant="surface" padding="lg">
         <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
           Session Goal
         </p>
         <p className="mt-2 text-xs font-mono text-text-secondary leading-relaxed">
           {truncateAtSentenceBoundary(projectSetup.sessionGoal, 320)}
         </p>
-      </div>
+      </Panel>
     </section>
   );
 }

@@ -1,5 +1,6 @@
 import type { Phase2Result } from '../../types';
 import { truncateAtSentenceBoundary } from '../analysisResultsViewModel';
+import { Panel, Pill } from '../ui';
 import { ResultsSectionHeader } from './shared';
 
 type AudioObservations = NonNullable<Phase2Result['audioObservations']>;
@@ -14,27 +15,32 @@ export function AudioObservationsSection({
       <ResultsSectionHeader
         title="Audio Observations"
         rightSlot={
-          <span className="text-meta font-mono bg-bg-panel border border-border text-text-secondary px-2 py-1 rounded font-bold">
+          <Pill tone="neutral" variant="outline" size="sm">
             Perceptual / Audio-Derived
-          </span>
+          </Pill>
         }
       />
 
-      <div className="rounded-sm border border-accent/20 bg-accent/5 p-4 space-y-2">
+      {/* The sound-design fingerprint is the section's primary insight, so it
+          keeps the reserved accent (now via the Panel tone) while the rest of
+          the cards read as neutral device panels. */}
+      <Panel variant="surface" tone="active" padding="lg" className="space-y-2">
         <p className="text-meta font-mono uppercase tracking-[0.18em] text-accent">
           Sound Design Fingerprint
         </p>
         <p className="text-xs font-mono text-text-secondary leading-relaxed">
           {truncateAtSentenceBoundary(audioObservations.soundDesignFingerprint, 320)}
         </p>
-      </div>
+      </Panel>
 
       {audioObservations.elementCharacter.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {audioObservations.elementCharacter.map((item, index) => (
-            <div
+            <Panel
               key={`${item.element}-${index}`}
-              className="rounded-sm border border-border bg-bg-card p-4 space-y-2"
+              variant="surface"
+              padding="lg"
+              className="space-y-2"
             >
               <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
                 {item.element}
@@ -42,7 +48,7 @@ export function AudioObservationsSection({
               <p className="text-xs font-mono text-text-secondary leading-relaxed">
                 {truncateAtSentenceBoundary(item.description, 220)}
               </p>
-            </div>
+            </Panel>
           ))}
         </div>
       )}
@@ -65,14 +71,14 @@ export function AudioObservationsSection({
         </div>
       )}
 
-      <div className="rounded-sm border border-border bg-bg-card p-4 space-y-2">
+      <Panel variant="surface" padding="lg" className="space-y-2">
         <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
           Mix Context
         </p>
         <p className="text-xs font-mono text-text-secondary leading-relaxed">
           {truncateAtSentenceBoundary(audioObservations.mixContext, 280)}
         </p>
-      </div>
+      </Panel>
     </section>
   );
 }

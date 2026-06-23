@@ -2,6 +2,7 @@ import type { Phase1Result, Phase2Result } from '../../types';
 import { getTextRoleClassName } from '../../utils/displayText';
 import { truncateAtSentenceBoundary } from '../analysisResultsViewModel';
 import { CitationBlock } from '../CitationBlock';
+import { Panel, Pill } from '../ui';
 import { ResultsSectionHeader, textRoleClassName } from './shared';
 
 type TrackLayout = NonNullable<Phase2Result['trackLayout']>;
@@ -18,18 +19,18 @@ export function TrackLayoutSection({
       <ResultsSectionHeader
         title="Track Layout"
         rightSlot={
-          <span className="text-meta font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">
+          <Pill tone="neutral" variant="outline" size="sm">
             SCAFFOLD
-          </span>
+          </Pill>
         }
       />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {trackLayout.map((item) => (
-          <div key={`${item.order}-${item.name}`} className="rounded-sm border border-border bg-bg-card p-4 space-y-3">
+          <Panel key={`${item.order}-${item.name}`} variant="surface" padding="lg" className="space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2 min-w-0">
-                <span className="w-6 h-6 rounded-sm bg-bg-panel border border-border text-accent font-mono text-meta flex items-center justify-center">
+                <span className="w-6 h-6 rounded-sm bg-bg-app border border-border text-accent font-mono text-meta flex items-center justify-center">
                   {item.order}
                 </span>
                 <div className="min-w-0">
@@ -70,7 +71,7 @@ export function TrackLayoutSection({
               }
               testId={`track-layout-citation-${item.order ?? 0}-${item.name}`}
             />
-          </div>
+          </Panel>
         ))}
       </div>
     </section>

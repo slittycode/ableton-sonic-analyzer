@@ -1,6 +1,7 @@
 import type { Phase2Result } from '../../types';
 import { getTextRoleClassName } from '../../utils/displayText';
 import { truncateAtSentenceBoundary } from '../analysisResultsViewModel';
+import { Panel, Pill } from '../ui';
 import { MetaBadgeList, ResultsSectionHeader, textRoleClassName } from './shared';
 
 type RoutingBlueprint = NonNullable<Phase2Result['routingBlueprint']>;
@@ -15,20 +16,20 @@ export function RoutingBlueprintSection({
       <ResultsSectionHeader
         title="Routing Blueprint"
         rightSlot={
-          <span className="text-meta font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">
+          <Pill tone="neutral" variant="outline" size="sm">
             SIGNAL MAP
-          </span>
+          </Pill>
         }
       />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="rounded-sm border border-border bg-bg-card p-4 space-y-2">
+        <Panel variant="surface" padding="lg" className="space-y-2">
           <p data-text-role="eyebrow" className={getTextRoleClassName('eyebrow')}>Sidechain Source</p>
           <p data-text-role="item-title" className={getTextRoleClassName('item-title')}>
             {routingBlueprint.sidechainSource ?? 'Not specified'}
           </p>
-        </div>
-        <div className="rounded-sm border border-border bg-bg-card p-4 space-y-2 md:col-span-2">
+        </Panel>
+        <Panel variant="surface" padding="lg" className="space-y-2 md:col-span-2">
           <p data-text-role="eyebrow" className={getTextRoleClassName('eyebrow')}>Sidechain Targets</p>
           <div className="flex flex-wrap gap-1.5">
             {routingBlueprint.sidechainTargets.map((target) => (
@@ -40,13 +41,13 @@ export function RoutingBlueprintSection({
               </span>
             ))}
           </div>
-        </div>
+        </Panel>
       </div>
 
       {routingBlueprint.returns.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {routingBlueprint.returns.map((returnTrack) => (
-            <div key={returnTrack.name} className="rounded-sm border border-border bg-bg-card p-4 space-y-3">
+            <Panel key={returnTrack.name} variant="surface" padding="lg" className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <h3 data-text-role="item-title" className={getTextRoleClassName('item-title')}>
                   {returnTrack.name}
@@ -64,20 +65,20 @@ export function RoutingBlueprintSection({
                   { label: 'Level', value: returnTrack.levelGuidance },
                 ]}
               />
-            </div>
+            </Panel>
           ))}
         </div>
       )}
 
       {routingBlueprint.notes.length > 0 && (
-        <div className="rounded-sm border border-border bg-bg-card p-4 space-y-2">
+        <Panel variant="surface" padding="lg" className="space-y-2">
           <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">Routing Notes</p>
           {routingBlueprint.notes.map((note, index) => (
             <p key={`${note}-${index}`} className="text-xs font-mono text-text-secondary leading-relaxed">
               {truncateAtSentenceBoundary(note, 220)}
             </p>
           ))}
-        </div>
+        </Panel>
       )}
     </section>
   );
