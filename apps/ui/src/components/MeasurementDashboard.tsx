@@ -42,24 +42,33 @@ import { SpectralCursorProvider } from '../hooks/useSpectralCursorBus';
 import { formatDisplayText, getTextRoleClassName } from '../utils/displayText';
 import { HarmonyLanes } from './HarmonyLanes';
 import { StructureLanes } from './StructureLanes';
+import {
+  LUFS_METER_GRADIENT,
+  PILL_TONE_FOR_LEGACY,
+  PLATFORM_REFS,
+  SPECTRAL_BALANCE_PALETTE,
+  SPECTRAL_CHART_PALETTE,
+  SPECTRAL_ROW_CONFIG,
+  type LegacyBadgeTone,
+} from './measurementDashboard/lib/constants';
+import {
+  buildDynamicsTextureCopy,
+  chordToneForLabel,
+  clamp,
+  formatDuration,
+  formatNumber,
+  isAssumedMeter,
+  isDynamicCharacterObject,
+  isTextureCharacterObject,
+  lufsToPercent,
+  resolveBarCount,
+} from './measurementDashboard/lib/formatters';
 
 // Local adapter over the canonical ui/Pill. The dashboard's detail rows use a
 // compact label/tone/compact status chip in ~17 places (and chordToneForLabel
 // still emits the legacy off-palette tones); this maps those onto the token
 // palette in one spot so the call sites stay untouched ahead of the Phase 5
 // split. Not a competing primitive — just local sugar over Pill.
-type LegacyBadgeTone = Tone | 'muted' | 'info' | 'violet';
-const PILL_TONE_FOR_LEGACY: Record<LegacyBadgeTone, Tone> = {
-  accent: 'accent',
-  success: 'success',
-  warning: 'warning',
-  error: 'error',
-  neutral: 'neutral',
-  muted: 'neutral',
-  info: 'neutral',
-  violet: 'neutral',
-};
-
 function StatusBadge({
   label,
   tone = 'neutral',
@@ -83,151 +92,6 @@ interface MeasurementDashboardProps {
   apiBaseUrl?: string;
   runId?: string;
 }
-
-const formatNumber = (value: number | null | undefined, decimals = 2): string => {
-  if (value === null || value === undefined) return '—';
-  return typeof value === 'number' ? value.toFixed(decimals) : '—';
-};
-
-const formatDuration = (seconds: number): string => {
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
-};
-
-// Audit Finding #4: `formatBpmScore` retired — Tempo card renders the
-// canonical band pill, same vocabulary as every other confidence surface.
-
-const isAssumedMeter = (phase1: Phase1Result): boolean =>
-  phase1.timeSignatureSource === 'assumed_four_four' || (phase1.timeSignatureConfidence ?? 1) <= 0;
-
-const resolveBarCount = (phase1: Phase1Result): number => {
-  const phraseGridBars = phase1.rhythmDetail?.phraseGrid?.totalBars;
-  if (typeof phraseGridBars === 'number' && Number.isFinite(phraseGridBars) && phraseGridBars > 0) {
-    return phraseGridBars;
-  }
-
-  const beatsPerBar = parseInt(phase1.timeSignature?.split('/')[0] || '4', 10) || 4;
-  const totalBeats = (phase1.durationSeconds / 60) * phase1.bpm;
-  return Math.floor(totalBeats / beatsPerBar);
-};
-
-const lufsToPercent = (value: number, min = -60, max = 0): number =>
-  Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
-
-const LUFS_METER_GRADIENT = `linear-gradient(to right,
-  rgba(0,255,157,0.7) 0%,
-  rgba(0,255,157,0.7) 60%,
-  rgba(255,184,0,0.7) 60%,
-  rgba(255,184,0,0.7) 76.7%,
-  rgba(255,136,0,0.8) 76.7%,
-  rgba(255,136,0,0.8) 90%,
-  rgba(255,51,51,0.8) 90%,
-  rgba(255,51,51,0.8) 100%
-)`;
-
-const PLATFORM_REFS = [
-  { lufs: -14, label: 'SPOT' },
-  { lufs: -16, label: 'APPL' },
-  { lufs: -23, label: 'BDCST' },
-];
-
-const SPECTRAL_BALANCE_PALETTE: Record<
-  keyof Phase1Result['spectralBalance'],
-  string
-> = {
-  subBass: '#ff6b00',
-  lowBass: '#fb923c',
-  lowMids: '#f59e0b',
-  mids: '#facc15',
-  upperMids: '#14b8a6',
-  highs: '#38bdf8',
-  brilliance: '#a78bfa',
-};
-
-const SPECTRAL_ROW_CONFIG: Array<{
-  key: keyof Phase1Result['spectralBalance'];
-  label: string;
-}> = [
-  { key: 'subBass', label: 'Sub Bass' },
-  { key: 'lowBass', label: 'Low Bass' },
-  { key: 'lowMids', label: 'Low Mids' },
-  { key: 'mids', label: 'Mids' },
-  { key: 'upperMids', label: 'Upper Mids' },
-  { key: 'highs', label: 'Highs' },
-  { key: 'brilliance', label: 'Brilliance' },
-];
-
-const SPECTRAL_CHART_PALETTE = [
-  '#ff6b00',
-  '#ff8c42',
-  '#f59e0b',
-  '#facc15',
-  '#14b8a6',
-  '#38bdf8',
-  '#60a5fa',
-  '#a78bfa',
-];
-
-const asFiniteNumber = (value: unknown): number | null => {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  return null;
-};
-
-const clamp = (value: number, min: number, max: number): number =>
-  Math.max(min, Math.min(max, value));
-
-const normalizePercent = (value: number, min: number, max: number): number => {
-  if (max === min) return 0;
-  return clamp(((value - min) / (max - min)) * 100, 0, 100);
-};
-
-const formatAnalysisModeLabel = (
-  analysisMode?: MeasurementAvailabilityContext['analysisMode'],
-): string => {
-  if (analysisMode === 'full') return 'full run';
-  if (analysisMode === 'standard') return 'standard run';
-  return 'run';
-};
-
-const buildDynamicsTextureCopy = (
-  kind: 'both' | 'dynamics' | 'texture',
-  measurementAvailability?: MeasurementAvailabilityContext,
-): {
-  title: string;
-  description: string;
-  detail?: string;
-} => {
-  if (!measurementAvailability?.hasRunContext) {
-    if (kind === 'both') {
-      return {
-        title: 'Measurements unavailable',
-        description: 'This payload does not include dynamics or texture detail.',
-      };
-    }
-
-    return {
-      title: `${kind === 'dynamics' ? 'Dynamics' : 'Texture'} unavailable`,
-      description: `This payload does not include ${kind} measurements.`,
-    };
-  }
-
-  const runLabel = formatAnalysisModeLabel(measurementAvailability.analysisMode);
-
-  if (kind === 'both') {
-    return {
-      title: 'Measurements not included in this run',
-      description: `This ${runLabel} completed without dynamics or texture detail.`,
-      detail: 'This usually means an older backend or partial measurement output.',
-    };
-  }
-
-  return {
-    title: `${kind === 'dynamics' ? 'Dynamics' : 'Texture'} unavailable`,
-    description: `This ${runLabel} did not include ${kind} measurements.`,
-    detail: 'This usually means an older backend or partial measurement output.',
-  };
-};
 
 function UnavailableMeasurementCard({
   title,
@@ -259,44 +123,6 @@ function UnavailableMeasurementCard({
     </EmptyState>
   );
 }
-
-const correlationPercent = (value: number | null | undefined): number =>
-  typeof value === 'number' ? normalizePercent(value, -1, 1) : 0;
-
-const isDynamicCharacterObject = (
-  value: Phase1Result['dynamicCharacter'],
-): value is NonNullable<Phase1Result['dynamicCharacter']> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const isTextureCharacterObject = (
-  value: Phase1Result['textureCharacter'],
-): value is NonNullable<Phase1Result['textureCharacter']> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const chordToneForLabel = (
-  chord: string,
-): 'accent' | 'violet' | 'error' | 'warning' | 'muted' => {
-  const normalized = chord.trim().toLowerCase();
-  if (!normalized) return 'muted';
-  if (/(dim|°|o)(?![a-z])/.test(normalized)) return 'error';
-  if (/(aug|\+)/.test(normalized)) return 'warning';
-  if (/(^|[^a-z])m(?!aj)/.test(normalized) || /min/.test(normalized)) return 'violet';
-  if (/[a-g](maj|sus|add|7|9|11|13)?/.test(normalized)) return 'accent';
-  return 'muted';
-};
-
-const loudnessToneColor = (value: number | null | undefined): string => {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return 'var(--color-text-secondary)';
-  if (value >= -8) return '#ff6b00';
-  if (value >= -12) return '#ffb347';
-  if (value >= -16) return '#ffd166';
-  return '#a3e635';
-};
-
-const formatSigned = (value: number | null | undefined, decimals = 1): string => {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
-  return `${value >= 0 ? '+' : ''}${value.toFixed(decimals)}`;
-};
 
 const MetricRow = ({
   label,
