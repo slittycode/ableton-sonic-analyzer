@@ -66,7 +66,7 @@ import {
   getTextRoleClassName,
   type TextRole,
 } from '../utils/displayText';
-import { MetaBadgeList, ResultsSectionHeader, textRoleClassName } from './analysisResults/shared';
+import { MetaBadgeList, ResultsSectionHeader, textRoleClassName, type StyleProfileSectionState } from './analysisResults/shared';
 import { AudioObservationsSection } from './analysisResults/AudioObservationsSection';
 import { ProjectSetupSection } from './analysisResults/ProjectSetupSection';
 import { TrackLayoutSection } from './analysisResults/TrackLayoutSection';
@@ -77,6 +77,7 @@ import { InterpretationPanel } from './analysisResults/InterpretationPanel';
 import { ConfidencePillRow } from './analysisResults/ConfidencePillRow';
 import { TrackCharacterSection } from './analysisResults/TrackCharacterSection';
 import { SecretSauceSection } from './analysisResults/SecretSauceSection';
+import { StyleProfileSection } from './analysisResults/StyleProfileSection';
 
 export interface AnalysisResultsProps {
   phase1: Phase1Result | null;
@@ -421,8 +422,6 @@ interface GroupedInterpretationWarning {
   paths: string[];
   mappings: InterpretationWarningMapping[];
 }
-
-type StyleProfileSectionState = 'ready' | 'dropped' | 'omitted' | 'disabled' | 'pending';
 
 // Audit Finding #2: `GroundingBadgeList` (9px monospace field-path pills) was
 // retired in favor of the structured `CitationBlock` primitive. The component
@@ -1216,152 +1215,11 @@ export function AnalysisResults({
         <TrackCharacterSection trackCharacter={phase2.trackCharacter} />
       )}
 
-      <section id="section-style-profile" className="space-y-6 scroll-mt-24">
-        <ResultsSectionHeader
-          title="Style Profile"
-          rightSlot={
-            styleProfileSectionState === 'ready' ? (
-              <span className="text-meta font-mono bg-bg-panel border border-accent/30 text-accent px-2 py-1 rounded font-bold">
-                STRUCTURED
-              </span>
-            ) : (
-              <span className="text-meta font-mono bg-bg-panel border border-border text-text-secondary px-2 py-1 rounded font-bold">
-                {styleProfileSectionState === 'disabled'
-                  ? 'DISABLED'
-                  : styleProfileSectionState === 'pending'
-                    ? 'PENDING'
-                    : styleProfileSectionState === 'omitted'
-                      ? 'NOT RETURNED'
-                      : 'DROPPED'}
-              </span>
-            )
-          }
-        />
-
-        {styleProfile ? (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <MetricTile
-                accent="accent"
-                size="xl"
-                label="Tempo"
-                value={styleProfile.authoritativeMeasurements.bpm ?? '—'}
-                unit={styleProfile.authoritativeMeasurements.bpm != null ? 'BPM' : undefined}
-              />
-              <MetricTile
-                accent="accent"
-                size="xl"
-                label="Key"
-                value={styleProfile.authoritativeMeasurements.key ?? '—'}
-              />
-              <MetricTile
-                accent="accent"
-                size="xl"
-                label="Meter"
-                value={styleProfile.authoritativeMeasurements.timeSignature ?? '—'}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="rounded-sm border border-border bg-bg-card p-4 space-y-3">
-                <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
-                  Genre
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  <span className="text-meta font-mono rounded-sm border border-accent/30 bg-accent/5 px-2 py-1 text-accent">
-                    {styleProfile.genre}
-                  </span>
-                  {styleProfile.subGenre && (
-                    <span className="text-meta font-mono rounded-sm border border-border px-2 py-1 text-text-secondary">
-                      {styleProfile.subGenre}
-                    </span>
-                  )}
-                </div>
-                {styleProfile.mood.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
-                      Mood
-                    </p>
-                    <TokenBadgeList
-                      items={styleProfile.mood.map((item) => ({ label: item, tone: 'accent' as const }))}
-                    />
-                  </div>
-                )}
-              </div>
-
-              <div className="rounded-sm border border-border bg-bg-card p-4 space-y-3">
-                {styleProfile.instruments.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
-                      Instruments
-                    </p>
-                    <TokenBadgeList
-                      items={styleProfile.instruments.map((item) => ({ label: item, tone: 'neutral' as const }))}
-                    />
-                  </div>
-                )}
-                {styleProfile.productionTechniques.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
-                      Production Techniques
-                    </p>
-                    <TokenBadgeList
-                      items={styleProfile.productionTechniques.map((item) => ({ label: item, tone: 'neutral' as const }))}
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="rounded-sm border border-border bg-bg-card p-4 space-y-2">
-                <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
-                  Style Read
-                </p>
-                <p className="text-xs font-mono text-text-secondary leading-relaxed">
-                  {truncateAtSentenceBoundary(styleProfile.description, 320)}
-                </p>
-              </div>
-              <div className="rounded-sm border border-accent/20 bg-accent/5 p-4 space-y-2">
-                <p className="text-meta font-mono uppercase tracking-[0.18em] text-accent">
-                  Reusable Prompt
-                </p>
-                <p className="text-xs font-mono text-text-secondary leading-relaxed">
-                  {truncateAtSentenceBoundary(styleProfile.generationPrompt, 320)}
-                </p>
-              </div>
-            </div>
-          </>
-        ) : (
-          <div className="rounded-sm border border-border bg-bg-card p-4 space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-micro font-mono uppercase px-1.5 py-0.5 rounded border border-border text-text-secondary">
-                {styleProfileSectionState === 'disabled'
-                  ? 'DISABLED'
-                  : styleProfileSectionState === 'pending'
-                    ? 'PENDING'
-                    : styleProfileSectionState === 'omitted'
-                      ? 'NOT RETURNED'
-                      : 'DROPPED'}
-              </span>
-            </div>
-            <p className="text-xs font-mono text-text-secondary leading-relaxed">
-              {styleProfileSectionState === 'disabled'
-                ? 'AI interpretation was disabled for this run, so no style profile was generated.'
-                : styleProfileSectionState === 'pending'
-                  ? 'Style profile is not ready yet. AI interpretation is still running or did not finish with a usable result.'
-                  : styleProfileSectionState === 'omitted'
-                    ? 'AI interpretation completed, but this run did not return a structured style profile.'
-                    : 'The model returned an invalid style profile, so ASA ignored it. See interpretation warnings above.'}
-            </p>
-            {styleProfileSectionState === 'disabled' && phase2StatusMessage && (
-              <p className="text-meta font-mono uppercase tracking-[0.16em] text-text-secondary/80">
-                {phase2StatusMessage}
-              </p>
-            )}
-          </div>
-        )}
-      </section>
+      <StyleProfileSection
+        styleProfile={styleProfile}
+        styleProfileSectionState={styleProfileSectionState}
+        phase2StatusMessage={phase2StatusMessage}
+      />
 
       {audioObservations && (
         <AudioObservationsSection audioObservations={audioObservations} />
