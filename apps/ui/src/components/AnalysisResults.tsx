@@ -10,8 +10,6 @@ import {
   StemSummaryResult,
 } from '../types';
 import {
-  AudioWaveform,
-  Check,
   ChevronDown,
   ChevronRight,
   FileJson,
@@ -42,11 +40,6 @@ import { ConfidenceBandBadge } from './sessionMusician/ConfidenceBandBadge';
 import { RecommendationVerificationBadge } from './RecommendationVerificationBadge';
 import { loadAppliedIds, toggleAppliedId } from '../services/appliedRecommendations';
 import {
-  formatContractRange,
-  formatContractValue,
-} from '../services/recommendationsContract';
-import type { RecommendationContractEntry } from '../types';
-import {
   buildArrangementViewModel,
   buildMixChainGroups,
   buildPatchCards,
@@ -60,7 +53,7 @@ import {
   getTextRoleClassName,
   type TextRole,
 } from '../utils/displayText';
-import { Collapsible, MetaBadgeList, ResultsSectionHeader, textRoleClassName, type StyleProfileSectionState } from './analysisResults/shared';
+import { AppliedCheckbox, Collapsible, ContractEntriesBlock, ContractValidatedBadge, groupIcon, MetaBadgeList, ResultsSectionHeader, textRoleClassName, type StyleProfileSectionState } from './analysisResults/shared';
 import { MeasurementSummarySection } from './analysisResults/MeasurementSummarySection';
 import { AudioObservationsSection } from './analysisResults/AudioObservationsSection';
 import { ProjectSetupSection } from './analysisResults/ProjectSetupSection';
@@ -76,6 +69,7 @@ import { StyleProfileSection } from './analysisResults/StyleProfileSection';
 import { InterpretationWarningsSection } from './analysisResults/InterpretationWarningsSection';
 import { SonicElementsSection } from './analysisResults/SonicElementsSection';
 import { ArrangementOverviewSection } from './analysisResults/ArrangementOverviewSection';
+import { MixChainSection } from './analysisResults/MixChainSection';
 
 export interface AnalysisResultsProps {
   phase1: Phase1Result | null;
@@ -205,103 +199,6 @@ export function toggleOpenKeySet(previous: ReadonlySet<string>, id: string): Set
   return next;
 }
 
-/**
- * Audit Finding #14: per-card "applied to my session" toggle. Looks like a
- * checkbox to producers who scan top-down through Mix Chain / Patches lists.
- * Renders nothing when no tracker is wired (e.g., file hash unavailable);
- * stops click propagation so toggling doesn't also expand/collapse the card.
- */
-function AppliedCheckbox({
-  isApplied,
-  onToggle,
-  ariaLabel,
-}: {
-  isApplied: boolean;
-  onToggle: () => void;
-  ariaLabel: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="checkbox"
-      aria-checked={isApplied}
-      aria-label={ariaLabel}
-      data-applied={isApplied || undefined}
-      data-testid="applied-checkbox"
-      onClick={(event) => {
-        event.stopPropagation();
-        onToggle();
-      }}
-      className={`flex-shrink-0 flex items-center justify-center w-4 h-4 rounded-sm border transition-colors ${
-        isApplied
-          ? 'border-success/60 bg-success/15 text-success hover:border-success'
-          : 'border-border bg-bg-card/40 text-text-secondary/40 hover:border-accent/40 hover:text-accent'
-      }`}
-      title={isApplied ? 'Applied — click to unmark' : 'Mark as applied'}
-    >
-      {isApplied ? <Check className="w-3 h-3" /> : null}
-    </button>
-  );
-}
-
-/**
- * "Validated" chip for cards backed by the recommendations.v1 contract
- * (ADR 0003): the backend admitted this card to the schema-validated,
- * citation-gated envelope. Cards without it are exactly the ones the
- * projection refused (typically: no Phase 1 citation), so the badge is the
- * citation gate made visible. Renders nothing when no entries match.
- */
-function ContractValidatedBadge({
-  entries,
-  testId,
-}: {
-  entries: RecommendationContractEntry[];
-  testId: string;
-}) {
-  if (entries.length === 0) return null;
-  return (
-    <span
-      data-testid={testId}
-      title="Passed the recommendations.v1 contract: schema-validated and citing at least one Phase 1 measurement."
-      className="text-micro font-mono uppercase px-1.5 py-0.5 rounded border border-success/40 text-success whitespace-nowrap"
-    >
-      ✓ Validated
-    </span>
-  );
-}
-
-/**
- * Expanded-card block listing the contract's normalized view of each backing
- * entry: parsed value + unit and the published working range. The range is
- * net-new information (the per-unit tolerance neighborhood the contract
- * derives) — the raw value string already renders in the parameter grid.
- */
-function ContractEntriesBlock({
-  entries,
-  testId,
-}: {
-  entries: RecommendationContractEntry[];
-  testId: string;
-}) {
-  if (entries.length === 0) return null;
-  return (
-    <div data-testid={testId} className="border border-success/20 bg-success/5 rounded-sm px-2 py-2">
-      <p className="text-meta font-mono text-success uppercase tracking-wide">
-        Validated · recommendations.v1
-      </p>
-      {entries.map((entry, idx) => {
-        const range = formatContractRange(entry);
-        return (
-          <p key={`${entry.parameter}-${idx}`} className="text-xs font-mono text-text-secondary mt-1">
-            {entry.parameter}: <span className="text-text-primary font-bold">{formatContractValue(entry)}</span>
-            {range ? ` · working range ${range}` : ''}
-          </p>
-        );
-      })}
-    </div>
-  );
-}
-
 function SourcesToggle({ sources, showSources, onToggle }: { sources?: string[]; showSources: boolean; onToggle: () => void }) {
   if (!sources || sources.length === 0) return null;
   return (
@@ -334,22 +231,6 @@ function SourcesToggle({ sources, showSources, onToggle }: { sources?: string[];
 // Audit Finding #4: `confidenceClass` was the tone mapper for the legacy
 // three-level Confidence Notes chips. Retired — chips now route through
 // `ConfidenceBandBadge` with the canonical four-band ladder.
-
-function groupIcon(groupName: string): React.ReactNode {
-  if (groupName.includes('DRUM PROCESSING')) return '🥁';
-  // Audit #13: 🫧 (bubbles) is not a bass signifier in any audio
-  // convention. Swapped to the monochrome Lucide waveform glyph, which
-  // matches the app's icon language. Other groups keep their emoji
-  // landmarks for now (smallest blast radius).
-  if (groupName.includes('BASS PROCESSING')) {
-    return <AudioWaveform className="w-3.5 h-3.5 inline -mt-0.5" aria-hidden="true" />;
-  }
-  if (groupName.includes('SYNTH / MELODIC')) return '🎹';
-  if (groupName.includes('MID PROCESSING')) return '🎚';
-  if (groupName.includes('HIGH-END DETAIL')) return '✨';
-  if (groupName.includes('MASTER BUS')) return '🧱';
-  return '🎛';
-}
 
 // Audit Finding #2: `GroundingBadgeList` (9px monospace field-path pills) was
 // retired in favor of the structured `CitationBlock` primitive. The component
@@ -787,207 +668,17 @@ export function AnalysisResults({
       )}
 
       {mixGroups.length > 0 && (
-        <section id="section-mix-chain" className="space-y-6 scroll-mt-24">
-          <ResultsSectionHeader
-            title={formatDisplayText('Mix & Master Chain', 'title')}
-            titleRole="section-title"
-            rightSlot={
-              <div className="flex items-center gap-2">
-                {/* Audit Finding #14: section-level progress glance. Only
-                    surfaces when the tracker is wired (audioContentHash
-                    available) AND at least one card has been applied —
-                    avoids leading with a "0 of N" on first view. */}
-                {audioContentHash && mixAppliedCount > 0 && (
-                  <Pill
-                    tone="success"
-                    size="sm"
-                    data-testid="mix-chain-applied-progress"
-                  >
-                    {mixAppliedCount} of {mixCardCount} applied
-                  </Pill>
-                )}
-                <span className="text-meta font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">SIGNAL FLOW</span>
-              </div>
-            }
-          />
-
-          <div className="space-y-4">
-            {mixGroups
-              .filter((group) => group.cards.length > 0)
-              .map((group) => (
-              <DeviceRack
-                key={group.name}
-                // The DeviceRack title strip carries the group name. The
-                // emoji-or-SVG from groupIcon() + uppercase group.name
-                // ("DRUM PROCESSING" etc.) are preserved verbatim so
-                // analysisResultsUi.test.ts:441-450 selectors (toContain
-                // ('🥁 DRUM PROCESSING')) AND the BASS PROCESSING test at
-                // :448 which expects a `lucide-audio-waveform` SVG class
-                // nearby both pass. The name must be a React fragment —
-                // template-literal coercion turns the AudioWaveform JSX
-                // node into "[object Object]" and the SVG is lost.
-                name={
-                  <>
-                    {groupIcon(group.name)} {group.name}
-                  </>
-                }
-                status="idle"
-              >
-                {/* Audit-preserved annotation paragraph kept here so
-                    data-text-role="body" presence assertions
-                    (analysisResultsUi.test.ts:474) stay green. */}
-                {group.annotation && (
-                  <p
-                    data-text-role="meta"
-                    className={textRoleClassName('meta', 'mb-3')}
-                  >
-                    {group.annotation}
-                  </p>
-                )}
-
-                {/* Keep this exact className — the brittle assertion
-                    analysisResultsUi.test.ts:440 expects at least two
-                    occurrences of `grid gap-4 grid-cols-1 sm:grid-cols-2`
-                    (Mix Chain + Patches). */}
-                <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
-                  {group.cards.map((card) => {
-                    const isOpen = !!openMix[card.id];
-                    const isApplied = appliedIds.has(card.id);
-                    return (
-                      <div
-                        key={card.id}
-                        data-applied={isApplied || undefined}
-                        className={`bg-bg-card border border-border rounded-sm overflow-hidden self-start transition-colors hover:border-accent/40 hover:bg-bg-card-hover/70 ${
-                          isApplied ? 'border-l-2 border-l-success' : ''
-                        }`}
-                      >
-                        <button
-                          onClick={() => toggleMix(card.id)}
-                          className="w-full text-left px-4 py-3 border-b border-border bg-bg-panel/60 hover:bg-bg-panel transition-colors"
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="min-w-0">
-                              {/* Audit quick-hit: order badges (`{card.order}`)
-                                used to render as small numbered chips next to
-                                each device. Because the cards are grouped by
-                                processing stage AFTER ordering, the numbers
-                                appeared out-of-order within each group ("1, 6,
-                                8, 9 / 2, 4 / 5, 7 / 3 / 10"), which read as
-                                a presentation bug. The visual sequence within
-                                each group is already meaningful — the badge
-                                added confusion without information. Dropped. */}
-                              <div className="flex items-center gap-2">
-                                <h4
-                                  data-text-role="item-title"
-                                  className={textRoleClassName('item-title', 'truncate')}
-                                >
-                                  {card.device}
-                                </h4>
-                                <span className="text-micro font-mono uppercase px-1.5 py-0.5 rounded border border-border text-text-secondary whitespace-nowrap">
-                                  {card.category}
-                                </span>
-                                <RecommendationVerificationBadge
-                                  trackContext={card.trackContext}
-                                  category={card.category}
-                                />
-                                <ContractValidatedBadge
-                                  entries={card.contractEntries}
-                                  testId={`mix-chain-contract-badge-${card.id}`}
-                                />
-                              </div>
-                              {/* Audit Finding #3: primary citation visible in
-                                the collapsed header so the chain-of-custody
-                                evidence isn't gated behind expansion. The
-                                expanded CitationBlock below still carries the
-                                full multi-row list. */}
-                              {card.phase1Fields.length > 0 && (
-                                <div className="mt-1 flex min-w-0">
-                                  <CitationHeadline
-                                    phase1={phase1}
-                                    field={card.phase1Fields[0]}
-                                    testId={`mix-chain-headline-${card.id}`}
-                                  />
-                                </div>
-                              )}
-                              <p data-text-role="body" className={textRoleClassName('body', 'mt-1 truncate')}>
-                                {card.role}
-                              </p>
-                              <div className="mt-2">
-                                <MetaBadgeList
-                                  items={[
-                                    // Audit N3/N8: drop `Family: Native` from
-                                    // the collapsed card. `deviceFamily` is
-                                    // almost always `NATIVE`; keeping it
-                                    // burns chip-row real estate without
-                                    // adding signal. Surfaces only the two
-                                    // chips that actually vary per card.
-                                    { label: 'Context', value: card.trackContext },
-                                    { label: 'Stage', value: card.workflowStage },
-                                  ]}
-                                />
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2 flex-shrink-0">
-                              {audioContentHash && (
-                                <AppliedCheckbox
-                                  isApplied={isApplied}
-                                  onToggle={() => toggleApplied(card.id)}
-                                  ariaLabel={`Mark ${card.device} as applied`}
-                                />
-                              )}
-                              <span className="text-text-secondary">
-                                {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                              </span>
-                            </div>
-                          </div>
-                        </button>
-
-                        <Collapsible isOpen={isOpen}>
-                          <div className="p-4 space-y-3">
-                            {/* Audit Finding #2 + #3: structured chain-of-custody
-                                evidence at the top of the expanded card. */}
-                            <CitationBlock
-                              phase1={phase1}
-                              fields={card.phase1Fields}
-                              testId={`mix-chain-citation-${card.id}`}
-                            />
-                            <p data-text-role="body" className={textRoleClassName('body')}>
-                              {truncateAtSentenceBoundary(card.role, 320)}
-                            </p>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              {card.parameters.map((parameter, idx) => (
-                                <div
-                                  key={`${card.id}-parameter-${idx}`}
-                                  className="border border-border rounded-sm px-2 py-1 bg-bg-panel/40"
-                                >
-                                  <p className="text-meta font-mono uppercase text-text-secondary">{parameter.label}</p>
-                                  <p className="text-xs font-mono text-text-primary font-bold">{parameter.value}</p>
-                                </div>
-                              ))}
-                            </div>
-
-                            <ContractEntriesBlock
-                              entries={card.contractEntries}
-                              testId={`mix-chain-contract-${card.id}`}
-                            />
-
-                            <div className="border border-accent/20 bg-accent/5 rounded-sm px-2 py-2">
-                              <p className="text-meta font-mono text-accent uppercase tracking-wide">PRO TIP</p>
-                              <p className="text-xs font-mono text-text-secondary mt-1 leading-relaxed">
-                                {truncateAtSentenceBoundary(card.proTip, 320)}
-                              </p>
-                            </div>
-                          </div>
-                        </Collapsible>
-                      </div>
-                    );
-                  })}
-                </div>
-              </DeviceRack>
-            ))}
-          </div>
-        </section>
+        <MixChainSection
+          mixGroups={mixGroups}
+          mixAppliedCount={mixAppliedCount}
+          mixCardCount={mixCardCount}
+          audioContentHash={audioContentHash}
+          openMix={openMix}
+          onToggle={toggleMix}
+          appliedIds={appliedIds}
+          onToggleApplied={toggleApplied}
+          phase1={phase1}
+        />
       )}
 
       {patchCards.length > 0 && (
