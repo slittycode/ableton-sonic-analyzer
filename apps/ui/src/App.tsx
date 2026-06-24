@@ -848,6 +848,17 @@ export default function App() {
           },
         },
       );
+    } catch (rawError) {
+      // The monitor's onError handles errors surfaced through polling; this
+      // catch covers the awaited create*Attempt POST that runs before the
+      // monitor (backend down / 4xx). Mirror onError's shouldIgnoreRun guard so
+      // an ignored/cancelled run isn't re-surfaced here.
+      if (shouldIgnoreRun(currentRunIdRef.current)) return;
+      const err = rawError instanceof Error ? rawError : new Error(String(rawError));
+      if (!(err instanceof BackendClientError && err.code === 'USER_CANCELLED')) {
+        setError(err.message);
+        setErrorRetryable(err instanceof BackendClientError && err.details?.retryable === true);
+      }
     } finally {
       setIsAnalyzing(false);
       abortControllerRef.current = null;
@@ -917,6 +928,17 @@ export default function App() {
           },
         },
       );
+    } catch (rawError) {
+      // The monitor's onError handles errors surfaced through polling; this
+      // catch covers the awaited create*Attempt POST that runs before the
+      // monitor (backend down / 4xx). Mirror onError's shouldIgnoreRun guard so
+      // an ignored/cancelled run isn't re-surfaced here.
+      if (shouldIgnoreRun(currentRunIdRef.current)) return;
+      const err = rawError instanceof Error ? rawError : new Error(String(rawError));
+      if (!(err instanceof BackendClientError && err.code === 'USER_CANCELLED')) {
+        setError(err.message);
+        setErrorRetryable(err instanceof BackendClientError && err.details?.retryable === true);
+      }
     } finally {
       setIsAnalyzing(false);
       abortControllerRef.current = null;

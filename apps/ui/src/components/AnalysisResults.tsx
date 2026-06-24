@@ -27,6 +27,7 @@ import { Phase2ConsistencyReport } from './Phase2ConsistencyReport';
 import { isBrowserLoudnessConfigEnabled } from '../config';
 import { BrowserLoudnessPanel } from './BrowserLoudnessPanel';
 import { MeasurementDashboard } from './MeasurementDashboard';
+import { ReconstructionContractPanel } from './ReconstructionContractPanel';
 import { PatchSmithPanel } from './PatchSmithPanel';
 import { SamplePlayback } from './SamplePlayback';
 import { SessionMusicianPanel } from './SessionMusicianPanel';
@@ -1814,6 +1815,8 @@ export function AnalysisResults({
       {phase2?.secretSauce && (
         <SecretSauceSection secretSauce={phase2.secretSauce} isPhase2V2={isPhase2V2} />
       )}
+
+      {isPhase2V2 && <ReconstructionContractPanel contract={phase2?.recommendations} />}
 
       {/* Audit Finding #1: measurements section moved to the end of the scroll.
           Wrapped in a single anchorable <section> so the StickyNav can target
