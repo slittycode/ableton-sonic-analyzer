@@ -19,6 +19,8 @@ apps/ui/.env*
 __pycache__/
 *.py[cod]
 *.pyo
+/.venv/
+.pytest_cache/
 apps/backend/*.egg-info/
 apps/backend/build/
 apps/backend/dist/
