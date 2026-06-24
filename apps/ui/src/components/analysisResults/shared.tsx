@@ -98,3 +98,22 @@ export function MetaBadgeList({ items }: { items: MetaBadgeItem[] }) {
     </div>
   );
 }
+
+/**
+ * Height-animated collapse wrapper. Moved verbatim out of the AnalysisResults
+ * monolith (Phase 5 split) — shared by the Sources toggle and the high-coupling
+ * Sonic / Arrangement / Mix / Patch card sections. The restyle phase replaces
+ * adopters with the `ui/CollapsibleCard` primitive (grid-rows collapse); until
+ * then this keeps the existing max-height behaviour byte-for-byte.
+ */
+export function Collapsible({ isOpen, children }: { isOpen: boolean; children: React.ReactNode }) {
+  return (
+    <div
+      className={`overflow-hidden transition-[max-height,opacity] duration-300 ease-out ${
+        isOpen ? 'max-h-[900px] opacity-100' : 'max-h-0 opacity-0'
+      }`}
+    >
+      {children}
+    </div>
+  );
+}
