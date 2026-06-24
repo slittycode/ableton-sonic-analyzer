@@ -7,6 +7,8 @@ import { getTextRoleClassName, type TextRole } from '../../utils/displayText';
 // of the AnalysisResults monolith (Phase 5 split) so each section component can
 // reuse them; AnalysisResults imports them back for the sections still inline.
 
+export type StyleProfileSectionState = 'ready' | 'dropped' | 'omitted' | 'disabled' | 'pending';
+
 export function textRoleClassName(role: TextRole, className = ''): string {
   return [getTextRoleClassName(role), className].filter(Boolean).join(' ');
 }
