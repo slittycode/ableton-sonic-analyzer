@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   AnalysisStageStatus,
   InterpretationSchemaVersion,
@@ -74,6 +74,7 @@ import { ConfidencePillRow } from './analysisResults/ConfidencePillRow';
 import { TrackCharacterSection } from './analysisResults/TrackCharacterSection';
 import { SecretSauceSection } from './analysisResults/SecretSauceSection';
 import { StyleProfileSection } from './analysisResults/StyleProfileSection';
+import { InterpretationWarningsSection } from './analysisResults/InterpretationWarningsSection';
 
 export interface AnalysisResultsProps {
   phase1: Phase1Result | null;
@@ -372,190 +373,11 @@ function withAlpha(hexColor: string, alphaHex: string): string {
   return `${hexColor}${alphaHex}`;
 }
 
-interface InterpretationWarningMapping {
-  originalValue?: string;
-  coercedValue?: string;
-  path?: string;
-}
-
-interface GroupedInterpretationWarning {
-  key: string;
-  code?: string;
-  count: number;
-  tone: 'adjustment' | 'warning';
-  title: string;
-  message: string;
-  paths: string[];
-  mappings: InterpretationWarningMapping[];
-}
-
 // Audit Finding #2: `GroundingBadgeList` (9px monospace field-path pills) was
 // retired in favor of the structured `CitationBlock` primitive. The component
 // previously lived here and rendered raw field paths like `bpmConfidence` as
 // orange-accent pills. Track Layout — its only call site — now uses
 // CitationBlock with the segmentIndexes routed through the `extraRows` prop.
-
-// Audit Finding #1C: the Interpretation Caution panel used to render the
-// backend's `originalValue` / `coercedValue` strings verbatim inside small
-// badges. For dropped Phase 2 recommendations, the backend JSON-dumps the
-// whole AbletonRecommendation object into `originalValue` (see
-// `_stringify_warning_value` / `_build_phase2_validation_warning` in
-// `apps/backend/server_phase2.py`). The producer would see a literal
-// `{"advancedTip":"…","device":"$Saturator","phase1Fields":[...],…}` string
-// inside the panel — engine output leaking through.
-//
-// `formatDroppedValue` keeps the backend contract intact and renders a
-// compact human summary for JSON-shaped values: parse, pick a few headline
-// keys (device, parameter, value, …), join as "k: v · k: v". Non-JSON
-// strings pass through. Invalid JSON falls back to a truncated raw string.
-const FORMAT_DROPPED_VALUE_HEADLINE_KEYS = [
-  'device',
-  'parameter',
-  'value',
-  'category',
-  'name',
-  'field',
-] as const;
-const FORMAT_DROPPED_VALUE_MAX_CHARS = 80;
-
-function formatDroppedValue(raw: unknown): string {
-  if (raw === null || raw === undefined) return '—';
-  const str = String(raw).trim();
-  if (str.length === 0) return '—';
-  const looksLikeJson = str.startsWith('{') || str.startsWith('[');
-  if (!looksLikeJson) {
-    return str.length > FORMAT_DROPPED_VALUE_MAX_CHARS
-      ? `${str.slice(0, FORMAT_DROPPED_VALUE_MAX_CHARS - 1)}…`
-      : str;
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(str);
-  } catch {
-    return str.length > FORMAT_DROPPED_VALUE_MAX_CHARS
-      ? `${str.slice(0, FORMAT_DROPPED_VALUE_MAX_CHARS - 1)}…`
-      : str;
-  }
-
-  if (Array.isArray(parsed)) {
-    const n = parsed.length;
-    const noun = `${n} item${n === 1 ? '' : 's'}`;
-    const first = parsed[0];
-    if (first && typeof first === 'object' && !Array.isArray(first)) {
-      const firstRec = first as Record<string, unknown>;
-      const label =
-        (typeof firstRec.device === 'string' && firstRec.device) ||
-        (typeof firstRec.name === 'string' && firstRec.name) ||
-        null;
-      if (label) return `${noun} (${label}${n > 1 ? ', …' : ''})`;
-    }
-    return noun;
-  }
-
-  if (parsed && typeof parsed === 'object') {
-    const record = parsed as Record<string, unknown>;
-    const parts: string[] = [];
-    for (const key of FORMAT_DROPPED_VALUE_HEADLINE_KEYS) {
-      if (parts.length >= 3) break;
-      const value = record[key];
-      if (value === null || value === undefined || value === '') continue;
-      const valueStr = typeof value === 'string' ? value : JSON.stringify(value);
-      if (!valueStr) continue;
-      parts.push(`${key}: ${valueStr}`);
-    }
-    if (parts.length === 0) {
-      const entries = Object.entries(record).filter(
-        ([, v]) => v !== null && v !== undefined && v !== '',
-      );
-      for (const [k, v] of entries.slice(0, 2)) {
-        const valueStr = typeof v === 'string' ? v : JSON.stringify(v);
-        parts.push(`${k}: ${valueStr}`);
-      }
-    }
-    if (parts.length === 0) return '—';
-    const joined = parts.join(' · ');
-    return joined.length > FORMAT_DROPPED_VALUE_MAX_CHARS
-      ? `${joined.slice(0, FORMAT_DROPPED_VALUE_MAX_CHARS - 1)}…`
-      : joined;
-  }
-
-  // Primitive that happened to start with `{` / `[` (very unlikely after the
-  // JSON.parse succeeded into an object, but defensive).
-  return str.length > FORMAT_DROPPED_VALUE_MAX_CHARS
-    ? `${str.slice(0, FORMAT_DROPPED_VALUE_MAX_CHARS - 1)}…`
-    : str;
-}
-
-function describeInterpretationWarning(
-  warning: InterpretationValidationWarning,
-): Pick<GroupedInterpretationWarning, 'tone' | 'title' | 'message'> {
-  if (warning.code === 'COERCED_TRACK_CONTEXT') {
-    // Two distinct repair reasons produce different titles so they stay as separate rows.
-    // "to match the required" → _normalize_track_context_value (format repair)
-    // "by matching against declared" → _repair_return_track_context (blueprint match)
-    const isFormatRepair = warning.message?.includes('to match the required') ?? true;
-    const title = isFormatRepair ? 'Reformatted routing label' : 'Matched routing label to declared return';
-    const originalValue = warning.originalValue ? `"${warning.originalValue}"` : 'the AI-generated routing label';
-    const coercedValue = warning.coercedValue ? `"${warning.coercedValue}"` : 'the detected return-track label';
-    return {
-      tone: 'adjustment',
-      title,
-      message: `The backend kept the result and corrected ${originalValue} to ${coercedValue} so the routing labels match the detected session structure.`,
-    };
-  }
-
-  return {
-    tone: 'warning',
-    title: warning.code ? warning.code.replace(/_/g, ' ') : 'Validation warning',
-    message: truncateAtSentenceBoundary(warning.message, 240),
-  };
-}
-
-function groupInterpretationWarnings(
-  warnings: InterpretationValidationWarning[],
-): GroupedInterpretationWarning[] {
-  const grouped = new Map<string, GroupedInterpretationWarning>();
-
-  warnings.forEach((warning, index) => {
-    const description = describeInterpretationWarning(warning);
-    // Key on code + tone + title only: multiple instances of the same repair reason
-    // collapse into one row; different repair reasons (different titles) stay separate.
-    const key = [warning.code ?? 'warning', description.tone, description.title].join('::');
-    const existing = grouped.get(key);
-
-    const mapping: InterpretationWarningMapping = {
-      originalValue: warning.originalValue,
-      coercedValue: warning.coercedValue,
-      path: warning.path,
-    };
-
-    if (existing) {
-      existing.count += 1;
-      if (warning.path) {
-        existing.paths.push(warning.path);
-      }
-      existing.mappings.push(mapping);
-      return;
-    }
-
-    grouped.set(key, {
-      key: `${key}::${index}`,
-      code: warning.code,
-      count: 1,
-      tone: description.tone,
-      title: description.title,
-      message: description.message,
-      paths: warning.path ? [warning.path] : [],
-      mappings: [mapping],
-    });
-  });
-
-  return Array.from(grouped.values()).map((warning) => ({
-    ...warning,
-    paths: Array.from(new Set(warning.paths)),
-  }));
-}
 
 function toFiniteNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -674,24 +496,6 @@ export function AnalysisResults({
   const styleProfileDropped = validationWarnings.some(
     (warning) => warning.code === 'DROPPED_INVALID_STYLE_PROFILE',
   );
-  const groupedValidationWarnings = useMemo(
-    () => groupInterpretationWarnings(validationWarnings),
-    [validationWarnings],
-  );
-  const adjustmentGroups = useMemo(
-    () => groupedValidationWarnings.filter((g) => g.tone === 'adjustment'),
-    [groupedValidationWarnings],
-  );
-  const warningGroups = useMemo(
-    () => groupedValidationWarnings.filter((g) => g.tone === 'warning'),
-    [groupedValidationWarnings],
-  );
-  const hasAdjustments = adjustmentGroups.length > 0;
-  const hasWarnings = warningGroups.length > 0;
-  const isMixed = hasAdjustments && hasWarnings;
-  const allValidationWarningsAreAdjustments = hasAdjustments && !hasWarnings;
-  const adjustmentCount = adjustmentGroups.reduce((sum, g) => sum + g.count, 0);
-  const warningCount = warningGroups.reduce((sum, g) => sum + g.count, 0);
 
   const confidenceBadges = toConfidenceBadges(phase2?.confidenceNotes);
   const arrangement = buildArrangementViewModel(phase1, phase2?.arrangementOverview);
@@ -904,148 +708,7 @@ export function AnalysisResults({
           </section>
         )}
 
-      {groupedValidationWarnings.length > 0 && (
-        <section
-          data-testid="interpretation-warnings"
-          className={`space-y-3 rounded-sm border p-4 ${
-            isMixed
-              ? 'border-border bg-bg-card'
-              : allValidationWarningsAreAdjustments
-                ? 'border-accent/25 bg-bg-card'
-                : 'border-warning/25 bg-bg-card'
-          }`}
-        >
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h2
-                className={`text-sm font-mono uppercase tracking-wider ${
-                  isMixed
-                    ? 'text-text-primary'
-                    : allValidationWarningsAreAdjustments ? 'text-accent' : 'text-warning'
-                }`}
-              >
-                {isMixed
-                  ? 'Interpretation Notes'
-                  : allValidationWarningsAreAdjustments ? 'Interpretation Adjustments' : 'Interpretation Caution'}
-              </h2>
-              <p
-                className={`text-meta font-mono uppercase tracking-[0.16em] ${
-                  isMixed
-                    ? 'text-text-secondary'
-                    : allValidationWarningsAreAdjustments ? 'text-accent/80' : 'text-warning/80'
-                }`}
-              >
-                {isMixed
-                  ? 'The backend made auto-corrections and flagged parts that may need review.'
-                  : allValidationWarningsAreAdjustments
-                    ? 'The backend kept the result and auto-corrected a few AI-generated labels so they match the detected session structure.'
-                    : 'The backend kept the result, but flagged parts that may not match the approved Live catalog.'}
-              </p>
-            </div>
-            <span
-              className={`text-meta font-mono uppercase px-2 py-1 rounded border ${
-                isMixed
-                  ? 'border-border text-text-secondary'
-                  : allValidationWarningsAreAdjustments
-                    ? 'border-accent/30 text-accent'
-                    : 'border-warning/30 text-warning'
-              }`}
-            >
-              {isMixed
-                ? `${adjustmentCount} adjustment${adjustmentCount === 1 ? '' : 's'} · ${warningCount} warning${warningCount === 1 ? '' : 's'}`
-                : allValidationWarningsAreAdjustments
-                  ? `${adjustmentCount} item${adjustmentCount === 1 ? '' : 's'}`
-                  : `${warningCount} warning${warningCount === 1 ? '' : 's'}`}
-            </span>
-          </div>
-          <div className="space-y-2">
-            {(isMixed ? [...adjustmentGroups, ...warningGroups] : groupedValidationWarnings).map((warning) => (
-              <div
-                key={warning.key}
-                className={`rounded-sm border p-3 space-y-2 ${
-                  warning.tone === 'adjustment'
-                    ? 'border-accent/20 bg-bg-panel'
-                    : 'border-warning/20 bg-bg-panel'
-                }`}
-              >
-                <div className="flex flex-wrap gap-1.5">
-                  {warning.code && (
-                    <span
-                      className={`text-micro font-mono uppercase px-1.5 py-0.5 rounded border ${
-                        warning.tone === 'adjustment'
-                          ? 'border-accent/30 text-accent'
-                          : 'border-warning/30 text-warning'
-                      }`}
-                    >
-                      {warning.code}
-                    </span>
-                  )}
-                  {warning.count > 1 && (
-                    <span
-                      className={`text-micro font-mono uppercase px-1.5 py-0.5 rounded border ${
-                        warning.tone === 'adjustment'
-                          ? 'border-accent/25 text-accent/90'
-                          : 'border-warning/25 text-warning/90'
-                      }`}
-                    >
-                      {warning.count} items
-                    </span>
-                  )}
-                </div>
-                <div className="space-y-1">
-                  <p
-                    className={`text-meta font-mono uppercase tracking-[0.16em] ${
-                      warning.tone === 'adjustment' ? 'text-accent/85' : 'text-warning/85'
-                    }`}
-                  >
-                    {warning.title}
-                  </p>
-                  <p className="text-xs font-mono text-text-secondary leading-relaxed">
-                    {warning.message}
-                  </p>
-                </div>
-                {warning.mappings.some((m) => m.originalValue || m.coercedValue || m.path) ? (
-                  <div className="space-y-1">
-                    {warning.mappings.map((m, mIdx) => (
-                      <div
-                        key={`${warning.key}-mapping-${mIdx}`}
-                        className="flex flex-wrap items-center gap-1.5 text-micro font-mono text-text-secondary"
-                      >
-                        {(m.originalValue || m.coercedValue) && (
-                          <>
-                            {/* Audit Finding #1C: render compact human summary
-                              for JSON-shaped values (dropped recommendations)
-                              instead of dumping the raw object. See
-                              `formatDroppedValue` near the top of the file. */}
-                            <span className="px-1.5 py-0.5 rounded border border-border">
-                              {formatDroppedValue(m.originalValue)}
-                            </span>
-                            <span className="opacity-50">→</span>
-                            <span className="px-1.5 py-0.5 rounded border border-border">
-                              {formatDroppedValue(m.coercedValue)}
-                            </span>
-                          </>
-                        )}
-                        {m.path && (
-                          <span className="px-1.5 py-0.5 rounded border border-border opacity-70">
-                            {m.path}
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="flex flex-wrap gap-1.5">
-                    <span className="text-micro font-mono px-1.5 py-0.5 rounded border border-border text-text-secondary">
-                      Result-level warning
-                    </span>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+      <InterpretationWarningsSection validationWarnings={validationWarnings} />
 
       {confidenceBadges.length > 0 && (
         <ConfidencePillRow confidenceBadges={confidenceBadges} />
