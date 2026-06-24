@@ -27,7 +27,6 @@ import {
 import { motion } from 'motion/react';
 import { assertNever } from '../utils/assertNever';
 import { downloadFile, generateMarkdown } from '../utils/exportUtils';
-import { INTERPRETATION_LABEL } from '../services/phaseLabels';
 import type { ValidationReport } from '../services/phase2Validator';
 import { Phase2ConsistencyReport } from './Phase2ConsistencyReport';
 import { isBrowserLoudnessConfigEnabled } from '../config';
@@ -75,6 +74,9 @@ import { TrackLayoutSection } from './analysisResults/TrackLayoutSection';
 import { RoutingBlueprintSection } from './analysisResults/RoutingBlueprintSection';
 import { WarpGuideSection } from './analysisResults/WarpGuideSection';
 import { DetectedCharacteristicsSection } from './analysisResults/DetectedCharacteristicsSection';
+import { InterpretationPanel } from './analysisResults/InterpretationPanel';
+import { ConfidencePillRow } from './analysisResults/ConfidencePillRow';
+import { TrackCharacterSection } from './analysisResults/TrackCharacterSection';
 
 export interface AnalysisResultsProps {
   phase1: Phase1Result | null;
@@ -1044,29 +1046,11 @@ export function AnalysisResults({
           Patches/Secret Sauce) so the actionable Phase 2 content reads first
           and the measurement evidence reads as drill-down. */}
 
-      <section data-testid="interpretation-panel" className="space-y-3">
-        <ResultsSectionHeader
-          title={
-            <>
-              {INTERPRETATION_LABEL}
-              <PhaseSourceBadge source="advisory" />
-            </>
-          }
-        />
-        <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
-          Interpretive guidance generated from DSP measurements. Not a ground-truth measurement.
-        </p>
-        {phase2StatusMessage && !phase2 && (
-          <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
-            {phase2StatusMessage}
-          </p>
-        )}
-        {!hasRenderablePhase2Content && !phase2StatusMessage && (
-          <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
-            Draft — AI interpretation is incomplete or unavailable.
-          </p>
-        )}
-      </section>
+      <InterpretationPanel
+        phase2StatusMessage={phase2StatusMessage}
+        hasPhase2={Boolean(phase2)}
+        hasRenderablePhase2Content={hasRenderablePhase2Content}
+      />
 
       {phase2ConsistencyReport &&
         phase2ConsistencyReport.violations.some((v) => v.audience !== 'dev') && (
@@ -1225,39 +1209,11 @@ export function AnalysisResults({
       )}
 
       {confidenceBadges.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 px-1">
-          {/* Audit Finding #4: chips used to render "{label}: High|Moderate|Low"
-            with bespoke success/warning/error tones. Now route through the
-            canonical band ladder so the same vocabulary (Solid / Workable /
-            Rough / Unreliable) appears across every confidence surface.
-            Filter null bands (unparseable values) rather than render a
-            misleading default. */}
-          {confidenceBadges.map((badge, idx) =>
-            badge.band ? (
-              <span key={`${badge.label}-${idx}`} className="inline-flex items-center gap-2">
-                <span className="text-meta font-mono uppercase tracking-wide text-text-secondary/80">
-                  {badge.label}:
-                </span>
-                <ConfidenceBandBadge variant="compact" band={badge.band} />
-              </span>
-            ) : null,
-          )}
-        </div>
+        <ConfidencePillRow confidenceBadges={confidenceBadges} />
       )}
 
       {phase2?.trackCharacter && (
-        <section className="space-y-3">
-          <ResultsSectionHeader
-            title={formatDisplayText('Track Character', 'title')}
-            titleRole="section-title"
-            rightSlot={
-              <span className="text-meta font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">AI INTERP</span>
-            }
-          />
-          <p data-text-role="body" className={textRoleClassName('body', 'opacity-80')}>
-            {truncateAtSentenceBoundary(phase2.trackCharacter, 900)}
-          </p>
-        </section>
+        <TrackCharacterSection trackCharacter={phase2.trackCharacter} />
       )}
 
       <section id="section-style-profile" className="space-y-6 scroll-mt-24">
