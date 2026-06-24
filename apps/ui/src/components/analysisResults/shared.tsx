@@ -56,6 +56,25 @@ export interface MetaBadgeItem {
   value?: string | null;
 }
 
+const LOW_CONFIDENCE_TITLE = 'Low confidence — treat this as approximate.';
+
+/**
+ * Inline ⚠ glyph flagging a low-confidence measurement. Shared between the
+ * Measurement Summary tiles and the harmonic-content card in AnalysisResults.
+ */
+export function lowConfidenceIndicator(show: boolean) {
+  if (!show) return null;
+  return (
+    <span
+      className="text-meta font-mono text-warning"
+      title={LOW_CONFIDENCE_TITLE}
+      aria-label="Low confidence"
+    >
+      ⚠
+    </span>
+  );
+}
+
 export function MetaBadgeList({ items }: { items: MetaBadgeItem[] }) {
   const visibleItems = items.filter((item) => typeof item.value === 'string' && item.value.trim().length > 0);
   if (visibleItems.length === 0) return null;
