@@ -4,6 +4,7 @@ import {
   getConfidenceBand,
   toConfidenceBand,
 } from "../services/sessionMusician/confidenceBand";
+import { isCardValidated } from "../services/recommendationsContract";
 
 export interface ConfidenceBadgeViewModel {
   label: string;
@@ -144,6 +145,12 @@ export interface MixChainCardViewModel {
    * don't render an empty block.
    */
   phase1Fields: string[];
+  /**
+   * True when this card's device+parameter is on the frozen, citation-gated
+   * recommendations.v1 contract (ADR 0003). Undefined for synthetic cards
+   * (e.g. the Limiter fallback) that have no Phase 2 origin to validate.
+   */
+  contractValidated?: boolean;
 }
 
 export interface MixChainGroupViewModel {
@@ -173,6 +180,12 @@ export interface PatchCardViewModel {
    * across the items that group into this single patch card. Deduplicated.
    */
   phase1Fields: string[];
+  /**
+   * True when every citation-eligible raw item merged into this card is on the
+   * frozen recommendations.v1 contract (ADR 0003). Undefined for synthetic
+   * cards (MIDI Clip Guide, stereo-width) that have no Phase 2 origin.
+   */
+  contractValidated?: boolean;
 }
 
 /**
@@ -990,6 +1003,7 @@ export function buildMixChainGroups(
   phase1: Phase1Result,
   chain: Phase2Result["mixAndMasterChain"] | undefined,
   sonicElements?: Phase2Result["sonicElements"],
+  validatedKeys: Set<string> = new Set(),
 ): MixChainGroupViewModel[] {
   if (!Array.isArray(chain) || chain.length === 0) return [];
 
@@ -1031,6 +1045,7 @@ export function buildMixChainGroups(
       // backend Phase 2 schema, enforced by server_phase2.py + phase2Validator)
       // so the CitationBlock above each card has structured citations.
       phase1Fields: Array.isArray(item.phase1Fields) ? [...item.phase1Fields] : [],
+      contractValidated: isCardValidated(validatedKeys, [item]),
       group,
       highEndCues: highEnd.cues,
     } satisfies MixChainCardViewModel & { group: ProcessingGroup; highEndCues: string[] };
@@ -1039,7 +1054,8 @@ export function buildMixChainGroups(
   const hasLimiter = cards.some((card) => /limit/i.test(card.device));
   if (!hasLimiter) {
     const nextOrder = Math.max(...cards.map((card) => card.order), 0) + 1;
-    cards.push({ ...makeLimiterFallbackCard(phase1, nextOrder), group: "MASTER BUS", highEndCues: [] });
+    // Synthetic fallback: no Phase 2 origin, so it is never on the contract.
+    cards.push({ ...makeLimiterFallbackCard(phase1, nextOrder), contractValidated: false, group: "MASTER BUS", highEndCues: [] });
   }
 
   const grouped = new Map<ProcessingGroup, Array<MixChainCardViewModel & { highEndCues?: string[] }>>();
@@ -1165,6 +1181,7 @@ function buildStereoWidthPatchCard(
 export function buildPatchCards(
   phase1: Phase1Result,
   phase2: Phase2Result | null,
+  validatedKeys: Set<string> = new Set(),
 ): PatchCardViewModel[] {
   if (!phase2) {
     return [];
@@ -1256,6 +1273,7 @@ export function buildPatchCards(
       ),
       transcriptionDerived: midiFocused,
       phase1Fields: mergedPhase1Fields,
+      contractValidated: isCardValidated(validatedKeys, group.items),
     };
   });
 
@@ -1315,8 +1333,9 @@ export function buildPatchCards(
 export function buildPatchGroups(
   phase1: Phase1Result,
   phase2: Phase2Result | null,
+  validatedKeys: Set<string> = new Set(),
 ): PatchGroupViewModel[] {
-  const cards = buildPatchCards(phase1, phase2);
+  const cards = buildPatchCards(phase1, phase2, validatedKeys);
   if (cards.length === 0) return [];
 
   const grouped = new Map<ProcessingGroup, PatchCardViewModel[]>();

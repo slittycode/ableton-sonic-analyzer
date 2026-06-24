@@ -54,6 +54,8 @@ import { ConfidenceBandBadge } from './sessionMusician/ConfidenceBandBadge';
 import { RecommendationVerificationBadge } from './RecommendationVerificationBadge';
 import { toConfidenceBand } from '../services/sessionMusician/confidenceBand';
 import { loadAppliedIds, toggleAppliedId } from '../services/appliedRecommendations';
+import { buildContractValidatedKeys } from '../services/recommendationsContract';
+import { ReconstructionContractPanel } from './ReconstructionContractPanel';
 import {
   buildArrangementViewModel,
   buildMixChainGroups,
@@ -745,7 +747,13 @@ export function AnalysisResults({
   const confidenceBadges = toConfidenceBadges(phase2?.confidenceNotes);
   const arrangement = buildArrangementViewModel(phase1, phase2?.arrangementOverview);
   const sonicCards = buildSonicElementCards(phase1, phase2?.sonicElements);
-  const mixGroups = buildMixChainGroups(phase1, phase2?.mixAndMasterChain, phase2?.sonicElements);
+  const contractValidatedKeys = buildContractValidatedKeys(phase2?.recommendations);
+  const mixGroups = buildMixChainGroups(
+    phase1,
+    phase2?.mixAndMasterChain,
+    phase2?.sonicElements,
+    contractValidatedKeys,
+  );
   // Audit Finding #14: per-section applied counts, derived from the
   // appliedIds Set + the rendered card lists. Keeps the progress chip in the
   // section header in sync with the per-card checkboxes without a second
@@ -759,7 +767,7 @@ export function AnalysisResults({
   // Audit follow-up: patches render grouped by Mix Chain's processing-stage
   // heuristic. `patchCards` (flat list) is retained for the length checks the
   // StickyNav and gating already use.
-  const patchGroups = buildPatchGroups(phase1, phase2);
+  const patchGroups = buildPatchGroups(phase1, phase2, contractValidatedKeys);
   const patchAppliedCount = patchCards.filter((card) => appliedIds.has(card.id)).length;
   const projectSetup = isPhase2V2 ? phase2?.projectSetup ?? null : null;
   const trackLayout = isPhase2V2 && Array.isArray(phase2?.trackLayout) ? phase2.trackLayout : [];
@@ -2180,6 +2188,17 @@ export function AnalysisResults({
                                   trackContext={card.trackContext}
                                   category={card.category}
                                 />
+                                {card.contractValidated && (
+                                  <Pill
+                                    tone="success"
+                                    variant="outline"
+                                    size="xs"
+                                    leadingDot
+                                    title="On the schema-validated, citation-gated reconstruction contract exported to the .als generator."
+                                  >
+                                    Cited · validated
+                                  </Pill>
+                                )}
                               </div>
                               {/* Audit Finding #3: primary citation visible in
                                 the collapsed header so the chain-of-custody
@@ -2353,6 +2372,17 @@ export function AnalysisResults({
                                   trackContext={patch.trackContext}
                                   category={patch.category}
                                 />
+                                {patch.contractValidated && (
+                                  <Pill
+                                    tone="success"
+                                    variant="outline"
+                                    size="xs"
+                                    leadingDot
+                                    title="On the schema-validated, citation-gated reconstruction contract exported to the .als generator."
+                                  >
+                                    Cited · validated
+                                  </Pill>
+                                )}
                               </div>
                               {/* Audit Finding #3: primary citation in the
                                 collapsed header so the chain-of-custody
@@ -2439,6 +2469,10 @@ export function AnalysisResults({
             ))}
           </div>
         </section>
+      )}
+
+      {isPhase2V2 && (
+        <ReconstructionContractPanel phase1={phase1} contract={phase2?.recommendations} />
       )}
 
       {phase2?.secretSauce && (
