@@ -10,9 +10,15 @@ Usage:
 
 import sys
 import numpy as np
-import essentia.standard as es
 
-from analyze import apply_bpm_correction
+from analyze_core import (
+    analyze_bpm,
+    analyze_key,
+    analyze_loudness,
+    analyze_time_signature,
+    analyze_true_peak,
+    extract_rhythm,
+)
 
 
 def analyze_fast(mono: np.ndarray, sample_rate: int = 44100) -> dict:
@@ -37,64 +43,10 @@ def analyze_fast(mono: np.ndarray, sample_rate: int = 44100) -> dict:
     """
     result = {}
 
-    # Run RhythmExtractor2013 for BPM and beat data
-    try:
-        rhythm_extractor = es.RhythmExtractor2013(method="multifeature")
-        bpm, beats, bpm_confidence, _, _ = rhythm_extractor(mono)
-        result["bpm"] = round(float(bpm), 2) if bpm is not None else None
-        # Phase 1 v2: normalize RhythmExtractor2013 confidence (~0-5.32) to 0-1.
-        result["bpmConfidence"] = (
-            round(min(max(float(bpm_confidence), 0.0) / 5.0, 1.0), 3)
-            if bpm_confidence is not None
-            else None
-        )
-    except Exception as e:
-        print(f"[warn] Fast mode BPM analysis failed: {e}", file=sys.stderr)
-        result["bpm"] = None
-        result["bpmConfidence"] = None
-        beats = None
-
-    # Percival BPM for cross-check
-    try:
-        percival = es.PercivalBpmEstimator()
-        bpm_percival = percival(mono)
-        result["bpmPercival"] = round(float(bpm_percival), 2) if bpm_percival is not None else None
-    except Exception as e:
-        print(f"[warn] Fast mode Percival BPM failed: {e}", file=sys.stderr)
-        result["bpmPercival"] = None
-
-    # BPM agreement
-    if result.get("bpm") is not None and result.get("bpmPercival") is not None:
-        result["bpmAgreement"] = abs(result["bpm"] - result["bpmPercival"]) < 2.0
-    else:
-        result["bpmAgreement"] = None
-
-    # BPM correction (shared helper)
-    correction = apply_bpm_correction(result["bpm"], result["bpmPercival"], result["bpmAgreement"])
-    result.update(correction)
-
-    # Key extraction
-    try:
-        key_extractor = es.KeyExtractor(profileType="edma")
-        key, scale, strength = key_extractor(mono)
-        result["key"] = f"{key} {scale}".title() if key and scale else None
-        result["keyConfidence"] = round(float(strength), 3) if strength is not None else None
-    except Exception as e:
-        print(f"[warn] Fast mode key analysis failed: {e}", file=sys.stderr)
-        result["key"] = None
-        result["keyConfidence"] = None
-
-    # Time signature (default to 4/4 if we have rhythm data)
-    if beats is not None and len(beats) > 0:
-        result["timeSignature"] = "4/4"
-        result["timeSignatureSource"] = "assumed_four_four"
-        result["timeSignatureConfidence"] = 0.0
-    else:
-        result["timeSignature"] = None
-        result["timeSignatureSource"] = None
-        result["timeSignatureConfidence"] = None
-
-    # Duration
+    rhythm_data = extract_rhythm(mono)
+    result.update(analyze_bpm(rhythm_data, mono, sample_rate))
+    result.update(analyze_key(mono, include_tuning=False))
+    result.update(analyze_time_signature(rhythm_data, mono=mono, sample_rate=sample_rate))
     result["durationSeconds"] = round(float(len(mono) / sample_rate), 3)
     result["sampleRate"] = sample_rate
 
@@ -102,24 +54,16 @@ def analyze_fast(mono: np.ndarray, sample_rate: int = 44100) -> dict:
     try:
         # Need stereo for LUFS — Essentia expects shape (N, 2), not (2, N)
         stereo = np.stack([mono, mono], axis=-1)
-        loudness_algo = es.LoudnessEBUR128(sampleRate=sample_rate)
-        _, _, lufs_integrated, lufs_range = loudness_algo(stereo)
-        result["lufsIntegrated"] = round(float(lufs_integrated), 2) if lufs_integrated is not None else None
-        result["lufsRange"] = round(float(lufs_range), 2) if lufs_range is not None else None
+        result.update(analyze_loudness(stereo, sample_rate=sample_rate))
     except Exception as e:
         print(f"[warn] Fast mode loudness analysis failed: {e}", file=sys.stderr)
         result["lufsIntegrated"] = None
         result["lufsRange"] = None
 
-    # True peak (from stereo), emitted in dBTP (Phase 1 v2). NOTE: fast mode uses
-    # a plain sample peak (np.max(np.abs)), NOT the oversampled inter-sample true
-    # peak the standard path computes via Essentia's TruePeakDetector — so this is
-    # a sample-peak approximation and may read lower than the standard path on
-    # material with real inter-sample overs.
+    # True peak (from stereo), emitted in dBTP (Phase 1 v2).
     try:
         if stereo is not None:
-            max_peak = float(np.max(np.abs(stereo)))
-            result["truePeak"] = round(20.0 * np.log10(max_peak), 1) if max_peak > 0 else None
+            result.update(analyze_true_peak(stereo))
         else:
             result["truePeak"] = None
     except Exception as e:

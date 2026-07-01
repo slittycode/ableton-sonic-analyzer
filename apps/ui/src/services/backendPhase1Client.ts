@@ -11,6 +11,8 @@ import {
   ChordTimelineEntry,
   DanceabilityResult,
   DynamicCharacter,
+  FundamentalsQuality,
+  FundamentalsQualityStatus,
   GenreDetail,
   KickDetail,
   Phase1Result,
@@ -577,6 +579,7 @@ export function parsePhase1Result(value: unknown): Phase1Result {
 
   return {
     phase1Version: toOptionalStringOrNull(phase1.phase1Version),
+    fundamentalsQuality: parseOptionalFundamentalsQuality(phase1.fundamentalsQuality),
     bpm: expectNumber(phase1, "bpm"),
     bpmConfidence: expectNumber(phase1, "bpmConfidence"),
     bpmPercival: toNumber(phase1.bpmPercival),
@@ -667,6 +670,51 @@ export function parsePhase1Result(value: unknown): Phase1Result {
     kickDetail: parseOptionalKickDetail(phase1.kickDetail),
     genreDetail: parseOptionalGenreDetail(phase1.genreDetail),
   };
+}
+
+const FUNDAMENTALS_QUALITY_STATUSES = new Set<FundamentalsQualityStatus>([
+  "authoritative",
+  "ambiguous",
+  "failed",
+  "not_run",
+]);
+
+function parseOptionalFundamentalsQuality(value: unknown): FundamentalsQuality | null {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value)) return null;
+
+  const rawDomains = isRecord(value.domains) ? value.domains : {};
+  const domains: FundamentalsQuality["domains"] = {};
+  for (const [name, rawDomain] of Object.entries(rawDomains)) {
+    if (!isRecord(rawDomain)) continue;
+    const status = parseFundamentalsQualityStatus(rawDomain.status);
+    const plainEnglish = typeof rawDomain.plainEnglish === "string"
+      ? rawDomain.plainEnglish
+      : "";
+    domains[name] = {
+      status,
+      plainEnglish,
+      source: toOptionalStringOrNull(rawDomain.source),
+      confidence: toNumber(rawDomain.confidence),
+      evidence: isRecord(rawDomain.evidence) ? { ...rawDomain.evidence } : {},
+    };
+  }
+
+  return {
+    schemaVersion: "fundamentals-quality.v1",
+    targetProfile: "electronic_ableton_v1",
+    analysisMode: typeof value.analysisMode === "string" ? value.analysisMode : "unknown",
+    localOnly: value.localOnly === true,
+    llmExcluded: value.llmExcluded === true,
+    overallStatus: parseFundamentalsQualityStatus(value.overallStatus),
+    domains,
+  };
+}
+
+function parseFundamentalsQualityStatus(value: unknown): FundamentalsQualityStatus {
+  return typeof value === "string" && FUNDAMENTALS_QUALITY_STATUSES.has(value as FundamentalsQualityStatus)
+    ? value as FundamentalsQualityStatus
+    : "ambiguous";
 }
 
 function roundToTwoDecimals(value: number): number {

@@ -185,6 +185,7 @@ def _build_phase1(payload: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "phase1Version": _coerce_nullable_string(payload.get("phase1Version")),
+        "fundamentalsQuality": payload.get("fundamentalsQuality"),
         "bpm": _coerce_number(payload.get("bpm")),
         "bpmConfidence": _coerce_number(payload.get("bpmConfidence")),
         "bpmPercival": _coerce_nullable_number(payload.get("bpmPercival")),
