@@ -59,6 +59,11 @@ describe('parseBackendAnalyzeResponse', () => {
     expect(parsed.phase1.segmentLoudness).toEqual(validPayload.phase1.segmentLoudness);
     expect(parsed.phase1.perceptual).toEqual(validPayload.phase1.perceptual);
     expect(parsed.phase1.danceability).toEqual(validPayload.phase1.danceability);
+    expect(parsed.phase1.fundamentalsQuality?.schemaVersion).toBe('fundamentals-quality.v1');
+    expect(parsed.phase1.fundamentalsQuality?.localOnly).toBe(true);
+    expect(parsed.phase1.fundamentalsQuality?.llmExcluded).toBe(true);
+    expect(parsed.phase1.fundamentalsQuality?.domains.tempo.status).toBe('authoritative');
+    expect(parsed.phase1.fundamentalsQuality?.domains.chords.status).toBe('ambiguous');
 
     // New fields
     expect(parsed.phase1.bpmPercival).toBe(127.5);
@@ -165,6 +170,7 @@ describe('parseBackendAnalyzeResponse', () => {
     expect(parsed.phase1.bpmDoubletime).toBeNull();
     expect(parsed.phase1.bpmSource).toBeNull();
     expect(parsed.phase1.bpmRawOriginal).toBeNull();
+    expect(parsed.phase1.fundamentalsQuality).toBeNull();
     expect(parsed.phase1.monoCompatible).toBeNull();
     expect(parsed.phase1.acidDetail).toBeNull();
     expect(parsed.phase1.genreDetail).toBeNull();

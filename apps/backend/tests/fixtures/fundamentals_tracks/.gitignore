@@ -1,0 +1,4 @@
+# Local fundamentals benchmark audio is never committed.
+*
+!.gitignore
+!README.md

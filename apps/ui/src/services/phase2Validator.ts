@@ -12,6 +12,7 @@ export type ValidationViolationType =
   | 'TRIVIAL_CITATIONS'
   | 'NEW_FIELD_UNCITED'
   | 'LOW_CONFIDENCE_NOT_HEDGED'
+  | 'FUNDAMENTAL_AUTHORITY_VIOLATION'
   | 'RECOMMENDATION_SALVAGED'
   | 'MISSING_LOUDNESS_ACTION';
 
@@ -230,6 +231,9 @@ export function validatePhase2Consistency(
   checkedFields++;
 
   violations.push(...validateKeyConsistency(phase1, phase2));
+  checkedFields++;
+
+  violations.push(...validateFundamentalAuthority(phase1, phase2));
   checkedFields++;
 
   violations.push(...validateLUFSConsistency(phase1, phase2));
@@ -750,6 +754,156 @@ function normalizeKey(key: string): string {
     .replace(/\bmaj(?:or)?\b/g, 'major')
     .replace(/\bmin(?:or)?\b/g, 'minor')
     .trim();
+}
+
+function normalizeMeter(value: string): string {
+  return value.trim().replace(/\s+/g, '').toLowerCase();
+}
+
+const FUNDAMENTAL_CITATION_DOMAINS: Array<{ domain: string; prefixes: string[] }> = [
+  { domain: 'tempo', prefixes: ['bpm', 'bpmConfidence', 'bpmPercival', 'bpmAgreement', 'bpmSource'] },
+  { domain: 'beatGrid', prefixes: ['rhythmDetail.beatGrid', 'rhythmDetail.beatPositions', 'rhythmDetail.tempoCurve'] },
+  { domain: 'downbeats', prefixes: ['rhythmDetail.downbeats', 'rhythmDetail.downbeatConfidence'] },
+  { domain: 'meter', prefixes: ['timeSignature', 'timeSignatureSource', 'timeSignatureConfidence'] },
+  { domain: 'key', prefixes: ['key', 'keyConfidence', 'keyProfile', 'segmentKey', 'tuningFrequency', 'tuningCents'] },
+  { domain: 'chords', prefixes: ['chordDetail'] },
+  { domain: 'percussion', prefixes: ['kickDetail', 'snareDetail', 'hihatDetail', 'beatsLoudness', 'rhythmTimeline'] },
+  { domain: 'transcription', prefixes: ['transcriptionDetail', 'pitchDetail', 'melodyDetail'] },
+];
+
+function domainForCitation(cited: string): string | null {
+  const normalized = cited.trim();
+  for (const entry of FUNDAMENTAL_CITATION_DOMAINS) {
+    if (entry.prefixes.some(prefix => normalized === prefix || normalized.startsWith(`${prefix}.`))) {
+      return entry.domain;
+    }
+  }
+  return null;
+}
+
+function validateFundamentalAuthority(
+  phase1: Phase1Result,
+  phase2: Phase2Result,
+): ValidationViolation[] {
+  const violations: ValidationViolation[] = [];
+
+  if (phase2.projectSetup?.tempoBpm !== undefined) {
+    const diff = Math.abs(phase2.projectSetup.tempoBpm - phase1.bpm);
+    if (diff > BPM_TOLERANCE) {
+      violations.push({
+        type: 'FUNDAMENTAL_AUTHORITY_VIOLATION',
+        field: 'projectSetup.tempoBpm',
+        phase1Value: phase1.bpm,
+        phase2Value: phase2.projectSetup.tempoBpm,
+        severity: 'ERROR',
+        message:
+          `Phase 2 projectSetup.tempoBpm (${phase2.projectSetup.tempoBpm}) contradicts ` +
+          `the local Phase 1 BPM (${phase1.bpm}). Phase 2 may explain the measured tempo, ` +
+          'but it must not supply a replacement tempo.',
+      });
+    }
+  }
+
+  if (phase2.projectSetup?.timeSignature !== undefined) {
+    const phase2Meter = normalizeMeter(phase2.projectSetup.timeSignature);
+    const phase1Meter = normalizeMeter(phase1.timeSignature);
+    if (phase2Meter !== phase1Meter) {
+      violations.push({
+        type: 'FUNDAMENTAL_AUTHORITY_VIOLATION',
+        field: 'projectSetup.timeSignature',
+        phase1Value: phase1.timeSignature,
+        phase2Value: phase2.projectSetup.timeSignature,
+        severity: 'ERROR',
+        message:
+          `Phase 2 projectSetup.timeSignature (${phase2.projectSetup.timeSignature}) contradicts ` +
+          `the local Phase 1 meter (${phase1.timeSignature}). Phase 2 must not replace ` +
+          'meter with an inferred value.',
+      });
+    }
+  }
+
+  const authoritative = phase2.styleProfile?.authoritativeMeasurements;
+  if (authoritative?.bpm !== undefined && authoritative.bpm !== null) {
+    const diff = Math.abs(authoritative.bpm - phase1.bpm);
+    if (diff > BPM_TOLERANCE) {
+      violations.push({
+        type: 'FUNDAMENTAL_AUTHORITY_VIOLATION',
+        field: 'styleProfile.authoritativeMeasurements.bpm',
+        phase1Value: phase1.bpm,
+        phase2Value: authoritative.bpm,
+        severity: 'ERROR',
+        message:
+          `Phase 2 styleProfile.authoritativeMeasurements.bpm (${authoritative.bpm}) ` +
+          `contradicts the local Phase 1 BPM (${phase1.bpm}).`,
+      });
+    }
+  }
+  if (authoritative?.key !== undefined && authoritative.key !== null && phase1.key !== null) {
+    if (normalizeKey(authoritative.key) !== normalizeKey(phase1.key)) {
+      violations.push({
+        type: 'FUNDAMENTAL_AUTHORITY_VIOLATION',
+        field: 'styleProfile.authoritativeMeasurements.key',
+        phase1Value: phase1.key,
+        phase2Value: authoritative.key,
+        severity: 'ERROR',
+        message:
+          `Phase 2 styleProfile.authoritativeMeasurements.key (${authoritative.key}) ` +
+          `contradicts the local Phase 1 key (${phase1.key}).`,
+      });
+    }
+  }
+  if (authoritative?.timeSignature !== undefined && authoritative.timeSignature !== null) {
+    if (normalizeMeter(authoritative.timeSignature) !== normalizeMeter(phase1.timeSignature)) {
+      violations.push({
+        type: 'FUNDAMENTAL_AUTHORITY_VIOLATION',
+        field: 'styleProfile.authoritativeMeasurements.timeSignature',
+        phase1Value: phase1.timeSignature,
+        phase2Value: authoritative.timeSignature,
+        severity: 'ERROR',
+        message:
+          `Phase 2 styleProfile.authoritativeMeasurements.timeSignature ` +
+          `(${authoritative.timeSignature}) contradicts the local Phase 1 meter ` +
+          `(${phase1.timeSignature}).`,
+      });
+    }
+  }
+
+  const qualityDomains = phase1.fundamentalsQuality?.domains;
+  if (!qualityDomains) {
+    return violations;
+  }
+
+  for (const rec of collectCitationRecs(phase2)) {
+    for (const cited of rec.phase1Fields) {
+      const domainName = domainForCitation(cited);
+      if (!domainName) continue;
+      const domain = qualityDomains[domainName];
+      if (!domain || domain.status === 'authoritative') continue;
+      const field = `${rec.bucket}[${rec.index}].phase1Fields`;
+      if (domain.status === 'ambiguous') {
+        const hedge = containsAny(rec.reasonText, HEDGE_WORDS);
+        if (hedge.matched) continue;
+      }
+      violations.push({
+        type: 'FUNDAMENTAL_AUTHORITY_VIOLATION',
+        field,
+        phase1Value: {
+          cited,
+          domain: domainName,
+          status: domain.status,
+          plainEnglish: domain.plainEnglish,
+        },
+        severity: 'ERROR',
+        message:
+          `Recommendation at ${rec.bucket}[${rec.index}] cites ${cited}, but Phase 1 marks ` +
+          `${domainName} as ${domain.status}. Phase 2 can use this only with clear ` +
+          'uncertainty language; it must not turn an ambiguous or missing local measurement ' +
+          'into a confident musical fact.',
+      });
+    }
+  }
+
+  return violations;
 }
 
 /**
