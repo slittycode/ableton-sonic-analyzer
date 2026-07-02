@@ -1031,7 +1031,7 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).not.toContain('Perceptual / Audio-Derived');
   });
 
-  it('renders exactly two DSP badges for the current Phase 1 headings and one AI advisory badge', () => {
+  it('renders exactly three DSP badges for the current Phase 1 headings and one AI advisory badge', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
         phase1: baseMeasurement,
@@ -1040,7 +1040,8 @@ describe('AnalysisResults UI wiring', () => {
       }),
     );
 
-    expect((html.match(/>DSP</g) ?? []).length).toBe(2);
+    // Measurement Summary + Reconstruction Brief + measurement dashboard.
+    expect((html.match(/>DSP</g) ?? []).length).toBe(3);
     expect((html.match(/>AI</g) ?? []).length).toBe(1);
     expect(html).toContain('Interpretive guidance generated from DSP measurements. Not a ground-truth measurement.');
   });
