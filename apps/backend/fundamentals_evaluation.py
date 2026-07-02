@@ -53,6 +53,7 @@ def run_fundamentals_evaluation(
     tracks_dir: Path = DEFAULT_TRACKS_DIR,
     report_path: Path = DEFAULT_REPORT_PATH,
     runner: Runner | None = None,
+    fail_on_skip: bool = False,
 ) -> dict[str, Any]:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     tracks = manifest.get("tracks", [])
@@ -90,7 +91,8 @@ def run_fundamentals_evaluation(
         "tracksAnalyzeFailed": failed_subprocess,
         "checksPassed": passed_checks,
         "checksFailed": failed_checks,
-        "allPassed": failed_checks == 0,
+        "failOnSkip": fail_on_skip,
+        "allPassed": failed_checks == 0 and (not fail_on_skip or skipped == 0),
     }
     report: dict[str, Any] = {
         "schemaVersion": "fundamentals-eval-report.v1",

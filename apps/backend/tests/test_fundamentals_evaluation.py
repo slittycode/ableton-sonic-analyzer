@@ -27,6 +27,24 @@ class FundamentalsEvaluationTests(unittest.TestCase):
             self.assertGreaterEqual(report["summary"]["tracksSkipped"], 1)
             self.assertTrue(report_path.exists())
 
+
+    def test_fail_on_skip_marks_missing_audio_report_failed(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="asa_fundamentals_eval_fail_skip_") as temp_dir:
+            report_path = Path(temp_dir) / "fundamentals_report.json"
+            tracks_dir = Path(temp_dir) / "empty_tracks"
+            tracks_dir.mkdir()
+
+            report = run_fundamentals_evaluation(
+                manifest_path=DEFAULT_MANIFEST_PATH,
+                tracks_dir=tracks_dir,
+                report_path=report_path,
+                fail_on_skip=True,
+            )
+
+            self.assertFalse(report["summary"]["allPassed"])
+            self.assertTrue(report["summary"]["failOnSkip"])
+            self.assertGreaterEqual(report["summary"]["tracksSkipped"], 1)
+
     def test_present_track_enforces_declared_fundamental_gates(self) -> None:
         with tempfile.TemporaryDirectory(prefix="asa_fundamentals_eval_present_") as temp_dir:
             temp_root = Path(temp_dir)

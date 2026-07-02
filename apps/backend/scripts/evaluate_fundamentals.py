@@ -31,6 +31,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST_PATH)
     parser.add_argument("--tracks-dir", type=Path, default=DEFAULT_TRACKS_DIR)
     parser.add_argument("--report", type=Path, default=DEFAULT_REPORT_PATH)
+    parser.add_argument("--fail-on-skip", action="store_true", help="Fail if any manifest track is skipped because audio is missing.")
     return parser.parse_args()
 
 
@@ -40,6 +41,7 @@ def main() -> None:
         manifest_path=args.manifest,
         tracks_dir=args.tracks_dir,
         report_path=args.report,
+        fail_on_skip=args.fail_on_skip,
     )
     summary: dict[str, Any] = {
         "summary": report["summary"],
