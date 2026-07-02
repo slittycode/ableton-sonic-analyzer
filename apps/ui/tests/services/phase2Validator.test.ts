@@ -231,6 +231,139 @@ describe('validatePhase2Consistency', () => {
     });
   });
 
+  describe('Fundamental authority validation', () => {
+    it('rejects Phase 2 project setup tempo that replaces the local BPM', () => {
+      const phase1 = createBasePhase1({ bpm: 126 });
+      const phase2 = createBasePhase2({
+        projectSetup: {
+          tempoBpm: 140,
+          timeSignature: '4/4',
+          sampleRate: 44100,
+          bitDepth: 24,
+          headroomTarget: '-6 dB',
+          sessionGoal: 'Reference rebuild',
+        },
+      });
+
+      const result = validatePhase2Consistency(phase1, phase2);
+
+      const violation = result.violations.find(v => v.field === 'projectSetup.tempoBpm');
+      expect(violation).toBeDefined();
+      expect(violation?.type).toBe('FUNDAMENTAL_AUTHORITY_VIOLATION');
+      expect(violation?.severity).toBe('ERROR');
+    });
+
+    it('rejects authoritative style-profile key that contradicts local key', () => {
+      const phase1 = createBasePhase1({ key: 'F minor' });
+      const phase2 = createBasePhase2({
+        trackCharacter: 'Tight modern electronic mix at 126 BPM in F minor.',
+        styleProfile: {
+          genre: 'Techno',
+          subGenre: 'Warehouse',
+          mood: ['Driving'],
+          instruments: ['Kick', 'Bass'],
+          productionTechniques: ['Sidechain'],
+          description: 'Driving warehouse techno at 126 BPM in F minor.',
+          generationPrompt: 'Warehouse techno groove in F minor at 126 BPM.',
+          authoritativeMeasurements: { bpm: 126, key: 'A minor', timeSignature: '4/4' },
+        },
+      });
+
+      const result = validatePhase2Consistency(phase1, phase2);
+
+      const violation = result.violations.find(
+        v => v.field === 'styleProfile.authoritativeMeasurements.key',
+      );
+      expect(violation).toBeDefined();
+      expect(violation?.type).toBe('FUNDAMENTAL_AUTHORITY_VIOLATION');
+      expect(violation?.severity).toBe('ERROR');
+    });
+
+    it('requires hedging when a recommendation cites ambiguous chord fundamentals', () => {
+      const phase1 = createBasePhase1({
+        fundamentalsQuality: {
+          schemaVersion: 'fundamentals-quality.v1',
+          targetProfile: 'electronic_ableton_v1',
+          analysisMode: 'full',
+          localOnly: true,
+          llmExcluded: true,
+          overallStatus: 'ambiguous',
+          domains: {
+            chords: {
+              status: 'ambiguous',
+              plainEnglish: 'Chord labels are local estimates.',
+              source: 'librosa_viterbi',
+              confidence: 0.31,
+              evidence: { chordTimelineAgreement: false },
+            },
+          },
+        },
+      });
+      const phase2 = createBasePhase2({
+        abletonRecommendations: [
+          {
+            device: 'Chord',
+            category: 'MIDI',
+            parameter: 'Shift 1',
+            value: '+3 st',
+            reason: 'Set the chord shape from the detected progression.',
+            phase1Fields: ['chordDetail.chordTimeline'],
+          },
+        ],
+      });
+
+      const result = validatePhase2Consistency(phase1, phase2);
+
+      const violation = result.violations.find(
+        v => v.type === 'FUNDAMENTAL_AUTHORITY_VIOLATION' &&
+          v.field === 'abletonRecommendations[0].phase1Fields',
+      );
+      expect(violation).toBeDefined();
+      expect(violation?.severity).toBe('ERROR');
+    });
+
+    it('allows hedged advice from ambiguous chord fundamentals', () => {
+      const phase1 = createBasePhase1({
+        fundamentalsQuality: {
+          schemaVersion: 'fundamentals-quality.v1',
+          targetProfile: 'electronic_ableton_v1',
+          analysisMode: 'full',
+          localOnly: true,
+          llmExcluded: true,
+          overallStatus: 'ambiguous',
+          domains: {
+            chords: {
+              status: 'ambiguous',
+              plainEnglish: 'Chord labels are local estimates.',
+              source: 'librosa_viterbi',
+              confidence: 0.31,
+              evidence: { chordTimelineAgreement: false },
+            },
+          },
+        },
+      });
+      const phase2 = createBasePhase2({
+        abletonRecommendations: [
+          {
+            device: 'Chord',
+            category: 'MIDI',
+            parameter: 'Shift 1',
+            value: '+3 st',
+            reason: 'The chord timeline is uncertain, so try this voicing only if it matches by ear.',
+            phase1Fields: ['chordDetail.chordTimeline'],
+          },
+        ],
+      });
+
+      const result = validatePhase2Consistency(phase1, phase2);
+
+      expect(result.violations.some(
+        v => v.type === 'FUNDAMENTAL_AUTHORITY_VIOLATION' &&
+          v.field === 'abletonRecommendations[0].phase1Fields',
+      )).toBe(false);
+    });
+  });
+
   describe('LUFS validation', () => {
     it('should pass when Phase 2 LUFS values are within reasonable bounds', () => {
       const phase1 = createBasePhase1({ lufsIntegrated: -7.9 });

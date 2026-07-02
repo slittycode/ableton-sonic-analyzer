@@ -1,0 +1,94 @@
+{
+  "schemaVersion": "fundamentals-eval.v1",
+  "targetProfile": "electronic_ableton_v1",
+  "gates": {
+    "clearTempoWithinBpm": 1.0,
+    "beatF1": 0.9,
+    "downbeatF1": 0.75,
+    "keyExactOrRelativeRate": 0.8,
+    "chordSegmentAccuracy": 0.65,
+    "kickF1": 0.85,
+    "snareHihatF1": 0.75,
+    "transcriptionNoteF1": 0.75
+  },
+  "tracks": [
+    {
+      "id": "four_on_floor_clear_128",
+      "audioPath": "four_on_floor_clear_128.wav",
+      "category": "tempo_beat_meter",
+      "description": "Owned or locally rendered four-on-the-floor electronic loop with clear 128 BPM grid.",
+      "expected": {
+        "bpm": 128,
+        "timeSignature": "4/4"
+      },
+      "thresholds": {
+        "bpmTolerance": 1.0,
+        "requiredQuality": {
+          "tempo": "authoritative",
+          "beatGrid": "authoritative",
+          "meter": ["authoritative", "ambiguous"]
+        }
+      }
+    },
+    {
+      "id": "tonal_minor_static_chords",
+      "audioPath": "tonal_minor_static_chords.wav",
+      "category": "key_chords",
+      "description": "Owned or locally rendered tonal electronic loop with stable minor-key harmony.",
+      "expected": {
+        "key": "A minor",
+        "chordTimeline": [
+          { "startSec": 0.0, "endSec": 4.0, "label": "Am" },
+          { "startSec": 4.0, "endSec": 8.0, "label": "F" }
+        ]
+      },
+      "thresholds": {
+        "allowRelativeMajorMinor": true,
+        "chordSegmentAccuracy": 0.65,
+        "requiredQuality": {
+          "key": "authoritative",
+          "chords": ["authoritative", "ambiguous"]
+        }
+      }
+    },
+    {
+      "id": "drum_stem_known_counts",
+      "audioPath": "drum_stem_known_counts.wav",
+      "category": "percussion",
+      "description": "MIDI-rendered drum loop with known kick, snare, and hi-hat counts.",
+      "expected": {
+        "percussion": {
+          "kickCount": 16,
+          "snareCount": 8,
+          "hihatCount": 32
+        }
+      },
+      "thresholds": {
+        "percussionCountTolerance": 1,
+        "requiredQuality": {
+          "percussion": ["authoritative", "ambiguous"]
+        }
+      }
+    },
+    {
+      "id": "mono_bass_transcription",
+      "audioPath": "mono_bass_transcription.wav",
+      "category": "monophonic_transcription",
+      "description": "Monophonic bass or lead line with hand/MIDI-labeled notes.",
+      "analyzeFlags": ["--transcribe"],
+      "expected": {
+        "transcriptionNotes": [
+          { "pitchMidi": 48, "onsetSeconds": 0.0, "durationSeconds": 0.5 },
+          { "pitchMidi": 51, "onsetSeconds": 0.5, "durationSeconds": 0.5 },
+          { "pitchMidi": 55, "onsetSeconds": 1.0, "durationSeconds": 0.5 }
+        ]
+      },
+      "thresholds": {
+        "transcriptionNoteF1": 0.75,
+        "requiredQuality": {
+          "transcription": ["authoritative", "ambiguous"]
+        }
+      }
+    }
+  ]
+}

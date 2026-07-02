@@ -627,9 +627,31 @@ export interface GenreDetail {
   topScores: Array<{ genre: string; score: number }>;
 }
 
+export type FundamentalsQualityStatus = "authoritative" | "ambiguous" | "failed" | "not_run";
+
+export interface FundamentalsQualityDomain {
+  status: FundamentalsQualityStatus;
+  plainEnglish: string;
+  source: string | null;
+  confidence: number | null;
+  evidence: Record<string, unknown>;
+}
+
+export interface FundamentalsQuality {
+  schemaVersion: "fundamentals-quality.v1";
+  targetProfile: "electronic_ableton_v1";
+  analysisMode: string;
+  localOnly: boolean;
+  llmExcluded: boolean;
+  overallStatus: FundamentalsQualityStatus;
+  domains: Record<string, FundamentalsQualityDomain>;
+}
+
 export interface Phase1Result {
   /** Phase 1 schema version, e.g. "phase1.v2". Absent on pre-v2 snapshots. */
   phase1Version?: string | null;
+  /** Local-only trust summary for musical fundamentals. LLMs must not write this. */
+  fundamentalsQuality?: FundamentalsQuality | null;
   bpm: number;
   /** Tempo confidence, normalized 0-1 (Phase 1 v2; raw Essentia ~0-5.32 in v1). */
   bpmConfidence: number;

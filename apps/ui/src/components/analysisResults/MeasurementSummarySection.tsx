@@ -32,6 +32,32 @@ function meterStatusLabel(phase1: Phase1Result): string {
   return isAssumedMeter(phase1) ? 'ASSUMED' : 'DETECTED';
 }
 
+type PillTone = React.ComponentProps<typeof Pill>['tone'];
+
+function fundamentalsTone(status: string | null | undefined): PillTone {
+  if (status === 'authoritative') return 'success';
+  if (status === 'failed') return 'error';
+  if (status === 'ambiguous') return 'warning';
+  return 'neutral';
+}
+
+function fundamentalsLabel(status: string | null | undefined): string {
+  if (status === 'authoritative') return 'LOCAL';
+  if (status === 'failed') return 'FAILED';
+  if (status === 'ambiguous') return 'CHECK';
+  return 'NOT RUN';
+}
+
+const FUNDAMENTALS_PILLS = [
+  ['Tempo', 'tempo'],
+  ['Beat', 'beatGrid'],
+  ['Meter', 'meter'],
+  ['Key', 'key'],
+  ['Chords', 'chords'],
+  ['Drums', 'percussion'],
+  ['Notes', 'transcription'],
+] as const;
+
 export function MeasurementSummarySection({
   phase1,
   finalBpm,
@@ -170,6 +196,37 @@ export function MeasurementSummarySection({
           />
         )}
       </div>
+      {phase1.fundamentalsQuality && (
+        <div
+          className="mt-3 flex flex-wrap items-center gap-1.5"
+          data-testid="fundamentals-quality-summary"
+        >
+          <span className="text-nano font-mono uppercase tracking-[0.16em] text-text-muted">
+            Local fundamentals
+          </span>
+          <Pill
+            tone={fundamentalsTone(phase1.fundamentalsQuality.overallStatus)}
+            size="xs"
+            title="Overall local-measurement trust across all fundamentals that ran."
+          >
+            Overall {fundamentalsLabel(phase1.fundamentalsQuality.overallStatus)}
+          </Pill>
+          {FUNDAMENTALS_PILLS.map(([label, domainKey]) => {
+            const domain = phase1.fundamentalsQuality?.domains[domainKey];
+            if (!domain) return null;
+            return (
+              <Pill
+                key={domainKey}
+                tone={fundamentalsTone(domain.status)}
+                size="xs"
+                title={domain.plainEnglish}
+              >
+                {label} {fundamentalsLabel(domain.status)}
+              </Pill>
+            );
+          })}
+        </div>
+      )}
     </DeviceRack>
   );
 }

@@ -15,7 +15,7 @@ Conventions:
 
 Top-level keys:
 
-`phase1Version`, `bpm`, `bpmConfidence`, `bpmPercival`, `bpmAgreement`, `bpmDoubletime`, `bpmSource`, `bpmRawOriginal`, `key`, `keyConfidence`, `keyProfile`, `tuningFrequency`, `tuningCents`, `timeSignature`, `timeSignatureSource`, `timeSignatureConfidence`, `durationSeconds`, `sampleRate`, `lufsIntegrated`, `lufsRange`, `lufsMomentaryMax`, `lufsShortTermMax`, `lufsCurve`, `truePeak`, `crestFactor`, `dynamicSpread`, `monoCompatible`, `plr`, `dynamicCharacter`, `textureCharacter`, `stereoDetail`, `spectralBalance`, `spectralBalanceTimeSeries`, `spectralDetail`, `stemAnalysis`, `transientDensityDetail`, `saturationDetail`, `snareDetail`, `hihatDetail`, `rhythmDetail`, `melodyDetail`, `transcriptionDetail`, `pitchDetail`, `grooveDetail`, `beatsLoudness`, `rhythmTimeline`, `sidechainDetail`, `reverbDetail`, `vocalDetail`, `acidDetail`, `supersawDetail`, `bassDetail`, `kickDetail`, `genreDetail`, `effectsDetail`, `synthesisCharacter`, `danceability`, `structure`, `arrangementDetail`, `segmentLoudness`, `segmentSpectral`, `segmentStereo`, `segmentKey`, `chordDetail`, `perceptual`, `essentiaFeatures`.
+`phase1Version`, `fundamentalsQuality`, `bpm`, `bpmConfidence`, `bpmPercival`, `bpmAgreement`, `bpmDoubletime`, `bpmSource`, `bpmRawOriginal`, `key`, `keyConfidence`, `keyProfile`, `tuningFrequency`, `tuningCents`, `timeSignature`, `timeSignatureSource`, `timeSignatureConfidence`, `durationSeconds`, `sampleRate`, `lufsIntegrated`, `lufsRange`, `lufsMomentaryMax`, `lufsShortTermMax`, `lufsCurve`, `truePeak`, `crestFactor`, `dynamicSpread`, `monoCompatible`, `plr`, `dynamicCharacter`, `textureCharacter`, `stereoDetail`, `spectralBalance`, `spectralBalanceTimeSeries`, `spectralDetail`, `stemAnalysis`, `transientDensityDetail`, `saturationDetail`, `snareDetail`, `hihatDetail`, `rhythmDetail`, `melodyDetail`, `transcriptionDetail`, `pitchDetail`, `grooveDetail`, `beatsLoudness`, `rhythmTimeline`, `sidechainDetail`, `reverbDetail`, `vocalDetail`, `acidDetail`, `supersawDetail`, `bassDetail`, `kickDetail`, `genreDetail`, `effectsDetail`, `synthesisCharacter`, `danceability`, `structure`, `arrangementDetail`, `segmentLoudness`, `segmentSpectral`, `segmentStereo`, `segmentKey`, `chordDetail`, `perceptual`, `essentiaFeatures`.
 
 **Shared (fast + full) vs full-only.** Fast-mode output is asserted byte-for-byte against the `EXPECTED_TOP_LEVEL_KEYS` set in [`tests/test_analyze.py`](tests/test_analyze.py). Full mode emits those keys *plus* a handful of detail-only fields that are deliberately absent from the shared snapshot: `keyProfile`, `tuningFrequency`, `tuningCents`, `lufsMomentaryMax`, `lufsShortTermMax`, and `pitchDetail`. When changing the schema, update both this list and `EXPECTED_TOP_LEVEL_KEYS`; full-only fields stay out of that set on purpose. See CLAUDE.md tripwire #4. Schema changes are also cross-checked executably against the frontend fixture and parser by `apps/ui/tests/services/phase1ContractParity.test.ts`, driven by the golden snapshot's `topLevelKeys`/`keyTree` — regenerating the golden (`UPDATE_PHASE1_GOLDEN=1`) is what arms the nested half of that gate.
 
@@ -150,6 +150,7 @@ Current server behavior that affects schema expectations:
 | Field | Type | Description | Units / Scale | LLM interpretation note |
 |---|---|---|---|---|
 | `phase1Version` | `string` | Phase 1 JSON schema version, e.g. `"phase1.v2"`. | identifier | Lets consumers detect the schema generation. v2 changed `truePeak` (now dBTP) and `bpmConfidence` (now 0-1) units vs v1. |
+| `fundamentalsQuality` | `object` | Local-only authority summary for tempo, beat grid, downbeats, meter, key, chords, percussion, and monophonic transcription. | `fundamentals-quality.v1` | Never produced by an LLM. Use its status and plain-English messages to avoid presenting weak measurements as settled facts. |
 | `bpm` | `float \| null` | Primary tempo estimate from `RhythmExtractor2013`. | beats per minute | Main tempo anchor for Ableton project tempo and clip warp assumptions. |
 | `bpmConfidence` | `float \| null` | Tempo confidence from `RhythmExtractor2013`, normalized to 0-1. | 0-1 (Phase 1 v2: raw Essentia confidence ~0-5.32 divided by 5.0 and clamped) | Higher = stronger rhythmic periodicity. Below 0.4 (raw < 2.0) suggests an ambiguous pulse or half/double-time content; hedge tempo claims there. |
 | `key` | `string \| null` | Global key label from `KeyExtractor` (`edma` profile), e.g. `"A Minor"`. | categorical | Starting point for harmonic reconstruction; validate by ear against bass/chord roots. |
@@ -162,6 +163,25 @@ Current server behavior that affects schema expectations:
 | `keyProfile` | `string \| null` | Key profile used by `KeyExtractor` (e.g. `"edma"`). | categorical | Indicates which pitch template corpus was used for key detection. |
 | `tuningFrequency` | `float \| null` | Estimated tuning reference frequency from spectral peak analysis. | Hz | Deviation from 440 Hz helps detect detuned material or concert-pitch variants. |
 | `tuningCents` | `float \| null` | Tuning offset from A440 in cents. | cents | Positive = sharp of A440, negative = flat. Useful for pitch-correcting reconstructions. |
+
+### `fundamentalsQuality`
+
+`fundamentalsQuality` is a summary of trust, not a separate analyzer. It reads
+the local Phase 1 output and labels each musical fundamental as
+`authoritative`, `ambiguous`, `failed`, or `not_run`.
+
+| Field | Type | Description |
+|---|---|---|
+| `fundamentalsQuality.schemaVersion` | `string` | Currently `"fundamentals-quality.v1"`. |
+| `fundamentalsQuality.targetProfile` | `string` | Currently `"electronic_ableton_v1"`. |
+| `fundamentalsQuality.localOnly` | `bool` | Always `true`; this block is derived from local DSP/model outputs only. |
+| `fundamentalsQuality.llmExcluded` | `bool` | Always `true`; Phase 2 must never write or override this block. |
+| `fundamentalsQuality.overallStatus` | `string` | Worst-case status across domains. |
+| `fundamentalsQuality.domains.<domain>.status` | `string` | Domain status for `tempo`, `beatGrid`, `downbeats`, `meter`, `key`, `chords`, `percussion`, and `transcription`. |
+| `fundamentalsQuality.domains.<domain>.plainEnglish` | `string` | Short user-facing explanation of how much to trust that domain. |
+| `fundamentalsQuality.domains.<domain>.source` | `string \| null` | Local algorithm/source label, e.g. `rhythm_extractor_confirmed`, `edma`, or `librosa_viterbi`. |
+| `fundamentalsQuality.domains.<domain>.confidence` | `float \| null` | Normalized confidence when a domain has a scalar confidence. |
+| `fundamentalsQuality.domains.<domain>.evidence` | `object` | Small domain-specific evidence object, such as BPM agreement, chord disagreement, hit counts, or full-mix fallback. |
 
 ---
 
