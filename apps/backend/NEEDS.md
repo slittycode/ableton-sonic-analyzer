@@ -188,6 +188,17 @@ resolved the wire-or-demote choice: **demote**. Standing consequences:
    change (it remains a legitimate baseline-fairness tweak if the comparison
    ever needs it).
 
+**⤴ REVERSED 2026-07-02 (owner-approved): wired as the Phase-2-off fallback.**
+`apps/ui/src/services/deterministicRecommendations.ts` now projects the real
+Phase 1 payload into `AudioFeatures` (the render-gated projection flagged
+above — it lives there, not in `analyzer.ts`), attaches per-card Phase 1
+citations, and hedges/skips cards whose fundamentals are weak;
+`DeterministicAdviceSection` renders it **only** when Phase 2 interpretation
+is unavailable (off, failed, interrupted, or terminally empty), labeled
+"Deterministic Baseline · NO AI". The eval bridge and its uncited-by-design
+scoring are unchanged. Standing consequence #2 stands for the Phase-2-on
+path: when interpretation runs, its output is the product surface.
+
 ---
 
 ## Sub-goal 3 — the Gemini verdict

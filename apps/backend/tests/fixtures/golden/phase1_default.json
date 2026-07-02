@@ -8,7 +8,7 @@
     "lufsIntegrated": -5.6,
     "lufsMomentaryMax": -4.8,
     "lufsRange": 0.8,
-    "lufsShortTermMax": -5.2,
+    "lufsShortTermMax": -5.1,
     "monoCompatible": true,
     "plr": 5.6,
     "sampleRate": 44100,
@@ -115,6 +115,100 @@
       "hfc": "number",
       "spectralComplexity": "number",
       "zeroCrossingRate": "number"
+    },
+    "fundamentalsQuality": {
+      "analysisMode": "str",
+      "domains": {
+        "beatGrid": {
+          "confidence": "number",
+          "evidence": {
+            "beatCount": "number",
+            "firstBeatSec": "number",
+            "lastBeatSec": "number"
+          },
+          "plainEnglish": "str",
+          "source": "str",
+          "status": "str"
+        },
+        "chords": {
+          "confidence": "number",
+          "evidence": {
+            "chordChangeCount": "number",
+            "chordStrength": "number",
+            "chordTimelineAgreement": "bool",
+            "dominantChords": "scalarList"
+          },
+          "plainEnglish": "str",
+          "source": "str",
+          "status": "str"
+        },
+        "downbeats": {
+          "confidence": "number",
+          "evidence": {
+            "downbeatCount": "number"
+          },
+          "plainEnglish": "str",
+          "source": "str",
+          "status": "str"
+        },
+        "key": {
+          "confidence": "number",
+          "evidence": {
+            "key": "str",
+            "tuningCents": "number",
+            "tuningFrequency": "number"
+          },
+          "plainEnglish": "str",
+          "source": "str",
+          "status": "str"
+        },
+        "meter": {
+          "confidence": "number",
+          "evidence": {
+            "timeSignature": "str"
+          },
+          "plainEnglish": "str",
+          "source": "str",
+          "status": "str"
+        },
+        "percussion": {
+          "confidence": "number",
+          "evidence": {
+            "hihatHitCount": "null",
+            "kickCount": "number",
+            "kickFundamentalHz": "number",
+            "snareHitCount": "number"
+          },
+          "plainEnglish": "str",
+          "source": "str",
+          "status": "str"
+        },
+        "tempo": {
+          "confidence": "number",
+          "evidence": {
+            "bpm": "number",
+            "bpmAgreement": "bool",
+            "bpmDoubletime": "bool",
+            "bpmPercival": "number",
+            "bpmRawOriginal": "number"
+          },
+          "plainEnglish": "str",
+          "source": "str",
+          "status": "str"
+        },
+        "transcription": {
+          "confidence": "null",
+          "evidence": {},
+          "plainEnglish": "str",
+          "source": "null",
+          "status": "str"
+        }
+      },
+      "llmExcluded": "bool",
+      "localOnly": "bool",
+      "overallStatus": "str",
+      "schemaVersion": "str",
+      "targetProfile": "str"
     },
     "genreDetail": {
       "confidence": "number",
@@ -473,6 +567,7 @@
     "dynamicSpread",
     "effectsDetail",
     "essentiaFeatures",
+    "fundamentalsQuality",
     "genreDetail",
     "grooveDetail",
     "hihatDetail",
@@ -541,6 +636,7 @@
     "dynamicSpread": "number",
     "effectsDetail": "dict",
     "essentiaFeatures": "dict",
+    "fundamentalsQuality": "dict",
     "genreDetail": "dict",
     "grooveDetail": "dict",
     "hihatDetail": "null",

@@ -197,6 +197,7 @@ from analyze_transcription import (  # noqa: E402
     TorchcrepeBackend,
     analyze_transcription,
 )
+from fundamentals_quality import build_fundamentals_quality  # noqa: E402
 
 
 def analyze_structure(
@@ -1531,6 +1532,10 @@ def main():
             "perceptual": result.get("perceptual"),
             "essentiaFeatures": result.get("essentiaFeatures"),
         }
+        output["fundamentalsQuality"] = build_fundamentals_quality(
+            output,
+            analysis_mode="fast",
+        )
         _emit_progress_marker("complete", "Analysis complete.", 1.0)
         print("Done.", file=sys.stderr)
         print(json.dumps(output, indent=2))
@@ -1946,6 +1951,10 @@ def main():
         "perceptual": result.get("perceptual"),
         "essentiaFeatures": result.get("essentiaFeatures"),
     }
+    output["fundamentalsQuality"] = build_fundamentals_quality(
+        output,
+        analysis_mode="standard" if run_standard else "full",
+    )
 
     # Conditional MT3 namespace — *absent* (not null) by default. Only added
     # when ASA_ENABLE_MT3=1 AND the transcribe() call succeeded. See the gate

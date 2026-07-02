@@ -4,16 +4,18 @@
  * Maps spectral characteristics to specific Ableton device recommendations.
  * This is deterministic — no hallucination possible.
  *
- * RESEARCH-ONLY BASELINE — not on the product path (owner decision, 2026-06-11).
- * No UI component or service imports this module; product recommendations come
- * from the Phase 2 interpretation providers. Its sole consumer is the eval
- * bridge `apps/backend/scripts/emit_deterministic_recs.ts`, which scores it as
- * the free deterministic baseline in GOAL.md sub-goal 3's three-source
- * comparison. Do NOT wire it into the product, and land score-driven *product*
- * improvements on the Phase 2 path instead — raising this module's harness
- * score improves code no user runs (see the NEEDS-WIRING decision in
- * apps/backend/NEEDS.md). Keep it import-pure: the bridge runs it under Node
- * native type-stripping with no build step.
+ * PRODUCT-WIRED as the Phase-2-off fallback (owner decision, 2026-07-02,
+ * reversing the 2026-06-11 research-only demotion). The product consumer is
+ * `src/services/deterministicRecommendations.ts`, which owns the Phase 1 →
+ * AudioFeatures projection, attaches per-card Phase 1 citations, and hedges
+ * or skips cards whose driving measurement is weak; it renders only when
+ * Phase 2 interpretation is unavailable (see `DeterministicAdviceSection`).
+ * The eval bridge `apps/backend/scripts/emit_deterministic_recs.ts` still
+ * scores this module as the free deterministic baseline in GOAL.md sub-goal
+ * 3's comparison and is unchanged (uncited by design). Score-driven *product*
+ * improvements still land on the Phase 2 path (apps/backend/NEEDS.md).
+ * Keep it import-pure: the bridge runs it under Node native type-stripping
+ * with no build step.
  */
 
 export interface DeviceRecommendation {

@@ -135,8 +135,14 @@ def analyze_bpm(
         }
 
 
-def analyze_key(mono: np.ndarray) -> dict:
-    """Extract musical key and confidence using KeyExtractor with EDMA profile."""
+def analyze_key(mono: np.ndarray, *, include_tuning: bool = True) -> dict:
+    """Extract musical key and confidence using KeyExtractor with EDMA profile.
+
+    ``include_tuning`` gates the per-frame spectral-peak tuning-frequency pass,
+    which is the dominant cost of key analysis on a full track. Fast mode does
+    not surface ``tuningFrequency``/``tuningCents``, so it passes ``False`` to
+    skip that work while keeping the return shape identical.
+    """
     try:
         extractor = es.KeyExtractor(profileType="edma")
         key, scale, strength = extractor(mono)
@@ -146,6 +152,11 @@ def analyze_key(mono: np.ndarray) -> dict:
             "keyConfidence": round(float(strength), 2),
             "keyProfile": "edma",
         }
+
+        if not include_tuning:
+            result["tuningFrequency"] = None
+            result["tuningCents"] = None
+            return result
 
         try:
             frame_size = 2048

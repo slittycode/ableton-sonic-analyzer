@@ -214,6 +214,8 @@ test('Phase 2 controls show config-disabled state when the env kill-switch is of
   await expect(
     page.getByText('AI interpretation skipped because it was disabled by configuration.', { exact: true }).first(),
   ).toBeVisible();
+  // With interpretation off, the deterministic Live 12 baseline steps in.
+  await expect(page.getByTestId('deterministic-advice')).toBeVisible();
 });
 
 test('turning Phase 2 off in the UI runs Phase 1 only and records the user-disabled reason', async ({ page }) => {
@@ -238,6 +240,7 @@ test('turning Phase 2 off in the UI runs Phase 1 only and records the user-disab
   await expect(
     page.getByText('AI interpretation skipped because it was disabled in the UI.', { exact: true }).first(),
   ).toBeVisible();
+  await expect(page.getByTestId('deterministic-advice')).toBeVisible();
 });
 
 test('Phase 2 runs Phase 1 and delegates Gemini to the backend when enabled', async ({ page }) => {
@@ -273,6 +276,8 @@ test('Phase 2 runs Phase 1 and delegates Gemini to the backend when enabled', as
   await expectAnalysisResultsVisible(page);
   await expect(page.getByText('126', { exact: true }).first()).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Sauce', exact: true })).toBeVisible();
+  // Real Phase 2 output present — the deterministic fallback must stay hidden.
+  await expect(page.getByTestId('deterministic-advice')).toHaveCount(0);
 });
 
 test('malformed Gemini Phase 2 response degrades gracefully to skipped', async ({ page }) => {
@@ -300,4 +305,6 @@ test('malformed Gemini Phase 2 response degrades gracefully to skipped', async (
   await expect(
     page.getByText('Gemini returned invalid JSON.', { exact: true }).first(),
   ).toBeVisible();
+  // Interpretation failed terminally — the deterministic fallback steps in.
+  await expect(page.getByTestId('deterministic-advice')).toBeVisible();
 });

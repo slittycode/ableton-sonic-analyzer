@@ -44,6 +44,10 @@ import {
   type TextRole,
 } from '../utils/displayText';
 import { Collapsible, textRoleClassName, type StyleProfileSectionState } from './analysisResults/shared';
+import { NotableFindingsSection } from './analysisResults/NotableFindingsSection';
+import { ReconstructionBriefSection } from './analysisResults/ReconstructionBriefSection';
+import { DeterministicAdviceSection } from './analysisResults/DeterministicAdviceSection';
+import { shouldShowDeterministicFallback } from '../services/deterministicRecommendations';
 import { MeasurementSummarySection } from './analysisResults/MeasurementSummarySection';
 import { AudioObservationsSection } from './analysisResults/AudioObservationsSection';
 import { ProjectSetupSection } from './analysisResults/ProjectSetupSection';
@@ -523,6 +527,10 @@ export function AnalysisResults({
 
       <StickyNav sections={navSections} />
 
+      <NotableFindingsSection phase1={phase1} />
+
+      <ReconstructionBriefSection phase1={phase1} />
+
       <MeasurementSummarySection
         phase1={phase1}
         finalBpm={finalBpm}
@@ -544,6 +552,10 @@ export function AnalysisResults({
         hasPhase2={Boolean(phase2)}
         hasRenderablePhase2Content={hasRenderablePhase2Content}
       />
+
+      {shouldShowDeterministicFallback(phase2, interpretationStatus) && (
+        <DeterministicAdviceSection phase1={phase1} />
+      )}
 
       {phase2ConsistencyReport &&
         phase2ConsistencyReport.violations.some((v) => v.audience !== 'dev') && (
