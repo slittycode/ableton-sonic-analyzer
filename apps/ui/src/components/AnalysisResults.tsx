@@ -61,6 +61,7 @@ import {
   type TextRole,
 } from '../utils/displayText';
 import { Collapsible, MetaBadgeList, ResultsSectionHeader, textRoleClassName, type StyleProfileSectionState } from './analysisResults/shared';
+import { NotableFindingsSection } from './analysisResults/NotableFindingsSection';
 import { MeasurementSummarySection } from './analysisResults/MeasurementSummarySection';
 import { AudioObservationsSection } from './analysisResults/AudioObservationsSection';
 import { ProjectSetupSection } from './analysisResults/ProjectSetupSection';
@@ -650,6 +651,8 @@ export function AnalysisResults({
       </div>
 
       <StickyNav sections={navSections} />
+
+      <NotableFindingsSection phase1={phase1} />
 
       <MeasurementSummarySection
         phase1={phase1}
