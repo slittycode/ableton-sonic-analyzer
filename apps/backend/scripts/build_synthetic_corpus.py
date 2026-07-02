@@ -29,7 +29,7 @@ from sample_theory import (  # noqa: E402
     NoteEvent,
     build_context,
     plan_bass_root,
-    plan_chord_progression,
+    _diatonic_triad_midi,
 )
 
 SCHEMA_VERSION = "fundamentals-eval.v1"
@@ -53,7 +53,9 @@ def _duration_for(bpm: float, beats: float) -> float:
     return float(beats) * 60.0 / float(bpm)
 
 
-def _overlay(target: np.ndarray, source: np.ndarray, start_sec: float, gain: float = 1.0) -> None:
+def _overlay(
+    target: np.ndarray, source: np.ndarray, start_sec: float, gain: float = 1.0
+) -> None:
     start = int(round(start_sec * SAMPLE_RATE))
     end = min(target.size, start + source.size)
     if start < target.size and end > start:
@@ -150,23 +152,49 @@ def render_chord_progression(
     beats_per_chord: float,
 ) -> RenderedClip:
     ctx = build_context(key=f"{key_root} {mode}", bpm=bpm)
-    plan = plan_chord_progression(ctx, bars=max(2, int(len(degrees) * beats_per_chord / 4)))
-    # Keep the existing renderer path as the audio source of truth.
+    notes: list[NoteEvent] = []
+    for index, degree in enumerate(degrees):
+        for pitch in _diatonic_triad_midi(ctx.root_pc, ctx.mode, degree, base_octave=4):
+            notes.append(
+                NoteEvent(
+                    pitch_midi=pitch,
+                    start_beat=index * beats_per_chord,
+                    duration_beats=beats_per_chord,
+                    velocity=88,
+                )
+            )
+    plan = ClipPlan(
+        tempo_bpm=bpm,
+        duration_beats=len(degrees) * beats_per_chord,
+        notes=notes,
+        program=0,
+    )
     rendered = render_clip(plan, allow_soundfont_backends=False)
     beat_seconds = 60.0 / bpm
     timeline = []
     for index, degree in enumerate(degrees):
         start = index * beats_per_chord * beat_seconds
         end = (index + 1) * beats_per_chord * beat_seconds
-        timeline.append({"startSec": round(start, 6), "endSec": round(end, 6), "label": _label_for_degree(key_root, mode, degree)})
-    return RenderedClip(rendered.samples, {"bpm": bpm, "key": f"{key_root} {mode}", "chordTimeline": timeline})
+        timeline.append(
+            {
+                "startSec": round(start, 6),
+                "endSec": round(end, 6),
+                "label": _label_for_degree(key_root, mode, degree),
+            }
+        )
+    return RenderedClip(
+        rendered.samples,
+        {"bpm": bpm, "key": f"{key_root} {mode}", "chordTimeline": timeline},
+    )
 
 
 def render_multi_layer(key_root: str, mode: str, bpm: float) -> RenderedClip:
     chords = render_chord_progression(key_root, mode, [1, 6, 4 if mode == "major" else 7, 5], bpm, 4.0)
     ctx = build_context(key=f"{key_root} {mode}", bpm=bpm)
     bass = render_clip(plan_bass_root(ctx, bars=4), allow_soundfont_backends=False).samples
-    drums = render_drum_pattern(bpm, "4/4", 4, range(0, 16, 1), [2, 6, 10, 14], [i * 0.5 for i in range(32)])
+    drums = render_drum_pattern(
+        bpm, "4/4", 4, range(0, 16, 1), [2, 6, 10, 14], [i * 0.5 for i in range(32)]
+    )
     n = max(chords.samples.size, bass.size, drums.samples.size)
     mix = np.zeros(n, dtype=np.float32)
     mix[: chords.samples.size] += chords.samples * 0.55
@@ -201,7 +229,7 @@ def _synthetic_specs() -> list[dict[str, Any]]:
         specs.append({"id": f"swing_hats_{swing}", "kind": "swing", "bpm": 124, "meter": "4/4", "bars": 4, "swing": swing})
     for root, mode, bpm in [("A", "minor", 128), ("F", "major", 122)]:
         specs.append({"id": f"multi_{root}_{mode}", "kind": "multi", "root": root, "mode": mode, "bpm": bpm})
-    return specs[:29]
+    return specs[:28]
 
 
 def _render_spec(spec: dict[str, Any]) -> RenderedClip:
@@ -210,8 +238,14 @@ def _render_spec(spec: dict[str, Any]) -> RenderedClip:
         meter = spec.get("meter", "4/4")
         bars = int(spec.get("bars", 4))
         beats = bars * _meter_beats_per_bar(meter)
-        kicks = list(range(0, beats, 1)) if spec["id"] == "drum_stem_known_counts" else list(range(0, beats, max(1, _meter_beats_per_bar(meter))))
-        snares = [beat for beat in range(beats) if beat % max(2, _meter_beats_per_bar(meter)) == 2]
+        if spec["id"] in {"four_on_floor_clear_128", "drum_stem_known_counts"}:
+            kicks = list(range(0, beats, 1))
+        else:
+            kicks = list(range(0, beats, max(1, _meter_beats_per_bar(meter))))
+        if spec["id"] == "drum_stem_known_counts":
+            snares = list(range(1, beats, 2))
+        else:
+            snares = [beat for beat in range(beats) if beat % max(2, _meter_beats_per_bar(meter)) == 2]
         hats = [i * 0.5 for i in range(beats * 2)]
         return render_drum_pattern(float(spec["bpm"]), meter, bars, kicks, snares, hats)
     if kind == "swing":
@@ -222,9 +256,23 @@ def _render_spec(spec: dict[str, Any]) -> RenderedClip:
     if kind == "multi":
         return render_multi_layer(spec["root"], spec["mode"], float(spec["bpm"]))
     if kind == "bass":
-        plan = ClipPlan(tempo_bpm=float(spec["bpm"]), duration_beats=2.0, notes=[NoteEvent(48, 0.0, 0.5), NoteEvent(51, 1.0, 0.5), NoteEvent(55, 2.0, 0.5)], program=38)
+        notes = [
+            NoteEvent(48, 0.0, 1.0),
+            NoteEvent(51, 1.0, 1.0),
+            NoteEvent(55, 2.0, 1.0),
+        ]
+        plan = ClipPlan(tempo_bpm=float(spec["bpm"]), duration_beats=3.0, notes=notes, program=38)
         rendered = render_clip(plan, allow_soundfont_backends=False)
-        return RenderedClip(rendered.samples, {"transcriptionNotes": [{"pitchMidi": 48, "onsetSeconds": 0.0, "durationSeconds": 0.5}, {"pitchMidi": 51, "onsetSeconds": 0.5, "durationSeconds": 0.5}, {"pitchMidi": 55, "onsetSeconds": 1.0, "durationSeconds": 0.5}]})
+        return RenderedClip(
+            rendered.samples,
+            {
+                "transcriptionNotes": [
+                    {"pitchMidi": 48, "onsetSeconds": 0.0, "durationSeconds": 0.5},
+                    {"pitchMidi": 51, "onsetSeconds": 0.5, "durationSeconds": 0.5},
+                    {"pitchMidi": 55, "onsetSeconds": 1.0, "durationSeconds": 0.5},
+                ]
+            },
+        )
     raise ValueError(f"unknown spec kind: {kind}")
 
 
@@ -254,7 +302,13 @@ def _reset_drum_rng() -> None:
     sample_drums._RNG = np.random.default_rng(seed=42)
 
 
-def build_corpus(out_dir: Path, manifest_path: Path, *, check: bool = False) -> dict[str, Any]:
+def build_corpus(
+    out_dir: Path,
+    manifest_path: Path,
+    *,
+    check: bool = False,
+    write_manifest: bool = True,
+) -> dict[str, Any]:
     _reset_drum_rng()
     synthetic_manifest = manifest_path.name.endswith(".synthetic.json")
     specs = _synthetic_specs() if synthetic_manifest else _default_specs()
@@ -267,14 +321,19 @@ def build_corpus(out_dir: Path, manifest_path: Path, *, check: bool = False) -> 
         write_wav(rendered.samples, path=path, sample_rate=SAMPLE_RATE)
         fingerprints[spec["id"]] = rendered.samples.tobytes()
         tracks.append(_manifest_track(spec, rendered, synthetic_subdir=synthetic_manifest))
-    emit_manifest(manifest_path, tracks)
+    if write_manifest:
+        emit_manifest(manifest_path, tracks)
     if check:
         _reset_drum_rng()
         for spec in specs:
             second = _render_spec(spec)
             if second.samples.tobytes() != fingerprints[spec["id"]]:
                 raise SystemExit(f"non-deterministic render for {spec['id']}")
-    return {"tracks": len(tracks), "manifest": str(manifest_path), "outDir": str(out_dir)}
+    return {
+        "tracks": len(tracks),
+        "manifest": str(manifest_path) if write_manifest else None,
+        "outDir": str(out_dir),
+    }
 
 
 def main() -> None:
@@ -282,8 +341,23 @@ def main() -> None:
     parser.add_argument("--out-dir", type=Path, default=BACKEND_DIR / "tests" / "fixtures" / "fundamentals_tracks")
     parser.add_argument("--manifest", type=Path, default=BACKEND_DIR / "tests" / "fixtures" / "fundamentals_eval_manifest.synthetic.json")
     parser.add_argument("--check", action="store_true", help="Double-render every clip and fail if bytes differ.")
+    parser.add_argument(
+        "--audio-only",
+        action="store_true",
+        help="Render WAV files without rewriting the committed manifest.",
+    )
     args = parser.parse_args()
-    print(json.dumps(build_corpus(args.out_dir, args.manifest, check=args.check), indent=2))
+    print(
+        json.dumps(
+            build_corpus(
+                args.out_dir,
+                args.manifest,
+                check=args.check,
+                write_manifest=not args.audio_only,
+            ),
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":

@@ -447,9 +447,23 @@ def _chord_segment_accuracy(actual: list[Any], expected: list[Any]) -> float:
             if actual_start is None or actual_end is None:
                 continue
             overlap = max(0.0, min(end, actual_end) - max(start, actual_start))
-            if overlap > 0.0 and actual_label == label:
+            if (
+                overlap > 0.0
+                and _normalize_chord_label_for_compare(actual_label)
+                == _normalize_chord_label_for_compare(label)
+            ):
                 matching_duration += overlap
     return matching_duration / total_duration if total_duration > 0 else 0.0
+
+
+def _normalize_chord_label_for_compare(label: str | None) -> str:
+    """Normalize ASA triad labels for fixture comparisons without enharmonic folding."""
+    value = (label or "").strip()
+    value = re.sub(r"\s+", "", value)
+    value = value.replace(":maj", "").replace(":min", "m")
+    value = re.sub(r"(?i)major$", "", value)
+    value = re.sub(r"(?i)minor$", "m", value)
+    return value
 
 
 def _note_f1(actual: list[Any], expected: list[Any]) -> float:

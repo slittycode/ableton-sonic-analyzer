@@ -3,7 +3,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from fundamentals_evaluation import _chord_segment_accuracy
+from fundamentals_evaluation import (
+    _chord_segment_accuracy,
+    _normalize_chord_label_for_compare,
+)
 from scripts.build_synthetic_corpus import build_corpus, render_chord_progression, render_drum_pattern
 
 
@@ -15,16 +18,30 @@ class BuildSyntheticCorpusTests(unittest.TestCase):
 
             result = build_corpus(root / "tracks", manifest, check=True)
 
-            self.assertGreaterEqual(result["tracks"], 28)
+            self.assertEqual(result["tracks"], 28)
             data = json.loads(manifest.read_text(encoding="utf-8"))
             self.assertEqual(data["schemaVersion"], "fundamentals-eval.v1")
             self.assertEqual(data["targetProfile"], "electronic_ableton_v1")
-            self.assertGreaterEqual(len(data["tracks"]), 28)
+            self.assertEqual(len(data["tracks"]), 28)
             first = data["tracks"][0]
             self.assertIn("id", first)
             self.assertIn("audioPath", first)
             self.assertIn("expected", first)
             self.assertTrue((root / "tracks" / first["audioPath"]).exists())
+
+
+    def test_audio_only_does_not_rewrite_manifest(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="asa_synth_audio_only_") as temp_dir:
+            root = Path(temp_dir)
+            manifest = root / "manifest.json"
+            manifest.write_text("sentinel", encoding="utf-8")
+
+            result = build_corpus(root / "tracks", manifest, check=True, write_manifest=False)
+
+            self.assertEqual(result["tracks"], 4)
+            self.assertIsNone(result["manifest"])
+            self.assertEqual(manifest.read_text(encoding="utf-8"), "sentinel")
+            self.assertTrue((root / "tracks" / "four_on_floor_clear_128.wav").exists())
 
     def test_drum_truth_counts_and_grid_match_requested_pattern(self) -> None:
         rendered = render_drum_pattern(
@@ -47,6 +64,7 @@ class BuildSyntheticCorpusTests(unittest.TestCase):
         expected = rendered.truth["chordTimeline"]
 
         self.assertEqual([segment["label"] for segment in expected], ["Am", "F", "G", "Em"])
+        self.assertEqual(_normalize_chord_label_for_compare("A minor"), "Am")
         self.assertEqual(_chord_segment_accuracy(expected, expected), 1.0)
 
 

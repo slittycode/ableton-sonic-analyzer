@@ -298,7 +298,7 @@ cmd_verify() {
     ( cd "$BACKEND_DIR" && ./venv/bin/python -m unittest discover -s tests ) || be=$?
     if [[ "$be" -eq 0 ]]; then
       echo "== Backend synthetic fundamentals corpus =="
-      ( cd "$BACKEND_DIR" && ./venv/bin/python scripts/build_synthetic_corpus.py --out-dir tests/fixtures/fundamentals_tracks --manifest tests/fixtures/fundamentals_eval_manifest.json --check ) || be=$?
+      ( cd "$BACKEND_DIR" && ./venv/bin/python scripts/build_synthetic_corpus.py --out-dir tests/fixtures/fundamentals_tracks --manifest tests/fixtures/fundamentals_eval_manifest.json --check --audio-only ) || be=$?
     fi
     if [[ "$be" -eq 0 ]]; then
       echo "== Backend fundamentals evaluation =="
