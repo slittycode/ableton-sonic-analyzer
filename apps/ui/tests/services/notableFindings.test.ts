@@ -78,4 +78,38 @@ describe('collectNotableFindings', () => {
     const sev = findings.map((f) => f.severity);
     expect(sev.indexOf('critical')).toBeLessThan(sev.indexOf('warning'));
   });
+
+  it('flags a genre-relative too-loud master as a warning', () => {
+    vi.mocked(generateMixDoctorReport).mockReturnValue({ ...OPTIMAL_REPORT, loudnessAdvice: { issue: 'too-loud', message: 'Hot master.' } } as unknown as MixDoctorReport);
+    const loud = collectNotableFindings(makePhase1()).find((f) => f.id === 'mix.loudness');
+    expect(loud?.severity).toBe('warning');
+    expect(loud?.phase1Field).toBe('lufsIntegrated');
+  });
+
+  it('flags a sub-bass mono issue, citing the field mixDoctor used', () => {
+    vi.mocked(generateMixDoctorReport).mockReturnValue({ ...OPTIMAL_REPORT, stereoAdvice: { monoCompatible: false, message: 'Collapse sub bass.' } } as unknown as MixDoctorReport);
+    const mono = collectNotableFindings(makePhase1({ monoCompatible: false })).find((f) => f.id === 'mix.stereo.mono');
+    expect(mono?.severity).toBe('warning');
+    expect(mono?.phase1Field).toBe('monoCompatible');
+  });
+
+  it('maps an off-target band to an info Balance finding', () => {
+    vi.mocked(generateMixDoctorReport).mockReturnValue({ ...OPTIMAL_REPORT, advice: [{ band: 'Highs', issue: 'too-loud', message: 'Harsh highs.' }] } as unknown as MixDoctorReport);
+    const band = collectNotableFindings(makePhase1()).find((f) => f.id === 'mix.band.highs');
+    expect(band?.severity).toBe('info');
+    expect(band?.phase1Field).toBe('spectralBalance.highs');
+  });
+
+  it('dedups: objective clipping supersedes the genre-relative too-loud warning', () => {
+    vi.mocked(generateMixDoctorReport).mockReturnValue({ ...OPTIMAL_REPORT, loudnessAdvice: { issue: 'too-loud', message: 'Hot.' } } as unknown as MixDoctorReport);
+    const findings = collectNotableFindings(makePhase1({ saturationDetail: { clippedSampleCount: 10 } as never }));
+    expect(findings.some((f) => f.id === 'loudness.clipping')).toBe(true);
+    expect(findings.some((f) => f.id === 'mix.loudness')).toBe(false);
+  });
+
+  it('skips mixDoctor (no crash) when spectralBalance is absent (fast mode)', () => {
+    const p = makePhase1({ spectralBalance: null as never });
+    expect(() => collectNotableFindings(p)).not.toThrow();
+    expect(generateMixDoctorReport).not.toHaveBeenCalled();
+  });
 });
