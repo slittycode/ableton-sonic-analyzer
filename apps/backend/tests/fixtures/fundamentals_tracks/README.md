@@ -1,9 +1,25 @@
 # Fundamentals Benchmark Audio
 
-Put owned, licensed, or locally rendered reference audio here to activate
-`scripts/evaluate_fundamentals.py`.
+Audio in this directory is generated on demand and is never committed.
 
-The manifest is committed at `../fundamentals_eval_manifest.json`; audio files
-in this directory are gitignored. When a listed file is absent, the harness
-reports a skip. When it is present, the declared tempo, beat, meter, key,
-chord, percussion, and transcription gates must pass.
+Generate the default verify corpus with:
+
+```bash
+./venv/bin/python scripts/build_synthetic_corpus.py \
+  --out-dir tests/fixtures/fundamentals_tracks \
+  --manifest tests/fixtures/fundamentals_eval_manifest.json \
+  --check
+```
+
+Generate the expanded synthetic corpus with:
+
+```bash
+./venv/bin/python scripts/build_synthetic_corpus.py \
+  --out-dir tests/fixtures/fundamentals_tracks \
+  --manifest tests/fixtures/fundamentals_eval_manifest.synthetic.json \
+  --check
+```
+
+The committed manifests live one directory up. When a listed file is absent,
+`scripts/evaluate_fundamentals.py` reports a skip; pass `--fail-on-skip` to make
+missing audio fail the gate instead of producing a vacuous green run.

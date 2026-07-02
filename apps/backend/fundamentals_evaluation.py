@@ -53,6 +53,7 @@ def run_fundamentals_evaluation(
     tracks_dir: Path = DEFAULT_TRACKS_DIR,
     report_path: Path = DEFAULT_REPORT_PATH,
     runner: Runner | None = None,
+    fail_on_skip: bool = False,
 ) -> dict[str, Any]:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     tracks = manifest.get("tracks", [])
@@ -90,7 +91,8 @@ def run_fundamentals_evaluation(
         "tracksAnalyzeFailed": failed_subprocess,
         "checksPassed": passed_checks,
         "checksFailed": failed_checks,
-        "allPassed": failed_checks == 0,
+        "failOnSkip": fail_on_skip,
+        "allPassed": failed_checks == 0 and (not fail_on_skip or skipped == 0),
     }
     report: dict[str, Any] = {
         "schemaVersion": "fundamentals-eval-report.v1",
@@ -445,9 +447,23 @@ def _chord_segment_accuracy(actual: list[Any], expected: list[Any]) -> float:
             if actual_start is None or actual_end is None:
                 continue
             overlap = max(0.0, min(end, actual_end) - max(start, actual_start))
-            if overlap > 0.0 and actual_label == label:
+            if (
+                overlap > 0.0
+                and _normalize_chord_label_for_compare(actual_label)
+                == _normalize_chord_label_for_compare(label)
+            ):
                 matching_duration += overlap
     return matching_duration / total_duration if total_duration > 0 else 0.0
+
+
+def _normalize_chord_label_for_compare(label: str | None) -> str:
+    """Normalize ASA triad labels for fixture comparisons without enharmonic folding."""
+    value = (label or "").strip()
+    value = re.sub(r"\s+", "", value)
+    value = value.replace(":maj", "").replace(":min", "m")
+    value = re.sub(r"(?i)major$", "", value)
+    value = re.sub(r"(?i)minor$", "m", value)
+    return value
 
 
 def _note_f1(actual: list[Any], expected: list[Any]) -> float:
