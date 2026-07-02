@@ -45,6 +45,7 @@ import {
 } from '../utils/displayText';
 import { Collapsible, textRoleClassName, type StyleProfileSectionState } from './analysisResults/shared';
 import { NotableFindingsSection } from './analysisResults/NotableFindingsSection';
+import { ReconstructionBriefSection } from './analysisResults/ReconstructionBriefSection';
 import { MeasurementSummarySection } from './analysisResults/MeasurementSummarySection';
 import { AudioObservationsSection } from './analysisResults/AudioObservationsSection';
 import { ProjectSetupSection } from './analysisResults/ProjectSetupSection';
@@ -525,6 +526,8 @@ export function AnalysisResults({
       <StickyNav sections={navSections} />
 
       <NotableFindingsSection phase1={phase1} />
+
+      <ReconstructionBriefSection phase1={phase1} />
 
       <MeasurementSummarySection
         phase1={phase1}
