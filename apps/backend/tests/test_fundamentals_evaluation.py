@@ -45,6 +45,53 @@ class FundamentalsEvaluationTests(unittest.TestCase):
             self.assertTrue(report["summary"]["failOnSkip"])
             self.assertGreaterEqual(report["summary"]["tracksSkipped"], 1)
 
+    def test_known_gaps_report_scores_without_gating(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="asa_fundamentals_eval_gaps_") as temp_dir:
+            temp_root = Path(temp_dir)
+            tracks_dir = temp_root / "tracks"
+            tracks_dir.mkdir()
+            (tracks_dir / "loop.wav").write_bytes(b"placeholder")
+            manifest_path = temp_root / "manifest.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "schemaVersion": "fundamentals-eval.v1",
+                        "tracks": [
+                            {
+                                "id": "loop",
+                                "audioPath": "loop.wav",
+                                "category": "unit",
+                                "expected": {"bpm": 128, "timeSignature": "3/4"},
+                                "thresholds": {"bpmTolerance": 1.0},
+                                "knownGaps": ["meter:timeSignature"],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            def runner(path: Path, flags: list[str] | None) -> dict:
+                # Meter is wrong (a known baseline gap); bpm is right.
+                return {"bpm": 128.0, "timeSignature": "4/4"}
+
+            report = run_fundamentals_evaluation(
+                manifest_path=manifest_path,
+                tracks_dir=tracks_dir,
+                report_path=temp_root / "report.json",
+                runner=runner,
+                fail_on_skip=True,
+            )
+
+            self.assertTrue(report["summary"]["allPassed"])
+            self.assertEqual(report["summary"]["checksFailed"], 0)
+            self.assertEqual(report["summary"]["checksInformational"], 1)
+            track = report["tracks"][0]
+            self.assertTrue(track["allPassed"])
+            meter_check = next(c for c in track["checks"] if c["name"] == "meter:timeSignature")
+            self.assertTrue(meter_check["informational"])
+            self.assertFalse(meter_check["passed"])  # score still visible
+
     def test_present_track_enforces_declared_fundamental_gates(self) -> None:
         with tempfile.TemporaryDirectory(prefix="asa_fundamentals_eval_present_") as temp_dir:
             temp_root = Path(temp_dir)

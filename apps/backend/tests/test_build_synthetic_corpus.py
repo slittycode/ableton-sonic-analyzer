@@ -5,9 +5,18 @@ from pathlib import Path
 
 from fundamentals_evaluation import (
     _chord_segment_accuracy,
-    _normalize_chord_label_for_compare,
+    _keys_match,
+    _normalize_chord_label,
 )
-from scripts.build_synthetic_corpus import build_corpus, render_chord_progression, render_drum_pattern
+from scripts.build_synthetic_corpus import (
+    _EXPECTED_KEYS_BY_KIND,
+    build_corpus,
+    render_chord_progression,
+    render_count_pattern,
+    render_grid_pattern,
+    _render_spec,
+    _synthetic_specs,
+)
 
 
 class BuildSyntheticCorpusTests(unittest.TestCase):
@@ -18,17 +27,53 @@ class BuildSyntheticCorpusTests(unittest.TestCase):
 
             result = build_corpus(root / "tracks", manifest, check=True)
 
-            self.assertEqual(result["tracks"], 28)
+            self.assertEqual(result["tracks"], len(_synthetic_specs()))
             data = json.loads(manifest.read_text(encoding="utf-8"))
             self.assertEqual(data["schemaVersion"], "fundamentals-eval.v1")
             self.assertEqual(data["targetProfile"], "electronic_ableton_v1")
-            self.assertEqual(len(data["tracks"]), 28)
             first = data["tracks"][0]
             self.assertIn("id", first)
             self.assertIn("audioPath", first)
             self.assertIn("expected", first)
             self.assertTrue((root / "tracks" / first["audioPath"]).exists())
 
+    def test_no_spec_is_silently_dropped(self) -> None:
+        # Codex's original emitted specs[:28], silently dropping the 29th
+        # (multi_F_major). Every declared spec must render.
+        specs = _synthetic_specs()
+        ids = [spec["id"] for spec in specs]
+        self.assertIn("multi_F_major", ids)
+        self.assertIn("multi_A_minor", ids)
+        self.assertEqual(len(ids), len(set(ids)), "duplicate spec ids")
+
+    def test_expected_blocks_carry_only_active_check_keys(self) -> None:
+        # Ground-truth-for-later (hitTimes, swingPercent, unchecked fields)
+        # must live under "truth", never inside "expected" — otherwise it
+        # silently becomes an uncalibrated live check the moment the harness
+        # learns the key.
+        with tempfile.TemporaryDirectory(prefix="asa_synth_expected_") as temp_dir:
+            root = Path(temp_dir)
+            manifest = root / "m.synthetic.json"
+            build_corpus(root / "tracks", manifest, check=False)
+            data = json.loads(manifest.read_text(encoding="utf-8"))
+            for track in data["tracks"]:
+                allowed = set(_EXPECTED_KEYS_BY_KIND[track["category"]])
+                self.assertLessEqual(
+                    set(track["expected"].keys()), allowed,
+                    f"{track['id']} expected keys leak beyond active checks",
+                )
+                self.assertNotIn("hitTimes", track["expected"])
+                self.assertNotIn("swingPercent", track["expected"])
+
+    def test_bass_and_multi_specs_get_their_analyze_flags(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="asa_synth_flags_") as temp_dir:
+            root = Path(temp_dir)
+            manifest = root / "m.synthetic.json"
+            build_corpus(root / "tracks", manifest, check=False)
+            data = json.loads(manifest.read_text(encoding="utf-8"))
+            by_id = {track["id"]: track for track in data["tracks"]}
+            self.assertEqual(by_id["mono_bass_transcription"].get("analyzeFlags"), ["--transcribe"])
+            self.assertEqual(by_id["multi_A_minor"].get("analyzeFlags"), ["--separate"])
 
     def test_audio_only_does_not_rewrite_manifest(self) -> None:
         with tempfile.TemporaryDirectory(prefix="asa_synth_audio_only_") as temp_dir:
@@ -43,29 +88,56 @@ class BuildSyntheticCorpusTests(unittest.TestCase):
             self.assertEqual(manifest.read_text(encoding="utf-8"), "sentinel")
             self.assertTrue((root / "tracks" / "four_on_floor_clear_128.wav").exists())
 
-    def test_drum_truth_counts_and_grid_match_requested_pattern(self) -> None:
-        rendered = render_drum_pattern(
-            120,
-            "4/4",
-            2,
-            kick_positions=[0, 4],
-            snare_positions=[2, 6],
-            hat_positions=[index * 0.5 for index in range(16)],
-            swing_percent=58,
+    def test_renders_are_order_independent(self) -> None:
+        # One-shots carry their own seeded RNGs, so rendering a single spec in
+        # isolation must produce the same bytes as rendering it mid-sequence.
+        spec = next(s for s in _synthetic_specs() if s["kind"] == "counts")
+        solo = _render_spec(spec).samples.tobytes()
+        _render_spec(next(s for s in _synthetic_specs() if s["kind"] == "grid"))
+        again = _render_spec(spec).samples.tobytes()
+        self.assertEqual(solo, again)
+
+    def test_count_pattern_truth_matches_placement(self) -> None:
+        rendered = render_count_pattern(bpm=128, bars=8)
+        self.assertEqual(
+            rendered.truth["percussion"],
+            {"kickCount": 32, "snareCount": 16, "hihatCount": 16},
         )
+        self.assertEqual(len(rendered.truth["hitTimes"]["kick"]), 32)
 
-        self.assertEqual(rendered.truth["percussion"], {"kickCount": 2, "snareCount": 2, "hihatCount": 16})
-        self.assertEqual(len(rendered.truth["beatGrid"]), 8)
-        self.assertEqual(rendered.truth["downbeats"], [0.0, 2.0])
-        self.assertEqual(rendered.truth["swingPercent"], 58)
+    def test_grid_pattern_truth_grid_and_downbeats(self) -> None:
+        rendered = render_grid_pattern(bpm=120, meter="3/4", bars=4)
+        self.assertEqual(len(rendered.truth["beatGrid"]), 12)
+        self.assertEqual(rendered.truth["downbeats"], [0.0, 1.5, 3.0, 4.5])
+        self.assertNotIn("swingPercent", rendered.truth)
+        swung = render_grid_pattern(bpm=120, meter="4/4", bars=2, with_hats=True, swing_percent=58)
+        self.assertEqual(swung.truth["swingPercent"], 58)
+        # First hat "and" lands at 58% of beat 0.
+        self.assertAlmostEqual(swung.truth["hitTimes"]["hihat"][0], 0.58 * 0.5, places=4)
 
-    def test_chord_labels_survive_segment_accuracy_compare(self) -> None:
+    def test_chord_labels_are_flat_spelled_and_fold_enharmonically(self) -> None:
         rendered = render_chord_progression("A", "minor", [1, 6, 7, 5], 120, 4.0)
-        expected = rendered.truth["chordTimeline"]
+        labels = [segment["label"] for segment in rendered.truth["chordTimeline"]]
+        self.assertEqual(labels, ["Am", "F", "G", "Em"])
 
-        self.assertEqual([segment["label"] for segment in expected], ["Am", "F", "G", "Em"])
-        self.assertEqual(_normalize_chord_label_for_compare("A minor"), "Am")
-        self.assertEqual(_chord_segment_accuracy(expected, expected), 1.0)
+        # F# major spells flat (Viterbi vocab) — the original hardcoded table
+        # emitted sharps and scored 0.25 against the analyzer.
+        sharp = render_chord_progression("F#", "major", [1, 6, 4, 5], 120, 4.0)
+        self.assertEqual(
+            [segment["label"] for segment in sharp.truth["chordTimeline"]],
+            ["Gb", "Ebm", "B", "Db"],
+        )
+        self.assertEqual(_normalize_chord_label("F#"), _normalize_chord_label("Gb"))
+        self.assertEqual(_normalize_chord_label("D#m"), _normalize_chord_label("Ebm"))
+        self.assertEqual(_normalize_chord_label("A minor"), _normalize_chord_label("Am"))
+        self.assertNotEqual(_normalize_chord_label("Am"), _normalize_chord_label("A"))
+        self.assertEqual(_chord_segment_accuracy(rendered.truth["chordTimeline"], rendered.truth["chordTimeline"]), 1.0)
+
+    def test_keys_match_folds_enharmonics(self) -> None:
+        self.assertTrue(_keys_match("C# Minor", "Db minor", allow_relative=False))
+        self.assertFalse(_keys_match("C# Major", "Db minor", allow_relative=False))
+        self.assertTrue(_keys_match("Eb major", "C minor", allow_relative=True))
+        self.assertTrue(_keys_match("D# major", "C minor", allow_relative=True))
 
 
 if __name__ == "__main__":

@@ -41,6 +41,10 @@ jobs:
       - name: Gate phase2-export.v1 asa-ableton handoff
         run: python -m unittest tests.test_phase2_export.AsaAbletonHandoffContractTests
       - run: python -m unittest discover -s tests
+      - name: Fundamentals gate (synthetic default corpus)
+        run: |
+          python scripts/build_synthetic_corpus.py --out-dir tests/fixtures/fundamentals_tracks --manifest tests/fixtures/fundamentals_eval_manifest.json --check --audio-only
+          python scripts/evaluate_fundamentals.py --fail-on-skip
       - name: Assert no wrong-interpreter pyc files
         run: |
           BAD=$(

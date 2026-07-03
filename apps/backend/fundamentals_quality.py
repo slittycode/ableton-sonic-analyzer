@@ -102,6 +102,17 @@ def _tempo_quality(payload: dict[str, Any]) -> dict[str, Any]:
     status = _status_from_confidence(confidence)
     if agreement is False and payload.get("bpmDoubletime") is not True:
         status = STATUS_AMBIGUOUS
+    elif (
+        status == STATUS_AMBIGUOUS
+        and agreement is True
+        and isinstance(confidence, (int, float))
+        and confidence >= 0.5
+    ):
+        # Two independent estimators (RhythmExtractor2013 + Percival) agree
+        # within tolerance — the cross-check itself is the settling evidence
+        # even when the extractor's own confidence sits mid-range. Marking
+        # this "cross-check not strong enough" was factually wrong.
+        status = STATUS_AUTHORITATIVE
     return _domain(
         status=status,
         plain=(
