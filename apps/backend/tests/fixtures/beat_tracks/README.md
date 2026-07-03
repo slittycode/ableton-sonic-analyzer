@@ -36,7 +36,13 @@ beat_tracks/
   harness reports per-genre metrics so outliers are visible; consider excluding the
   documented corrupt files.
 - **Genre skew**: GTZAN is mixed-genre. The pass bar is judged on the
-  `asaRelevant` subset (disco, hiphop, pop — the electronic-adjacent genres). A
-  modern ASA electronic slice (`beat_eval_manifest_asa.json`) is the representativeness
-  fast-follow; use only **user-owned / unreleased** tracks so the slice stays
-  contamination-free for beat_this.
+  `asaRelevant` subset (disco, hiphop, pop — the electronic-adjacent genres). The
+  modern ASA electronic slice (`beat_eval_manifest_asa.json`, built with
+  `build_beat_manifest.py --asa-slice` from `<root>/asa/{audio,annotations}/`)
+  is the representativeness requirement — the frozen gate needs >= 15 clips
+  (`MIN_CLIPS_ASA`) or it reports `underpowered`. Contamination-safe sources:
+  **user-owned / unreleased** tracks, or **hand-annotated GiantSteps Beatport
+  previews** (fetched by `scripts/fetch_giantsteps.py`; GiantSteps carries no
+  beat annotations upstream, so it is outside beat_this's training data —
+  annotate bar-1 downbeats by hand, ~1-2 h for 15-20 clips, the one manual
+  labeling task in the accuracy program).
