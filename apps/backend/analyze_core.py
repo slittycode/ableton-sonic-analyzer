@@ -1263,14 +1263,30 @@ def analyze_time_signature(
     - fewer than 16 beats are detected
     - mono is not provided (legacy callers)
     - onset detection fails
+
+    Also emits ``timeSignatureCandidates`` — the per-candidate accent evidence
+    (dominance + per-bar-position onset means) that was previously computed
+    and discarded. Additive, full-mode-only at the top level; downstream meter
+    work (and fundamentalsQuality's meter evidence) reads it instead of
+    recomputing. Empty list on every fallback branch.
     """
+
+    def _result(
+        label: str | None,
+        source: str | None,
+        confidence: float | None,
+        candidates: list[dict] | None = None,
+    ) -> dict:
+        return {
+            "timeSignature": label,
+            "timeSignatureSource": source,
+            "timeSignatureConfidence": confidence,
+            "timeSignatureCandidates": candidates or [],
+        }
+
     try:
         if rhythm_data is None:
-            return {
-                "timeSignature": None,
-                "timeSignatureSource": None,
-                "timeSignatureConfidence": None,
-            }
+            return _result(None, None, None)
 
         raw_ticks = rhythm_data.get("ticks")
         # Defensive: rhythm_data["ticks"] may already be a numpy array.
@@ -1283,39 +1299,23 @@ def analyze_time_signature(
         if mono is None or ticks.size < 16:
             # Not enough information to disambiguate — preserve the
             # "assumed 4/4" contract that consumers expect today.
-            return {
-                "timeSignature": "4/4",
-                "timeSignatureSource": "assumed_four_four",
-                "timeSignatureConfidence": 0.0,
-            }
+            return _result("4/4", "assumed_four_four", 0.0)
 
         # Lazy import — analyze_rhythm is loaded after analyze_core at the
         # module level. Importing at function-call time avoids the cycle.
         try:
             from analyze_rhythm import _detect_onset_times
         except Exception:
-            return {
-                "timeSignature": "4/4",
-                "timeSignatureSource": "assumed_four_four",
-                "timeSignatureConfidence": 0.0,
-            }
+            return _result("4/4", "assumed_four_four", 0.0)
 
         onset_times = _detect_onset_times(mono, sample_rate)
         if onset_times.size < 16:
-            return {
-                "timeSignature": "4/4",
-                "timeSignatureSource": "assumed_four_four",
-                "timeSignatureConfidence": 0.0,
-            }
+            return _result("4/4", "assumed_four_four", 0.0)
 
         beat_diffs = np.diff(ticks)
         beat_diffs = beat_diffs[beat_diffs > 0]
         if beat_diffs.size == 0:
-            return {
-                "timeSignature": "4/4",
-                "timeSignatureSource": "assumed_four_four",
-                "timeSignatureConfidence": 0.0,
-            }
+            return _result("4/4", "assumed_four_four", 0.0)
         beat_duration = float(np.median(beat_diffs))
         half_beat = beat_duration / 2.0
 
@@ -1349,11 +1349,17 @@ def analyze_time_signature(
 
         if 4 not in scores:
             # We couldn't even score 4/4 — fall back to the assumption.
-            return {
-                "timeSignature": "4/4",
-                "timeSignatureSource": "assumed_four_four",
-                "timeSignatureConfidence": 0.0,
+            return _result("4/4", "assumed_four_four", 0.0)
+
+        # Surface the previously discarded evidence, strongest first.
+        candidates = [
+            {
+                "timeSignature": _TIME_SIG_LABELS.get(B, f"{B}/4"),
+                "dominance": round(float(scores[B]), 3),
+                "positionMeans": per_position_means[B],
             }
+            for B in sorted(scores, key=scores.get, reverse=True)
+        ]
 
         baseline = scores[4]
         best_B = max(scores, key=scores.get)
@@ -1363,32 +1369,16 @@ def analyze_time_signature(
         if best_B == 4:
             # 4/4 won outright; confidence rises with downbeat dominance.
             confidence = max(0.0, min(1.0, (baseline - 1.0) / 2.0))
-            return {
-                "timeSignature": "4/4",
-                "timeSignatureSource": "onset_autocorrelation",
-                "timeSignatureConfidence": round(float(confidence), 2),
-            }
+            return _result("4/4", "onset_autocorrelation", round(float(confidence), 2), candidates)
 
         # Non-4/4 candidate won. Require a margin over 4/4 to override.
         margin = (best_score - baseline) / max(baseline, 0.1)
         if margin < _TIME_SIG_MARGIN_THRESHOLD:
             confidence = max(0.0, min(1.0, (baseline - 1.0) / 2.0))
-            return {
-                "timeSignature": "4/4",
-                "timeSignatureSource": "onset_autocorrelation_low_margin",
-                "timeSignatureConfidence": round(float(confidence), 2),
-            }
+            return _result("4/4", "onset_autocorrelation_low_margin", round(float(confidence), 2), candidates)
 
         confidence = max(0.0, min(1.0, margin))
-        return {
-            "timeSignature": winner_label,
-            "timeSignatureSource": "onset_autocorrelation",
-            "timeSignatureConfidence": round(float(confidence), 2),
-        }
+        return _result(winner_label, "onset_autocorrelation", round(float(confidence), 2), candidates)
     except Exception as exc:
         print(f"[warn] Time signature estimation failed: {exc}", file=sys.stderr)
-        return {
-            "timeSignature": None,
-            "timeSignatureSource": None,
-            "timeSignatureConfidence": None,
-        }
+        return _result(None, None, None)

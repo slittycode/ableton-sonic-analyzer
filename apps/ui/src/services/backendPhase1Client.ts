@@ -13,6 +13,7 @@ import {
   DynamicCharacter,
   FundamentalsQuality,
   FundamentalsQualityStatus,
+  TimeSignatureCandidate,
   GenreDetail,
   KickDetail,
   Phase1Result,
@@ -595,6 +596,7 @@ export function parsePhase1Result(value: unknown): Phase1Result {
     timeSignature: expectString(phase1, "timeSignature"),
     timeSignatureSource: toOptionalStringOrNull(phase1.timeSignatureSource),
     timeSignatureConfidence: toNumber(phase1.timeSignatureConfidence),
+    timeSignatureCandidates: parseOptionalTimeSignatureCandidates(phase1.timeSignatureCandidates),
     durationSeconds: expectNumber(phase1, "durationSeconds"),
     sampleRate: toNumber(phase1.sampleRate),
     lufsIntegrated,
@@ -678,6 +680,22 @@ const FUNDAMENTALS_QUALITY_STATUSES = new Set<FundamentalsQualityStatus>([
   "failed",
   "not_run",
 ]);
+
+function parseOptionalTimeSignatureCandidates(value: unknown): TimeSignatureCandidate[] | null {
+  if (!Array.isArray(value)) return null;
+  const candidates: TimeSignatureCandidate[] = [];
+  for (const entry of value) {
+    if (!isRecord(entry)) continue;
+    const timeSignature = typeof entry.timeSignature === "string" ? entry.timeSignature : null;
+    const dominance = toNumber(entry.dominance);
+    if (timeSignature === null || dominance === null) continue;
+    const positionMeans = Array.isArray(entry.positionMeans)
+      ? entry.positionMeans.filter((v): v is number => typeof v === "number" && Number.isFinite(v))
+      : [];
+    candidates.push({ timeSignature, dominance, positionMeans });
+  }
+  return candidates;
+}
 
 function parseOptionalFundamentalsQuality(value: unknown): FundamentalsQuality | null {
   if (value === undefined || value === null) return null;

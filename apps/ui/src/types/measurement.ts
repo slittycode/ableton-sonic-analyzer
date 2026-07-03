@@ -627,6 +627,17 @@ export interface GenreDetail {
   topScores: Array<{ genre: string; score: number }>;
 }
 
+/**
+ * One meter candidate from analyze_time_signature's accent autocorrelation.
+ * `dominance` = mean accent at bar position 1 / mean of the other positions;
+ * `positionMeans` = the per-bar-position onset-count means behind it.
+ */
+export interface TimeSignatureCandidate {
+  timeSignature: string;
+  dominance: number;
+  positionMeans: number[];
+}
+
 export type FundamentalsQualityStatus = "authoritative" | "ambiguous" | "failed" | "not_run";
 
 export interface FundamentalsQualityDomain {
@@ -668,6 +679,12 @@ export interface Phase1Result {
   timeSignature: string;
   timeSignatureSource?: string | null;
   timeSignatureConfidence?: number | null;
+  /**
+   * Full mode only. Per-candidate meter evidence from the onset-accent
+   * autocorrelation, strongest first (accuracy program PR-B1). Evidence
+   * surface — never an override of `timeSignature`.
+   */
+  timeSignatureCandidates?: TimeSignatureCandidate[] | null;
   durationSeconds: number;
   sampleRate?: number | null;
   lufsIntegrated: number;

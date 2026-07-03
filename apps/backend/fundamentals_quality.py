@@ -203,6 +203,24 @@ def _meter_quality(payload: dict[str, Any]) -> dict[str, Any]:
         )
     assumed = source == "assumed_four_four" or _confidence(confidence) == 0.0
     status = STATUS_AMBIGUOUS if assumed else _status_from_confidence(confidence, high=0.5)
+    evidence: dict[str, Any] = {"timeSignature": meter}
+    candidates = payload.get("timeSignatureCandidates")
+    if isinstance(candidates, list) and candidates:
+        # Candidates are emitted strongest-first by analyze_time_signature.
+        best = candidates[0] if isinstance(candidates[0], dict) else {}
+        best_dominance = best.get("dominance")
+        runner_up = candidates[1] if len(candidates) > 1 and isinstance(candidates[1], dict) else {}
+        runner_dominance = runner_up.get("dominance")
+        margin = None
+        if isinstance(best_dominance, (int, float)) and isinstance(runner_dominance, (int, float)) and runner_dominance > 0:
+            margin = round((float(best_dominance) - float(runner_dominance)) / float(runner_dominance), 3)
+        evidence.update(
+            {
+                "bestCandidate": best.get("timeSignature"),
+                "margin": margin,
+                "candidateCount": len(candidates),
+            }
+        )
     return _domain(
         status=status,
         plain=(
@@ -212,7 +230,7 @@ def _meter_quality(payload: dict[str, Any]) -> dict[str, Any]:
         ),
         source=str(source) if source else "time_signature",
         confidence=confidence,
-        evidence={"timeSignature": meter},
+        evidence=evidence,
     )
 
 

@@ -1900,6 +1900,8 @@ def main():
         "timeSignature": result.get("timeSignature"),
         "timeSignatureSource": result.get("timeSignatureSource"),
         "timeSignatureConfidence": result.get("timeSignatureConfidence"),
+        # Full-only (like keyProfile/tuning*): per-candidate meter evidence.
+        "timeSignatureCandidates": result.get("timeSignatureCandidates", []),
         "durationSeconds": result.get("durationSeconds"),
         "sampleRate": result.get("sampleRate"),
         "lufsIntegrated": result.get("lufsIntegrated"),
