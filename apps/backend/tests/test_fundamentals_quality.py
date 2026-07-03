@@ -52,6 +52,31 @@ class FundamentalsQualityTests(unittest.TestCase):
         self.assertEqual(quality["domains"]["percussion"]["status"], "authoritative")
         self.assertEqual(quality["domains"]["transcription"]["status"], "authoritative")
 
+    def test_tempo_cross_check_agreement_settles_mid_confidence(self) -> None:
+        # Two independent estimators agreeing IS the settling evidence — a
+        # mid-range extractor confidence must not demote a cross-confirmed BPM.
+        payload = {
+            "bpm": 128.0,
+            "bpmConfidence": 0.6,
+            "bpmPercival": 128.4,
+            "bpmAgreement": True,
+            "bpmDoubletime": False,
+            "bpmSource": "rhythm_extractor_confirmed",
+        }
+        quality = build_fundamentals_quality(payload, analysis_mode="full")
+        self.assertEqual(quality["domains"]["tempo"]["status"], "authoritative")
+
+        # Without agreement the mid-confidence demotion stands.
+        payload["bpmAgreement"] = None
+        quality = build_fundamentals_quality(payload, analysis_mode="full")
+        self.assertEqual(quality["domains"]["tempo"]["status"], "ambiguous")
+
+        # And agreement does not rescue genuinely low confidence.
+        payload["bpmAgreement"] = True
+        payload["bpmConfidence"] = 0.3
+        quality = build_fundamentals_quality(payload, analysis_mode="full")
+        self.assertEqual(quality["domains"]["tempo"]["status"], "ambiguous")
+
     def test_marks_assumed_meter_and_chord_disagreement_as_ambiguous(self) -> None:
         payload = {
             "bpm": 126.0,

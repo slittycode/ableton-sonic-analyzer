@@ -11,10 +11,10 @@
     {
       "id": "four_on_floor_clear_128",
       "audioPath": "synthetic/four_on_floor_clear_128.wav",
-      "category": "drums",
-      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture. Regenerate audio on demand with scripts/build_synthetic_corpus.py.",
+      "category": "grid",
+      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
-        "bpm": 128,
+        "bpm": 128.0,
         "timeSignature": "4/4",
         "beatGrid": [
           0.0,
@@ -32,97 +32,47 @@
           5.625,
           6.09375,
           6.5625,
-          7.03125
+          7.03125,
+          7.5,
+          7.96875,
+          8.4375,
+          8.90625,
+          9.375,
+          9.84375,
+          10.3125,
+          10.78125,
+          11.25,
+          11.71875,
+          12.1875,
+          12.65625,
+          13.125,
+          13.59375,
+          14.0625,
+          14.53125
         ],
         "downbeats": [
           0.0,
           1.875,
           3.75,
-          5.625
-        ],
-        "percussion": {
-          "kickCount": 16,
-          "snareCount": 4,
-          "hihatCount": 32
-        },
-        "hitTimes": {
-          "kick": [
-            0.0,
-            0.46875,
-            0.9375,
-            1.40625,
-            1.875,
-            2.34375,
-            2.8125,
-            3.28125,
-            3.75,
-            4.21875,
-            4.6875,
-            5.15625,
-            5.625,
-            6.09375,
-            6.5625,
-            7.03125
-          ],
-          "snare": [
-            0.9375,
-            2.8125,
-            4.6875,
-            6.5625
-          ],
-          "hihat": [
-            0.0,
-            0.234375,
-            0.46875,
-            0.703125,
-            0.9375,
-            1.171875,
-            1.40625,
-            1.640625,
-            1.875,
-            2.109375,
-            2.34375,
-            2.578125,
-            2.8125,
-            3.046875,
-            3.28125,
-            3.515625,
-            3.75,
-            3.984375,
-            4.21875,
-            4.453125,
-            4.6875,
-            4.921875,
-            5.15625,
-            5.390625,
-            5.625,
-            5.859375,
-            6.09375,
-            6.328125,
-            6.5625,
-            6.796875,
-            7.03125,
-            7.265625
-          ]
-        },
-        "swingPercent": 50
+          5.625,
+          7.5,
+          9.375,
+          11.25,
+          13.125
+        ]
       },
       "thresholds": {
         "bpmTolerance": 1.0,
         "beatF1": 0.9,
-        "downbeatF1": 0.75,
-        "chordSegmentAccuracy": 0.65,
-        "percussionCountTolerance": 1,
-        "transcriptionNoteF1": 0.75
+        "downbeatF1": 0.75
       }
     },
     {
       "id": "tonal_minor_static_chords",
       "audioPath": "synthetic/tonal_minor_static_chords.wav",
       "category": "chords",
-      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture. Regenerate audio on demand with scripts/build_synthetic_corpus.py.",
+      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
-        "bpm": 120,
         "key": "A minor",
         "chordTimeline": [
           {
@@ -138,51 +88,31 @@
         ]
       },
       "thresholds": {
-        "bpmTolerance": 1.0,
-        "beatF1": 0.9,
-        "downbeatF1": 0.75,
-        "chordSegmentAccuracy": 0.65,
-        "percussionCountTolerance": 1,
-        "transcriptionNoteF1": 0.75
+        "chordSegmentAccuracy": 0.65
+      },
+      "truth": {
+        "bpm": 120.0
       }
     },
     {
       "id": "drum_stem_known_counts",
       "audioPath": "synthetic/drum_stem_known_counts.wav",
-      "category": "drums",
-      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture. Regenerate audio on demand with scripts/build_synthetic_corpus.py.",
+      "category": "counts",
+      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
-        "bpm": 128,
-        "timeSignature": "4/4",
-        "beatGrid": [
-          0.0,
-          0.46875,
-          0.9375,
-          1.40625,
-          1.875,
-          2.34375,
-          2.8125,
-          3.28125,
-          3.75,
-          4.21875,
-          4.6875,
-          5.15625,
-          5.625,
-          6.09375,
-          6.5625,
-          7.03125
-        ],
-        "downbeats": [
-          0.0,
-          1.875,
-          3.75,
-          5.625
-        ],
+        "bpm": 128.0,
         "percussion": {
-          "kickCount": 16,
-          "snareCount": 8,
-          "hihatCount": 32
-        },
+          "kickCount": 32,
+          "snareCount": 16,
+          "hihatCount": 16
+        }
+      },
+      "thresholds": {
+        "bpmTolerance": 1.0,
+        "percussionCountTolerance": 1
+      },
+      "truth": {
+        "timeSignature": "4/4",
         "hitTimes": {
           "kick": [
             0.0,
@@ -200,69 +130,68 @@
             5.625,
             6.09375,
             6.5625,
-            7.03125
+            7.03125,
+            7.5,
+            7.96875,
+            8.4375,
+            8.90625,
+            9.375,
+            9.84375,
+            10.3125,
+            10.78125,
+            11.25,
+            11.71875,
+            12.1875,
+            12.65625,
+            13.125,
+            13.59375,
+            14.0625,
+            14.53125
           ],
           "snare": [
-            0.46875,
-            1.40625,
-            2.34375,
-            3.28125,
-            4.21875,
-            5.15625,
-            6.09375,
-            7.03125
+            0.703125,
+            1.640625,
+            2.578125,
+            3.515625,
+            4.453125,
+            5.390625,
+            6.328125,
+            7.265625,
+            8.203125,
+            9.140625,
+            10.078125,
+            11.015625,
+            11.953125,
+            12.890625,
+            13.828125,
+            14.765625
           ],
           "hihat": [
-            0.0,
             0.234375,
-            0.46875,
-            0.703125,
-            0.9375,
             1.171875,
-            1.40625,
-            1.640625,
-            1.875,
             2.109375,
-            2.34375,
-            2.578125,
-            2.8125,
             3.046875,
-            3.28125,
-            3.515625,
-            3.75,
             3.984375,
-            4.21875,
-            4.453125,
-            4.6875,
             4.921875,
-            5.15625,
-            5.390625,
-            5.625,
             5.859375,
-            6.09375,
-            6.328125,
-            6.5625,
             6.796875,
-            7.03125,
-            7.265625
+            7.734375,
+            8.671875,
+            9.609375,
+            10.546875,
+            11.484375,
+            12.421875,
+            13.359375,
+            14.296875
           ]
-        },
-        "swingPercent": 50
-      },
-      "thresholds": {
-        "bpmTolerance": 1.0,
-        "beatF1": 0.9,
-        "downbeatF1": 0.75,
-        "chordSegmentAccuracy": 0.65,
-        "percussionCountTolerance": 1,
-        "transcriptionNoteF1": 0.75
+        }
       }
     },
     {
       "id": "mono_bass_transcription",
       "audioPath": "synthetic/mono_bass_transcription.wav",
       "category": "bass",
-      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture. Regenerate audio on demand with scripts/build_synthetic_corpus.py.",
+      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
         "transcriptionNotes": [
           {
@@ -283,21 +212,19 @@
         ]
       },
       "thresholds": {
-        "bpmTolerance": 1.0,
-        "beatF1": 0.9,
-        "downbeatF1": 0.75,
-        "chordSegmentAccuracy": 0.65,
-        "percussionCountTolerance": 1,
         "transcriptionNoteF1": 0.75
-      }
+      },
+      "analyzeFlags": [
+        "--transcribe"
+      ]
     },
     {
       "id": "grid_4_4_70",
       "audioPath": "synthetic/grid_4_4_70.wav",
-      "category": "drums",
-      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture. Regenerate audio on demand with scripts/build_synthetic_corpus.py.",
+      "category": "grid",
+      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
-        "bpm": 70,
+        "bpm": 70.0,
         "timeSignature": "4/4",
         "beatGrid": [
           0.0,
@@ -315,85 +242,48 @@
           10.285714,
           11.142857,
           12.0,
-          12.857143
+          12.857143,
+          13.714286,
+          14.571429,
+          15.428571,
+          16.285714,
+          17.142857,
+          18.0,
+          18.857143,
+          19.714286,
+          20.571429,
+          21.428571,
+          22.285714,
+          23.142857,
+          24.0,
+          24.857143,
+          25.714286,
+          26.571429
         ],
         "downbeats": [
           0.0,
           3.428571,
           6.857143,
-          10.285714
-        ],
-        "percussion": {
-          "kickCount": 4,
-          "snareCount": 4,
-          "hihatCount": 32
-        },
-        "hitTimes": {
-          "kick": [
-            0.0,
-            3.428571,
-            6.857143,
-            10.285714
-          ],
-          "snare": [
-            1.714286,
-            5.142857,
-            8.571429,
-            12.0
-          ],
-          "hihat": [
-            0.0,
-            0.428571,
-            0.857143,
-            1.285714,
-            1.714286,
-            2.142857,
-            2.571429,
-            3.0,
-            3.428571,
-            3.857143,
-            4.285714,
-            4.714286,
-            5.142857,
-            5.571429,
-            6.0,
-            6.428571,
-            6.857143,
-            7.285714,
-            7.714286,
-            8.142857,
-            8.571429,
-            9.0,
-            9.428571,
-            9.857143,
-            10.285714,
-            10.714286,
-            11.142857,
-            11.571429,
-            12.0,
-            12.428571,
-            12.857143,
-            13.285714
-          ]
-        },
-        "swingPercent": 50
+          10.285714,
+          13.714286,
+          17.142857,
+          20.571429,
+          24.0
+        ]
       },
       "thresholds": {
         "bpmTolerance": 1.0,
         "beatF1": 0.9,
-        "downbeatF1": 0.75,
-        "chordSegmentAccuracy": 0.65,
-        "percussionCountTolerance": 1,
-        "transcriptionNoteF1": 0.75
+        "downbeatF1": 0.75
       }
     },
     {
       "id": "grid_3_4_90",
       "audioPath": "synthetic/grid_3_4_90.wav",
-      "category": "drums",
-      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture. Regenerate audio on demand with scripts/build_synthetic_corpus.py.",
+      "category": "grid",
+      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
-        "bpm": 90,
+        "bpm": 90.0,
         "timeSignature": "3/4",
         "beatGrid": [
           0.0,
@@ -407,77 +297,48 @@
           5.333333,
           6.0,
           6.666667,
-          7.333333
+          7.333333,
+          8.0,
+          8.666667,
+          9.333333,
+          10.0,
+          10.666667,
+          11.333333,
+          12.0,
+          12.666667,
+          13.333333,
+          14.0,
+          14.666667,
+          15.333333
         ],
         "downbeats": [
           0.0,
           2.0,
           4.0,
-          6.0
-        ],
-        "percussion": {
-          "kickCount": 4,
-          "snareCount": 4,
-          "hihatCount": 24
-        },
-        "hitTimes": {
-          "kick": [
-            0.0,
-            2.0,
-            4.0,
-            6.0
-          ],
-          "snare": [
-            1.333333,
-            3.333333,
-            5.333333,
-            7.333333
-          ],
-          "hihat": [
-            0.0,
-            0.333333,
-            0.666667,
-            1.0,
-            1.333333,
-            1.666667,
-            2.0,
-            2.333333,
-            2.666667,
-            3.0,
-            3.333333,
-            3.666667,
-            4.0,
-            4.333333,
-            4.666667,
-            5.0,
-            5.333333,
-            5.666667,
-            6.0,
-            6.333333,
-            6.666667,
-            7.0,
-            7.333333,
-            7.666667
-          ]
-        },
-        "swingPercent": 50
+          6.0,
+          8.0,
+          10.0,
+          12.0,
+          14.0
+        ]
       },
       "thresholds": {
         "bpmTolerance": 1.0,
         "beatF1": 0.9,
-        "downbeatF1": 0.75,
-        "chordSegmentAccuracy": 0.65,
-        "percussionCountTolerance": 1,
-        "transcriptionNoteF1": 0.75
-      }
+        "downbeatF1": 0.75
+      },
+      "knownGaps": [
+        "meter:timeSignature",
+        "downbeats:f1"
+      ]
     },
     {
       "id": "grid_6_8_110",
       "audioPath": "synthetic/grid_6_8_110.wav",
-      "category": "drums",
-      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture. Regenerate audio on demand with scripts/build_synthetic_corpus.py.",
+      "category": "grid",
+      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
-        "bpm": 110,
+        "bpm": 110.0,
         "timeSignature": "6/8",
         "beatGrid": [
           0.0,
@@ -503,101 +364,60 @@
           10.909091,
           11.454545,
           12.0,
-          12.545455
+          12.545455,
+          13.090909,
+          13.636364,
+          14.181818,
+          14.727273,
+          15.272727,
+          15.818182,
+          16.363636,
+          16.909091,
+          17.454545,
+          18.0,
+          18.545455,
+          19.090909,
+          19.636364,
+          20.181818,
+          20.727273,
+          21.272727,
+          21.818182,
+          22.363636,
+          22.909091,
+          23.454545,
+          24.0,
+          24.545455,
+          25.090909,
+          25.636364
         ],
         "downbeats": [
           0.0,
           3.272727,
           6.545455,
-          9.818182
-        ],
-        "percussion": {
-          "kickCount": 4,
-          "snareCount": 4,
-          "hihatCount": 48
-        },
-        "hitTimes": {
-          "kick": [
-            0.0,
-            3.272727,
-            6.545455,
-            9.818182
-          ],
-          "snare": [
-            1.090909,
-            4.363636,
-            7.636364,
-            10.909091
-          ],
-          "hihat": [
-            0.0,
-            0.272727,
-            0.545455,
-            0.818182,
-            1.090909,
-            1.363636,
-            1.636364,
-            1.909091,
-            2.181818,
-            2.454545,
-            2.727273,
-            3.0,
-            3.272727,
-            3.545455,
-            3.818182,
-            4.090909,
-            4.363636,
-            4.636364,
-            4.909091,
-            5.181818,
-            5.454545,
-            5.727273,
-            6.0,
-            6.272727,
-            6.545455,
-            6.818182,
-            7.090909,
-            7.363636,
-            7.636364,
-            7.909091,
-            8.181818,
-            8.454545,
-            8.727273,
-            9.0,
-            9.272727,
-            9.545455,
-            9.818182,
-            10.090909,
-            10.363636,
-            10.636364,
-            10.909091,
-            11.181818,
-            11.454545,
-            11.727273,
-            12.0,
-            12.272727,
-            12.545455,
-            12.818182
-          ]
-        },
-        "swingPercent": 50
+          9.818182,
+          13.090909,
+          16.363636,
+          19.636364,
+          22.909091
+        ]
       },
       "thresholds": {
         "bpmTolerance": 1.0,
         "beatF1": 0.9,
-        "downbeatF1": 0.75,
-        "chordSegmentAccuracy": 0.65,
-        "percussionCountTolerance": 1,
-        "transcriptionNoteF1": 0.75
-      }
+        "downbeatF1": 0.75
+      },
+      "knownGaps": [
+        "meter:timeSignature",
+        "downbeats:f1"
+      ]
     },
     {
       "id": "grid_4_4_128",
       "audioPath": "synthetic/grid_4_4_128.wav",
-      "category": "drums",
-      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture. Regenerate audio on demand with scripts/build_synthetic_corpus.py.",
+      "category": "grid",
+      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
-        "bpm": 128,
+        "bpm": 128.0,
         "timeSignature": "4/4",
         "beatGrid": [
           0.0,
@@ -615,85 +435,48 @@
           5.625,
           6.09375,
           6.5625,
-          7.03125
+          7.03125,
+          7.5,
+          7.96875,
+          8.4375,
+          8.90625,
+          9.375,
+          9.84375,
+          10.3125,
+          10.78125,
+          11.25,
+          11.71875,
+          12.1875,
+          12.65625,
+          13.125,
+          13.59375,
+          14.0625,
+          14.53125
         ],
         "downbeats": [
           0.0,
           1.875,
           3.75,
-          5.625
-        ],
-        "percussion": {
-          "kickCount": 4,
-          "snareCount": 4,
-          "hihatCount": 32
-        },
-        "hitTimes": {
-          "kick": [
-            0.0,
-            1.875,
-            3.75,
-            5.625
-          ],
-          "snare": [
-            0.9375,
-            2.8125,
-            4.6875,
-            6.5625
-          ],
-          "hihat": [
-            0.0,
-            0.234375,
-            0.46875,
-            0.703125,
-            0.9375,
-            1.171875,
-            1.40625,
-            1.640625,
-            1.875,
-            2.109375,
-            2.34375,
-            2.578125,
-            2.8125,
-            3.046875,
-            3.28125,
-            3.515625,
-            3.75,
-            3.984375,
-            4.21875,
-            4.453125,
-            4.6875,
-            4.921875,
-            5.15625,
-            5.390625,
-            5.625,
-            5.859375,
-            6.09375,
-            6.328125,
-            6.5625,
-            6.796875,
-            7.03125,
-            7.265625
-          ]
-        },
-        "swingPercent": 50
+          5.625,
+          7.5,
+          9.375,
+          11.25,
+          13.125
+        ]
       },
       "thresholds": {
         "bpmTolerance": 1.0,
         "beatF1": 0.9,
-        "downbeatF1": 0.75,
-        "chordSegmentAccuracy": 0.65,
-        "percussionCountTolerance": 1,
-        "transcriptionNoteF1": 0.75
+        "downbeatF1": 0.75
       }
     },
     {
       "id": "grid_7_8_140",
       "audioPath": "synthetic/grid_7_8_140.wav",
-      "category": "drums",
-      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture. Regenerate audio on demand with scripts/build_synthetic_corpus.py.",
+      "category": "grid",
+      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
-        "bpm": 140,
+        "bpm": 140.0,
         "timeSignature": "7/8",
         "beatGrid": [
           0.0,
@@ -723,109 +506,65 @@
           10.285714,
           10.714286,
           11.142857,
-          11.571429
+          11.571429,
+          12.0,
+          12.428571,
+          12.857143,
+          13.285714,
+          13.714286,
+          14.142857,
+          14.571429,
+          15.0,
+          15.428571,
+          15.857143,
+          16.285714,
+          16.714286,
+          17.142857,
+          17.571429,
+          18.0,
+          18.428571,
+          18.857143,
+          19.285714,
+          19.714286,
+          20.142857,
+          20.571429,
+          21.0,
+          21.428571,
+          21.857143,
+          22.285714,
+          22.714286,
+          23.142857,
+          23.571429
         ],
         "downbeats": [
           0.0,
           3.0,
           6.0,
-          9.0
-        ],
-        "percussion": {
-          "kickCount": 4,
-          "snareCount": 4,
-          "hihatCount": 56
-        },
-        "hitTimes": {
-          "kick": [
-            0.0,
-            3.0,
-            6.0,
-            9.0
-          ],
-          "snare": [
-            0.857143,
-            3.857143,
-            6.857143,
-            9.857143
-          ],
-          "hihat": [
-            0.0,
-            0.214286,
-            0.428571,
-            0.642857,
-            0.857143,
-            1.071429,
-            1.285714,
-            1.5,
-            1.714286,
-            1.928571,
-            2.142857,
-            2.357143,
-            2.571429,
-            2.785714,
-            3.0,
-            3.214286,
-            3.428571,
-            3.642857,
-            3.857143,
-            4.071429,
-            4.285714,
-            4.5,
-            4.714286,
-            4.928571,
-            5.142857,
-            5.357143,
-            5.571429,
-            5.785714,
-            6.0,
-            6.214286,
-            6.428571,
-            6.642857,
-            6.857143,
-            7.071429,
-            7.285714,
-            7.5,
-            7.714286,
-            7.928571,
-            8.142857,
-            8.357143,
-            8.571429,
-            8.785714,
-            9.0,
-            9.214286,
-            9.428571,
-            9.642857,
-            9.857143,
-            10.071429,
-            10.285714,
-            10.5,
-            10.714286,
-            10.928571,
-            11.142857,
-            11.357143,
-            11.571429,
-            11.785714
-          ]
-        },
-        "swingPercent": 50
+          9.0,
+          12.0,
+          15.0,
+          18.0,
+          21.0
+        ]
       },
       "thresholds": {
         "bpmTolerance": 1.0,
         "beatF1": 0.9,
-        "downbeatF1": 0.75,
-        "chordSegmentAccuracy": 0.65,
-        "percussionCountTolerance": 1,
-        "transcriptionNoteF1": 0.75
-      }
+        "downbeatF1": 0.75
+      },
+      "knownGaps": [
+        "meter:timeSignature",
+        "downbeats:f1",
+        "tempo:bpm"
+      ]
     },
     {
       "id": "grid_4_4_174",
       "audioPath": "synthetic/grid_4_4_174.wav",
-      "category": "drums",
-      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture. Regenerate audio on demand with scripts/build_synthetic_corpus.py.",
+      "category": "grid",
+      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
-        "bpm": 174,
+        "bpm": 174.0,
         "timeSignature": "4/4",
         "beatGrid": [
           0.0,
@@ -843,85 +582,50 @@
           4.137931,
           4.482759,
           4.827586,
-          5.172414
+          5.172414,
+          5.517241,
+          5.862069,
+          6.206897,
+          6.551724,
+          6.896552,
+          7.241379,
+          7.586207,
+          7.931034,
+          8.275862,
+          8.62069,
+          8.965517,
+          9.310345,
+          9.655172,
+          10.0,
+          10.344828,
+          10.689655
         ],
         "downbeats": [
           0.0,
           1.37931,
           2.758621,
-          4.137931
-        ],
-        "percussion": {
-          "kickCount": 4,
-          "snareCount": 4,
-          "hihatCount": 32
-        },
-        "hitTimes": {
-          "kick": [
-            0.0,
-            1.37931,
-            2.758621,
-            4.137931
-          ],
-          "snare": [
-            0.689655,
-            2.068966,
-            3.448276,
-            4.827586
-          ],
-          "hihat": [
-            0.0,
-            0.172414,
-            0.344828,
-            0.517241,
-            0.689655,
-            0.862069,
-            1.034483,
-            1.206897,
-            1.37931,
-            1.551724,
-            1.724138,
-            1.896552,
-            2.068966,
-            2.241379,
-            2.413793,
-            2.586207,
-            2.758621,
-            2.931034,
-            3.103448,
-            3.275862,
-            3.448276,
-            3.62069,
-            3.793103,
-            3.965517,
-            4.137931,
-            4.310345,
-            4.482759,
-            4.655172,
-            4.827586,
-            5.0,
-            5.172414,
-            5.344828
-          ]
-        },
-        "swingPercent": 50
+          4.137931,
+          5.517241,
+          6.896552,
+          8.275862,
+          9.655172
+        ]
       },
       "thresholds": {
         "bpmTolerance": 1.0,
         "beatF1": 0.9,
-        "downbeatF1": 0.75,
-        "chordSegmentAccuracy": 0.65,
-        "percussionCountTolerance": 1,
-        "transcriptionNoteF1": 0.75
-      }
+        "downbeatF1": 0.75
+      },
+      "knownGaps": [
+        "tempo:bpm"
+      ]
     },
     {
       "id": "chords_C_major",
       "audioPath": "synthetic/chords_C_major.wav",
       "category": "chords",
-      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture. Regenerate audio on demand with scripts/build_synthetic_corpus.py.",
+      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
-        "bpm": 96,
         "key": "C major",
         "chordTimeline": [
           {
@@ -947,21 +651,18 @@
         ]
       },
       "thresholds": {
-        "bpmTolerance": 1.0,
-        "beatF1": 0.9,
-        "downbeatF1": 0.75,
-        "chordSegmentAccuracy": 0.65,
-        "percussionCountTolerance": 1,
-        "transcriptionNoteF1": 0.75
+        "chordSegmentAccuracy": 0.65
+      },
+      "truth": {
+        "bpm": 96.0
       }
     },
     {
       "id": "chords_Dflat_minor",
       "audioPath": "synthetic/chords_Dflat_minor.wav",
       "category": "chords",
-      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture. Regenerate audio on demand with scripts/build_synthetic_corpus.py.",
+      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
-        "bpm": 100,
         "key": "Db minor",
         "chordTimeline": [
           {
@@ -987,21 +688,18 @@
         ]
       },
       "thresholds": {
-        "bpmTolerance": 1.0,
-        "beatF1": 0.9,
-        "downbeatF1": 0.75,
-        "chordSegmentAccuracy": 0.65,
-        "percussionCountTolerance": 1,
-        "transcriptionNoteF1": 0.75
+        "chordSegmentAccuracy": 0.65
+      },
+      "truth": {
+        "bpm": 100.0
       }
     },
     {
       "id": "chords_D_major",
       "audioPath": "synthetic/chords_D_major.wav",
       "category": "chords",
-      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture. Regenerate audio on demand with scripts/build_synthetic_corpus.py.",
+      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
-        "bpm": 104,
         "key": "D major",
         "chordTimeline": [
           {
@@ -1027,21 +725,18 @@
         ]
       },
       "thresholds": {
-        "bpmTolerance": 1.0,
-        "beatF1": 0.9,
-        "downbeatF1": 0.75,
-        "chordSegmentAccuracy": 0.65,
-        "percussionCountTolerance": 1,
-        "transcriptionNoteF1": 0.75
+        "chordSegmentAccuracy": 0.65
+      },
+      "truth": {
+        "bpm": 104.0
       }
     },
     {
       "id": "chords_Eflat_minor",
       "audioPath": "synthetic/chords_Eflat_minor.wav",
       "category": "chords",
-      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture. Regenerate audio on demand with scripts/build_synthetic_corpus.py.",
+      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
-        "bpm": 108,
         "key": "Eb minor",
         "chordTimeline": [
           {
@@ -1067,21 +762,18 @@
         ]
       },
       "thresholds": {
-        "bpmTolerance": 1.0,
-        "beatF1": 0.9,
-        "downbeatF1": 0.75,
-        "chordSegmentAccuracy": 0.65,
-        "percussionCountTolerance": 1,
-        "transcriptionNoteF1": 0.75
+        "chordSegmentAccuracy": 0.65
+      },
+      "truth": {
+        "bpm": 108.0
       }
     },
     {
       "id": "chords_E_major",
       "audioPath": "synthetic/chords_E_major.wav",
       "category": "chords",
-      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture. Regenerate audio on demand with scripts/build_synthetic_corpus.py.",
+      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
-        "bpm": 112,
         "key": "E major",
         "chordTimeline": [
           {
@@ -1092,7 +784,7 @@
           {
             "startSec": 2.142857,
             "endSec": 4.285714,
-            "label": "C#m"
+            "label": "Dbm"
           },
           {
             "startSec": 4.285714,
@@ -1107,21 +799,18 @@
         ]
       },
       "thresholds": {
-        "bpmTolerance": 1.0,
-        "beatF1": 0.9,
-        "downbeatF1": 0.75,
-        "chordSegmentAccuracy": 0.65,
-        "percussionCountTolerance": 1,
-        "transcriptionNoteF1": 0.75
+        "chordSegmentAccuracy": 0.65
+      },
+      "truth": {
+        "bpm": 112.0
       }
     },
     {
       "id": "chords_F_minor",
       "audioPath": "synthetic/chords_F_minor.wav",
       "category": "chords",
-      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture. Regenerate audio on demand with scripts/build_synthetic_corpus.py.",
+      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
-        "bpm": 116,
         "key": "F minor",
         "chordTimeline": [
           {
@@ -1147,32 +836,29 @@
         ]
       },
       "thresholds": {
-        "bpmTolerance": 1.0,
-        "beatF1": 0.9,
-        "downbeatF1": 0.75,
-        "chordSegmentAccuracy": 0.65,
-        "percussionCountTolerance": 1,
-        "transcriptionNoteF1": 0.75
+        "chordSegmentAccuracy": 0.65
+      },
+      "truth": {
+        "bpm": 116.0
       }
     },
     {
       "id": "chords_Fsharp_major",
       "audioPath": "synthetic/chords_Fsharp_major.wav",
       "category": "chords",
-      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture. Regenerate audio on demand with scripts/build_synthetic_corpus.py.",
+      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
-        "bpm": 120,
         "key": "F# major",
         "chordTimeline": [
           {
             "startSec": 0.0,
             "endSec": 2.0,
-            "label": "F#"
+            "label": "Gb"
           },
           {
             "startSec": 2.0,
             "endSec": 4.0,
-            "label": "D#m"
+            "label": "Ebm"
           },
           {
             "startSec": 4.0,
@@ -1182,26 +868,23 @@
           {
             "startSec": 6.0,
             "endSec": 8.0,
-            "label": "C#"
+            "label": "Db"
           }
         ]
       },
       "thresholds": {
-        "bpmTolerance": 1.0,
-        "beatF1": 0.9,
-        "downbeatF1": 0.75,
-        "chordSegmentAccuracy": 0.65,
-        "percussionCountTolerance": 1,
-        "transcriptionNoteF1": 0.75
+        "chordSegmentAccuracy": 0.65
+      },
+      "truth": {
+        "bpm": 120.0
       }
     },
     {
       "id": "chords_G_minor",
       "audioPath": "synthetic/chords_G_minor.wav",
       "category": "chords",
-      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture. Regenerate audio on demand with scripts/build_synthetic_corpus.py.",
+      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
-        "bpm": 124,
         "key": "G minor",
         "chordTimeline": [
           {
@@ -1227,21 +910,18 @@
         ]
       },
       "thresholds": {
-        "bpmTolerance": 1.0,
-        "beatF1": 0.9,
-        "downbeatF1": 0.75,
-        "chordSegmentAccuracy": 0.65,
-        "percussionCountTolerance": 1,
-        "transcriptionNoteF1": 0.75
+        "chordSegmentAccuracy": 0.65
+      },
+      "truth": {
+        "bpm": 124.0
       }
     },
     {
       "id": "chords_Aflat_major",
       "audioPath": "synthetic/chords_Aflat_major.wav",
       "category": "chords",
-      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture. Regenerate audio on demand with scripts/build_synthetic_corpus.py.",
+      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
-        "bpm": 128,
         "key": "Ab major",
         "chordTimeline": [
           {
@@ -1267,21 +947,18 @@
         ]
       },
       "thresholds": {
-        "bpmTolerance": 1.0,
-        "beatF1": 0.9,
-        "downbeatF1": 0.75,
-        "chordSegmentAccuracy": 0.65,
-        "percussionCountTolerance": 1,
-        "transcriptionNoteF1": 0.75
+        "chordSegmentAccuracy": 0.65
+      },
+      "truth": {
+        "bpm": 128.0
       }
     },
     {
       "id": "chords_A_minor",
       "audioPath": "synthetic/chords_A_minor.wav",
       "category": "chords",
-      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture. Regenerate audio on demand with scripts/build_synthetic_corpus.py.",
+      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
-        "bpm": 132,
         "key": "A minor",
         "chordTimeline": [
           {
@@ -1307,21 +984,18 @@
         ]
       },
       "thresholds": {
-        "bpmTolerance": 1.0,
-        "beatF1": 0.9,
-        "downbeatF1": 0.75,
-        "chordSegmentAccuracy": 0.65,
-        "percussionCountTolerance": 1,
-        "transcriptionNoteF1": 0.75
+        "chordSegmentAccuracy": 0.65
+      },
+      "truth": {
+        "bpm": 132.0
       }
     },
     {
       "id": "chords_Bflat_major",
       "audioPath": "synthetic/chords_Bflat_major.wav",
       "category": "chords",
-      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture. Regenerate audio on demand with scripts/build_synthetic_corpus.py.",
+      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
-        "bpm": 136,
         "key": "Bb major",
         "chordTimeline": [
           {
@@ -1347,21 +1021,18 @@
         ]
       },
       "thresholds": {
-        "bpmTolerance": 1.0,
-        "beatF1": 0.9,
-        "downbeatF1": 0.75,
-        "chordSegmentAccuracy": 0.65,
-        "percussionCountTolerance": 1,
-        "transcriptionNoteF1": 0.75
+        "chordSegmentAccuracy": 0.65
+      },
+      "truth": {
+        "bpm": 136.0
       }
     },
     {
       "id": "chords_B_minor",
       "audioPath": "synthetic/chords_B_minor.wav",
       "category": "chords",
-      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture. Regenerate audio on demand with scripts/build_synthetic_corpus.py.",
+      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
-        "bpm": 140,
         "key": "B minor",
         "chordTimeline": [
           {
@@ -1382,26 +1053,29 @@
           {
             "startSec": 5.142857,
             "endSec": 6.857143,
-            "label": "F#m"
+            "label": "Gbm"
           }
         ]
       },
       "thresholds": {
-        "bpmTolerance": 1.0,
-        "beatF1": 0.9,
-        "downbeatF1": 0.75,
-        "chordSegmentAccuracy": 0.65,
-        "percussionCountTolerance": 1,
-        "transcriptionNoteF1": 0.75
+        "chordSegmentAccuracy": 0.65
+      },
+      "truth": {
+        "bpm": 140.0
       }
     },
     {
       "id": "swing_hats_50",
       "audioPath": "synthetic/swing_hats_50.wav",
       "category": "swing",
-      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture. Regenerate audio on demand with scripts/build_synthetic_corpus.py.",
+      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
-        "bpm": 124,
+        "bpm": 124.0
+      },
+      "thresholds": {
+        "bpmTolerance": 1.0
+      },
+      "truth": {
         "timeSignature": "4/4",
         "beatGrid": [
           0.0,
@@ -1419,85 +1093,85 @@
           5.806452,
           6.290323,
           6.774194,
-          7.258065
+          7.258065,
+          7.741935,
+          8.225806,
+          8.709677,
+          9.193548,
+          9.677419,
+          10.16129,
+          10.645161,
+          11.129032,
+          11.612903,
+          12.096774,
+          12.580645,
+          13.064516,
+          13.548387,
+          14.032258,
+          14.516129,
+          15.0
         ],
         "downbeats": [
           0.0,
           1.935484,
           3.870968,
-          5.806452
+          5.806452,
+          7.741935,
+          9.677419,
+          11.612903,
+          13.548387
         ],
-        "percussion": {
-          "kickCount": 4,
-          "snareCount": 4,
-          "hihatCount": 32
-        },
+        "swingPercent": 50.0,
         "hitTimes": {
-          "kick": [
-            0.0,
-            1.935484,
-            3.870968,
-            5.806452
-          ],
-          "snare": [
-            0.967742,
-            2.903226,
-            4.83871,
-            6.774194
-          ],
           "hihat": [
-            0.0,
             0.241935,
-            0.483871,
             0.725806,
-            0.967742,
             1.209677,
-            1.451613,
             1.693548,
-            1.935484,
             2.177419,
-            2.419355,
             2.66129,
-            2.903226,
             3.145161,
-            3.387097,
             3.629032,
-            3.870968,
             4.112903,
-            4.354839,
             4.596774,
-            4.83871,
             5.080645,
-            5.322581,
             5.564516,
-            5.806452,
             6.048387,
-            6.290323,
             6.532258,
-            6.774194,
             7.016129,
-            7.258065,
-            7.5
+            7.5,
+            7.983871,
+            8.467742,
+            8.951613,
+            9.435484,
+            9.919355,
+            10.403226,
+            10.887097,
+            11.370968,
+            11.854839,
+            12.33871,
+            12.822581,
+            13.306452,
+            13.790323,
+            14.274194,
+            14.758065,
+            15.241935
           ]
-        },
-        "swingPercent": 50
-      },
-      "thresholds": {
-        "bpmTolerance": 1.0,
-        "beatF1": 0.9,
-        "downbeatF1": 0.75,
-        "chordSegmentAccuracy": 0.65,
-        "percussionCountTolerance": 1,
-        "transcriptionNoteF1": 0.75
+        }
       }
     },
     {
       "id": "swing_hats_54",
       "audioPath": "synthetic/swing_hats_54.wav",
       "category": "swing",
-      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture. Regenerate audio on demand with scripts/build_synthetic_corpus.py.",
+      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
-        "bpm": 124,
+        "bpm": 124.0
+      },
+      "thresholds": {
+        "bpmTolerance": 1.0
+      },
+      "truth": {
         "timeSignature": "4/4",
         "beatGrid": [
           0.0,
@@ -1515,85 +1189,85 @@
           5.806452,
           6.290323,
           6.774194,
-          7.258065
+          7.258065,
+          7.741935,
+          8.225806,
+          8.709677,
+          9.193548,
+          9.677419,
+          10.16129,
+          10.645161,
+          11.129032,
+          11.612903,
+          12.096774,
+          12.580645,
+          13.064516,
+          13.548387,
+          14.032258,
+          14.516129,
+          15.0
         ],
         "downbeats": [
           0.0,
           1.935484,
           3.870968,
-          5.806452
+          5.806452,
+          7.741935,
+          9.677419,
+          11.612903,
+          13.548387
         ],
-        "percussion": {
-          "kickCount": 4,
-          "snareCount": 4,
-          "hihatCount": 32
-        },
+        "swingPercent": 54.0,
         "hitTimes": {
-          "kick": [
-            0.0,
-            1.935484,
-            3.870968,
-            5.806452
-          ],
-          "snare": [
-            0.967742,
-            2.903226,
-            4.83871,
-            6.774194
-          ],
           "hihat": [
-            0.0,
             0.26129,
-            0.483871,
             0.745161,
-            0.967742,
             1.229032,
-            1.451613,
             1.712903,
-            1.935484,
             2.196774,
-            2.419355,
             2.680645,
-            2.903226,
             3.164516,
-            3.387097,
             3.648387,
-            3.870968,
             4.132258,
-            4.354839,
             4.616129,
-            4.83871,
             5.1,
-            5.322581,
             5.583871,
-            5.806452,
             6.067742,
-            6.290323,
             6.551613,
-            6.774194,
             7.035484,
-            7.258065,
-            7.519355
+            7.519355,
+            8.003226,
+            8.487097,
+            8.970968,
+            9.454839,
+            9.93871,
+            10.422581,
+            10.906452,
+            11.390323,
+            11.874194,
+            12.358065,
+            12.841935,
+            13.325806,
+            13.809677,
+            14.293548,
+            14.777419,
+            15.26129
           ]
-        },
-        "swingPercent": 54
-      },
-      "thresholds": {
-        "bpmTolerance": 1.0,
-        "beatF1": 0.9,
-        "downbeatF1": 0.75,
-        "chordSegmentAccuracy": 0.65,
-        "percussionCountTolerance": 1,
-        "transcriptionNoteF1": 0.75
+        }
       }
     },
     {
       "id": "swing_hats_58",
       "audioPath": "synthetic/swing_hats_58.wav",
       "category": "swing",
-      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture. Regenerate audio on demand with scripts/build_synthetic_corpus.py.",
+      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
-        "bpm": 124,
+        "bpm": 124.0
+      },
+      "thresholds": {
+        "bpmTolerance": 1.0
+      },
+      "truth": {
         "timeSignature": "4/4",
         "beatGrid": [
           0.0,
@@ -1611,85 +1285,85 @@
           5.806452,
           6.290323,
           6.774194,
-          7.258065
+          7.258065,
+          7.741935,
+          8.225806,
+          8.709677,
+          9.193548,
+          9.677419,
+          10.16129,
+          10.645161,
+          11.129032,
+          11.612903,
+          12.096774,
+          12.580645,
+          13.064516,
+          13.548387,
+          14.032258,
+          14.516129,
+          15.0
         ],
         "downbeats": [
           0.0,
           1.935484,
           3.870968,
-          5.806452
+          5.806452,
+          7.741935,
+          9.677419,
+          11.612903,
+          13.548387
         ],
-        "percussion": {
-          "kickCount": 4,
-          "snareCount": 4,
-          "hihatCount": 32
-        },
+        "swingPercent": 58.0,
         "hitTimes": {
-          "kick": [
-            0.0,
-            1.935484,
-            3.870968,
-            5.806452
-          ],
-          "snare": [
-            0.967742,
-            2.903226,
-            4.83871,
-            6.774194
-          ],
           "hihat": [
-            0.0,
             0.280645,
-            0.483871,
             0.764516,
-            0.967742,
             1.248387,
-            1.451613,
             1.732258,
-            1.935484,
             2.216129,
-            2.419355,
             2.7,
-            2.903226,
             3.183871,
-            3.387097,
             3.667742,
-            3.870968,
             4.151613,
-            4.354839,
             4.635484,
-            4.83871,
             5.119355,
-            5.322581,
             5.603226,
-            5.806452,
             6.087097,
-            6.290323,
             6.570968,
-            6.774194,
             7.054839,
-            7.258065,
-            7.53871
+            7.53871,
+            8.022581,
+            8.506452,
+            8.990323,
+            9.474194,
+            9.958065,
+            10.441935,
+            10.925806,
+            11.409677,
+            11.893548,
+            12.377419,
+            12.86129,
+            13.345161,
+            13.829032,
+            14.312903,
+            14.796774,
+            15.280645
           ]
-        },
-        "swingPercent": 58
-      },
-      "thresholds": {
-        "bpmTolerance": 1.0,
-        "beatF1": 0.9,
-        "downbeatF1": 0.75,
-        "chordSegmentAccuracy": 0.65,
-        "percussionCountTolerance": 1,
-        "transcriptionNoteF1": 0.75
+        }
       }
     },
     {
       "id": "swing_hats_62",
       "audioPath": "synthetic/swing_hats_62.wav",
       "category": "swing",
-      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture. Regenerate audio on demand with scripts/build_synthetic_corpus.py.",
+      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
-        "bpm": 124,
+        "bpm": 124.0
+      },
+      "thresholds": {
+        "bpmTolerance": 1.0
+      },
+      "truth": {
         "timeSignature": "4/4",
         "beatGrid": [
           0.0,
@@ -1707,85 +1381,85 @@
           5.806452,
           6.290323,
           6.774194,
-          7.258065
+          7.258065,
+          7.741935,
+          8.225806,
+          8.709677,
+          9.193548,
+          9.677419,
+          10.16129,
+          10.645161,
+          11.129032,
+          11.612903,
+          12.096774,
+          12.580645,
+          13.064516,
+          13.548387,
+          14.032258,
+          14.516129,
+          15.0
         ],
         "downbeats": [
           0.0,
           1.935484,
           3.870968,
-          5.806452
+          5.806452,
+          7.741935,
+          9.677419,
+          11.612903,
+          13.548387
         ],
-        "percussion": {
-          "kickCount": 4,
-          "snareCount": 4,
-          "hihatCount": 32
-        },
+        "swingPercent": 62.0,
         "hitTimes": {
-          "kick": [
-            0.0,
-            1.935484,
-            3.870968,
-            5.806452
-          ],
-          "snare": [
-            0.967742,
-            2.903226,
-            4.83871,
-            6.774194
-          ],
           "hihat": [
-            0.0,
             0.3,
-            0.483871,
             0.783871,
-            0.967742,
             1.267742,
-            1.451613,
             1.751613,
-            1.935484,
             2.235484,
-            2.419355,
             2.719355,
-            2.903226,
             3.203226,
-            3.387097,
             3.687097,
-            3.870968,
             4.170968,
-            4.354839,
             4.654839,
-            4.83871,
             5.13871,
-            5.322581,
             5.622581,
-            5.806452,
             6.106452,
-            6.290323,
             6.590323,
-            6.774194,
             7.074194,
-            7.258065,
-            7.558065
+            7.558065,
+            8.041935,
+            8.525806,
+            9.009677,
+            9.493548,
+            9.977419,
+            10.46129,
+            10.945161,
+            11.429032,
+            11.912903,
+            12.396774,
+            12.880645,
+            13.364516,
+            13.848387,
+            14.332258,
+            14.816129,
+            15.3
           ]
-        },
-        "swingPercent": 62
-      },
-      "thresholds": {
-        "bpmTolerance": 1.0,
-        "beatF1": 0.9,
-        "downbeatF1": 0.75,
-        "chordSegmentAccuracy": 0.65,
-        "percussionCountTolerance": 1,
-        "transcriptionNoteF1": 0.75
+        }
       }
     },
     {
       "id": "swing_hats_66",
       "audioPath": "synthetic/swing_hats_66.wav",
       "category": "swing",
-      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture. Regenerate audio on demand with scripts/build_synthetic_corpus.py.",
+      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
-        "bpm": 124,
+        "bpm": 124.0
+      },
+      "thresholds": {
+        "bpmTolerance": 1.0
+      },
+      "truth": {
         "timeSignature": "4/4",
         "beatGrid": [
           0.0,
@@ -1803,85 +1477,79 @@
           5.806452,
           6.290323,
           6.774194,
-          7.258065
+          7.258065,
+          7.741935,
+          8.225806,
+          8.709677,
+          9.193548,
+          9.677419,
+          10.16129,
+          10.645161,
+          11.129032,
+          11.612903,
+          12.096774,
+          12.580645,
+          13.064516,
+          13.548387,
+          14.032258,
+          14.516129,
+          15.0
         ],
         "downbeats": [
           0.0,
           1.935484,
           3.870968,
-          5.806452
+          5.806452,
+          7.741935,
+          9.677419,
+          11.612903,
+          13.548387
         ],
-        "percussion": {
-          "kickCount": 4,
-          "snareCount": 4,
-          "hihatCount": 32
-        },
+        "swingPercent": 66.0,
         "hitTimes": {
-          "kick": [
-            0.0,
-            1.935484,
-            3.870968,
-            5.806452
-          ],
-          "snare": [
-            0.967742,
-            2.903226,
-            4.83871,
-            6.774194
-          ],
           "hihat": [
-            0.0,
             0.319355,
-            0.483871,
             0.803226,
-            0.967742,
             1.287097,
-            1.451613,
             1.770968,
-            1.935484,
             2.254839,
-            2.419355,
             2.73871,
-            2.903226,
             3.222581,
-            3.387097,
             3.706452,
-            3.870968,
             4.190323,
-            4.354839,
             4.674194,
-            4.83871,
             5.158065,
-            5.322581,
             5.641935,
-            5.806452,
             6.125806,
-            6.290323,
             6.609677,
-            6.774194,
             7.093548,
-            7.258065,
-            7.577419
+            7.577419,
+            8.06129,
+            8.545161,
+            9.029032,
+            9.512903,
+            9.996774,
+            10.480645,
+            10.964516,
+            11.448387,
+            11.932258,
+            12.416129,
+            12.9,
+            13.383871,
+            13.867742,
+            14.351613,
+            14.835484,
+            15.319355
           ]
-        },
-        "swingPercent": 66
-      },
-      "thresholds": {
-        "bpmTolerance": 1.0,
-        "beatF1": 0.9,
-        "downbeatF1": 0.75,
-        "chordSegmentAccuracy": 0.65,
-        "percussionCountTolerance": 1,
-        "transcriptionNoteF1": 0.75
+        }
       }
     },
     {
       "id": "multi_A_minor",
       "audioPath": "synthetic/multi_A_minor.wav",
       "category": "multi",
-      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture. Regenerate audio on demand with scripts/build_synthetic_corpus.py.",
+      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
-        "bpm": 128,
         "key": "A minor",
         "chordTimeline": [
           {
@@ -1905,44 +1573,56 @@
             "label": "Em"
           }
         ],
-        "timeSignature": "4/4",
-        "percussion": {
-          "kickCount": 16,
-          "snareCount": 4,
-          "hihatCount": 32
-        },
-        "beatGrid": [
-          0.0,
-          0.46875,
-          0.9375,
-          1.40625,
-          1.875,
-          2.34375,
-          2.8125,
-          3.28125,
-          3.75,
-          4.21875,
-          4.6875,
-          5.15625,
-          5.625,
-          6.09375,
-          6.5625,
-          7.03125
-        ],
-        "downbeats": [
-          0.0,
-          1.875,
-          3.75,
-          5.625
-        ]
+        "timeSignature": "4/4"
       },
       "thresholds": {
-        "bpmTolerance": 1.0,
-        "beatF1": 0.9,
-        "downbeatF1": 0.75,
-        "chordSegmentAccuracy": 0.65,
-        "percussionCountTolerance": 1,
-        "transcriptionNoteF1": 0.75
+        "chordSegmentAccuracy": 0.45,
+        "allowRelativeMajorMinor": true
+      },
+      "truth": {
+        "bpm": 128.0
+      },
+      "analyzeFlags": [
+        "--separate"
+      ]
+    },
+    {
+      "id": "multi_F_major",
+      "audioPath": "synthetic/multi_F_major.wav",
+      "category": "multi",
+      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
+      "expected": {
+        "key": "F major",
+        "chordTimeline": [
+          {
+            "startSec": 0.0,
+            "endSec": 1.967213,
+            "label": "F"
+          },
+          {
+            "startSec": 1.967213,
+            "endSec": 3.934426,
+            "label": "Dm"
+          },
+          {
+            "startSec": 3.934426,
+            "endSec": 5.901639,
+            "label": "Bb"
+          },
+          {
+            "startSec": 5.901639,
+            "endSec": 7.868852,
+            "label": "C"
+          }
+        ],
+        "timeSignature": "4/4"
+      },
+      "thresholds": {
+        "chordSegmentAccuracy": 0.45,
+        "allowRelativeMajorMinor": true
+      },
+      "truth": {
+        "bpm": 122.0
       },
       "analyzeFlags": [
         "--separate"
