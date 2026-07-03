@@ -6,9 +6,18 @@ This directory holds the ground truth dataset used by `scripts/calibrate_confide
 
 ## Current state
 
-**Warning: this dataset is not ready for real calibration yet.** `labels.json` currently contains placeholder entries, `cache/` currently contains hand-crafted stubs that do not represent real analyzer output, and `tracks/` does not exist yet, so no audio files have been added. If you run the calibration script against this directory as-is, it aborts with exit code `1` after reporting that all tracks are being served from cache with no audio files, that the cache stubs may not represent real analysis output, and that calibration has been aborted.
+**Status: awaiting real audio.** `labels.json` contains placeholder entries
+documenting the expected schema; `tracks/` does not exist yet. The fake
+`cache/` stubs that previously lived here were deleted (2026-07-03) — they
+did not represent real analyzer output and would have silently corrupted any
+calibration report. Running `scripts/calibrate_confidence.py` against this
+directory as-is aborts with exit code `1` until audio is added.
 
-`ARTIFACT_CLEANUP_MAX` is a separate cleanup safeguard elsewhere in the backend. It is not the error message currently emitted by `scripts/calibrate_confidence.py` for this missing-audio ground truth directory.
+**Corpus strategy (accuracy program):** the calibration corpus is built from
+the synthetic fundamentals corpus (`apps/backend/scripts/build_synthetic_corpus.py`)
+plus public EDM previews (GiantSteps intake — `apps/backend/scripts/fetch_giantsteps.py`).
+The owner's personal library is NOT required. Update `labels.json` with
+human-verified values for whichever tracks are placed in `tracks/`.
 
 ## How to populate
 
