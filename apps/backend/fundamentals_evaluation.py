@@ -253,6 +253,17 @@ def _evaluate_expected(
             f"target>={threshold} actual={round(score, 4)}",
         ))
 
+    swing = expected.get("swingPercent")
+    if isinstance(swing, (int, float)):
+        tolerance = float(thresholds.get("swingTolerance", 3.0))
+        actual = _number(_nested_value(payload, "rhythmDetail.swingDetail.swingPercent"))
+        passed = actual is not None and abs(actual - float(swing)) <= tolerance
+        checks.append(FundamentalsCheck(
+            "swing:swingPercent",
+            passed,
+            f"target={swing} tolerance={tolerance} actual={actual}",
+        ))
+
     percussion = expected.get("percussion")
     if isinstance(percussion, dict):
         checks.extend(_evaluate_percussion_counts(payload, percussion, thresholds))

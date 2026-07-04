@@ -158,8 +158,12 @@ def render_grid_pattern(
     with_hats. Off-beat onsets bin ambiguously in analyze_time_signature's
     ±half-beat onset counting and corrupt the bar-length autocorrelation
     (verified: hats on every "and" flip a straight 4/4 read to 6/8 or 3/4),
-    so meter-checked clips carry the bare pulse. with_hats adds swung 8th
-    "and" hats for the swing-truth clips, whose manifest checks BPM only.
+    so meter-checked clips carry the bare pulse. with_hats adds a realistic
+    swung 8th-note hat pattern — a straight on-beat hat plus the delayed
+    off-beat "and" hat — for the swing-truth clips, whose manifest checks BPM
+    and swingPercent (the long/short 8th-interval ratio the swing measurement
+    reads). Both hats are present because the measurement keys off the
+    alternation of long and short intervals, not a single offbeat position.
     """
     beats_per_bar = _meter_beats_per_bar(meter)
     total_beats = bars * beats_per_bar
@@ -172,9 +176,10 @@ def render_grid_pattern(
         accent = beat % beats_per_bar == 0
         _overlay(buf, kick, beat * beat_s, 1.0 if accent else 0.8)
         if with_hats:
+            _overlay(buf, hat, beat * beat_s, 0.6)  # straight on-beat 8th
             and_sec = (beat + swing_percent / 100.0) * beat_s
             hat_times.append(round(and_sec, 6))
-            _overlay(buf, hat, and_sec, 0.6)
+            _overlay(buf, hat, and_sec, 0.6)  # swung off-beat 8th
 
     truth = {
         "bpm": bpm,
@@ -365,10 +370,9 @@ def _render_spec(spec: dict[str, Any]) -> RenderedClip:
 _EXPECTED_KEYS_BY_KIND: dict[str, tuple[str, ...]] = {
     "grid": ("bpm", "timeSignature", "beatGrid", "downbeats"),
     "counts": ("bpm", "percussion"),
-    # Swing clips exist to carry swing ground truth for the swing-measurement
-    # PR; their swung "and" hats corrupt the meter autocorrelation, so only
-    # BPM is an active check.
-    "swing": ("bpm",),
+    # Swing clips: their swung "and" hats corrupt the meter autocorrelation,
+    # so meter/beat checks stay off; BPM and swingPercent are the active checks.
+    "swing": ("bpm", "swingPercent"),
     "chords": ("key", "chordTimeline"),
     "multi": ("key", "chordTimeline", "timeSignature"),
     "bass": ("transcriptionNotes",),
@@ -377,7 +381,7 @@ _EXPECTED_KEYS_BY_KIND: dict[str, tuple[str, ...]] = {
 _THRESHOLDS_BY_KIND: dict[str, dict[str, Any]] = {
     "grid": {"bpmTolerance": 1.0, "beatF1": 0.9, "downbeatF1": 0.75},
     "counts": {"bpmTolerance": 1.0, "percussionCountTolerance": 1},
-    "swing": {"bpmTolerance": 1.0},
+    "swing": {"bpmTolerance": 1.0, "swingTolerance": 3.0},
     "chords": {"chordSegmentAccuracy": 0.65},
     "multi": {"chordSegmentAccuracy": 0.45, "allowRelativeMajorMinor": True},
     "bass": {"transcriptionNoteF1": 0.75},

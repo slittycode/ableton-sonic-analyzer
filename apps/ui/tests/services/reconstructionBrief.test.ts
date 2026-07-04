@@ -97,9 +97,25 @@ describe('buildReconstructionBrief', () => {
     expect(measured?.text).toBe('Measured meter: 4/4.');
   });
 
+  it('prefers the measured swing percentage over the loudness proxy', () => {
+    const swung = buildReconstructionBrief(makePhase1({
+      rhythmDetail: {
+        onsetRate: 4.2, beatGrid: [0, 0.5], downbeats: [0], beatPositions: [0, 0.5], grooveAmount: 0.4,
+        swingDetail: {
+          swingPercent: 62.0, swingConfidence: 0.9, gridResolution: '8th',
+          direction: 'swung', meanAbsOffsetMs: 14.1, offbeatOnsetCount: 30,
+        },
+      },
+    })).find((l) => l.domain === 'groove');
+    expect(swung?.text).toContain('swings at about 62%');
+    expect(swung?.phase1Fields).toContain('rhythmDetail.swingDetail.swingPercent');
+    // The old kickSwing/hihatSwing proxy is not used when swingDetail is present.
+    expect(swung?.phase1Fields).not.toContain('grooveDetail.kickSwing');
+  });
+
   it('describes swing qualitatively and skips low-confidence sidechain pumping', () => {
     const groove = buildReconstructionBrief(makePhase1()).find((l) => l.domain === 'groove');
-    // max(kickSwing 0.12, hihatSwing 0.31) > 0.3 -> noticeably swung
+    // No swingDetail -> falls back to max(kickSwing 0.12, hihatSwing 0.31) > 0.3
     expect(groove?.text).toContain('noticeably swung');
     // pumpingConfidence 0.31 < 0.5 -> no pumping claim
     expect(groove?.text).not.toContain('pumping');

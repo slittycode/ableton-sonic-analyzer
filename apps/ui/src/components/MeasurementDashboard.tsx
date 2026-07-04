@@ -1202,6 +1202,16 @@ export function MeasurementDashboard({
                   <div className="text-meta font-mono uppercase tracking-wide text-text-secondary mb-3">
                     Swing
                   </div>
+                  {phase1.rhythmDetail?.swingDetail && (
+                    <div className="mb-3 flex items-baseline justify-between gap-2 border-b border-border pb-2">
+                      <span className="text-meta font-mono uppercase tracking-[0.12em] text-text-secondary">
+                        {phase1.rhythmDetail.swingDetail.direction === 'swung' ? 'Groove Pool' : 'Grid'}
+                      </span>
+                      <span className="text-sm font-mono text-accent">
+                        {Math.round(phase1.rhythmDetail.swingDetail.swingPercent)}%
+                      </span>
+                    </div>
+                  )}
                   <div className="space-y-3">
                     {[
                       { label: 'KICK', value: phase1.grooveDetail.kickSwing, color: '#ff4444' },

@@ -1070,10 +1070,12 @@
       "category": "swing",
       "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
-        "bpm": 124.0
+        "bpm": 124.0,
+        "swingPercent": 50.0
       },
       "thresholds": {
-        "bpmTolerance": 1.0
+        "bpmTolerance": 1.0,
+        "swingTolerance": 3.0
       },
       "truth": {
         "timeSignature": "4/4",
@@ -1121,7 +1123,6 @@
           11.612903,
           13.548387
         ],
-        "swingPercent": 50.0,
         "hitTimes": {
           "hihat": [
             0.241935,
@@ -1166,10 +1167,12 @@
       "category": "swing",
       "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
-        "bpm": 124.0
+        "bpm": 124.0,
+        "swingPercent": 54.0
       },
       "thresholds": {
-        "bpmTolerance": 1.0
+        "bpmTolerance": 1.0,
+        "swingTolerance": 3.0
       },
       "truth": {
         "timeSignature": "4/4",
@@ -1217,7 +1220,6 @@
           11.612903,
           13.548387
         ],
-        "swingPercent": 54.0,
         "hitTimes": {
           "hihat": [
             0.26129,
@@ -1262,10 +1264,12 @@
       "category": "swing",
       "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
-        "bpm": 124.0
+        "bpm": 124.0,
+        "swingPercent": 58.0
       },
       "thresholds": {
-        "bpmTolerance": 1.0
+        "bpmTolerance": 1.0,
+        "swingTolerance": 3.0
       },
       "truth": {
         "timeSignature": "4/4",
@@ -1313,7 +1317,6 @@
           11.612903,
           13.548387
         ],
-        "swingPercent": 58.0,
         "hitTimes": {
           "hihat": [
             0.280645,
@@ -1358,10 +1361,12 @@
       "category": "swing",
       "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
-        "bpm": 124.0
+        "bpm": 124.0,
+        "swingPercent": 62.0
       },
       "thresholds": {
-        "bpmTolerance": 1.0
+        "bpmTolerance": 1.0,
+        "swingTolerance": 3.0
       },
       "truth": {
         "timeSignature": "4/4",
@@ -1409,7 +1414,6 @@
           11.612903,
           13.548387
         ],
-        "swingPercent": 62.0,
         "hitTimes": {
           "hihat": [
             0.3,
@@ -1454,10 +1458,12 @@
       "category": "swing",
       "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
-        "bpm": 124.0
+        "bpm": 124.0,
+        "swingPercent": 66.0
       },
       "thresholds": {
-        "bpmTolerance": 1.0
+        "bpmTolerance": 1.0,
+        "swingTolerance": 3.0
       },
       "truth": {
         "timeSignature": "4/4",
@@ -1505,7 +1511,6 @@
           11.612903,
           13.548387
         ],
-        "swingPercent": 66.0,
         "hitTimes": {
           "hihat": [
             0.319355,
