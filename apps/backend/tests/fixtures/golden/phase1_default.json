@@ -236,6 +236,18 @@
     "hihatDetail": "null",
     "key": "str",
     "keyConfidence": "number",
+    "keyEnsemble": {
+      "agreement": "number",
+      "alternates": "list",
+      "method": "str",
+      "profiles": {
+        "[]": {
+          "key": "str",
+          "profile": "str",
+          "strength": "number"
+        }
+      }
+    },
     "keyProfile": "str",
     "kickDetail": {
       "fundamentalHz": "number",
@@ -575,6 +587,7 @@
     "hihatDetail",
     "key",
     "keyConfidence",
+    "keyEnsemble",
     "keyProfile",
     "kickDetail",
     "lufsCurve",
@@ -645,6 +658,7 @@
     "hihatDetail": "null",
     "key": "str",
     "keyConfidence": "number",
+    "keyEnsemble": "dict",
     "keyProfile": "str",
     "kickDetail": "dict",
     "lufsCurve": "dict",

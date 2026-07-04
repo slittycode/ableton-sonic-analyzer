@@ -591,6 +591,9 @@ export function parsePhase1Result(value: unknown): Phase1Result {
     key: expectNullableString(phase1, "key"),
     keyConfidence: expectNumber(phase1, "keyConfidence"),
     keyProfile: toOptionalStringOrNull(phase1.keyProfile),
+    keyEnsemble: isRecord(phase1.keyEnsemble)
+      ? (phase1.keyEnsemble as unknown as Phase1Result["keyEnsemble"])
+      : null,
     tuningFrequency: toNumber(phase1.tuningFrequency),
     tuningCents: toNumber(phase1.tuningCents),
     timeSignature: expectString(phase1, "timeSignature"),
