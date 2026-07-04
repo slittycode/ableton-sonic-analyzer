@@ -52,6 +52,31 @@ class FundamentalsQualityTests(unittest.TestCase):
         self.assertEqual(quality["domains"]["percussion"]["status"], "authoritative")
         self.assertEqual(quality["domains"]["transcription"]["status"], "authoritative")
 
+    def test_meter_evidence_summarizes_candidates(self) -> None:
+        payload = {
+            "bpm": 128.0,
+            "bpmConfidence": 0.9,
+            "timeSignature": "4/4",
+            "timeSignatureSource": "onset_autocorrelation",
+            "timeSignatureConfidence": 0.6,
+            "timeSignatureCandidates": [
+                {"timeSignature": "4/4", "dominance": 1.5, "positionMeans": [2.0, 1.2, 1.4, 1.3]},
+                {"timeSignature": "3/4", "dominance": 1.2, "positionMeans": [1.8, 1.5, 1.5]},
+            ],
+        }
+        quality = build_fundamentals_quality(payload, analysis_mode="full")
+        evidence = quality["domains"]["meter"]["evidence"]
+        self.assertEqual(evidence["bestCandidate"], "4/4")
+        self.assertEqual(evidence["candidateCount"], 2)
+        self.assertAlmostEqual(evidence["margin"], 0.25, places=3)
+
+        # No candidates (fast mode / fallback) — evidence stays minimal.
+        quality = build_fundamentals_quality(
+            {"bpm": 128.0, "timeSignature": "4/4", "timeSignatureSource": "assumed_four_four"},
+            analysis_mode="fast",
+        )
+        self.assertNotIn("bestCandidate", quality["domains"]["meter"]["evidence"])
+
     def test_tempo_cross_check_agreement_settles_mid_confidence(self) -> None:
         # Two independent estimators agreeing IS the settling evidence — a
         # mid-range extractor confidence must not demote a cross-confirmed BPM.
