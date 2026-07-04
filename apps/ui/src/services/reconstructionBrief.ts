@@ -109,13 +109,24 @@ function grooveLine(phase1: Phase1Result): BriefLine | null {
   const fields = ['rhythmDetail.onsetRate'];
   const parts: string[] = [`About ${fmt(rhythm.onsetRate)} rhythmic events per second.`];
 
-  const kickSwing = phase1.grooveDetail?.kickSwing;
-  const hihatSwing = phase1.grooveDetail?.hihatSwing;
-  if (finite(kickSwing) && finite(hihatSwing)) {
-    const maxSwing = Math.max(kickSwing, hihatSwing);
-    const feel = maxSwing > 0.3 ? 'a noticeably swung feel — reach for the Groove Pool' : maxSwing > 0.1 ? 'a light swing' : 'a straight, quantized grid';
-    parts.push(`The drums have ${feel}.`);
-    fields.push('grooveDetail.kickSwing', 'grooveDetail.hihatSwing');
+  // Prefer the measured swing percentage (Groove-Pool-ready) when available;
+  // fall back to the older loudness-interval swing proxy otherwise.
+  const swing = rhythm.swingDetail;
+  if (swing && swing.direction === 'swung' && finite(swing.swingPercent)) {
+    parts.push(`The groove swings at about ${Math.round(swing.swingPercent)}% — set the Groove Pool swing to match.`);
+    fields.push('rhythmDetail.swingDetail.swingPercent');
+  } else if (swing && swing.direction === 'straight') {
+    parts.push('The groove sits on a straight, quantized grid.');
+    fields.push('rhythmDetail.swingDetail.swingPercent');
+  } else {
+    const kickSwing = phase1.grooveDetail?.kickSwing;
+    const hihatSwing = phase1.grooveDetail?.hihatSwing;
+    if (finite(kickSwing) && finite(hihatSwing)) {
+      const maxSwing = Math.max(kickSwing, hihatSwing);
+      const feel = maxSwing > 0.3 ? 'a noticeably swung feel — reach for the Groove Pool' : maxSwing > 0.1 ? 'a light swing' : 'a straight, quantized grid';
+      parts.push(`The drums have ${feel}.`);
+      fields.push('grooveDetail.kickSwing', 'grooveDetail.hihatSwing');
+    }
   }
 
   const sidechain = phase1.sidechainDetail;

@@ -373,6 +373,14 @@ export const phase1EnvelopeFixture = {
       { t: 0.0, bpm: 128.1 },
       { t: 2.0, bpm: 127.9 },
     ],
+    swingDetail: {
+      swingPercent: 58.0,
+      swingConfidence: 0.9,
+      gridResolution: '8th',
+      direction: 'swung',
+      meanAbsOffsetMs: 12.4,
+      offbeatOnsetCount: 31,
+    },
   },
   melodyDetail: {
     noteCount: 3,

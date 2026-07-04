@@ -47,10 +47,10 @@ class BuildSyntheticCorpusTests(unittest.TestCase):
         self.assertEqual(len(ids), len(set(ids)), "duplicate spec ids")
 
     def test_expected_blocks_carry_only_active_check_keys(self) -> None:
-        # Ground-truth-for-later (hitTimes, swingPercent, unchecked fields)
-        # must live under "truth", never inside "expected" — otherwise it
-        # silently becomes an uncalibrated live check the moment the harness
-        # learns the key.
+        # Ground-truth-for-later (hitTimes, unchecked fields) must live under
+        # "truth", never inside "expected" — otherwise it silently becomes an
+        # uncalibrated live check the moment the harness learns the key. Only
+        # keys in _EXPECTED_KEYS_BY_KIND for the clip kind may appear.
         with tempfile.TemporaryDirectory(prefix="asa_synth_expected_") as temp_dir:
             root = Path(temp_dir)
             manifest = root / "m.synthetic.json"
@@ -63,7 +63,6 @@ class BuildSyntheticCorpusTests(unittest.TestCase):
                     f"{track['id']} expected keys leak beyond active checks",
                 )
                 self.assertNotIn("hitTimes", track["expected"])
-                self.assertNotIn("swingPercent", track["expected"])
 
     def test_bass_and_multi_specs_get_their_analyze_flags(self) -> None:
         with tempfile.TemporaryDirectory(prefix="asa_synth_flags_") as temp_dir:

@@ -428,6 +428,13 @@ Type: `object \| null`
 | `rhythmDetail.phraseGrid.totalBars` | `int` | Total number of detected bars. | count | Track length in bars for arrangement planning. |
 | `rhythmDetail.phraseGrid.totalPhrases8Bar` | `int` | Total number of 8-bar phrases. | count | Quick structural count for electronic arrangement estimation. |
 | `rhythmDetail.tempoCurve` | `Array<{t: float, bpm: float}> \| null` | Instantaneous-BPM curve from beat ticks, smoothed with a 4-beat rolling median, downsampled to ~200 points. | seconds / BPM | Surfaces deliberate ritardando/accelerando and DJ-tool tempo blends that the single mean `bpm` scalar conflates away. Phase 2 cites this to explain tempo-modulated sections. |
+| `rhythmDetail.swingDetail` | `object \| null` | Real 8th-note swing / micro-timing from the long/short alternation of inter-onset intervals (accuracy program PR-B2). `null` when there isn't enough 8th-note activity to measure. Grid-phase-independent: keys off interval structure, not each onset's phase against the beat grid, so it survives the beat tracker anchoring "the beat" on a loud offbeat. | object | Prefer over `grooveDetail.kickSwing`/`hihatSwing` (loudness-interval proxies) when present. |
+| `rhythmDetail.swingDetail.swingPercent` | `float` | Swing ratio = long / (long + short) 8th interval, ×100. | 50-75 | Ableton Groove Pool swing scale: 50 = straight, 66.7 = full triplet swing. Drops straight into a groove template. |
+| `rhythmDetail.swingDetail.swingConfidence` | `float` | Confidence from long/short population balance and count. | 0-1 | Low values = weak or ambiguous 8th activity; hedge the swing claim. |
+| `rhythmDetail.swingDetail.gridResolution` | `string` | Grid the swing was read at. Currently always `"8th"`. | categorical | Reserved for a future 16th-note swing pass. |
+| `rhythmDetail.swingDetail.direction` | `"straight" \| "swung"` | Whether a clear long/short 8th alternation was found. | categorical | `straight` pins `swingPercent` at 50; `swung` reports the measured ratio. |
+| `rhythmDetail.swingDetail.meanAbsOffsetMs` | `float` | Mean absolute deviation of 8th intervals from the straight 0.5-beat, in ms. | milliseconds | General timing-tightness measure independent of swing direction. |
+| `rhythmDetail.swingDetail.offbeatOnsetCount` | `int` | Number of 8th-note-scale intervals the estimate is built from. | count | The evidence base behind `swingConfidence`. |
 
 Note: `rhythmDetail.beatPositions` previously referred to a truncated beat-timestamp alias. That timestamp array is now exposed as `rhythmDetail.beatGrid` for the full track.
 

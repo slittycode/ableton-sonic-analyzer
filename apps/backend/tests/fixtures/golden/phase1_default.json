@@ -315,6 +315,7 @@
         "totalBars": "number",
         "totalPhrases8Bar": "number"
       },
+      "swingDetail": "null",
       "tempoCurve": {
         "[]": {
           "bpm": "number",

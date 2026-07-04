@@ -188,6 +188,80 @@ def _compute_downbeat_phase(low_band: np.ndarray, meter: int) -> tuple[int, floa
     return phase, float(np.clip(confidence, 0.0, 1.0))
 
 
+def compute_swing_detail(
+    onset_times: np.ndarray,
+    ticks: np.ndarray,
+) -> dict | None:
+    """Real micro-timing swing from the onset inter-onset-interval pattern.
+
+    Swing delays the offbeat 8th, so a swung 8th-note stream alternates a long
+    interval (beat -> delayed "and") and a short one ("and" -> next beat) that
+    together span one beat. The swing ratio = long / (long + short): 50% is
+    straight, ~66.7% is full triplet swing — the same 50-75 scale Ableton's
+    Groove Pool uses, so ``swingPercent`` drops straight into a groove.
+
+    Working from the *intervals* between onsets rather than each onset's phase
+    against the beat grid deliberately sidesteps the grid-phase ambiguity: on
+    sparse material the beat tracker sometimes anchors "the beat" on the loud
+    offbeat hat, which would flip a phase measurement (58% read as 42%). The
+    long/short interval structure is invariant to that choice.
+
+    Returns ``None`` when there isn't enough 8th-note activity to say anything
+    honest.
+    """
+    ticks = np.asarray(ticks, dtype=np.float64)
+    onsets = np.sort(np.asarray(onset_times, dtype=np.float64))
+    if ticks.size < 3 or onsets.size < 6:
+        return None
+
+    beat_diffs = np.diff(ticks)
+    beat_diffs = beat_diffs[beat_diffs > 0]
+    if beat_diffs.size == 0:
+        return None
+    beat_dur = float(np.median(beat_diffs))
+    if beat_dur <= 0:
+        return None
+
+    # Inter-onset intervals in beats; keep the 8th-note-scale ones.
+    iois = np.diff(onsets) / beat_dur
+    eighth = iois[(iois >= 0.30) & (iois <= 0.70)]
+    if eighth.size < 4:
+        return None
+
+    long_iois = eighth[eighth > 0.53]
+    short_iois = eighth[eighth < 0.47]
+
+    if long_iois.size >= 2 and short_iois.size >= 2:
+        long_med = float(np.median(long_iois))
+        short_med = float(np.median(short_iois))
+        swing_percent = round(long_med / (long_med + short_med) * 100.0, 1)
+        direction = "swung"
+        # Confidence: long/short populations should be balanced (a real
+        # alternation) and plentiful.
+        balance = 1.0 - abs(long_iois.size - short_iois.size) / float(eighth.size)
+        count_factor = min(1.0, eighth.size / 8.0)
+        swing_confidence = round(max(0.0, balance) * count_factor, 3)
+    else:
+        # No clear long/short split — a straight 8th grid.
+        swing_percent = 50.0
+        direction = "straight"
+        count_factor = min(1.0, eighth.size / 8.0)
+        # Tighter clustering around 0.5 => more confident it's genuinely straight.
+        spread = float(np.percentile(eighth, 75) - np.percentile(eighth, 25))
+        swing_confidence = round(max(0.0, 1.0 - spread / 0.15) * count_factor, 3)
+
+    mean_abs_offset_ms = round(float(np.mean(np.abs(eighth - 0.5))) * beat_dur * 1000.0, 2)
+
+    return {
+        "swingPercent": swing_percent,
+        "swingConfidence": swing_confidence,
+        "gridResolution": "8th",
+        "direction": direction,
+        "meanAbsOffsetMs": mean_abs_offset_ms,
+        "offbeatOnsetCount": int(eighth.size),
+    }
+
+
 def analyze_rhythm_detail(
     mono: np.ndarray,
     sample_rate: int,
@@ -272,6 +346,9 @@ def analyze_rhythm_detail(
         # DJ-tool transitions that the single mean BPM scalar conflates away.
         tempo_curve = _compute_tempo_curve_from_ticks(ticks)
 
+        # Reuse the onset array already computed above (no extra DSP pass).
+        swing_detail = compute_swing_detail(onset_times, ticks)
+
         return {
             "rhythmDetail": {
                 "onsetRate": round(onset_rate, 2),
@@ -284,6 +361,7 @@ def analyze_rhythm_detail(
                 "tempoStability": tempo_stability,
                 "phraseGrid": phrase_grid,
                 "tempoCurve": tempo_curve,
+                "swingDetail": swing_detail,
             }
         }
     except Exception as e:

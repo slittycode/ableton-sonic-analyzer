@@ -322,6 +322,22 @@ export interface TempoCurvePoint {
 
 export type DownbeatSource = 'kick_accent' | 'stride';
 
+/**
+ * Real micro-timing swing (accuracy program PR-B2), measured from the
+ * long/short alternation of 8th-note inter-onset intervals. `swingPercent`
+ * is on Ableton's Groove Pool 50-75 scale (50 = straight, 66.7 = full
+ * triplet swing), so it drops straight into a groove template. `null` when
+ * there isn't enough 8th-note activity to measure.
+ */
+export interface SwingDetail {
+  swingPercent: number;
+  swingConfidence: number;
+  gridResolution: string;
+  direction: "straight" | "swung";
+  meanAbsOffsetMs: number;
+  offbeatOnsetCount: number;
+}
+
 export interface RhythmDetail {
   onsetRate: number;
   beatGrid: number[];
@@ -348,6 +364,8 @@ export interface RhythmDetail {
    * and DJ-tool transitions that the single mean BPM scalar conflates away.
    */
   tempoCurve?: TempoCurvePoint[] | null;
+  /** Real 8th-note swing / micro-timing. Null when unmeasurable. */
+  swingDetail?: SwingDetail | null;
 }
 
 export interface GrooveDetail {
