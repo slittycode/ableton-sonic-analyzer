@@ -14,7 +14,7 @@ EXPECTED_TOP_LEVEL_KEYS = {
     "fundamentalsQuality",
     "bpm", "bpmConfidence", "bpmPercival", "bpmAgreement",
     "bpmDoubletime", "bpmSource", "bpmRawOriginal",
-    "key", "keyConfidence", "keyProfile", "tuningFrequency", "tuningCents",
+    "key", "keyConfidence", "keyProfile", "keyEnsemble", "tuningFrequency", "tuningCents",
     "timeSignature", "timeSignatureSource",
     "timeSignatureConfidence", "timeSignatureCandidates",
     "durationSeconds", "sampleRate",

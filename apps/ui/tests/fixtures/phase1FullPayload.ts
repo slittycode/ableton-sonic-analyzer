@@ -140,6 +140,16 @@ export const phase1EnvelopeFixture = {
   key: 'A minor',
   keyConfidence: 0.91,
   keyProfile: 'edma',
+  keyEnsemble: {
+    method: 'profile_vote.v1',
+    agreement: 2,
+    profiles: [
+      { profile: 'edma', key: 'A minor', strength: 0.91 },
+      { profile: 'temperley', key: 'A minor', strength: 0.86 },
+      { profile: 'krumhansl', key: 'C major', strength: 0.7 },
+    ],
+    alternates: [{ key: 'C major', strength: 0.7 }],
+  },
   tuningFrequency: 440.12,
   tuningCents: 0.05,
   timeSignature: '4/4',

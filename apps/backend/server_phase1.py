@@ -196,6 +196,7 @@ def _build_phase1(payload: dict[str, Any]) -> dict[str, Any]:
         "key": _coerce_nullable_string(payload.get("key")),
         "keyConfidence": _coerce_number(payload.get("keyConfidence")),
         "keyProfile": payload.get("keyProfile"),
+        "keyEnsemble": payload.get("keyEnsemble"),
         "tuningFrequency": _coerce_nullable_number(payload.get("tuningFrequency")),
         "tuningCents": _coerce_nullable_number(payload.get("tuningCents")),
         "timeSignature": _coerce_string(payload.get("timeSignature"), "4/4"),

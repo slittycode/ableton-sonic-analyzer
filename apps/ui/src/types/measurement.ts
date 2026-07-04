@@ -656,6 +656,27 @@ export interface TimeSignatureCandidate {
   positionMeans: number[];
 }
 
+/**
+ * Multi-profile key cross-check (accuracy program PR-B3). Full mode only.
+ * EDMA stays the authoritative shipped `key`; this records what temperley
+ * and krumhansl also read, how many agree, and the distinct alternates.
+ * Surfacing-only until the GiantSteps gate proves the vote beats EDMA-alone
+ * (incorporations/key-ensemble-decision-2026-07-04.md).
+ */
+export interface KeyEnsembleProfile {
+  profile: string;
+  key: string;
+  strength: number;
+}
+
+export interface KeyEnsemble {
+  method: string;
+  /** How many profiles (0-3) match the shipped EDMA label. */
+  agreement: number;
+  profiles: KeyEnsembleProfile[];
+  alternates: Array<{ key: string; strength: number }>;
+}
+
 export type FundamentalsQualityStatus = "authoritative" | "ambiguous" | "failed" | "not_run";
 
 export interface FundamentalsQualityDomain {
@@ -692,6 +713,8 @@ export interface Phase1Result {
   key: string | null;
   keyConfidence: number;
   keyProfile?: string | null;
+  /** Full-only multi-profile key cross-check (surfacing-only). */
+  keyEnsemble?: KeyEnsemble | null;
   tuningFrequency?: number | null;
   tuningCents?: number | null;
   timeSignature: string;

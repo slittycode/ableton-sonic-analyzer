@@ -1895,6 +1895,8 @@ def main():
         "key": result.get("key"),
         "keyConfidence": result.get("keyConfidence"),
         "keyProfile": result.get("keyProfile"),
+        # Full-only (like keyProfile/tuning*): multi-profile key cross-check.
+        "keyEnsemble": result.get("keyEnsemble"),
         "tuningFrequency": result.get("tuningFrequency"),
         "tuningCents": result.get("tuningCents"),
         "timeSignature": result.get("timeSignature"),

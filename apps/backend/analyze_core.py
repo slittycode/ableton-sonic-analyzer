@@ -135,13 +135,61 @@ def analyze_bpm(
         }
 
 
+# Key profiles run in the full-mode ensemble. EDMA stays the authoritative
+# shipped label (tuned for electronic dance music); temperley and krumhansl
+# are cross-checks whose agreement calibrates confidence and whose
+# disagreements surface as alternates. Order fixed so the emitted list is
+# deterministic.
+_KEY_ENSEMBLE_PROFILES = ("edma", "temperley", "krumhansl")
+
+
+def _run_key_profile(mono: np.ndarray, profile: str) -> dict | None:
+    """Run one KeyExtractor profile → {profile, key, strength} or None on failure."""
+    try:
+        key, scale, strength = es.KeyExtractor(profileType=profile)(mono)
+        return {
+            "profile": profile,
+            "key": f"{key} {scale.capitalize()}",
+            "strength": round(float(strength), 3),
+        }
+    except Exception:
+        return None
+
+
+def _build_key_ensemble(mono: np.ndarray, primary_key: str | None) -> dict | None:
+    """Cross-check EDMA against temperley/krumhansl (accuracy program PR-B3).
+
+    Surfacing-only: records each profile's read, how many agree with the
+    shipped EDMA label, and the distinct alternates. Does NOT override the
+    shipped ``key`` — the vote is evidence until the GiantSteps gate proves it
+    beats EDMA-alone (see incorporations/key-ensemble-decision-2026-07-04.md).
+    """
+    profiles = [p for p in (_run_key_profile(mono, name) for name in _KEY_ENSEMBLE_PROFILES) if p]
+    if not profiles:
+        return None
+    agreement = sum(1 for p in profiles if primary_key is not None and p["key"] == primary_key)
+    seen: set[str] = set()
+    alternates: list[dict] = []
+    for p in profiles:
+        if p["key"] != primary_key and p["key"] not in seen:
+            seen.add(p["key"])
+            alternates.append({"key": p["key"], "strength": p["strength"]})
+    return {
+        "method": "profile_vote.v1",
+        "agreement": agreement,
+        "profiles": profiles,
+        "alternates": alternates,
+    }
+
+
 def analyze_key(mono: np.ndarray, *, include_tuning: bool = True) -> dict:
     """Extract musical key and confidence using KeyExtractor with EDMA profile.
 
     ``include_tuning`` gates the per-frame spectral-peak tuning-frequency pass,
     which is the dominant cost of key analysis on a full track. Fast mode does
     not surface ``tuningFrequency``/``tuningCents``, so it passes ``False`` to
-    skip that work while keeping the return shape identical.
+    skip that work while keeping the return shape identical. It also gates the
+    full-only ``keyEnsemble`` cross-check for the same reason.
     """
     try:
         extractor = es.KeyExtractor(profileType="edma")
@@ -157,6 +205,8 @@ def analyze_key(mono: np.ndarray, *, include_tuning: bool = True) -> dict:
             result["tuningFrequency"] = None
             result["tuningCents"] = None
             return result
+
+        result["keyEnsemble"] = _build_key_ensemble(mono, key_str)
 
         try:
             frame_size = 2048
