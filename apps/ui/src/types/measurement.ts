@@ -448,6 +448,8 @@ export interface SegmentKeyEntry {
   segmentIndex: number;
   key: string | null;
   keyConfidence?: number | null;
+  /** Which audio the per-segment key ran on (accuracy program PR-B4). */
+  source?: "full_mix" | "harmonic_stems";
 }
 
 /**
@@ -479,6 +481,12 @@ export interface ChordDetail {
   chordTimelineSource?: string | null;
   /** Phase 1.D #2: true when Viterbi's dominant matches Essentia's dominantChords[0] after enharmonic normalization. */
   chordTimelineAgreement?: boolean | null;
+  /**
+   * Which audio the chroma ran on (accuracy program PR-B4): `harmonic_stems`
+   * = bass-removed stem mix (higher chord accuracy on dense material),
+   * `full_mix` = whole track (when stems were unavailable).
+   */
+  chordSource?: "full_mix" | "harmonic_stems";
 }
 
 export interface PerceptualDetail {

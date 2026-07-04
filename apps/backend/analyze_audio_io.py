@@ -47,6 +47,35 @@ def _load_stem_mono(
         return None
 
 
+def mix_stems_mono(
+    stems: dict | None,
+    stem_names: tuple[str, ...],
+    sample_rate: int = 44100,
+) -> np.ndarray | None:
+    """Sum the named Demucs stems into one mono array (harmonic-source mix).
+
+    Used by chord/key analysis to run chroma on bass-removed audio: summing
+    ``other`` + ``vocals`` keeps the harmonic content while dropping the
+    bassline and drums that pollute full-mix chroma. Returns ``None`` when no
+    named stem is loadable, so callers fall back to the full mix unchanged.
+    Stems are equal-length (same source render), but guard for safety.
+    """
+    loaded = [
+        arr
+        for name in stem_names
+        if (arr := _load_stem_mono(stems, name, sample_rate=sample_rate)) is not None
+    ]
+    if not loaded:
+        return None
+    length = min(arr.shape[0] for arr in loaded)
+    if length == 0:
+        return None
+    mixed = np.zeros(length, dtype=np.float32)
+    for arr in loaded:
+        mixed += arr[:length]
+    return mixed
+
+
 def _load_stem_stereo(
     stems: dict | None,
     stem_name: str,

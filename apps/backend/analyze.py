@@ -63,6 +63,7 @@ from analyze_audio_io import (  # noqa: E402
     _load_stem_stereo,
     analyze_crepe_pitch,
     cleanup_stems,
+    mix_stems_mono,
 )
 from separation_backend import separate_stems_backend  # noqa: E402
 from analyze_estimate import (  # noqa: E402
@@ -1792,14 +1793,21 @@ def main():
                 sample_rate=sample_rate,
             )
         )
-        result.update(analyze_segment_key(result.get("structure"), mono, sample_rate))
+        # Harmonic-source mix (bass/drums removed) for chord + key chroma when
+        # stems are available; None -> full-mix path, bit-identical to before.
+        harmonic_mono = mix_stems_mono(stems, ("other", "vocals"), sample_rate)
+        result.update(
+            analyze_segment_key(
+                result.get("structure"), mono, sample_rate, harmonic_mono=harmonic_mono
+            )
+        )
 
         # Stereo array no longer needed — release memory.
         del stereo
         gc.collect()
 
         # Chords
-        result.update(analyze_chords(mono, sample_rate))
+        result.update(analyze_chords(mono, sample_rate, harmonic_mono=harmonic_mono))
 
         # Perceptual
         result.update(analyze_perceptual(mono, sample_rate))
