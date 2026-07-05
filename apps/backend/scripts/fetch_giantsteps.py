@@ -78,22 +78,51 @@ def _load_checksums(repo_dir: Path) -> dict[str, str]:
     return checksums
 
 
+def _is_plain_annotation(path: Path) -> bool:
+    """True for a plain single-value annotation ("D minor" / "137.5").
+
+    The GiantSteps repos ship each track's annotation in two directories with
+    identical content but different formats: a plain ``annotations/<subset>/``
+    file and a MIREX-format ``annotations/giantsteps/`` file whose first line is
+    a ``#@format:`` header. The evaluation harness (and this corpus's README)
+    expect the plain form — the header form's first token parses as a note name
+    of ``#@format:`` and silently scores every clip 0.0. Detect the plain form
+    by the absence of a leading ``#`` comment line.
+    """
+    try:
+        with path.open("r", encoding="utf-8", errors="replace") as handle:
+            return not handle.readline().lstrip().startswith("#")
+    except OSError:
+        return False
+
+
+def _annotation_paths(repo_dir: Path, subset: str) -> dict[str, Path]:
+    """Map annotation filename -> chosen source path, one entry per stem.
+
+    When a repo ships both the plain and MIREX-format variant of a stem, the
+    plain one wins (see ``_is_plain_annotation``); this also de-duplicates the
+    stem list that ``rglob`` would otherwise report twice.
+    """
+    suffix = ".key" if subset == "key" else ".bpm"
+    chosen: dict[str, Path] = {}
+    for path in (repo_dir / "annotations").rglob(f"*{suffix}"):
+        existing = chosen.get(path.name)
+        if existing is None or (_is_plain_annotation(path) and not _is_plain_annotation(existing)):
+            chosen[path.name] = path
+    return chosen
+
+
 def _annotation_stems(repo_dir: Path, subset: str) -> list[str]:
     suffix = ".key" if subset == "key" else ".bpm"
-    annotations = repo_dir / "annotations"
-    return sorted(
-        path.name[: -len(suffix)]
-        for path in annotations.rglob(f"*{suffix}")
-    )
+    return sorted(name[: -len(suffix)] for name in _annotation_paths(repo_dir, subset))
 
 
 def _stage_annotations(repo_dir: Path, subset_root: Path, subset: str) -> int:
-    suffix = ".key" if subset == "key" else ".bpm"
     dest = subset_root / "annotations"
     dest.mkdir(parents=True, exist_ok=True)
     count = 0
-    for path in (repo_dir / "annotations").rglob(f"*{suffix}"):
-        shutil.copy2(path, dest / path.name)
+    for name, path in _annotation_paths(repo_dir, subset).items():
+        shutil.copy2(path, dest / name)
         count += 1
     return count
 

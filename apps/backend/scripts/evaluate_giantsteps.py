@@ -40,6 +40,13 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Run the full analyze pipeline instead of --fast (slower; same key/bpm fields).",
     )
+    parser.add_argument(
+        "--jobs",
+        type=int,
+        default=1,
+        help="Parallel analyzer subprocesses (default 1). Scoring is identical to "
+        "sequential; only wall-clock changes. 6-8 is sensible on a multi-core host.",
+    )
     return parser.parse_args()
 
 
@@ -53,6 +60,7 @@ def main() -> None:
         fast=not args.full,
         max_clips=args.max_clips,
         report_path=report_path,
+        jobs=args.jobs,
     )
     print(json.dumps({"summary": report["summary"], "reportPath": report.get("reportPath")}, indent=2))
     if report["summary"]["status"] != "evaluated":
