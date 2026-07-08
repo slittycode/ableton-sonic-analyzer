@@ -71,6 +71,9 @@ def main() -> int:
             if args.asa_slice
             else "GTZAN + GTZAN-Rhythm (Marchand/Fresnel/Peeters 2015)"
         ),
+        # Consumed by beat_evaluation.run_beat_evaluation to pick the right
+        # power floor (MIN_CLIPS_ASA vs MIN_CLIPS_PRIMARY) and gate semantics.
+        "subset": subset,
         "annotationFormat": "gtzan_rhythm",
         "currentShippingMethod": "kick_accent",
         "clips": clips,

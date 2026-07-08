@@ -501,8 +501,17 @@ def _meter_detection(clip_reports: list[dict[str, Any]]) -> dict[str, Any]:
 def summarize_beat_gate(
     method_summaries_asa: dict[str, dict[str, Any]],
     asa_relevant_clip_count: int,
+    *,
+    slice_mode: bool = False,
 ) -> dict[str, Any]:
-    """Apply the pre-registered pass bar to the asaRelevant-subset summaries."""
+    """Apply the pre-registered pass bar to the asaRelevant-subset summaries.
+
+    ``slice_mode`` is the ASA-electronic-slice run (manifest ``subset: "asa"``):
+    the power floor drops to ``MIN_CLIPS_ASA`` and the verdict is the frozen
+    bar's clause 3 — does the >= ``ADOPT_MARGIN`` downbeat gain reproduce on
+    modern electronic material? — reported via ``asaSliceConfirms``. The GTZAN
+    run keeps ``asaSliceConfirms: None`` (pending, set by the slice run).
+    """
     def _db(method: str) -> float | None:
         summary = method_summaries_asa.get(method) or {}
         return summary.get("downbeatF1Strict")
@@ -517,7 +526,8 @@ def summarize_beat_gate(
     bt_beat = _beat("beat_this")
     ka_beat = _beat("kick_accent")
 
-    underpowered = asa_relevant_clip_count < MIN_CLIPS_PRIMARY
+    min_clips = MIN_CLIPS_ASA if slice_mode else MIN_CLIPS_PRIMARY
+    underpowered = asa_relevant_clip_count < min_clips
     beat_this_present = bt_db is not None
 
     cond_downbeat_gain = (
@@ -530,7 +540,11 @@ def summarize_beat_gate(
     criteria = {
         "downbeatGainAtLeastMargin": cond_downbeat_gain,
         "noBeatRegression": cond_no_beat_regression,
-        "asaSliceConfirms": None,  # set by the ASA-slice run (Phase D); pending on GTZAN
+        # GTZAN run: pending (None), settled by the slice run. Slice run: the
+        # frozen clause-3 verdict itself.
+        "asaSliceConfirms": (
+            (cond_downbeat_gain if not underpowered else None) if slice_mode else None
+        ),
         "sufficientlyPowered": not underpowered,
     }
 
@@ -538,14 +552,17 @@ def summarize_beat_gate(
         recommendation = "underpowered"
     elif not beat_this_present:
         recommendation = "pending_beat_this"
+    elif slice_mode:
+        recommendation = "asa_slice_confirms" if cond_downbeat_gain else "asa_slice_fails"
     elif cond_downbeat_gain and cond_no_beat_regression:
         recommendation = "adopt_pending_asa_slice"
     else:
         recommendation = "keep_heuristic"
 
     return {
-        "evaluatedOn": "asaRelevant_subset",
+        "evaluatedOn": "asa_slice" if slice_mode else "asaRelevant_subset",
         "asaRelevantClipCount": asa_relevant_clip_count,
+        "minClipsRequired": min_clips,
         "bestNonNeuralDownbeatF1": best_non_neural,
         "beatThisDownbeatF1": bt_db,
         "downbeatGain": None if (bt_db is None or best_non_neural is None) else round(bt_db - best_non_neural, 4),
@@ -645,11 +662,13 @@ def run_beat_evaluation(
     method_summaries_full = {m: _summarize_method(evaluated, m, asa_only=False) for m in methods}
     method_summaries_asa = {m: _summarize_method(evaluated, m, asa_only=True) for m in methods}
     asa_relevant_count = sum(1 for c in evaluated if c.get("asaRelevant"))
+    slice_mode = manifest.get("subset") == "asa"
 
     report = {
         "generatedAt": datetime.now(timezone.utc).isoformat(),
         "manifestPath": str(manifest_path),
         "datasetName": manifest.get("datasetName"),
+        "subset": manifest.get("subset"),
         "researchOnly": True,
         "metricsBackend": "mir_eval" if mir is not None else "handrolled_fallback",
         "config": {
@@ -667,7 +686,7 @@ def run_beat_evaluation(
         "meterDetection": _meter_detection(evaluated),
         "methodSummariesFull": method_summaries_full,
         "methodSummariesAsaRelevant": method_summaries_asa,
-        "gate": summarize_beat_gate(method_summaries_asa, asa_relevant_count),
+        "gate": summarize_beat_gate(method_summaries_asa, asa_relevant_count, slice_mode=slice_mode),
         "clips": clip_reports,
     }
 
