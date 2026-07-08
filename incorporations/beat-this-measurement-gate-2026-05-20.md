@@ -139,7 +139,14 @@ reproduce a ≥0.10 gain (e.g. if beat_this generalizes worse to modern electron
 than to GTZAN disco/hiphop/pop), or an unacceptable per-clip latency for the
 torch model on the product path.
 
-**Not yet measured (optional, non-blocking):** the full 10-genre GTZAN run
-(only the 300-clip asaRelevant subset was run — that is the pass-bar subset);
-`beat_eval_manifest.gtzan.json` (999 clips) is built and ready if the broader
-per-genre / non-4/4 breakdown is wanted.
+**Full 10-genre run (diagnostic, non-gating, same day):** all 999 clips
+evaluated; the gate block recomputed on the full manifest reproduces the
+asaRelevant numbers exactly (0.4722 → 0.9244, gain +0.4522), confirming the
+subset shortcut changed nothing. Full-corpus macro means — stride beat 0.8029 /
+downbeat-strict 0.2040; kick_accent 0.8029 / 0.3097; beat_this **0.8910 /
+0.7822**. The ordering is unchanged on hard mixed-genre material (jazz,
+classical, blues drag every method down; beat_this still leads by +0.47
+strict). Meter detection over the full corpus: 0.5968 exact, and only 6/63
+genuinely non-4/4 clips read correctly (0.0952) — both weaker than the
+asaRelevant subset, reinforcing meter as the layer to replace rather than
+patch.
