@@ -154,6 +154,65 @@ class GateTests(unittest.TestCase):
         self.assertEqual(gate["productRecommendation"], "keep_heuristic")
         self.assertFalse(gate["successCriteria"]["noBeatRegression"])
 
+    def test_gtzan_mode_keeps_asa_slice_pending(self) -> None:
+        gate = be.summarize_beat_gate(
+            {"kick_accent": self._summary(0.5), "beat_this": self._summary(0.7)},
+            asa_relevant_clip_count=250,
+        )
+        self.assertIsNone(gate["successCriteria"]["asaSliceConfirms"])
+        self.assertEqual(gate["minClipsRequired"], be.MIN_CLIPS_PRIMARY)
+
+
+class SliceModeGateTests(unittest.TestCase):
+    """slice_mode=True — the ASA electronic slice run (manifest subset: "asa").
+
+    The pre-registered clause 3 lives here: MIN_CLIPS_ASA (not
+    MIN_CLIPS_PRIMARY) is the power floor, and the run itself settles
+    asaSliceConfirms — without this the 15-20-clip hand-annotated slice would
+    always report "underpowered" and the gate could never finalize.
+    """
+
+    def _summary(self, downbeat: float, beat: float = 0.9) -> dict:
+        return {"downbeatF1Strict": downbeat, "beatF1": beat, "clipsScored": 18}
+
+    def test_confirms_when_gain_reproduces(self) -> None:
+        gate = be.summarize_beat_gate(
+            {
+                "stride": self._summary(0.30),
+                "kick_accent": self._summary(0.50),
+                "beat_this": self._summary(0.65),
+            },
+            asa_relevant_clip_count=18,
+            slice_mode=True,
+        )
+        self.assertEqual(gate["productRecommendation"], "asa_slice_confirms")
+        self.assertTrue(gate["successCriteria"]["asaSliceConfirms"])
+        self.assertEqual(gate["evaluatedOn"], "asa_slice")
+        self.assertEqual(gate["minClipsRequired"], be.MIN_CLIPS_ASA)
+
+    def test_fails_when_gain_does_not_reproduce(self) -> None:
+        gate = be.summarize_beat_gate(
+            {
+                "kick_accent": self._summary(0.60),
+                "beat_this": self._summary(0.65),  # +0.05 < ADOPT_MARGIN
+            },
+            asa_relevant_clip_count=18,
+            slice_mode=True,
+        )
+        self.assertEqual(gate["productRecommendation"], "asa_slice_fails")
+        self.assertFalse(gate["successCriteria"]["asaSliceConfirms"])
+
+    def test_asa_power_floor_is_min_clips_asa(self) -> None:
+        summaries = {
+            "kick_accent": self._summary(0.50),
+            "beat_this": self._summary(0.70),
+        }
+        powered = be.summarize_beat_gate(summaries, asa_relevant_clip_count=be.MIN_CLIPS_ASA, slice_mode=True)
+        self.assertEqual(powered["productRecommendation"], "asa_slice_confirms")
+        under = be.summarize_beat_gate(summaries, asa_relevant_clip_count=be.MIN_CLIPS_ASA - 1, slice_mode=True)
+        self.assertEqual(under["productRecommendation"], "underpowered")
+        self.assertIsNone(under["successCriteria"]["asaSliceConfirms"])  # never a vacuous verdict
+
 
 class ScoreAndAggregationTests(unittest.TestCase):
     """CI-runnable coverage for the scoring/aggregation core (no essentia needed)."""
