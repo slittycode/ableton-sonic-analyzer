@@ -153,6 +153,21 @@ class EvaluateCorpusTests(unittest.TestCase):
             evaluate_corpus(clips, subset="key", runner=runner, max_clips=2)
             self.assertEqual(len(calls), 2)
 
+    def test_parallel_jobs_match_sequential(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="asa_gs_eval_") as temp_dir:
+            tmp = Path(temp_dir)
+            keys = ["D minor", "C major", "E major", "A minor", "F# minor", "G major"]
+            clips = [self._clip(tmp, f"c{i}", key=keys[i % len(keys)]) for i in range(12)]
+            answers = {clip.clip_id: keys[i % len(keys)] for i, clip in enumerate(clips)}
+
+            def runner(path: Path, flags):  # pure + thread-safe
+                return {"key": answers[path.stem]}
+
+            seq = evaluate_corpus(clips, subset="key", runner=runner, jobs=1)
+            par = evaluate_corpus(clips, subset="key", runner=runner, jobs=4)
+            self.assertEqual(par["summary"], seq["summary"])
+            self.assertEqual(par["clips"], seq["clips"])  # order preserved
+
 
 if __name__ == "__main__":
     unittest.main()

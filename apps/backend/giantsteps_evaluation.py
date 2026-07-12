@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -161,6 +162,7 @@ def evaluate_corpus(
     fast: bool = True,
     max_clips: int | None = None,
     report_path: Path | None = None,
+    jobs: int = 1,
 ) -> dict[str, Any]:
     """Score the corpus; returns the aggregate report dict.
 
@@ -168,12 +170,33 @@ def evaluate_corpus(
     mode), which keeps a ~600-clip subset run tractable. The report's
     ``status`` is ``"underpowered"`` when zero clips were evaluable — callers
     must treat that as failure, never as a vacuous green.
+
+    ``jobs`` dispatches the per-clip analyzer subprocess across a thread pool
+    (the analysis work runs in the subprocesses, so threads give real
+    parallelism); scoring stays sequential and in corpus order, so results are
+    identical to ``jobs=1`` — only wall-clock changes. The 120 s GiantSteps
+    previews make a ~600-clip run otherwise multi-hour.
     """
     if runner is None:
         runner = _run_analyze
     flags = ["--fast"] if fast else None
 
     selected = clips[:max_clips] if max_clips else clips
+
+    def _run_one(clip: GiantstepsClip) -> tuple[GiantstepsClip, str, Any]:
+        if not clip.audio_path.exists():
+            return clip, "missing_audio", None
+        try:
+            return clip, "ok", runner(clip.audio_path, flags)
+        except subprocess.CalledProcessError as exc:
+            return clip, "analyze_failed", (exc.stderr or "")[-300:]
+
+    if jobs and jobs > 1:
+        with ThreadPoolExecutor(max_workers=jobs) as pool:
+            outcomes = list(pool.map(_run_one, selected))
+    else:
+        outcomes = [_run_one(clip) for clip in selected]
+
     per_clip: list[dict[str, Any]] = []
     missing_audio = 0
     analyze_failed = 0
@@ -183,23 +206,16 @@ def evaluate_corpus(
     acc1_hits = 0
     acc2_hits = 0
 
-    for clip in selected:
-        if not clip.audio_path.exists():
+    for clip, status, data in outcomes:
+        if status == "missing_audio":
             missing_audio += 1
             per_clip.append({"id": clip.clip_id, "status": "missing_audio"})
             continue
-        try:
-            payload = runner(clip.audio_path, flags)
-        except subprocess.CalledProcessError as exc:
+        if status == "analyze_failed":
             analyze_failed += 1
-            per_clip.append(
-                {
-                    "id": clip.clip_id,
-                    "status": "analyze_failed",
-                    "error": (exc.stderr or "")[-300:],
-                }
-            )
+            per_clip.append({"id": clip.clip_id, "status": "analyze_failed", "error": data})
             continue
+        payload = data
 
         entry: dict[str, Any] = {"id": clip.clip_id, "status": "evaluated"}
         if subset == "key" and clip.expected_key:
