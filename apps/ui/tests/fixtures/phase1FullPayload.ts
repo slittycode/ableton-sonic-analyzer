@@ -575,7 +575,7 @@ export const phase1EnvelopeFixture = {
     },
   ],
   segmentStereo: [{ segmentIndex: 0, stereoWidth: 0.8, stereoCorrelation: 0.9 }],
-  segmentKey: [{ segmentIndex: 0, key: 'A minor', keyConfidence: 0.85 }],
+  segmentKey: [{ segmentIndex: 0, key: 'A minor', keyConfidence: 0.85, source: 'full_mix' }],
   essentiaFeatures: {
     zeroCrossingRate: 0.12,
     hfc: 0.45,
@@ -594,6 +594,7 @@ export const phase1EnvelopeFixture = {
     chordChangeCount: 1,
     chordTimelineSource: 'librosa_viterbi',
     chordTimelineAgreement: true,
+    chordSource: 'harmonic_stems',
   },
   perceptual: {
     sharpness: 1.42,

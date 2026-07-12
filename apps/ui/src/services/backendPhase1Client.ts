@@ -944,6 +944,10 @@ function parseOptionalChordDetail(value: unknown): ChordDetail | null {
         : null;
 
   const chordTimeline = parseOptionalChordTimeline(value.chordTimeline);
+  const chordSource =
+    value.chordSource === "harmonic_stems" || value.chordSource === "full_mix"
+      ? value.chordSource
+      : undefined;
 
   return {
     chordSequence,
@@ -954,6 +958,7 @@ function parseOptionalChordDetail(value: unknown): ChordDetail | null {
     chordChangeCount,
     chordTimelineSource,
     chordTimelineAgreement,
+    chordSource,
   };
 }
 
