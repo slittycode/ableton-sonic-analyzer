@@ -193,6 +193,7 @@ def _build_phase1(payload: dict[str, Any]) -> dict[str, Any]:
         "bpmDoubletime": payload.get("bpmDoubletime"),
         "bpmSource": payload.get("bpmSource"),
         "bpmRawOriginal": _coerce_nullable_number(payload.get("bpmRawOriginal")),
+        "bpmOctaveEvidence": payload.get("bpmOctaveEvidence"),
         "key": _coerce_nullable_string(payload.get("key")),
         "keyConfidence": _coerce_number(payload.get("keyConfidence")),
         "keyProfile": payload.get("keyProfile"),

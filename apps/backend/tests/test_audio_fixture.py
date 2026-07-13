@@ -13,7 +13,7 @@ EXPECTED_TOP_LEVEL_KEYS = {
     "phase1Version",
     "fundamentalsQuality",
     "bpm", "bpmConfidence", "bpmPercival", "bpmAgreement",
-    "bpmDoubletime", "bpmSource", "bpmRawOriginal",
+    "bpmDoubletime", "bpmSource", "bpmRawOriginal", "bpmOctaveEvidence",
     "key", "keyConfidence", "keyProfile", "keyEnsemble", "tuningFrequency", "tuningCents",
     "timeSignature", "timeSignatureSource",
     "timeSignatureConfidence", "timeSignatureCandidates",
