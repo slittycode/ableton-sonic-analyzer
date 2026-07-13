@@ -649,7 +649,10 @@ export interface GenreDetail {
   genre: string;
   confidence: number;
   secondaryGenre: string | null;
-  genreFamily: "house" | "techno" | "dnb" | "ambient" | "trance" | "dubstep" | "breaks" | "other";
+  genreFamily:
+    | "house" | "techno" | "dnb" | "ambient" | "trance" | "dubstep" | "breaks"
+    | "garage" | "hardcore" | "trap" | "electro" | "downtempo"
+    | "other";
   topScores: Array<{ genre: string; score: number }>;
 }
 

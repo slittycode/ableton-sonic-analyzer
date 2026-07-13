@@ -160,6 +160,96 @@ class SignatureMatchTests(unittest.TestCase):
         self.assertIsNotNone(result["genreDetail"])
         self.assertEqual(result["genreDetail"]["genreFamily"], "dnb")
 
+    def test_downtempo_signature_resolves_to_downtempo_family(self):
+        # Measured chill-out profile (PR-G7): slow, dark, very dynamic,
+        # little pumping.
+        result = analyze_detection.analyze_genre_detail(_phase1_result(
+            bpm=100.0,
+            crestFactor=14.5,
+            spectralBalance={"subBass": -13.0},
+            spectralDetail={"spectralCentroid": 900.0},
+            rhythmDetail={"onsetRate": 3.5},
+            sidechainDetail={"pumpingStrength": 0.3},
+            bassDetail={"averageDecayMs": 200.0},
+        ))
+        self.assertIsNotNone(result["genreDetail"])
+        self.assertEqual(result["genreDetail"]["genreFamily"], "downtempo")
+
+    def test_trap_signature_resolves_to_trap_family(self):
+        # Knowledge-based (PR-G7): notated 150 (above dubstep's 138-145
+        # window — a 140 vector with these features is genuinely ambiguous
+        # with dubstep even to a human), sub-dominant 808, sparse onsets,
+        # minimal pumping.
+        result = analyze_detection.analyze_genre_detail(_phase1_result(
+            bpm=150.0,
+            crestFactor=9.0,
+            spectralBalance={"subBass": -5.0},
+            spectralDetail={"spectralCentroid": 1300.0},
+            rhythmDetail={"onsetRate": 2.5},
+            sidechainDetail={"pumpingStrength": 0.15},
+            bassDetail={"averageDecayMs": 450.0},
+        ))
+        self.assertIsNotNone(result["genreDetail"])
+        self.assertEqual(result["genreDetail"]["genreFamily"], "trap")
+
+    def test_two_step_low_sidechain_resolves_to_garage_family(self):
+        # The audit's uk-garage fix: classic 2-step has a broken kick and
+        # little sidechain pumping — the old table's only garage entries
+        # required 0.35+ pumping and scored AGAINST this material.
+        result = analyze_detection.analyze_genre_detail(_phase1_result(
+            bpm=134.0,
+            crestFactor=9.0,
+            spectralBalance={"subBass": -10.0},
+            spectralDetail={"spectralCentroid": 2200.0},
+            rhythmDetail={"onsetRate": 6.0},
+            sidechainDetail={"pumpingStrength": 0.2},
+            bassDetail={"averageDecayMs": 350.0},
+        ))
+        self.assertIsNotNone(result["genreDetail"])
+        self.assertEqual(result["genreDetail"]["genreFamily"], "garage")
+
+    def test_gabber_fires_via_octave_evidence_on_halved_bpm(self):
+        # The measured hardcore failure: EVERY GiantSteps hardcore clip
+        # ships a halved bpm (e.g. 92 for a true 184). The gabber signature
+        # keys on the true tempo and must fire through the PR-G3 octave
+        # evidence's preferred bpm.
+        features = dict(
+            crestFactor=9.2,
+            spectralBalance={"subBass": -8.0},
+            spectralDetail={"spectralCentroid": 2400.0},
+            rhythmDetail={"onsetRate": 4.0},
+            sidechainDetail={"pumpingStrength": 0.24},
+            bassDetail={"averageDecayMs": 190.0},
+            kickDetail={"thd": 0.68},
+        )
+        with_evidence = analyze_detection.analyze_genre_detail(_phase1_result(
+            bpm=92.0,
+            bpmOctaveEvidence={"preferredBpm": 184.0, "supportsShipped": False},
+            **features,
+        ))
+        self.assertIsNotNone(with_evidence["genreDetail"])
+        self.assertEqual(with_evidence["genreDetail"]["genreFamily"], "hardcore")
+
+    def test_octave_evidence_that_supports_shipped_changes_nothing(self):
+        features = dict(
+            bpm=128.0,
+            crestFactor=6.5,
+            spectralBalance={"subBass": -12.0},
+            spectralDetail={"spectralCentroid": 2500.0},
+            rhythmDetail={"onsetRate": 6.0},
+            sidechainDetail={"pumpingStrength": 0.45},
+            bassDetail={"averageDecayMs": 600.0},
+        )
+        plain = analyze_detection.analyze_genre_detail(_phase1_result(**features))
+        supported = analyze_detection.analyze_genre_detail(_phase1_result(
+            bpmOctaveEvidence={"preferredBpm": 128.0, "supportsShipped": True},
+            **features,
+        ))
+        self.assertEqual(plain["genreDetail"]["genre"], supported["genreDetail"]["genre"])
+        self.assertEqual(
+            plain["genreDetail"]["confidence"], supported["genreDetail"]["confidence"]
+        )
+
 
 class OutputShapeTests(unittest.TestCase):
     """The classifier's response shape is part of the Phase 1 → UI contract."""

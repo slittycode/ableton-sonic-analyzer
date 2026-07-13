@@ -1136,7 +1136,11 @@ function parseOptionalGenreDetail(value: unknown): GenreDetail | null {
   if (!isRecord(value)) return null;
   const confidence = toNumber(value.confidence);
   if (confidence === null || typeof value.genre !== "string") return null;
-  const validFamilies = ["house", "techno", "dnb", "ambient", "trance", "dubstep", "breaks", "other"] as const;
+  const validFamilies = [
+    "house", "techno", "dnb", "ambient", "trance", "dubstep", "breaks",
+    "garage", "hardcore", "trap", "electro", "downtempo",
+    "other",
+  ] as const;
   const genreFamily = validFamilies.includes(value.genreFamily as typeof validFamilies[number])
     ? (value.genreFamily as typeof validFamilies[number])
     : "other";
