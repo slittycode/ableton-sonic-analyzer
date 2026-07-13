@@ -15,6 +15,7 @@
       "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
         "bpm": 128.0,
+        "bpmOctave": 128.0,
         "timeSignature": "4/4",
         "beatGrid": [
           0.0,
@@ -64,7 +65,8 @@
       "thresholds": {
         "bpmTolerance": 1.0,
         "beatF1": 0.9,
-        "downbeatF1": 0.75
+        "downbeatF1": 0.75,
+        "octaveTolerance": 2.0
       }
     },
     {
@@ -225,6 +227,7 @@
       "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
         "bpm": 70.0,
+        "bpmOctave": 70.0,
         "timeSignature": "4/4",
         "beatGrid": [
           0.0,
@@ -274,7 +277,8 @@
       "thresholds": {
         "bpmTolerance": 1.0,
         "beatF1": 0.9,
-        "downbeatF1": 0.75
+        "downbeatF1": 0.75,
+        "octaveTolerance": 2.0
       }
     },
     {
@@ -284,6 +288,7 @@
       "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
         "bpm": 85.0,
+        "bpmOctave": 85.0,
         "timeSignature": "4/4",
         "beatGrid": [
           0.0,
@@ -333,7 +338,8 @@
       "thresholds": {
         "bpmTolerance": 1.0,
         "beatF1": 0.9,
-        "downbeatF1": 0.75
+        "downbeatF1": 0.75,
+        "octaveTolerance": 2.0
       }
     },
     {
@@ -343,6 +349,7 @@
       "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
         "bpm": 90.0,
+        "bpmOctave": 90.0,
         "timeSignature": "3/4",
         "beatGrid": [
           0.0,
@@ -384,7 +391,8 @@
       "thresholds": {
         "bpmTolerance": 1.0,
         "beatF1": 0.9,
-        "downbeatF1": 0.75
+        "downbeatF1": 0.75,
+        "octaveTolerance": 2.0
       },
       "knownGaps": [
         "meter:timeSignature",
@@ -398,6 +406,7 @@
       "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
         "bpm": 110.0,
+        "bpmOctave": 110.0,
         "timeSignature": "6/8",
         "beatGrid": [
           0.0,
@@ -463,7 +472,8 @@
       "thresholds": {
         "bpmTolerance": 1.0,
         "beatF1": 0.9,
-        "downbeatF1": 0.75
+        "downbeatF1": 0.75,
+        "octaveTolerance": 2.0
       },
       "knownGaps": [
         "meter:timeSignature",
@@ -477,6 +487,7 @@
       "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
         "bpm": 128.0,
+        "bpmOctave": 128.0,
         "timeSignature": "4/4",
         "beatGrid": [
           0.0,
@@ -526,7 +537,8 @@
       "thresholds": {
         "bpmTolerance": 1.0,
         "beatF1": 0.9,
-        "downbeatF1": 0.75
+        "downbeatF1": 0.75,
+        "octaveTolerance": 2.0
       }
     },
     {
@@ -536,6 +548,7 @@
       "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
         "bpm": 140.0,
+        "bpmOctave": 140.0,
         "timeSignature": "7/8",
         "beatGrid": [
           0.0,
@@ -609,12 +622,14 @@
       "thresholds": {
         "bpmTolerance": 1.0,
         "beatF1": 0.9,
-        "downbeatF1": 0.75
+        "downbeatF1": 0.75,
+        "octaveTolerance": 2.0
       },
       "knownGaps": [
         "meter:timeSignature",
         "downbeats:f1",
-        "tempo:bpm"
+        "tempo:bpm",
+        "tempoOctave:preferredBpm"
       ]
     },
     {
@@ -624,6 +639,7 @@
       "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
         "bpm": 150.0,
+        "bpmOctave": 150.0,
         "timeSignature": "4/4",
         "beatGrid": [
           0.0,
@@ -673,7 +689,8 @@
       "thresholds": {
         "bpmTolerance": 1.0,
         "beatF1": 0.9,
-        "downbeatF1": 0.75
+        "downbeatF1": 0.75,
+        "octaveTolerance": 2.0
       }
     },
     {
@@ -683,6 +700,7 @@
       "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
         "bpm": 174.0,
+        "bpmOctave": 174.0,
         "timeSignature": "4/4",
         "beatGrid": [
           0.0,
@@ -732,7 +750,8 @@
       "thresholds": {
         "bpmTolerance": 1.0,
         "beatF1": 0.9,
-        "downbeatF1": 0.75
+        "downbeatF1": 0.75,
+        "octaveTolerance": 2.0
       },
       "knownGaps": [
         "tempo:bpm"
@@ -745,6 +764,7 @@
       "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
         "bpm": 190.0,
+        "bpmOctave": 190.0,
         "timeSignature": "4/4",
         "beatGrid": [
           0.0,
@@ -794,7 +814,8 @@
       "thresholds": {
         "bpmTolerance": 1.0,
         "beatF1": 0.9,
-        "downbeatF1": 0.75
+        "downbeatF1": 0.75,
+        "octaveTolerance": 2.0
       },
       "knownGaps": [
         "tempo:bpm",
@@ -1260,6 +1281,7 @@
         "swingTolerance": 3.0
       },
       "truth": {
+        "bpmOctave": 124.0,
         "timeSignature": "4/4",
         "beatGrid": [
           0.0,
@@ -1357,6 +1379,7 @@
         "swingTolerance": 3.0
       },
       "truth": {
+        "bpmOctave": 124.0,
         "timeSignature": "4/4",
         "beatGrid": [
           0.0,
@@ -1454,6 +1477,7 @@
         "swingTolerance": 3.0
       },
       "truth": {
+        "bpmOctave": 124.0,
         "timeSignature": "4/4",
         "beatGrid": [
           0.0,
@@ -1551,6 +1575,7 @@
         "swingTolerance": 3.0
       },
       "truth": {
+        "bpmOctave": 124.0,
         "timeSignature": "4/4",
         "beatGrid": [
           0.0,
@@ -1648,6 +1673,7 @@
         "swingTolerance": 3.0
       },
       "truth": {
+        "bpmOctave": 124.0,
         "timeSignature": "4/4",
         "beatGrid": [
           0.0,
@@ -1822,6 +1848,7 @@
       "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
         "bpm": 132.0,
+        "bpmOctave": 132.0,
         "timeSignature": "4/4",
         "beatGrid": [
           0.0,
@@ -1871,7 +1898,8 @@
       "thresholds": {
         "bpmTolerance": 1.0,
         "beatF1": 0.9,
-        "downbeatF1": 0.75
+        "downbeatF1": 0.75,
+        "octaveTolerance": 2.0
       },
       "truth": {
         "hitTimes": {
@@ -1921,6 +1949,7 @@
       "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
         "bpm": 140.0,
+        "bpmOctave": 140.0,
         "timeSignature": "4/4",
         "beatGrid": [
           0.0,
@@ -1970,7 +1999,8 @@
       "thresholds": {
         "bpmTolerance": 1.0,
         "beatF1": 0.9,
-        "downbeatF1": 0.75
+        "downbeatF1": 0.75,
+        "octaveTolerance": 2.0
       },
       "truth": {
         "hitTimes": {
@@ -2004,6 +2034,7 @@
       "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
         "bpm": 174.0,
+        "bpmOctave": 174.0,
         "timeSignature": "4/4",
         "beatGrid": [
           0.0,
@@ -2053,7 +2084,8 @@
       "thresholds": {
         "bpmTolerance": 1.0,
         "beatF1": 0.9,
-        "downbeatF1": 0.75
+        "downbeatF1": 0.75,
+        "octaveTolerance": 2.0
       },
       "truth": {
         "hitTimes": {
@@ -2092,6 +2124,7 @@
       "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
         "bpm": 136.0,
+        "bpmOctave": 136.0,
         "timeSignature": "4/4",
         "beatGrid": [
           0.0,
@@ -2141,7 +2174,8 @@
       "thresholds": {
         "bpmTolerance": 1.0,
         "beatF1": 0.9,
-        "downbeatF1": 0.75
+        "downbeatF1": 0.75,
+        "octaveTolerance": 2.0
       },
       "truth": {
         "hitTimes": {

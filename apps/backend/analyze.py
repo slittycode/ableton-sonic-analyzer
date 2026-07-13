@@ -138,6 +138,7 @@ from analyze_structure import (  # noqa: E402
 from analyze_rhythm import (  # noqa: E402
     _extract_beat_loudness_data,
     _detect_onset_times,
+    analyze_bpm_octave_evidence,
     analyze_rhythm_detail,
     analyze_melody,
     analyze_groove,
@@ -1586,6 +1587,9 @@ def main():
     result = {}
 
     result.update(analyze_bpm(rhythm_data, mono, sample_rate))
+    # Full-only, surfacing-only: octave/ratio candidates for the shipped bpm
+    # (accuracy PR-G3). Never overrides bpm — see analyze_bpm_octave_evidence.
+    result.update(analyze_bpm_octave_evidence(mono, sample_rate, result.get("bpm")))
     result.update(analyze_key(mono))
     result.update(analyze_time_signature(rhythm_data, mono=mono, sample_rate=sample_rate))
     result.update(analyze_duration_and_sr(mono, sample_rate))
@@ -1900,6 +1904,8 @@ def main():
         "bpmDoubletime": result.get("bpmDoubletime"),
         "bpmSource": result.get("bpmSource"),
         "bpmRawOriginal": result.get("bpmRawOriginal"),
+        # Full-only (like keyEnsemble): surfacing-only octave/ratio evidence.
+        "bpmOctaveEvidence": result.get("bpmOctaveEvidence"),
         "key": result.get("key"),
         "keyConfidence": result.get("keyConfidence"),
         "keyProfile": result.get("keyProfile"),

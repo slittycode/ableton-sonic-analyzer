@@ -408,7 +408,8 @@ class AnalyzeFastStructuralSnapshotTests(unittest.TestCase):
         """Fast mode must emit exactly the shared top-level key set (EXPECTED_TOP_LEVEL_KEYS).
 
         Full mode emits these keys *plus* a few detail-only fields (keyProfile,
-        tuningFrequency, tuningCents, lufsMomentaryMax, lufsShortTermMax, pitchDetail), so
+        tuningFrequency, tuningCents, lufsMomentaryMax, lufsShortTermMax, pitchDetail,
+        timeSignatureCandidates, keyEnsemble, bpmOctaveEvidence), so
         this asserts the shared contract — not a byte-for-byte match with full mode.
         """
         self.assertEqual(

@@ -253,6 +253,19 @@ def _evaluate_expected(
             f"target>={threshold} actual={round(score, 4)}",
         ))
 
+    bpm_octave = expected.get("bpmOctave")
+    if isinstance(bpm_octave, (int, float)):
+        # Gates the surfacing-only bpmOctaveEvidence field (PR-G3), not the
+        # shipped bpm: does the true tempo win the candidate ranking?
+        tolerance = float(thresholds.get("octaveTolerance", 2.0))
+        actual = _number(_nested_value(payload, "bpmOctaveEvidence.preferredBpm"))
+        passed = actual is not None and abs(actual - float(bpm_octave)) <= tolerance
+        checks.append(FundamentalsCheck(
+            "tempoOctave:preferredBpm",
+            passed,
+            f"target={bpm_octave} tolerance={tolerance} actual={actual}",
+        ))
+
     swing = expected.get("swingPercent")
     if isinstance(swing, (int, float)):
         tolerance = float(thresholds.get("swingTolerance", 3.0))

@@ -685,6 +685,36 @@ export interface KeyEnsemble {
   alternates: Array<{ key: string; strength: number }>;
 }
 
+/**
+ * One simple-ratio tempo candidate scored against the low-band (kick) and
+ * full-band inter-onset streams (accuracy program PR-G3). Full mode only.
+ * Surfacing-only — never an override of the shipped `bpm`.
+ */
+export interface BpmOctaveCandidate {
+  bpm: number;
+  /** Candidate:shipped ratio label, e.g. "2:1", "3:2", "1:1". */
+  ratio: string;
+  /** Kick-pulse articulation evidence, 0-1. */
+  lowbandScore: number;
+  /** Hat/snare-grid evidence (admits the 8th-note 0.5 multiple), 0-1. */
+  fullbandScore: number;
+  /** lowbandScore + fullbandScore. */
+  score: number;
+}
+
+export interface BpmOctaveEvidence {
+  /** Candidates sorted by score, strongest first. */
+  candidates: BpmOctaveCandidate[];
+  preferredBpm: number;
+  preferredRatio: string;
+  /** True when the shipped bpm's own 1:1 candidate wins the ranking. */
+  supportsShipped: boolean;
+  /** Top score / runner-up score; null when the runner-up scored 0. */
+  dominance: number | null;
+  lowbandIoiCount: number;
+  fullbandIoiCount: number;
+}
+
 export type FundamentalsQualityStatus = "authoritative" | "ambiguous" | "failed" | "not_run";
 
 export interface FundamentalsQualityDomain {
@@ -718,6 +748,12 @@ export interface Phase1Result {
   bpmDoubletime?: boolean | null;
   bpmSource?: string | null;
   bpmRawOriginal?: number | null;
+  /**
+   * Full mode only. Simple-ratio octave/tempo candidates scored against the
+   * low-band pulse (accuracy program PR-G3). Evidence surface — never an
+   * override of `bpm`.
+   */
+  bpmOctaveEvidence?: BpmOctaveEvidence | null;
   key: string | null;
   keyConfidence: number;
   keyProfile?: string | null;

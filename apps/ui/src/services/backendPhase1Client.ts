@@ -588,6 +588,9 @@ export function parsePhase1Result(value: unknown): Phase1Result {
     bpmDoubletime: phase1.bpmDoubletime === true ? true : phase1.bpmDoubletime === false ? false : null,
     bpmSource: typeof phase1.bpmSource === "string" ? phase1.bpmSource : null,
     bpmRawOriginal: toNumber(phase1.bpmRawOriginal),
+    bpmOctaveEvidence: isRecord(phase1.bpmOctaveEvidence)
+      ? (phase1.bpmOctaveEvidence as unknown as Phase1Result["bpmOctaveEvidence"])
+      : null,
     key: expectNullableString(phase1, "key"),
     keyConfidence: expectNumber(phase1, "keyConfidence"),
     keyProfile: toOptionalStringOrNull(phase1.keyProfile),
