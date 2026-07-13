@@ -33,6 +33,28 @@ afterEach(() => {
 });
 
 describe('parseBackendAnalyzeResponse', () => {
+  it('parses timeSignatureCandidates and drops malformed entries', () => {
+    const parsed = parseBackendAnalyzeResponse({
+      ...validPayload,
+      phase1: {
+        ...validPayload.phase1,
+        timeSignatureCandidates: [
+          { timeSignature: '4/4', dominance: 1.42, positionMeans: [2.1, 1.4, 1.6, 1.5], loudnessDominance: 1.31 },
+          { timeSignature: '3/4', dominance: 1.11, positionMeans: [1.9, 1.7, 'bad'] },
+          { dominance: 1.0 },
+          'garbage',
+        ],
+      },
+    });
+
+    // loudnessDominance (PR-G4) forwards when present and reads null on
+    // pre-G4 snapshots that lack it.
+    expect(parsed.phase1.timeSignatureCandidates).toEqual([
+      { timeSignature: '4/4', dominance: 1.42, positionMeans: [2.1, 1.4, 1.6, 1.5], loudnessDominance: 1.31 },
+      { timeSignature: '3/4', dominance: 1.11, positionMeans: [1.9, 1.7], loudnessDominance: null },
+    ]);
+  });
+
   it('accepts a valid backend payload', () => {
     const parsed = parseBackendAnalyzeResponse({
       ...validPayload,
@@ -59,6 +81,11 @@ describe('parseBackendAnalyzeResponse', () => {
     expect(parsed.phase1.segmentLoudness).toEqual(validPayload.phase1.segmentLoudness);
     expect(parsed.phase1.perceptual).toEqual(validPayload.phase1.perceptual);
     expect(parsed.phase1.danceability).toEqual(validPayload.phase1.danceability);
+    expect(parsed.phase1.fundamentalsQuality?.schemaVersion).toBe('fundamentals-quality.v1');
+    expect(parsed.phase1.fundamentalsQuality?.localOnly).toBe(true);
+    expect(parsed.phase1.fundamentalsQuality?.llmExcluded).toBe(true);
+    expect(parsed.phase1.fundamentalsQuality?.domains.tempo.status).toBe('authoritative');
+    expect(parsed.phase1.fundamentalsQuality?.domains.chords.status).toBe('ambiguous');
 
     // New fields
     expect(parsed.phase1.bpmPercival).toBe(127.5);
@@ -165,6 +192,7 @@ describe('parseBackendAnalyzeResponse', () => {
     expect(parsed.phase1.bpmDoubletime).toBeNull();
     expect(parsed.phase1.bpmSource).toBeNull();
     expect(parsed.phase1.bpmRawOriginal).toBeNull();
+    expect(parsed.phase1.fundamentalsQuality).toBeNull();
     expect(parsed.phase1.monoCompatible).toBeNull();
     expect(parsed.phase1.acidDetail).toBeNull();
     expect(parsed.phase1.genreDetail).toBeNull();

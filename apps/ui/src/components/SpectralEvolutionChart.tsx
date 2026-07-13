@@ -242,6 +242,8 @@ export function SpectralEvolutionChart({ data, onsetStrength }: SpectralEvolutio
       <div className="rounded-sm overflow-hidden border border-border bg-bg-panel">
         <canvas
           ref={canvasRef}
+          role="img"
+          aria-label="Spectral evolution: frequency-band energy over time"
           className="w-full cursor-crosshair"
           style={{ height: '120px' }}
           onMouseMove={handleMouseMove}

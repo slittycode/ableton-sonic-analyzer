@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   AnalysisStageStatus,
   InterpretationSchemaVersion,
@@ -9,30 +9,16 @@ import {
   SpectralArtifacts,
   StemSummaryResult,
 } from '../types';
-import {
-  Activity,
-  AudioWaveform,
-  Check,
-  ChevronDown,
-  ChevronRight,
-  Clock,
-  Disc,
-  FileJson,
-  FileText,
-  Music,
-  Settings2,
-  Sliders,
-  Sparkles,
-} from 'lucide-react';
+import { FileJson, FileText } from 'lucide-react';
 import { motion } from 'motion/react';
 import { assertNever } from '../utils/assertNever';
 import { downloadFile, generateMarkdown } from '../utils/exportUtils';
-import { INTERPRETATION_LABEL } from '../services/phaseLabels';
 import type { ValidationReport } from '../services/phase2Validator';
 import { Phase2ConsistencyReport } from './Phase2ConsistencyReport';
 import { isBrowserLoudnessConfigEnabled } from '../config';
 import { BrowserLoudnessPanel } from './BrowserLoudnessPanel';
 import { MeasurementDashboard } from './MeasurementDashboard';
+import { ReconstructionContractPanel } from './ReconstructionContractPanel';
 import { PatchSmithPanel } from './PatchSmithPanel';
 import { SamplePlayback } from './SamplePlayback';
 import { SessionMusicianPanel } from './SessionMusicianPanel';
@@ -40,35 +26,45 @@ import { TranscriptionPianorollBlock } from './TranscriptionPianorollBlock';
 import { Mt3TranscriptionPanel } from './Mt3TranscriptionPanel';
 import { StemListeningNotesPanel } from './StemListeningNotesPanel';
 import { hasStemListeningNotesContent } from '../services/sessionMusician';
-import { Button, DeviceRack, MetricBar, MetricTile, Pill, SectionHeader, TokenBadgeList } from './ui';
-import { PhaseSourceBadge } from './PhaseSourceBadge';
+import { Button, SectionHeader } from './ui';
 import { StickyNav, type StickyNavSection } from './StickyNav';
-import { CitationBlock, CitationHeadline } from './CitationBlock';
 import { ConfidenceBandBadge } from './sessionMusician/ConfidenceBandBadge';
-import { RecommendationVerificationBadge } from './RecommendationVerificationBadge';
-import { toConfidenceBand } from '../services/sessionMusician/confidenceBand';
 import { loadAppliedIds, toggleAppliedId } from '../services/appliedRecommendations';
-import {
-  formatContractRange,
-  formatContractValue,
-} from '../services/recommendationsContract';
-import type { RecommendationContractEntry } from '../types';
 import {
   buildArrangementViewModel,
   buildMixChainGroups,
   buildPatchCards,
   buildPatchGroups,
   buildSonicElementCards,
-  calculateStereoBandStyle,
   toConfidenceBadges,
-  truncateAtSentenceBoundary,
-  truncateBySentenceCount,
 } from './analysisResultsViewModel';
 import {
   formatDisplayText,
   getTextRoleClassName,
   type TextRole,
 } from '../utils/displayText';
+import { Collapsible, textRoleClassName, type StyleProfileSectionState } from './analysisResults/shared';
+import { NotableFindingsSection } from './analysisResults/NotableFindingsSection';
+import { ReconstructionBriefSection } from './analysisResults/ReconstructionBriefSection';
+import { DeterministicAdviceSection } from './analysisResults/DeterministicAdviceSection';
+import { shouldShowDeterministicFallback } from '../services/deterministicRecommendations';
+import { MeasurementSummarySection } from './analysisResults/MeasurementSummarySection';
+import { AudioObservationsSection } from './analysisResults/AudioObservationsSection';
+import { ProjectSetupSection } from './analysisResults/ProjectSetupSection';
+import { TrackLayoutSection } from './analysisResults/TrackLayoutSection';
+import { RoutingBlueprintSection } from './analysisResults/RoutingBlueprintSection';
+import { WarpGuideSection } from './analysisResults/WarpGuideSection';
+import { DetectedCharacteristicsSection } from './analysisResults/DetectedCharacteristicsSection';
+import { InterpretationPanel } from './analysisResults/InterpretationPanel';
+import { ConfidencePillRow } from './analysisResults/ConfidencePillRow';
+import { TrackCharacterSection } from './analysisResults/TrackCharacterSection';
+import { SecretSauceSection } from './analysisResults/SecretSauceSection';
+import { StyleProfileSection } from './analysisResults/StyleProfileSection';
+import { InterpretationWarningsSection } from './analysisResults/InterpretationWarningsSection';
+import { SonicElementsSection } from './analysisResults/SonicElementsSection';
+import { ArrangementOverviewSection } from './analysisResults/ArrangementOverviewSection';
+import { MixChainSection } from './analysisResults/MixChainSection';
+import { PatchFrameworkSection } from './analysisResults/PatchFrameworkSection';
 
 export interface AnalysisResultsProps {
   phase1: Phase1Result | null;
@@ -198,115 +194,6 @@ export function toggleOpenKeySet(previous: ReadonlySet<string>, id: string): Set
   return next;
 }
 
-/**
- * Audit Finding #14: per-card "applied to my session" toggle. Looks like a
- * checkbox to producers who scan top-down through Mix Chain / Patches lists.
- * Renders nothing when no tracker is wired (e.g., file hash unavailable);
- * stops click propagation so toggling doesn't also expand/collapse the card.
- */
-function AppliedCheckbox({
-  isApplied,
-  onToggle,
-  ariaLabel,
-}: {
-  isApplied: boolean;
-  onToggle: () => void;
-  ariaLabel: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="checkbox"
-      aria-checked={isApplied}
-      aria-label={ariaLabel}
-      data-applied={isApplied || undefined}
-      data-testid="applied-checkbox"
-      onClick={(event) => {
-        event.stopPropagation();
-        onToggle();
-      }}
-      className={`flex-shrink-0 flex items-center justify-center w-4 h-4 rounded-sm border transition-colors ${
-        isApplied
-          ? 'border-success/60 bg-success/15 text-success hover:border-success'
-          : 'border-border bg-bg-card/40 text-text-secondary/40 hover:border-accent/40 hover:text-accent'
-      }`}
-      title={isApplied ? 'Applied — click to unmark' : 'Mark as applied'}
-    >
-      {isApplied ? <Check className="w-3 h-3" /> : null}
-    </button>
-  );
-}
-
-/**
- * "Validated" chip for cards backed by the recommendations.v1 contract
- * (ADR 0003): the backend admitted this card to the schema-validated,
- * citation-gated envelope. Cards without it are exactly the ones the
- * projection refused (typically: no Phase 1 citation), so the badge is the
- * citation gate made visible. Renders nothing when no entries match.
- */
-function ContractValidatedBadge({
-  entries,
-  testId,
-}: {
-  entries: RecommendationContractEntry[];
-  testId: string;
-}) {
-  if (entries.length === 0) return null;
-  return (
-    <span
-      data-testid={testId}
-      title="Passed the recommendations.v1 contract: schema-validated and citing at least one Phase 1 measurement."
-      className="text-micro font-mono uppercase px-1.5 py-0.5 rounded border border-success/40 text-success whitespace-nowrap"
-    >
-      ✓ Validated
-    </span>
-  );
-}
-
-/**
- * Expanded-card block listing the contract's normalized view of each backing
- * entry: parsed value + unit and the published working range. The range is
- * net-new information (the per-unit tolerance neighborhood the contract
- * derives) — the raw value string already renders in the parameter grid.
- */
-function ContractEntriesBlock({
-  entries,
-  testId,
-}: {
-  entries: RecommendationContractEntry[];
-  testId: string;
-}) {
-  if (entries.length === 0) return null;
-  return (
-    <div data-testid={testId} className="border border-success/20 bg-success/5 rounded-sm px-2 py-2">
-      <p className="text-meta font-mono text-success uppercase tracking-wide">
-        Validated · recommendations.v1
-      </p>
-      {entries.map((entry, idx) => {
-        const range = formatContractRange(entry);
-        return (
-          <p key={`${entry.parameter}-${idx}`} className="text-xs font-mono text-text-secondary mt-1">
-            {entry.parameter}: <span className="text-text-primary font-bold">{formatContractValue(entry)}</span>
-            {range ? ` · working range ${range}` : ''}
-          </p>
-        );
-      })}
-    </div>
-  );
-}
-
-function Collapsible({ isOpen, children }: { isOpen: boolean; children: React.ReactNode }) {
-  return (
-    <div
-      className={`overflow-hidden transition-[max-height,opacity] duration-300 ease-out ${
-        isOpen ? 'max-h-[900px] opacity-100' : 'max-h-0 opacity-0'
-      }`}
-    >
-      {children}
-    </div>
-  );
-}
-
 function SourcesToggle({ sources, showSources, onToggle }: { sources?: string[]; showSources: boolean; onToggle: () => void }) {
   if (!sources || sources.length === 0) return null;
   return (
@@ -340,320 +227,11 @@ function SourcesToggle({ sources, showSources, onToggle }: { sources?: string[];
 // three-level Confidence Notes chips. Retired — chips now route through
 // `ConfidenceBandBadge` with the canonical four-band ladder.
 
-function shortenCharacteristicName(name: string): string {
-  return name.trim().split(/\s+/).slice(0, 2).join(' ');
-}
-
-function characteristicPillClass(confidence: string): string {
-  const normalized = String(confidence).trim().toUpperCase();
-  if (normalized === 'HIGH') {
-    return 'bg-success/20 text-success border-success/30';
-  }
-  if (normalized === 'MED' || normalized === 'MODERATE') {
-    return 'bg-warning/20 text-warning border-warning/30';
-  }
-  return 'bg-error/20 text-error border-error/30';
-}
-
-function groupIcon(groupName: string): React.ReactNode {
-  if (groupName.includes('DRUM PROCESSING')) return '🥁';
-  // Audit #13: 🫧 (bubbles) is not a bass signifier in any audio
-  // convention. Swapped to the monochrome Lucide waveform glyph, which
-  // matches the app's icon language. Other groups keep their emoji
-  // landmarks for now (smallest blast radius).
-  if (groupName.includes('BASS PROCESSING')) {
-    return <AudioWaveform className="w-3.5 h-3.5 inline -mt-0.5" aria-hidden="true" />;
-  }
-  if (groupName.includes('SYNTH / MELODIC')) return '🎹';
-  if (groupName.includes('MID PROCESSING')) return '🎚';
-  if (groupName.includes('HIGH-END DETAIL')) return '✨';
-  if (groupName.includes('MASTER BUS')) return '🧱';
-  return '🎛';
-}
-
-const SEGMENT_ORDER_PALETTE = ['#e05c00', '#c44b8a', '#2d9cdb', '#27ae60'] as const;
-const TRACK_AVERAGE_LUFS = -7.5;
-
-function getSegmentPaletteColor(segmentIndex: number): string {
-  return SEGMENT_ORDER_PALETTE[segmentIndex % SEGMENT_ORDER_PALETTE.length];
-}
-
-function withAlpha(hexColor: string, alphaHex: string): string {
-  return `${hexColor}${alphaHex}`;
-}
-
-const LOW_CONFIDENCE_TITLE = "Low confidence — treat this as approximate.";
-
-function textRoleClassName(role: TextRole, className = ''): string {
-  return [getTextRoleClassName(role), className].filter(Boolean).join(' ');
-}
-
-interface ResultsSectionHeaderProps {
-  title: React.ReactNode;
-  rightSlot?: React.ReactNode;
-  titleRole?: TextRole;
-  titleClassName?: string;
-  className?: string;
-}
-
-/**
- * Thin wrapper around the SectionHeader primitive — preserves the
- * (title, rightSlot, titleRole, titleClassName, className) API the rest of
- * AnalysisResults expects while letting the primitive own the actual layout
- * + LED indicator + data-text-role propagation. The static accent dot
- * (`<span class="w-2 h-2 bg-accent rounded-full">`) is upgraded to the
- * pulsing `.led-indicator--active` glyph that every other DeviceRack /
- * SectionHeader in the migration uses.
- */
-function ResultsSectionHeader({
-  title,
-  rightSlot,
-  titleRole,
-  titleClassName,
-  className,
-}: ResultsSectionHeaderProps) {
-  return (
-    <SectionHeader
-      title={title}
-      titleRole={titleRole}
-      titleClassName={titleClassName}
-      action={rightSlot}
-      variant="underline"
-      size="md"
-      ledTone="accent"
-      className={className}
-    />
-  );
-}
-
-function lowConfidenceIndicator(show: boolean) {
-  if (!show) return null;
-  return (
-    <span
-      className="text-meta font-mono text-warning"
-      title={LOW_CONFIDENCE_TITLE}
-      aria-label="Low confidence"
-    >
-      ⚠
-    </span>
-  );
-}
-
-interface MetaBadgeItem {
-  label: string;
-  value?: string | null;
-}
-
-interface InterpretationWarningMapping {
-  originalValue?: string;
-  coercedValue?: string;
-  path?: string;
-}
-
-interface GroupedInterpretationWarning {
-  key: string;
-  code?: string;
-  count: number;
-  tone: 'adjustment' | 'warning';
-  title: string;
-  message: string;
-  paths: string[];
-  mappings: InterpretationWarningMapping[];
-}
-
-type StyleProfileSectionState = 'ready' | 'dropped' | 'omitted' | 'disabled' | 'pending';
-
-function MetaBadgeList({ items }: { items: MetaBadgeItem[] }) {
-  const visibleItems = items.filter((item) => typeof item.value === 'string' && item.value.trim().length > 0);
-  if (visibleItems.length === 0) return null;
-
-  // Audit N8: previously each chip rendered as `Family: Native` /
-  // `Context: Acid bass` / `Stage: Sound design`. The `Label:` prefix read
-  // as a JSON-key column header — engineering-flavour. The chip content
-  // alone (`Acid bass`) is enough; we keep `item.label` only for the React
-  // key. Tooltip preserves the original label for users who want context.
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {visibleItems.map((item) => (
-        <span
-          key={`${item.label}-${item.value}`}
-          title={item.label}
-          className="text-micro font-mono uppercase px-1.5 py-0.5 rounded border border-border text-text-secondary whitespace-nowrap"
-        >
-          {item.value}
-        </span>
-      ))}
-    </div>
-  );
-}
-
 // Audit Finding #2: `GroundingBadgeList` (9px monospace field-path pills) was
 // retired in favor of the structured `CitationBlock` primitive. The component
 // previously lived here and rendered raw field paths like `bpmConfidence` as
 // orange-accent pills. Track Layout — its only call site — now uses
 // CitationBlock with the segmentIndexes routed through the `extraRows` prop.
-
-// Audit Finding #1C: the Interpretation Caution panel used to render the
-// backend's `originalValue` / `coercedValue` strings verbatim inside small
-// badges. For dropped Phase 2 recommendations, the backend JSON-dumps the
-// whole AbletonRecommendation object into `originalValue` (see
-// `_stringify_warning_value` / `_build_phase2_validation_warning` in
-// `apps/backend/server_phase2.py`). The producer would see a literal
-// `{"advancedTip":"…","device":"$Saturator","phase1Fields":[...],…}` string
-// inside the panel — engine output leaking through.
-//
-// `formatDroppedValue` keeps the backend contract intact and renders a
-// compact human summary for JSON-shaped values: parse, pick a few headline
-// keys (device, parameter, value, …), join as "k: v · k: v". Non-JSON
-// strings pass through. Invalid JSON falls back to a truncated raw string.
-const FORMAT_DROPPED_VALUE_HEADLINE_KEYS = [
-  'device',
-  'parameter',
-  'value',
-  'category',
-  'name',
-  'field',
-] as const;
-const FORMAT_DROPPED_VALUE_MAX_CHARS = 80;
-
-function formatDroppedValue(raw: unknown): string {
-  if (raw === null || raw === undefined) return '—';
-  const str = String(raw).trim();
-  if (str.length === 0) return '—';
-  const looksLikeJson = str.startsWith('{') || str.startsWith('[');
-  if (!looksLikeJson) {
-    return str.length > FORMAT_DROPPED_VALUE_MAX_CHARS
-      ? `${str.slice(0, FORMAT_DROPPED_VALUE_MAX_CHARS - 1)}…`
-      : str;
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(str);
-  } catch {
-    return str.length > FORMAT_DROPPED_VALUE_MAX_CHARS
-      ? `${str.slice(0, FORMAT_DROPPED_VALUE_MAX_CHARS - 1)}…`
-      : str;
-  }
-
-  if (Array.isArray(parsed)) {
-    const n = parsed.length;
-    const noun = `${n} item${n === 1 ? '' : 's'}`;
-    const first = parsed[0];
-    if (first && typeof first === 'object' && !Array.isArray(first)) {
-      const firstRec = first as Record<string, unknown>;
-      const label =
-        (typeof firstRec.device === 'string' && firstRec.device) ||
-        (typeof firstRec.name === 'string' && firstRec.name) ||
-        null;
-      if (label) return `${noun} (${label}${n > 1 ? ', …' : ''})`;
-    }
-    return noun;
-  }
-
-  if (parsed && typeof parsed === 'object') {
-    const record = parsed as Record<string, unknown>;
-    const parts: string[] = [];
-    for (const key of FORMAT_DROPPED_VALUE_HEADLINE_KEYS) {
-      if (parts.length >= 3) break;
-      const value = record[key];
-      if (value === null || value === undefined || value === '') continue;
-      const valueStr = typeof value === 'string' ? value : JSON.stringify(value);
-      if (!valueStr) continue;
-      parts.push(`${key}: ${valueStr}`);
-    }
-    if (parts.length === 0) {
-      const entries = Object.entries(record).filter(
-        ([, v]) => v !== null && v !== undefined && v !== '',
-      );
-      for (const [k, v] of entries.slice(0, 2)) {
-        const valueStr = typeof v === 'string' ? v : JSON.stringify(v);
-        parts.push(`${k}: ${valueStr}`);
-      }
-    }
-    if (parts.length === 0) return '—';
-    const joined = parts.join(' · ');
-    return joined.length > FORMAT_DROPPED_VALUE_MAX_CHARS
-      ? `${joined.slice(0, FORMAT_DROPPED_VALUE_MAX_CHARS - 1)}…`
-      : joined;
-  }
-
-  // Primitive that happened to start with `{` / `[` (very unlikely after the
-  // JSON.parse succeeded into an object, but defensive).
-  return str.length > FORMAT_DROPPED_VALUE_MAX_CHARS
-    ? `${str.slice(0, FORMAT_DROPPED_VALUE_MAX_CHARS - 1)}…`
-    : str;
-}
-
-function describeInterpretationWarning(
-  warning: InterpretationValidationWarning,
-): Pick<GroupedInterpretationWarning, 'tone' | 'title' | 'message'> {
-  if (warning.code === 'COERCED_TRACK_CONTEXT') {
-    // Two distinct repair reasons produce different titles so they stay as separate rows.
-    // "to match the required" → _normalize_track_context_value (format repair)
-    // "by matching against declared" → _repair_return_track_context (blueprint match)
-    const isFormatRepair = warning.message?.includes('to match the required') ?? true;
-    const title = isFormatRepair ? 'Reformatted routing label' : 'Matched routing label to declared return';
-    const originalValue = warning.originalValue ? `"${warning.originalValue}"` : 'the AI-generated routing label';
-    const coercedValue = warning.coercedValue ? `"${warning.coercedValue}"` : 'the detected return-track label';
-    return {
-      tone: 'adjustment',
-      title,
-      message: `The backend kept the result and corrected ${originalValue} to ${coercedValue} so the routing labels match the detected session structure.`,
-    };
-  }
-
-  return {
-    tone: 'warning',
-    title: warning.code ? warning.code.replace(/_/g, ' ') : 'Validation warning',
-    message: truncateAtSentenceBoundary(warning.message, 240),
-  };
-}
-
-function groupInterpretationWarnings(
-  warnings: InterpretationValidationWarning[],
-): GroupedInterpretationWarning[] {
-  const grouped = new Map<string, GroupedInterpretationWarning>();
-
-  warnings.forEach((warning, index) => {
-    const description = describeInterpretationWarning(warning);
-    // Key on code + tone + title only: multiple instances of the same repair reason
-    // collapse into one row; different repair reasons (different titles) stay separate.
-    const key = [warning.code ?? 'warning', description.tone, description.title].join('::');
-    const existing = grouped.get(key);
-
-    const mapping: InterpretationWarningMapping = {
-      originalValue: warning.originalValue,
-      coercedValue: warning.coercedValue,
-      path: warning.path,
-    };
-
-    if (existing) {
-      existing.count += 1;
-      if (warning.path) {
-        existing.paths.push(warning.path);
-      }
-      existing.mappings.push(mapping);
-      return;
-    }
-
-    grouped.set(key, {
-      key: `${key}::${index}`,
-      code: warning.code,
-      count: 1,
-      tone: description.tone,
-      title: description.title,
-      message: description.message,
-      paths: warning.path ? [warning.path] : [],
-      mappings: [mapping],
-    });
-  });
-
-  return Array.from(grouped.values()).map((warning) => ({
-    ...warning,
-    paths: Array.from(new Set(warning.paths)),
-  }));
-}
 
 function toFiniteNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -671,14 +249,6 @@ function getChordStrength(phase1: Phase1Result): number | null {
   }
 
   return toFiniteNumber((chordDetail as Record<string, unknown>).chordStrength);
-}
-
-function isAssumedMeter(phase1: Phase1Result): boolean {
-  return phase1.timeSignatureSource === 'assumed_four_four' || (phase1.timeSignatureConfidence ?? 1) <= 0;
-}
-
-function meterStatusLabel(phase1: Phase1Result): string {
-  return isAssumedMeter(phase1) ? 'ASSUMED' : 'DETECTED';
 }
 
 // Audit Finding #4: `formatBpmScore` retired — the BPM card now renders
@@ -780,24 +350,6 @@ export function AnalysisResults({
   const styleProfileDropped = validationWarnings.some(
     (warning) => warning.code === 'DROPPED_INVALID_STYLE_PROFILE',
   );
-  const groupedValidationWarnings = useMemo(
-    () => groupInterpretationWarnings(validationWarnings),
-    [validationWarnings],
-  );
-  const adjustmentGroups = useMemo(
-    () => groupedValidationWarnings.filter((g) => g.tone === 'adjustment'),
-    [groupedValidationWarnings],
-  );
-  const warningGroups = useMemo(
-    () => groupedValidationWarnings.filter((g) => g.tone === 'warning'),
-    [groupedValidationWarnings],
-  );
-  const hasAdjustments = adjustmentGroups.length > 0;
-  const hasWarnings = warningGroups.length > 0;
-  const isMixed = hasAdjustments && hasWarnings;
-  const allValidationWarningsAreAdjustments = hasAdjustments && !hasWarnings;
-  const adjustmentCount = adjustmentGroups.reduce((sum, g) => sum + g.count, 0);
-  const warningCount = warningGroups.reduce((sum, g) => sum + g.count, 0);
 
   const confidenceBadges = toConfidenceBadges(phase2?.confidenceNotes);
   const arrangement = buildArrangementViewModel(phase1, phase2?.arrangementOverview);
@@ -847,15 +399,6 @@ export function AnalysisResults({
     phase1.transcription?.mt3 && phase1.transcription.mt3.tracks.length > 0
       ? phase1.transcription.mt3
       : null;
-  const warpTargets = warpGuide
-    ? [
-        { label: 'Full Track', target: warpGuide.fullTrack },
-        { label: 'Drums', target: warpGuide.drums },
-        { label: 'Bass', target: warpGuide.bass },
-        { label: 'Melodic', target: warpGuide.melodic },
-        ...(warpGuide.vocals ? [{ label: 'Vocals', target: warpGuide.vocals }] : []),
-      ]
-    : [];
   const characteristicPills = Array.isArray(phase2?.detectedCharacteristics)
     ? phase2.detectedCharacteristics.slice(0, 4)
     : [];
@@ -984,131 +527,17 @@ export function AnalysisResults({
 
       <StickyNav sections={navSections} />
 
-      <DeviceRack name="Measurement Summary" density="dense" status="success">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {/* TEMPO */}
-          <MetricTile
-            size="lg"
-            accent="accent"
-            icon={<Activity className="w-3.5 h-3.5 text-accent/60" />}
-            label="TEMPO"
-            value={finalBpm}
-            unit="BPM"
-            headerRight={<PhaseSourceBadge source="measured" />}
-            footer={
-              <div className="space-y-2">
-                {/* Audit Finding #4: `SCORE 0.86` badge retired in favor of the
-                    canonical band pill — same vocabulary as Key, Character, and
-                    every other confidence surface. */}
-                <ConfidenceBandBadge variant="compact" confidence={phase1.bpmConfidence} />
-                {phase1.bpmSource && (
-                  <span className="block text-nano font-mono uppercase tracking-wide text-text-secondary/50">
-                    {phase1.bpmSource.replace(/_/g, ' ')}
-                  </span>
-                )}
-              </div>
-            }
-          />
+      <NotableFindingsSection phase1={phase1} />
 
-          {/* KEY SIG */}
-          <MetricTile
-            size="lg"
-            accent="accent"
-            icon={<Music className="w-3.5 h-3.5 text-accent/60" />}
-            label="KEY SIG"
-            value={<span className="truncate block">{finalKey}</span>}
-            headerRight={
-              <div className="flex items-center gap-1">
-                <PhaseSourceBadge source="measured" />
-                {lowConfidenceIndicator(keyIsApproximate)}
-              </div>
-            }
-            footer={
-              <div className="space-y-1.5">
-                <MetricBar
-                  value={phase1.keyConfidence}
-                  color="var(--color-accent)"
-                  glow
-                />
-                {/* Audit Finding #4: `CONF 62%` text replaced with the canonical
-                    band pill so every confidence reads in the same vocabulary. */}
-                <ConfidenceBandBadge variant="compact" confidence={phase1.keyConfidence} />
-              </div>
-            }
-          />
+      <ReconstructionBriefSection phase1={phase1} />
 
-          {/* METER */}
-          <MetricTile
-            size="lg"
-            accent="accent"
-            icon={<Clock className="w-3.5 h-3.5 text-accent/60" />}
-            label="METER"
-            value={phase1.timeSignature}
-            footer={<Pill tone="neutral" size="xs">{meterStatusLabel(phase1)}</Pill>}
-          />
-
-          {/* CHARACTER — genre primary, characteristic pills secondary */}
-          {phase1.genreDetail ? (
-            <MetricTile
-              size="lg"
-              accent="accent"
-              icon={<Disc className="w-3.5 h-3.5 text-accent/60" />}
-              label="CHARACTER"
-              value={<span className="truncate block capitalize">{phase1.genreDetail.genre}</span>}
-              headerRight={<PhaseSourceBadge source="measured" />}
-              footer={
-                <div className="space-y-2">
-                  <TokenBadgeList
-                    items={[
-                      { label: phase1.genreDetail.genreFamily, tone: 'accent' },
-                      ...(phase1.genreDetail.secondaryGenre
-                        ? [{ label: phase1.genreDetail.secondaryGenre, tone: 'neutral' as const }]
-                        : []),
-                    ]}
-                  />
-                  <MetricBar
-                    value={phase1.genreDetail.confidence}
-                    color="var(--color-accent)"
-                    glow
-                  />
-                  {/* Audit Finding #4: `CONF X%` replaced with the canonical
-                      band pill — same vocabulary across every confidence. */}
-                  <ConfidenceBandBadge
-                    variant="compact"
-                    confidence={phase1.genreDetail.confidence}
-                  />
-                </div>
-              }
-            />
-          ) : (
-            <MetricTile
-              size="lg"
-              accent="accent"
-              icon={<Disc className="w-3.5 h-3.5 text-accent/60" />}
-              label="CHARACTER"
-              value={
-                <span className="text-base font-mono uppercase tracking-wide text-text-secondary/60">
-                  SCANNING...
-                </span>
-              }
-              footer={
-                characteristicPills.length > 0 ? (
-                  <div className="w-full flex flex-wrap gap-1">
-                    {characteristicPills.map((item, idx) => (
-                      <span
-                        key={`${item.name}-${idx}`}
-                        className={`inline-flex items-center px-2 py-1 rounded-sm border text-micro font-mono uppercase tracking-wide ${characteristicPillClass(item.confidence)}`}
-                      >
-                        {shortenCharacteristicName(item.name)}
-                      </span>
-                    ))}
-                  </div>
-                ) : undefined
-              }
-            />
-          )}
-        </div>
-      </DeviceRack>
+      <MeasurementSummarySection
+        phase1={phase1}
+        finalBpm={finalBpm}
+        finalKey={finalKey}
+        keyIsApproximate={keyIsApproximate}
+        characteristicPills={characteristicPills}
+      />
 
       {/* Audit Finding #1: MeasurementDashboard was here at the top of the
           results scroll, ahead of Style / Sonic Elements / Mix Chain / Patches.
@@ -1118,29 +547,15 @@ export function AnalysisResults({
           Patches/Secret Sauce) so the actionable Phase 2 content reads first
           and the measurement evidence reads as drill-down. */}
 
-      <section data-testid="interpretation-panel" className="space-y-3">
-        <ResultsSectionHeader
-          title={
-            <>
-              {INTERPRETATION_LABEL}
-              <PhaseSourceBadge source="advisory" />
-            </>
-          }
-        />
-        <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
-          Interpretive guidance generated from DSP measurements. Not a ground-truth measurement.
-        </p>
-        {phase2StatusMessage && !phase2 && (
-          <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
-            {phase2StatusMessage}
-          </p>
-        )}
-        {!hasRenderablePhase2Content && !phase2StatusMessage && (
-          <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
-            Draft — AI interpretation is incomplete or unavailable.
-          </p>
-        )}
-      </section>
+      <InterpretationPanel
+        phase2StatusMessage={phase2StatusMessage}
+        hasPhase2={Boolean(phase2)}
+        hasRenderablePhase2Content={hasRenderablePhase2Content}
+      />
+
+      {shouldShowDeterministicFallback(phase2, interpretationStatus) && (
+        <DeterministicAdviceSection phase1={phase1} />
+      )}
 
       {phase2ConsistencyReport &&
         phase2ConsistencyReport.violations.some((v) => v.audience !== 'dev') && (
@@ -1155,830 +570,53 @@ export function AnalysisResults({
           </section>
         )}
 
-      {groupedValidationWarnings.length > 0 && (
-        <section
-          data-testid="interpretation-warnings"
-          className={`space-y-3 rounded-sm border p-4 ${
-            isMixed
-              ? 'border-border bg-bg-card'
-              : allValidationWarningsAreAdjustments
-                ? 'border-accent/25 bg-bg-card'
-                : 'border-warning/25 bg-bg-card'
-          }`}
-        >
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h2
-                className={`text-sm font-mono uppercase tracking-wider ${
-                  isMixed
-                    ? 'text-text-primary'
-                    : allValidationWarningsAreAdjustments ? 'text-accent' : 'text-warning'
-                }`}
-              >
-                {isMixed
-                  ? 'Interpretation Notes'
-                  : allValidationWarningsAreAdjustments ? 'Interpretation Adjustments' : 'Interpretation Caution'}
-              </h2>
-              <p
-                className={`text-meta font-mono uppercase tracking-[0.16em] ${
-                  isMixed
-                    ? 'text-text-secondary'
-                    : allValidationWarningsAreAdjustments ? 'text-accent/80' : 'text-warning/80'
-                }`}
-              >
-                {isMixed
-                  ? 'The backend made auto-corrections and flagged parts that may need review.'
-                  : allValidationWarningsAreAdjustments
-                    ? 'The backend kept the result and auto-corrected a few AI-generated labels so they match the detected session structure.'
-                    : 'The backend kept the result, but flagged parts that may not match the approved Live catalog.'}
-              </p>
-            </div>
-            <span
-              className={`text-meta font-mono uppercase px-2 py-1 rounded border ${
-                isMixed
-                  ? 'border-border text-text-secondary'
-                  : allValidationWarningsAreAdjustments
-                    ? 'border-accent/30 text-accent'
-                    : 'border-warning/30 text-warning'
-              }`}
-            >
-              {isMixed
-                ? `${adjustmentCount} adjustment${adjustmentCount === 1 ? '' : 's'} · ${warningCount} warning${warningCount === 1 ? '' : 's'}`
-                : allValidationWarningsAreAdjustments
-                  ? `${adjustmentCount} item${adjustmentCount === 1 ? '' : 's'}`
-                  : `${warningCount} warning${warningCount === 1 ? '' : 's'}`}
-            </span>
-          </div>
-          <div className="space-y-2">
-            {(isMixed ? [...adjustmentGroups, ...warningGroups] : groupedValidationWarnings).map((warning) => (
-              <div
-                key={warning.key}
-                className={`rounded-sm border p-3 space-y-2 ${
-                  warning.tone === 'adjustment'
-                    ? 'border-accent/20 bg-bg-panel'
-                    : 'border-warning/20 bg-bg-panel'
-                }`}
-              >
-                <div className="flex flex-wrap gap-1.5">
-                  {warning.code && (
-                    <span
-                      className={`text-micro font-mono uppercase px-1.5 py-0.5 rounded border ${
-                        warning.tone === 'adjustment'
-                          ? 'border-accent/30 text-accent'
-                          : 'border-warning/30 text-warning'
-                      }`}
-                    >
-                      {warning.code}
-                    </span>
-                  )}
-                  {warning.count > 1 && (
-                    <span
-                      className={`text-micro font-mono uppercase px-1.5 py-0.5 rounded border ${
-                        warning.tone === 'adjustment'
-                          ? 'border-accent/25 text-accent/90'
-                          : 'border-warning/25 text-warning/90'
-                      }`}
-                    >
-                      {warning.count} items
-                    </span>
-                  )}
-                </div>
-                <div className="space-y-1">
-                  <p
-                    className={`text-meta font-mono uppercase tracking-[0.16em] ${
-                      warning.tone === 'adjustment' ? 'text-accent/85' : 'text-warning/85'
-                    }`}
-                  >
-                    {warning.title}
-                  </p>
-                  <p className="text-xs font-mono text-text-secondary leading-relaxed">
-                    {warning.message}
-                  </p>
-                </div>
-                {warning.mappings.some((m) => m.originalValue || m.coercedValue || m.path) ? (
-                  <div className="space-y-1">
-                    {warning.mappings.map((m, mIdx) => (
-                      <div
-                        key={`${warning.key}-mapping-${mIdx}`}
-                        className="flex flex-wrap items-center gap-1.5 text-micro font-mono text-text-secondary"
-                      >
-                        {(m.originalValue || m.coercedValue) && (
-                          <>
-                            {/* Audit Finding #1C: render compact human summary
-                              for JSON-shaped values (dropped recommendations)
-                              instead of dumping the raw object. See
-                              `formatDroppedValue` near the top of the file. */}
-                            <span className="px-1.5 py-0.5 rounded border border-border">
-                              {formatDroppedValue(m.originalValue)}
-                            </span>
-                            <span className="opacity-50">→</span>
-                            <span className="px-1.5 py-0.5 rounded border border-border">
-                              {formatDroppedValue(m.coercedValue)}
-                            </span>
-                          </>
-                        )}
-                        {m.path && (
-                          <span className="px-1.5 py-0.5 rounded border border-border opacity-70">
-                            {m.path}
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="flex flex-wrap gap-1.5">
-                    <span className="text-micro font-mono px-1.5 py-0.5 rounded border border-border text-text-secondary">
-                      Result-level warning
-                    </span>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+      <InterpretationWarningsSection validationWarnings={validationWarnings} />
 
       {confidenceBadges.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 px-1">
-          {/* Audit Finding #4: chips used to render "{label}: High|Moderate|Low"
-            with bespoke success/warning/error tones. Now route through the
-            canonical band ladder so the same vocabulary (Solid / Workable /
-            Rough / Unreliable) appears across every confidence surface.
-            Filter null bands (unparseable values) rather than render a
-            misleading default. */}
-          {confidenceBadges.map((badge, idx) =>
-            badge.band ? (
-              <span key={`${badge.label}-${idx}`} className="inline-flex items-center gap-2">
-                <span className="text-meta font-mono uppercase tracking-wide text-text-secondary/80">
-                  {badge.label}:
-                </span>
-                <ConfidenceBandBadge variant="compact" band={badge.band} />
-              </span>
-            ) : null,
-          )}
-        </div>
+        <ConfidencePillRow confidenceBadges={confidenceBadges} />
       )}
 
       {phase2?.trackCharacter && (
-        <section className="space-y-3">
-          <ResultsSectionHeader
-            title={formatDisplayText('Track Character', 'title')}
-            titleRole="section-title"
-            rightSlot={
-              <span className="text-meta font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">AI INTERP</span>
-            }
-          />
-          <p data-text-role="body" className={textRoleClassName('body', 'opacity-80')}>
-            {truncateAtSentenceBoundary(phase2.trackCharacter, 900)}
-          </p>
-        </section>
+        <TrackCharacterSection trackCharacter={phase2.trackCharacter} />
       )}
 
-      <section id="section-style-profile" className="space-y-6 scroll-mt-24">
-        <ResultsSectionHeader
-          title="Style Profile"
-          rightSlot={
-            styleProfileSectionState === 'ready' ? (
-              <span className="text-meta font-mono bg-bg-panel border border-accent/30 text-accent px-2 py-1 rounded font-bold">
-                STRUCTURED
-              </span>
-            ) : (
-              <span className="text-meta font-mono bg-bg-panel border border-border text-text-secondary px-2 py-1 rounded font-bold">
-                {styleProfileSectionState === 'disabled'
-                  ? 'DISABLED'
-                  : styleProfileSectionState === 'pending'
-                    ? 'PENDING'
-                    : styleProfileSectionState === 'omitted'
-                      ? 'NOT RETURNED'
-                      : 'DROPPED'}
-              </span>
-            )
-          }
-        />
-
-        {styleProfile ? (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <MetricTile
-                accent="accent"
-                size="xl"
-                label="Tempo"
-                value={styleProfile.authoritativeMeasurements.bpm ?? '—'}
-                unit={styleProfile.authoritativeMeasurements.bpm != null ? 'BPM' : undefined}
-              />
-              <MetricTile
-                accent="accent"
-                size="xl"
-                label="Key"
-                value={styleProfile.authoritativeMeasurements.key ?? '—'}
-              />
-              <MetricTile
-                accent="accent"
-                size="xl"
-                label="Meter"
-                value={styleProfile.authoritativeMeasurements.timeSignature ?? '—'}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="rounded-sm border border-border bg-bg-card p-4 space-y-3">
-                <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
-                  Genre
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  <span className="text-meta font-mono rounded-sm border border-accent/30 bg-accent/5 px-2 py-1 text-accent">
-                    {styleProfile.genre}
-                  </span>
-                  {styleProfile.subGenre && (
-                    <span className="text-meta font-mono rounded-sm border border-border px-2 py-1 text-text-secondary">
-                      {styleProfile.subGenre}
-                    </span>
-                  )}
-                </div>
-                {styleProfile.mood.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
-                      Mood
-                    </p>
-                    <TokenBadgeList
-                      items={styleProfile.mood.map((item) => ({ label: item, tone: 'accent' as const }))}
-                    />
-                  </div>
-                )}
-              </div>
-
-              <div className="rounded-sm border border-border bg-bg-card p-4 space-y-3">
-                {styleProfile.instruments.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
-                      Instruments
-                    </p>
-                    <TokenBadgeList
-                      items={styleProfile.instruments.map((item) => ({ label: item, tone: 'neutral' as const }))}
-                    />
-                  </div>
-                )}
-                {styleProfile.productionTechniques.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
-                      Production Techniques
-                    </p>
-                    <TokenBadgeList
-                      items={styleProfile.productionTechniques.map((item) => ({ label: item, tone: 'neutral' as const }))}
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="rounded-sm border border-border bg-bg-card p-4 space-y-2">
-                <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
-                  Style Read
-                </p>
-                <p className="text-xs font-mono text-text-secondary leading-relaxed">
-                  {truncateAtSentenceBoundary(styleProfile.description, 320)}
-                </p>
-              </div>
-              <div className="rounded-sm border border-accent/20 bg-accent/5 p-4 space-y-2">
-                <p className="text-meta font-mono uppercase tracking-[0.18em] text-accent">
-                  Reusable Prompt
-                </p>
-                <p className="text-xs font-mono text-text-secondary leading-relaxed">
-                  {truncateAtSentenceBoundary(styleProfile.generationPrompt, 320)}
-                </p>
-              </div>
-            </div>
-          </>
-        ) : (
-          <div className="rounded-sm border border-border bg-bg-card p-4 space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-micro font-mono uppercase px-1.5 py-0.5 rounded border border-border text-text-secondary">
-                {styleProfileSectionState === 'disabled'
-                  ? 'DISABLED'
-                  : styleProfileSectionState === 'pending'
-                    ? 'PENDING'
-                    : styleProfileSectionState === 'omitted'
-                      ? 'NOT RETURNED'
-                      : 'DROPPED'}
-              </span>
-            </div>
-            <p className="text-xs font-mono text-text-secondary leading-relaxed">
-              {styleProfileSectionState === 'disabled'
-                ? 'AI interpretation was disabled for this run, so no style profile was generated.'
-                : styleProfileSectionState === 'pending'
-                  ? 'Style profile is not ready yet. AI interpretation is still running or did not finish with a usable result.'
-                  : styleProfileSectionState === 'omitted'
-                    ? 'AI interpretation completed, but this run did not return a structured style profile.'
-                    : 'The model returned an invalid style profile, so ASA ignored it. See interpretation warnings above.'}
-            </p>
-            {styleProfileSectionState === 'disabled' && phase2StatusMessage && (
-              <p className="text-meta font-mono uppercase tracking-[0.16em] text-text-secondary/80">
-                {phase2StatusMessage}
-              </p>
-            )}
-          </div>
-        )}
-      </section>
+      <StyleProfileSection
+        styleProfile={styleProfile}
+        styleProfileSectionState={styleProfileSectionState}
+        phase2StatusMessage={phase2StatusMessage}
+      />
 
       {audioObservations && (
-        <section id="section-audio-observations" className="space-y-6 scroll-mt-24">
-          <ResultsSectionHeader
-            title="Audio Observations"
-            rightSlot={
-              <span className="text-meta font-mono bg-bg-panel border border-border text-text-secondary px-2 py-1 rounded font-bold">
-                Perceptual / Audio-Derived
-              </span>
-            }
-          />
-
-          <div className="rounded-sm border border-accent/20 bg-accent/5 p-4 space-y-2">
-            <p className="text-meta font-mono uppercase tracking-[0.18em] text-accent">
-              Sound Design Fingerprint
-            </p>
-            <p className="text-xs font-mono text-text-secondary leading-relaxed">
-              {truncateAtSentenceBoundary(audioObservations.soundDesignFingerprint, 320)}
-            </p>
-          </div>
-
-          {audioObservations.elementCharacter.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {audioObservations.elementCharacter.map((item, index) => (
-                <div
-                  key={`${item.element}-${index}`}
-                  className="rounded-sm border border-border bg-bg-card p-4 space-y-2"
-                >
-                  <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
-                    {item.element}
-                  </p>
-                  <p className="text-xs font-mono text-text-secondary leading-relaxed">
-                    {truncateAtSentenceBoundary(item.description, 220)}
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {audioObservations.productionSignatures.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
-                Production Signatures
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {audioObservations.productionSignatures.map((signature, index) => (
-                  <span
-                    key={`${signature}-${index}`}
-                    className="text-meta font-mono rounded-sm border border-accent/30 bg-accent/5 px-2 py-1 text-accent"
-                  >
-                    {truncateAtSentenceBoundary(signature, 140)}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="rounded-sm border border-border bg-bg-card p-4 space-y-2">
-            <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
-              Mix Context
-            </p>
-            <p className="text-xs font-mono text-text-secondary leading-relaxed">
-              {truncateAtSentenceBoundary(audioObservations.mixContext, 280)}
-            </p>
-          </div>
-        </section>
+        <AudioObservationsSection audioObservations={audioObservations} />
       )}
 
       {projectSetup && (
-        <section id="section-project-setup" className="space-y-6 scroll-mt-24">
-          <ResultsSectionHeader
-            title="Project Setup"
-            rightSlot={
-              <span className="text-meta font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">
-                LIVE 12 V2
-              </span>
-            }
-          />
-
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            <MetricTile accent="accent" size="xl" label="Tempo" value={projectSetup.tempoBpm} unit="BPM" />
-            <MetricTile accent="accent" size="xl" label="Meter" value={projectSetup.timeSignature} />
-            <MetricTile accent="accent" size="xl" label="Sample Rate" value={`${projectSetup.sampleRate} Hz`} />
-            <MetricTile accent="accent" size="xl" label="Bit Depth" value={`${projectSetup.bitDepth}-bit`} />
-            <MetricTile accent="accent" size="xl" label="Headroom" value={projectSetup.headroomTarget} />
-          </div>
-
-          <div className="rounded-sm border border-border bg-bg-card p-4">
-            <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
-              Session Goal
-            </p>
-            <p className="mt-2 text-xs font-mono text-text-secondary leading-relaxed">
-              {truncateAtSentenceBoundary(projectSetup.sessionGoal, 320)}
-            </p>
-          </div>
-        </section>
+        <ProjectSetupSection projectSetup={projectSetup} />
       )}
 
       {trackLayout.length > 0 && (
-        <section id="section-track-layout" className="space-y-6 scroll-mt-24">
-          <ResultsSectionHeader
-            title="Track Layout"
-            rightSlot={
-              <span className="text-meta font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">
-                SCAFFOLD
-              </span>
-            }
-          />
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {trackLayout.map((item) => (
-              <div key={`${item.order}-${item.name}`} className="rounded-sm border border-border bg-bg-card p-4 space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="w-6 h-6 rounded-sm bg-bg-panel border border-border text-accent font-mono text-meta flex items-center justify-center">
-                      {item.order}
-                    </span>
-                    <div className="min-w-0">
-                      <h3
-                        data-text-role="item-title"
-                        className={textRoleClassName('item-title', 'truncate')}
-                      >
-                        {item.name}
-                      </h3>
-                      <p data-text-role="eyebrow" className={getTextRoleClassName('eyebrow')}>
-                        {item.type}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                <p data-text-role="body" className={textRoleClassName('body')}>
-                  {truncateAtSentenceBoundary(item.purpose, 220)}
-                </p>
-                {/* Audit Finding #2: replaced the legacy GroundingBadgeList
-                    (9px field-path pills) with the structured CitationBlock
-                    primitive, finishing the chain-of-custody visual treatment
-                    that already lands on Mix Chain / Patches / Sonic cards.
-                    Segment indexes (Track Layout-only) ride as a synthetic
-                    extra row at the bottom of the block. */}
-                <CitationBlock
-                  phase1={phase1}
-                  fields={item.grounding.phase1Fields}
-                  extraRows={
-                    Array.isArray(item.grounding.segmentIndexes) &&
-                    item.grounding.segmentIndexes.length > 0
-                      ? [
-                          {
-                            label: 'Active in segments',
-                            value: item.grounding.segmentIndexes.join(' · '),
-                          },
-                        ]
-                      : undefined
-                  }
-                  testId={`track-layout-citation-${item.order ?? 0}-${item.name}`}
-                />
-              </div>
-            ))}
-          </div>
-        </section>
+        <TrackLayoutSection trackLayout={trackLayout} phase1={phase1} />
       )}
 
       {routingBlueprint && (
-        <section id="section-routing-blueprint" className="space-y-6 scroll-mt-24">
-          <ResultsSectionHeader
-            title="Routing Blueprint"
-            rightSlot={
-              <span className="text-meta font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">
-                SIGNAL MAP
-              </span>
-            }
-          />
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="rounded-sm border border-border bg-bg-card p-4 space-y-2">
-              <p data-text-role="eyebrow" className={getTextRoleClassName('eyebrow')}>Sidechain Source</p>
-              <p data-text-role="item-title" className={getTextRoleClassName('item-title')}>
-                {routingBlueprint.sidechainSource ?? 'Not specified'}
-              </p>
-            </div>
-            <div className="rounded-sm border border-border bg-bg-card p-4 space-y-2 md:col-span-2">
-              <p data-text-role="eyebrow" className={getTextRoleClassName('eyebrow')}>Sidechain Targets</p>
-              <div className="flex flex-wrap gap-1.5">
-                {routingBlueprint.sidechainTargets.map((target) => (
-                  <span
-                    key={target}
-                    className="text-micro font-mono uppercase px-1.5 py-0.5 rounded border border-accent/30 bg-accent/5 text-accent"
-                  >
-                    {target}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {routingBlueprint.returns.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {routingBlueprint.returns.map((returnTrack) => (
-                <div key={returnTrack.name} className="rounded-sm border border-border bg-bg-card p-4 space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <h3 data-text-role="item-title" className={getTextRoleClassName('item-title')}>
-                      {returnTrack.name}
-                    </h3>
-                    <span className="text-micro font-mono uppercase px-1.5 py-0.5 rounded border border-border text-text-secondary">
-                      {returnTrack.deviceFocus}
-                    </span>
-                  </div>
-                  <p data-text-role="body" className={textRoleClassName('body')}>
-                    {truncateAtSentenceBoundary(returnTrack.purpose, 220)}
-                  </p>
-                  <MetaBadgeList
-                    items={[
-                      { label: 'Sends', value: returnTrack.sendSources.join(', ') },
-                      { label: 'Level', value: returnTrack.levelGuidance },
-                    ]}
-                  />
-                </div>
-              ))}
-            </div>
-          )}
-
-          {routingBlueprint.notes.length > 0 && (
-            <div className="rounded-sm border border-border bg-bg-card p-4 space-y-2">
-              <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">Routing Notes</p>
-              {routingBlueprint.notes.map((note, index) => (
-                <p key={`${note}-${index}`} className="text-xs font-mono text-text-secondary leading-relaxed">
-                  {truncateAtSentenceBoundary(note, 220)}
-                </p>
-              ))}
-            </div>
-          )}
-        </section>
+        <RoutingBlueprintSection routingBlueprint={routingBlueprint} />
       )}
 
       {warpGuide && (
-        <section id="section-warp-guide" className="space-y-6 scroll-mt-24">
-          <ResultsSectionHeader
-            title="Warp Guide"
-            rightSlot={
-              <span className="text-meta font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">
-                CLIP PREP
-              </span>
-            }
-          />
-
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-            {warpTargets.map(({ label, target }) => (
-              <div key={label} className="rounded-sm border border-border bg-bg-card p-4 space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">{label}</p>
-                  <span className="text-micro font-mono uppercase px-1.5 py-0.5 rounded border border-accent/30 bg-accent/5 text-accent">
-                    {target.warpMode}
-                  </span>
-                </div>
-                {target.settings && (
-                  <p className="text-meta font-mono text-text-secondary uppercase tracking-wide">
-                    {target.settings}
-                  </p>
-                )}
-                <p className="text-xs font-mono text-text-secondary leading-relaxed">
-                  {truncateAtSentenceBoundary(target.reason, 220)}
-                </p>
-              </div>
-            ))}
-          </div>
-
-          <div className="rounded-sm border border-border bg-bg-card p-4">
-            <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">Why These Modes</p>
-            <p className="mt-2 text-xs font-mono text-text-secondary leading-relaxed">
-              {truncateAtSentenceBoundary(warpGuide.rationale, 320)}
-            </p>
-          </div>
-        </section>
+        <WarpGuideSection warpGuide={warpGuide} />
       )}
 
       {Array.isArray(phase2?.detectedCharacteristics) && phase2.detectedCharacteristics.length > 0 && (
-        <div className="space-y-6">
-          <ResultsSectionHeader
-            title="Detected Characteristics"
-            rightSlot={
-              <span className="text-meta font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">AI INTERP</span>
-            }
-          />
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {phase2.detectedCharacteristics.map((item, idx) => (
-              <div
-                key={idx}
-                className="bg-bg-card border rounded-sm p-4 flex flex-col transition-all hover:border-accent/40 group relative overflow-hidden border-accent/30"
-              >
-                <div className="absolute top-0 left-0 w-1 h-full bg-accent"></div>
-                <div className="flex items-center justify-between mb-3 pl-2">
-                  <h3
-                    data-text-role="item-title"
-                    className={textRoleClassName('item-title', 'truncate pr-2')}
-                  >
-                    {item.name}
-                  </h3>
-                  {/* Audit Finding #4: Detected Characteristics cards used
-                    to render a HIGH/MED/LOW string pill with bespoke
-                    success/warning/error tones. Replaced with the canonical
-                    ConfidenceBandBadge so the same vocabulary (Solid /
-                    Workable / Rough / Unreliable) reads across every
-                    confidence surface in the UI. toConfidenceBand maps
-                    Gemini's HIGH→solid (0.9), MED→workable (0.6),
-                    LOW→rough (0.3) — middle of each band so the percent
-                    label reads as an honest hedge. */}
-                  {(() => {
-                    const band = toConfidenceBand(item.confidence);
-                    return band ? (
-                      <ConfidenceBandBadge variant="compact" band={band} />
-                    ) : null;
-                  })()}
-                </div>
-                <p className="text-xs text-text-secondary leading-relaxed font-mono opacity-80 border-t border-border/50 pt-2 mt-2 pl-2">
-                  {truncateAtSentenceBoundary(item.explanation, 600)}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
+        <DetectedCharacteristicsSection characteristics={phase2.detectedCharacteristics} />
       )}
 
       {arrangement && (
-        <section id="section-arrangement" className="space-y-6 scroll-mt-24">
-          <ResultsSectionHeader
-            title="Arrangement Overview"
-            rightSlot={
-              <span className="text-meta font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">TIMELINE</span>
-            }
-          />
-
-          {arrangement.summary && (
-            <p className="text-xs text-text-secondary font-mono leading-relaxed opacity-80">
-              {arrangement.summary}
-            </p>
-          )}
-
-          <div className="bg-bg-card border border-border rounded-sm p-4 space-y-4">
-            <div className="relative pt-6">
-              <div className="relative h-14 border border-border rounded-sm overflow-hidden bg-bg-app">
-                {arrangement.segments.map((segment, segmentIndex) => (
-                  <div
-                    key={segment.id}
-                    className="absolute top-0 bottom-0 px-2 py-1 border-r border-bg-app/30 text-meta font-mono text-white flex items-center justify-center text-center overflow-hidden"
-                    style={{
-                      left: `${segment.leftPercent}%`,
-                      width: `${segment.widthPercent}%`,
-                      backgroundColor: getSegmentPaletteColor(segmentIndex),
-                    }}
-                    title={`${segment.name} • ${segment.lufsLabel}`}
-                  >
-                    <span className="truncate">{segment.name} • {segment.lufsLabel}</span>
-                  </div>
-                ))}
-
-                {arrangement.noveltyMarkers.map((marker, idx) => (
-                  <div
-                    key={`marker-${idx}`}
-                    className="absolute top-0 bottom-0 pointer-events-none"
-                    style={{ left: `${marker.leftPercent}%` }}
-                  >
-                    <div className="absolute -top-5 -translate-x-1/2 bg-bg-panel border border-border rounded px-1 py-[1px] text-micro font-mono text-text-secondary whitespace-nowrap">
-                      {marker.label}
-                    </div>
-                    <div className="h-full w-px bg-accent/90" />
-                  </div>
-                ))}
-              </div>
-
-              <div className="flex items-center justify-between mt-2 text-meta font-mono text-text-secondary">
-                <span>0s</span>
-                <span>{arrangement.totalDuration.toFixed(1)}s</span>
-              </div>
-            </div>
-
-            {arrangement.noveltyNotes && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="h-px bg-border/60 flex-1" />
-                  <span className="text-meta font-mono uppercase tracking-wide text-text-secondary">
-                    NOVELTY EVENTS
-                  </span>
-                  <div className="h-px bg-border/60 flex-1" />
-                </div>
-                <p className="text-xs text-text-secondary font-mono leading-relaxed">
-                  {arrangement.noveltyNotes}
-                </p>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              {arrangement.segments.map((segment, segmentIndex) => {
-                const isOpen = !!openArrangement[segment.id];
-                const segmentColor = getSegmentPaletteColor(segmentIndex);
-                const lufsDelta = segment.lufs !== null ? segment.lufs - TRACK_AVERAGE_LUFS : null;
-                const lufsDeltaLabel =
-                  lufsDelta === null
-                    ? null
-                    : `${lufsDelta >= 0 ? '▲' : '▼'} ${lufsDelta >= 0 ? '+' : ''}${lufsDelta.toFixed(1)} dB`;
-                const lufsDeltaClass =
-                  lufsDelta === null
-                    ? ''
-                    : lufsDelta > 0
-                      ? 'text-success border-success/30 bg-success/10'
-                      : lufsDelta < 0
-                        ? 'text-error border-error/30 bg-error/10'
-                        : 'text-text-secondary border-border bg-bg-panel/40';
-                return (
-                  <div
-                    key={`${segment.id}-detail`}
-                    className="border border-border border-l-2 rounded-sm overflow-hidden bg-bg-panel/40"
-                    style={{ borderLeftColor: segmentColor }}
-                  >
-                    <button
-                      onClick={() => toggleArrangement(segment.id)}
-                      className="w-full flex items-center justify-between gap-3 px-3 py-2 text-left hover:bg-bg-card transition-colors"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-xs">{isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}</span>
-                        <span className="text-xs font-mono text-text-primary truncate">{segment.name}</span>
-                        <span
-                          className="text-meta font-mono px-1.5 py-0.5 rounded border whitespace-nowrap"
-                          style={{
-                            backgroundColor: withAlpha(segmentColor, '22'),
-                            borderColor: withAlpha(segmentColor, '66'),
-                            color: segmentColor,
-                          }}
-                        >
-                          {segment.lufsLabel}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {lufsDeltaLabel && (
-                          <span className={`text-micro font-mono px-1.5 py-0.5 rounded border whitespace-nowrap ${lufsDeltaClass}`}>
-                            {lufsDeltaLabel}
-                          </span>
-                        )}
-                        <span className="text-meta font-mono text-text-secondary whitespace-nowrap">
-                          {segment.startTime.toFixed(1)}s - {segment.endTime.toFixed(1)}s
-                        </span>
-                      </div>
-                    </button>
-
-                    <Collapsible isOpen={isOpen}>
-                      <div className="px-3 pb-3 pt-1 space-y-2 border-t border-border/60">
-                        <p className="text-xs text-text-secondary font-mono leading-relaxed">
-                          {truncateBySentenceCount(segment.description, 4)}
-                        </p>
-                        {segment.spectralNote && (
-                          <div className="border border-border/70 rounded-sm bg-bg-panel/50 px-2 py-2 space-y-1">
-                            <span className="inline-flex text-micro font-mono uppercase tracking-wide px-1.5 py-0.5 rounded border border-accent/40 text-accent">
-                              SPECTRAL NOTE
-                            </span>
-                            <p className="text-eyebrow text-text-secondary/90 font-mono leading-relaxed">
-                              {segment.spectralNote}
-                            </p>
-                          </div>
-                        )}
-                        {isPhase2V2 && (segment.sceneName || segment.abletonAction || segment.automationFocus) && (
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                            {segment.sceneName && (
-                              <div className="border border-border/70 rounded-sm bg-bg-panel/50 px-2 py-2 space-y-1">
-                                <span className="inline-flex text-micro font-mono uppercase tracking-wide px-1.5 py-0.5 rounded border border-border text-text-secondary">
-                                  Scene
-                                </span>
-                                <p className="text-eyebrow text-text-secondary/90 font-mono leading-relaxed">
-                                  {segment.sceneName}
-                                </p>
-                              </div>
-                            )}
-                            {segment.abletonAction && (
-                              <div className="border border-border/70 rounded-sm bg-bg-panel/50 px-2 py-2 space-y-1">
-                                <span className="inline-flex text-micro font-mono uppercase tracking-wide px-1.5 py-0.5 rounded border border-border text-text-secondary">
-                                  Ableton Action
-                                </span>
-                                <p className="text-eyebrow text-text-secondary/90 font-mono leading-relaxed">
-                                  {segment.abletonAction}
-                                </p>
-                              </div>
-                            )}
-                            {segment.automationFocus && (
-                              <div className="border border-border/70 rounded-sm bg-bg-panel/50 px-2 py-2 space-y-1">
-                                <span className="inline-flex text-micro font-mono uppercase tracking-wide px-1.5 py-0.5 rounded border border-border text-text-secondary">
-                                  Automation Focus
-                                </span>
-                                <p className="text-eyebrow text-text-secondary/90 font-mono leading-relaxed">
-                                  {segment.automationFocus}
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </Collapsible>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </section>
+        <ArrangementOverviewSection
+          arrangement={arrangement}
+          openArrangement={openArrangement}
+          onToggle={toggleArrangement}
+          isPhase2V2={isPhase2V2}
+        />
       )}
 
       {/* Pair the note-draft panel and the Gemini stem listening notes visually.
@@ -2023,608 +661,48 @@ export function AnalysisResults({
       </div>
 
       {sonicCards.length > 0 && (
-        <section id="section-sonic-elements" className="space-y-6 scroll-mt-24">
-          <ResultsSectionHeader
-            title={formatDisplayText('Sonic Elements & Reconstruction', 'title')}
-            titleRole="section-title"
-            rightSlot={
-              <span className="text-meta font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">COLLAPSIBLE</span>
-            }
-          />
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-            {sonicCards.map((card) => {
-              const isOpen = openSonic.has(card.id);
-              return (
-                <div
-                  key={card.id}
-                  className="bg-bg-card border border-border rounded-sm overflow-hidden self-start flex flex-col transition-colors hover:border-accent/40 hover:bg-bg-card-hover/70"
-                >
-                  <button
-                    onClick={() => toggleSonic(card.id)}
-                    className="w-full px-4 py-3 border-b border-border bg-bg-panel/60 text-left hover:bg-bg-panel transition-colors"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm">{card.icon}</span>
-                          <h3
-                            data-text-role="item-title"
-                            className={textRoleClassName('item-title', 'truncate')}
-                          >
-                            {card.title}
-                          </h3>
-                          {card.id === 'harmonicContent' && lowConfidenceIndicator(chordsAreApproximate)}
-                          {card.transcriptionDerived && (
-                            <span className="text-micro font-mono uppercase px-1.5 py-0.5 rounded border border-accent/40 text-accent whitespace-nowrap">
-                              Transcription-derived
-                            </span>
-                          )}
-                        </div>
-                        {/* Audit Finding #3: primary citation visible in the
-                          collapsed header. Mirrors the Mix Chain / Patch
-                          placement so all three card types feel parallel. */}
-                        {card.phase1Fields.length > 0 && (
-                          <div className="mt-1 flex min-w-0">
-                            <CitationHeadline
-                              phase1={phase1}
-                              field={card.phase1Fields[0]}
-                              testId={`sonic-headline-${card.id}`}
-                            />
-                          </div>
-                        )}
-                        <p data-text-role="body" className={textRoleClassName('body', 'mt-1 truncate')}>
-                          {card.summary}
-                        </p>
-                      </div>
-                      <span className="text-text-secondary">
-                        {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                      </span>
-                    </div>
-                  </button>
-
-                  <Collapsible isOpen={isOpen}>
-                    <div className="p-4 space-y-3">
-                      {/* Audit Finding #2 + #3: chain-of-custody block at the
-                          TOP of the expanded card so the producer sees the
-                          measurements + worst-confidence band BEFORE reading
-                          the prose description. */}
-                      <CitationBlock
-                        phase1={phase1}
-                        fields={card.phase1Fields}
-                        testId={`sonic-citation-${card.id}`}
-                      />
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <p data-text-role="body" className={textRoleClassName('body')}>
-                          {card.description}
-                        </p>
-                      </div>
-
-                      <div className="space-y-2">
-                        {card.measurements.map((measurement, idx) => (
-                          <div
-                            key={`${card.id}-measurement-${idx}`}
-                            className="flex items-center justify-between text-eyebrow font-mono border border-border rounded-sm px-2 py-1 bg-bg-panel/40"
-                          >
-                            <span className="text-text-secondary truncate pr-2">
-                              {measurement.icon} {measurement.label}
-                            </span>
-                            <span className="text-text-primary font-bold whitespace-nowrap">{measurement.value}</span>
-                          </div>
-                        ))}
-
-                        {card.isWidthAndStereo && (
-                          <div className="mt-3 border border-border rounded-sm p-2 bg-bg-panel/40">
-                            <div className="flex items-center justify-between text-meta font-mono text-text-secondary mb-1">
-                              <span>L</span>
-                              <span>R</span>
-                            </div>
-                            <div className="relative h-3 rounded bg-bg-app border border-border overflow-hidden">
-                              <div className="absolute inset-y-0 left-1/2 w-px bg-text-secondary/70" />
-                              <div
-                                className="absolute inset-y-0 bg-accent/50 border border-accent/60 rounded"
-                                style={calculateStereoBandStyle(phase1.stereoWidth)}
-                              />
-                            </div>
-                            <p className="text-meta font-mono text-text-secondary mt-1">
-                              Width band: {phase1.stereoWidth.toFixed(2)} around center
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                      </div>
-                    </div>
-                  </Collapsible>
-                </div>
-              );
-            })}
-          </div>
-        </section>
+        <SonicElementsSection
+          sonicCards={sonicCards}
+          openSonic={openSonic}
+          onToggle={toggleSonic}
+          phase1={phase1}
+          chordsAreApproximate={chordsAreApproximate}
+        />
       )}
 
       {mixGroups.length > 0 && (
-        <section id="section-mix-chain" className="space-y-6 scroll-mt-24">
-          <ResultsSectionHeader
-            title={formatDisplayText('Mix & Master Chain', 'title')}
-            titleRole="section-title"
-            rightSlot={
-              <div className="flex items-center gap-2">
-                {/* Audit Finding #14: section-level progress glance. Only
-                    surfaces when the tracker is wired (audioContentHash
-                    available) AND at least one card has been applied —
-                    avoids leading with a "0 of N" on first view. */}
-                {audioContentHash && mixAppliedCount > 0 && (
-                  <Pill
-                    tone="success"
-                    size="sm"
-                    data-testid="mix-chain-applied-progress"
-                  >
-                    {mixAppliedCount} of {mixCardCount} applied
-                  </Pill>
-                )}
-                <span className="text-meta font-mono bg-accent text-bg-app px-2 py-1 rounded font-bold">SIGNAL FLOW</span>
-              </div>
-            }
-          />
-
-          <div className="space-y-4">
-            {mixGroups
-              .filter((group) => group.cards.length > 0)
-              .map((group) => (
-              <DeviceRack
-                key={group.name}
-                // The DeviceRack title strip carries the group name. The
-                // emoji-or-SVG from groupIcon() + uppercase group.name
-                // ("DRUM PROCESSING" etc.) are preserved verbatim so
-                // analysisResultsUi.test.ts:441-450 selectors (toContain
-                // ('🥁 DRUM PROCESSING')) AND the BASS PROCESSING test at
-                // :448 which expects a `lucide-audio-waveform` SVG class
-                // nearby both pass. The name must be a React fragment —
-                // template-literal coercion turns the AudioWaveform JSX
-                // node into "[object Object]" and the SVG is lost.
-                name={
-                  <>
-                    {groupIcon(group.name)} {group.name}
-                  </>
-                }
-                status="idle"
-              >
-                {/* Audit-preserved annotation paragraph kept here so
-                    data-text-role="body" presence assertions
-                    (analysisResultsUi.test.ts:474) stay green. */}
-                {group.annotation && (
-                  <p
-                    data-text-role="meta"
-                    className={textRoleClassName('meta', 'mb-3')}
-                  >
-                    {group.annotation}
-                  </p>
-                )}
-
-                {/* Keep this exact className — the brittle assertion
-                    analysisResultsUi.test.ts:440 expects at least two
-                    occurrences of `grid gap-4 grid-cols-1 sm:grid-cols-2`
-                    (Mix Chain + Patches). */}
-                <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
-                  {group.cards.map((card) => {
-                    const isOpen = !!openMix[card.id];
-                    const isApplied = appliedIds.has(card.id);
-                    return (
-                      <div
-                        key={card.id}
-                        data-applied={isApplied || undefined}
-                        className={`bg-bg-card border border-border rounded-sm overflow-hidden self-start transition-colors hover:border-accent/40 hover:bg-bg-card-hover/70 ${
-                          isApplied ? 'border-l-2 border-l-success' : ''
-                        }`}
-                      >
-                        <button
-                          onClick={() => toggleMix(card.id)}
-                          className="w-full text-left px-4 py-3 border-b border-border bg-bg-panel/60 hover:bg-bg-panel transition-colors"
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="min-w-0">
-                              {/* Audit quick-hit: order badges (`{card.order}`)
-                                used to render as small numbered chips next to
-                                each device. Because the cards are grouped by
-                                processing stage AFTER ordering, the numbers
-                                appeared out-of-order within each group ("1, 6,
-                                8, 9 / 2, 4 / 5, 7 / 3 / 10"), which read as
-                                a presentation bug. The visual sequence within
-                                each group is already meaningful — the badge
-                                added confusion without information. Dropped. */}
-                              <div className="flex items-center gap-2">
-                                <h4
-                                  data-text-role="item-title"
-                                  className={textRoleClassName('item-title', 'truncate')}
-                                >
-                                  {card.device}
-                                </h4>
-                                <span className="text-micro font-mono uppercase px-1.5 py-0.5 rounded border border-border text-text-secondary whitespace-nowrap">
-                                  {card.category}
-                                </span>
-                                <RecommendationVerificationBadge
-                                  trackContext={card.trackContext}
-                                  category={card.category}
-                                />
-                                <ContractValidatedBadge
-                                  entries={card.contractEntries}
-                                  testId={`mix-chain-contract-badge-${card.id}`}
-                                />
-                              </div>
-                              {/* Audit Finding #3: primary citation visible in
-                                the collapsed header so the chain-of-custody
-                                evidence isn't gated behind expansion. The
-                                expanded CitationBlock below still carries the
-                                full multi-row list. */}
-                              {card.phase1Fields.length > 0 && (
-                                <div className="mt-1 flex min-w-0">
-                                  <CitationHeadline
-                                    phase1={phase1}
-                                    field={card.phase1Fields[0]}
-                                    testId={`mix-chain-headline-${card.id}`}
-                                  />
-                                </div>
-                              )}
-                              <p data-text-role="body" className={textRoleClassName('body', 'mt-1 truncate')}>
-                                {card.role}
-                              </p>
-                              <div className="mt-2">
-                                <MetaBadgeList
-                                  items={[
-                                    // Audit N3/N8: drop `Family: Native` from
-                                    // the collapsed card. `deviceFamily` is
-                                    // almost always `NATIVE`; keeping it
-                                    // burns chip-row real estate without
-                                    // adding signal. Surfaces only the two
-                                    // chips that actually vary per card.
-                                    { label: 'Context', value: card.trackContext },
-                                    { label: 'Stage', value: card.workflowStage },
-                                  ]}
-                                />
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2 flex-shrink-0">
-                              {audioContentHash && (
-                                <AppliedCheckbox
-                                  isApplied={isApplied}
-                                  onToggle={() => toggleApplied(card.id)}
-                                  ariaLabel={`Mark ${card.device} as applied`}
-                                />
-                              )}
-                              <span className="text-text-secondary">
-                                {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                              </span>
-                            </div>
-                          </div>
-                        </button>
-
-                        <Collapsible isOpen={isOpen}>
-                          <div className="p-4 space-y-3">
-                            {/* Audit Finding #2 + #3: structured chain-of-custody
-                                evidence at the top of the expanded card. */}
-                            <CitationBlock
-                              phase1={phase1}
-                              fields={card.phase1Fields}
-                              testId={`mix-chain-citation-${card.id}`}
-                            />
-                            <p data-text-role="body" className={textRoleClassName('body')}>
-                              {truncateAtSentenceBoundary(card.role, 320)}
-                            </p>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              {card.parameters.map((parameter, idx) => (
-                                <div
-                                  key={`${card.id}-parameter-${idx}`}
-                                  className="border border-border rounded-sm px-2 py-1 bg-bg-panel/40"
-                                >
-                                  <p className="text-meta font-mono uppercase text-text-secondary">{parameter.label}</p>
-                                  <p className="text-xs font-mono text-text-primary font-bold">{parameter.value}</p>
-                                </div>
-                              ))}
-                            </div>
-
-                            <ContractEntriesBlock
-                              entries={card.contractEntries}
-                              testId={`mix-chain-contract-${card.id}`}
-                            />
-
-                            <div className="border border-accent/20 bg-accent/5 rounded-sm px-2 py-2">
-                              <p className="text-meta font-mono text-accent uppercase tracking-wide">PRO TIP</p>
-                              <p className="text-xs font-mono text-text-secondary mt-1 leading-relaxed">
-                                {truncateAtSentenceBoundary(card.proTip, 320)}
-                              </p>
-                            </div>
-                          </div>
-                        </Collapsible>
-                      </div>
-                    );
-                  })}
-                </div>
-              </DeviceRack>
-            ))}
-          </div>
-        </section>
+        <MixChainSection
+          mixGroups={mixGroups}
+          mixAppliedCount={mixAppliedCount}
+          mixCardCount={mixCardCount}
+          audioContentHash={audioContentHash}
+          openMix={openMix}
+          onToggle={toggleMix}
+          appliedIds={appliedIds}
+          onToggleApplied={toggleApplied}
+          phase1={phase1}
+        />
       )}
 
       {patchCards.length > 0 && (
-        <section id="section-patches" className="space-y-6 scroll-mt-24">
-          <ResultsSectionHeader
-            title={formatDisplayText('Patch Framework', 'title')}
-            titleRole="section-title"
-            rightSlot={
-              <div className="flex items-center gap-2">
-                {audioContentHash && patchAppliedCount > 0 && (
-                  <Pill
-                    tone="success"
-                    size="sm"
-                    data-testid="patches-applied-progress"
-                  >
-                    {patchAppliedCount} of {patchCards.length} applied
-                  </Pill>
-                )}
-                <Sliders className="w-4 h-4 text-accent opacity-70" />
-              </div>
-            }
-          />
-
-          {/* Audit follow-up: cards grouped by processing stage (Drum / Bass /
-              Synth / Mid / High-end / Master) using the same heuristic and
-              emoji eyebrows as Mix Chain above. Producers can now jump to the
-              bass patch without scanning all 8 cards. */}
-          <div className="space-y-4">
-            {patchGroups.map((group) => (
-              <DeviceRack
-                key={group.name}
-                // Mirror Mix Chain's D.5b shape. JSX fragment (not template
-                // literal) so groupIcon's BASS PROCESSING return value (an
-                // <AudioWaveform> SVG) renders as a real React node — the
-                // template-literal version stringifies it to "[object
-                // Object]" and analysisResultsUi.test.ts:448 fails.
-                name={
-                  <>
-                    {groupIcon(group.name)} {group.name}
-                  </>
-                }
-                status="idle"
-              >
-                {/* Keep the exact className — analysisResultsUi.test.ts:440
-                    expects ≥2 occurrences of `grid gap-4 grid-cols-1
-                    sm:grid-cols-2` across Mix Chain + Patches. */}
-                <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
-                  {group.cards.map((patch) => {
-                    const isOpen = !!openPatch[patch.id];
-                    const isApplied = appliedIds.has(patch.id);
-                    return (
-                      <div
-                        key={patch.id}
-                        data-applied={isApplied || undefined}
-                        className={`bg-bg-card border border-border rounded-sm overflow-hidden self-start transition-colors hover:border-accent/40 hover:bg-bg-card-hover/70 ${
-                          isApplied ? 'border-l-2 border-l-success' : ''
-                        }`}
-                      >
-                        <button
-                          onClick={() => togglePatch(patch.id)}
-                          className="w-full text-left px-4 py-3 border-b border-border bg-bg-panel/60 hover:bg-bg-panel transition-colors"
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2">
-                                <Settings2 className="w-4 h-4 text-accent" />
-                                <h4
-                                  data-text-role="item-title"
-                                  className={textRoleClassName('item-title', 'truncate')}
-                                >
-                                  {patch.device}
-                                </h4>
-                                {patch.transcriptionDerived && (
-                                  <span className="text-micro font-mono uppercase px-1.5 py-0.5 rounded border border-accent/40 text-accent whitespace-nowrap">
-                                    Transcription-derived
-                                  </span>
-                                )}
-                                <span className="text-micro font-mono uppercase px-1.5 py-0.5 rounded border border-border text-text-secondary whitespace-nowrap">
-                                  {patch.category}
-                                </span>
-                                <RecommendationVerificationBadge
-                                  trackContext={patch.trackContext}
-                                  category={patch.category}
-                                />
-                                <ContractValidatedBadge
-                                  entries={patch.contractEntries}
-                                  testId={`patch-contract-badge-${patch.id}`}
-                                />
-                              </div>
-                              {/* Audit Finding #3: primary citation in the
-                                collapsed header so the chain-of-custody
-                                evidence is visible without expanding. */}
-                              {patch.phase1Fields.length > 0 && (
-                                <div className="mt-1 flex min-w-0">
-                                  <CitationHeadline
-                                    phase1={phase1}
-                                    field={patch.phase1Fields[0]}
-                                    testId={`patch-headline-${patch.id}`}
-                                  />
-                                </div>
-                              )}
-                              {/* Audit Finding #1B: the per-card patchRole
-                                paragraph used to render a duplicated
-                                category-keyed placeholder ("Primary tone
-                                generator" on every SYNTHESIS card). It has been
-                                removed; the category chip above carries the
-                                bucket and `whyThisWorks` (inside the expanded
-                                card body) carries the actionable explanation. */}
-                              <div className="mt-2">
-                                <MetaBadgeList
-                                  items={[
-                                    // Same Family-chip drop as Mix Chain cards (audit N3/N8).
-                                    { label: 'Context', value: patch.trackContext },
-                                    { label: 'Stage', value: patch.workflowStage },
-                                  ]}
-                                />
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2 flex-shrink-0">
-                              {audioContentHash && (
-                                <AppliedCheckbox
-                                  isApplied={isApplied}
-                                  onToggle={() => toggleApplied(patch.id)}
-                                  ariaLabel={`Mark ${patch.device} patch as applied`}
-                                />
-                              )}
-                              <span className="text-text-secondary">
-                                {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                              </span>
-                            </div>
-                          </div>
-                        </button>
-
-                        <Collapsible isOpen={isOpen}>
-                          <div className="p-4 space-y-3">
-                            {/* Audit Finding #2 + #3: chain-of-custody block
-                                at the top of the expanded patch card. */}
-                            <CitationBlock
-                              phase1={phase1}
-                              fields={patch.phase1Fields}
-                              testId={`patch-citation-${patch.id}`}
-                            />
-                            <p data-text-role="body" className={textRoleClassName('body')}>
-                              {truncateAtSentenceBoundary(patch.whyThisWorks, 600)}
-                            </p>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              {patch.parameters.map((parameter, idx) => (
-                                <div
-                                  key={`${patch.id}-parameter-${idx}`}
-                                  className="border border-border rounded-sm px-2 py-1 bg-bg-panel/40"
-                                >
-                                  <p className="text-meta font-mono uppercase text-text-secondary">{parameter.label}</p>
-                                  <p className="text-xs font-mono text-text-primary font-bold">{parameter.value}</p>
-                                </div>
-                              ))}
-                            </div>
-
-                            <ContractEntriesBlock
-                              entries={patch.contractEntries}
-                              testId={`patch-contract-${patch.id}`}
-                            />
-
-                            <div className="border border-accent/20 bg-accent/5 rounded-sm px-2 py-2">
-                              <p className="text-meta font-mono text-accent uppercase tracking-wide">PRO TIP</p>
-                              <p className="text-xs font-mono text-text-secondary mt-1 leading-relaxed">
-                                {truncateAtSentenceBoundary(patch.proTip, 320)}
-                              </p>
-                            </div>
-                          </div>
-                        </Collapsible>
-                      </div>
-                    );
-                  })}
-                </div>
-              </DeviceRack>
-            ))}
-          </div>
-        </section>
+        <PatchFrameworkSection
+          patchGroups={patchGroups}
+          patchAppliedCount={patchAppliedCount}
+          patchTotalCount={patchCards.length}
+          audioContentHash={audioContentHash}
+          openPatch={openPatch}
+          onToggle={togglePatch}
+          appliedIds={appliedIds}
+          onToggleApplied={toggleApplied}
+          phase1={phase1}
+        />
       )}
 
       {phase2?.secretSauce && (
-        <div className="relative overflow-hidden bg-bg-card border border-accent/30 rounded-sm p-0 group">
-          <div className="bg-accent/10 p-4 border-b border-accent/20 flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="bg-accent text-bg-app p-1.5 rounded-sm">
-                <Sparkles className="w-4 h-4" />
-              </div>
-              <h2
-                data-text-role="section-title"
-                className={textRoleClassName('section-title', 'text-accent')}
-              >
-                {formatDisplayText('Secret Sauce Protocol', 'title')}
-              </h2>
-            </div>
-            <span className="text-meta font-mono bg-accent/20 text-accent px-2 py-1 rounded-sm border border-accent/30">
-              CONFIDENTIAL
-            </span>
-          </div>
-
-          <div className="p-6 relative">
-            <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">
-              <Sparkles className="w-32 h-32 text-accent" />
-            </div>
-
-            <div className="relative z-10 space-y-6">
-              <div className="space-y-2">
-                <h3
-                  data-text-role="item-title"
-                  className={[getTextRoleClassName('item-title'), 'text-lg'].join(' ')}
-                >
-                  {phase2.secretSauce.title}
-                </h3>
-                <p data-text-role="body" className={textRoleClassName('body', 'max-w-3xl border-l-2 border-accent/30 pl-4')}>
-                  {truncateAtSentenceBoundary(phase2.secretSauce.explanation, 600)}
-                </p>
-              </div>
-
-              {isPhase2V2 && Array.isArray(phase2.secretSauce.workflowSteps) && phase2.secretSauce.workflowSteps.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-border/50">
-                  {phase2.secretSauce.workflowSteps.map((step) => (
-                    <div key={step.step} className="rounded-sm border border-border bg-bg-panel/40 p-4 space-y-3">
-                      <div className="flex items-center gap-3">
-                        <span className="flex-shrink-0 w-6 h-6 rounded-sm bg-bg-panel border border-border flex items-center justify-center text-accent font-mono text-xs">
-                          {step.step}
-                        </span>
-                        <div className="min-w-0">
-                          <p
-                            data-text-role="item-title"
-                            className={textRoleClassName('item-title', 'truncate')}
-                          >
-                            {step.device}
-                          </p>
-                          <p data-text-role="eyebrow" className={getTextRoleClassName('eyebrow')}>
-                            {step.parameter}: {step.value}
-                          </p>
-                        </div>
-                      </div>
-                      <MetaBadgeList
-                        items={[
-                          { label: 'Context', value: step.trackContext },
-                          { label: 'Device', value: step.device },
-                        ]}
-                      />
-                      <p className="text-xs text-text-secondary leading-relaxed font-mono">
-                        {truncateAtSentenceBoundary(step.instruction, 220)}
-                      </p>
-                      <div className="border border-accent/20 bg-accent/5 rounded-sm px-2 py-2">
-                        <p className="text-meta font-mono text-accent uppercase tracking-wide">
-                          Measurement Reason
-                        </p>
-                        <p className="text-xs font-mono text-text-secondary mt-1 leading-relaxed">
-                          {truncateAtSentenceBoundary(step.measurementJustification, 220)}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-border/50">
-                  {(Array.isArray(phase2.secretSauce.implementationSteps)
-                    ? phase2.secretSauce.implementationSteps
-                    : []
-                  ).map((step, idx) => (
-                    <div key={idx} className="flex space-x-3">
-                      <span className="flex-shrink-0 w-6 h-6 rounded-sm bg-bg-panel border border-border flex items-center justify-center text-accent font-mono text-xs">
-                        {idx + 1}
-                      </span>
-                      <p className="text-xs text-text-secondary leading-relaxed font-mono pt-1">
-                        {truncateAtSentenceBoundary(step, 260)}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        <SecretSauceSection secretSauce={phase2.secretSauce} isPhase2V2={isPhase2V2} />
       )}
+
+      {isPhase2V2 && <ReconstructionContractPanel contract={phase2?.recommendations} />}
 
       {/* Audit Finding #1: measurements section moved to the end of the scroll.
           Wrapped in a single anchorable <section> so the StickyNav can target

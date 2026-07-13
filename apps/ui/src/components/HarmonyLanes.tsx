@@ -10,8 +10,23 @@ interface HarmonyLanesProps {
 const formatNum = (v: number | null | undefined, d = 2): string =>
   typeof v === 'number' && Number.isFinite(v) ? v.toFixed(d) : '—';
 
+function qualityLabel(status: string | null | undefined): string {
+  if (status === 'authoritative') return 'Local';
+  if (status === 'failed') return 'Failed';
+  if (status === 'ambiguous') return 'Check';
+  return 'Not run';
+}
+
+function qualityColor(status: string | null | undefined): string {
+  if (status === 'authoritative') return '#22c55e';
+  if (status === 'failed') return '#ef4444';
+  if (status === 'ambiguous') return '#f59e0b';
+  return '#777';
+}
+
 export function HarmonyLanes({ phase1 }: HarmonyLanesProps) {
   const chord = phase1.chordDetail;
+  const chordQuality = phase1.fundamentalsQuality?.domains.chords;
   const keyStr = phase1.key ?? null;
   const hasChord = chord &&
     ((chord.progression && chord.progression.length > 0) ||
@@ -43,6 +58,11 @@ export function HarmonyLanes({ phase1 }: HarmonyLanesProps) {
   const statsItems = [
     ...(keyStr ? [{ label: 'Key', value: keyStr }] : []),
     { label: 'Strength', value: strengthPct, color: '#ff8800' },
+    ...(chordQuality ? [{
+      label: 'Quality',
+      value: qualityLabel(chordQuality.status),
+      color: qualityColor(chordQuality.status),
+    }] : []),
     { label: 'Chords', value: String(uniqueCount || '—') },
   ];
 
@@ -50,6 +70,16 @@ export function HarmonyLanes({ phase1 }: HarmonyLanesProps) {
     <LaneContainer>
       {/* Header stats */}
       <StatsBar items={statsItems} />
+
+      {chordQuality && chordQuality.status !== 'authoritative' && (
+        <LaneRow label="Trust" height="h-7">
+          <div className="flex h-full items-center px-3">
+            <span className="truncate text-micro font-mono text-warning">
+              {chordQuality.plainEnglish}
+            </span>
+          </div>
+        </LaneRow>
+      )}
 
       {/* Chord Palette lane */}
       {palette.length > 0 && (

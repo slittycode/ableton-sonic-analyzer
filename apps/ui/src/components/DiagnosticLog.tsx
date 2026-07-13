@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
 import { Phase2ConsistencyReport } from './Phase2ConsistencyReport';
+import { LedIndicator } from './ui';
 import { BackendTimingDiagnostics, DiagnosticLogEntry, DiagnosticLogStatus } from '../types';
 import { assertNever } from '../utils/assertNever';
 
@@ -71,7 +72,7 @@ export function DiagnosticLog({ logs, defaultExpanded }: DiagnosticLogProps) {
         aria-expanded={isExpanded}
         aria-label="Toggle diagnostic log"
       >
-        <span className="w-2 h-2 bg-accent rounded-full mr-2"></span>
+        <LedIndicator status="active" className="mr-2" />
         System Diagnostics
         <span className="ml-2 text-meta">{isExpanded ? '▾' : '▸'}</span>
         <span className="ml-auto text-meta text-text-secondary/50">{logs.length} {logs.length === 1 ? 'entry' : 'entries'}</span>

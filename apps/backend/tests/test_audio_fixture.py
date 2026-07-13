@@ -11,11 +11,13 @@ import numpy as np
 
 EXPECTED_TOP_LEVEL_KEYS = {
     "phase1Version",
+    "fundamentalsQuality",
     "bpm", "bpmConfidence", "bpmPercival", "bpmAgreement",
-    "bpmDoubletime", "bpmSource", "bpmRawOriginal",
-    "key", "keyConfidence", "keyProfile", "tuningFrequency", "tuningCents",
+    "bpmDoubletime", "bpmSource", "bpmRawOriginal", "bpmOctaveEvidence",
+    "key", "keyConfidence", "keyProfile", "keyEnsemble", "tuningFrequency", "tuningCents",
     "timeSignature", "timeSignatureSource",
-    "timeSignatureConfidence", "durationSeconds", "sampleRate",
+    "timeSignatureConfidence", "timeSignatureCandidates",
+    "durationSeconds", "sampleRate",
     "lufsIntegrated", "lufsRange", "lufsMomentaryMax", "lufsShortTermMax",
     "lufsCurve",
     "truePeak", "plr", "crestFactor",
@@ -315,6 +317,13 @@ class AudioFixtureSmokeTest(unittest.TestCase):
 
     def test_chord_detail_present(self) -> None:
         self.assertIn("chordDetail", self.result)
+
+    def test_fundamentals_quality_present(self) -> None:
+        quality = self.result["fundamentalsQuality"]
+        self.assertEqual(quality["schemaVersion"], "fundamentals-quality.v1")
+        self.assertTrue(quality["localOnly"])
+        self.assertTrue(quality["llmExcluded"])
+        self.assertIn("tempo", quality["domains"])
 
     # -- Tier 6: Expected nulls --
 

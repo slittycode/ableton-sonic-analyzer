@@ -188,6 +188,288 @@ def _compute_downbeat_phase(low_band: np.ndarray, meter: int) -> tuple[int, floa
     return phase, float(np.clip(confidence, 0.0, 1.0))
 
 
+def compute_swing_detail(
+    onset_times: np.ndarray,
+    ticks: np.ndarray,
+) -> dict | None:
+    """Real micro-timing swing from the onset inter-onset-interval pattern.
+
+    Swing delays the offbeat 8th, so a swung 8th-note stream alternates a long
+    interval (beat -> delayed "and") and a short one ("and" -> next beat) that
+    together span one beat. The swing ratio = long / (long + short): 50% is
+    straight, ~66.7% is full triplet swing — the same 50-75 scale Ableton's
+    Groove Pool uses, so ``swingPercent`` drops straight into a groove.
+
+    Working from the *intervals* between onsets rather than each onset's phase
+    against the beat grid deliberately sidesteps the grid-phase ambiguity: on
+    sparse material the beat tracker sometimes anchors "the beat" on the loud
+    offbeat hat, which would flip a phase measurement (58% read as 42%). The
+    long/short interval structure is invariant to that choice.
+
+    Grid resolution (accuracy program PR-G5): the 8th grid is analyzed first
+    and, when it swings, wins — unchanged from the original measurement. When
+    the 8th grid reads straight (or has too little activity), the 16th grid
+    is probed with the same long/short-split logic at half scale: UKG/2-step
+    shuffle lives on the 16ths and was previously invisible (its swung-16th
+    IOIs never split the 8th window, reading "straight"). A 16th split only
+    ships when a genuine long/short alternation exists — straight material
+    and sparse material keep their original outputs byte-identical.
+
+    Returns ``None`` when there isn't enough 8th- or 16th-note activity to
+    say anything honest.
+    """
+    ticks = np.asarray(ticks, dtype=np.float64)
+    onsets = np.sort(np.asarray(onset_times, dtype=np.float64))
+    if ticks.size < 3 or onsets.size < 6:
+        return None
+
+    beat_diffs = np.diff(ticks)
+    beat_diffs = beat_diffs[beat_diffs > 0]
+    if beat_diffs.size == 0:
+        return None
+    beat_dur = float(np.median(beat_diffs))
+    if beat_dur <= 0:
+        return None
+
+    def _swung_split(scaled: np.ndarray, long_threshold: float, short_threshold: float) -> dict | None:
+        """Long/short alternation within one grid span; None without a genuine split."""
+        long_iois = scaled[scaled > long_threshold]
+        short_iois = scaled[scaled < short_threshold]
+        if long_iois.size < 2 or short_iois.size < 2:
+            return None
+        long_med = float(np.median(long_iois))
+        short_med = float(np.median(short_iois))
+        balance = 1.0 - abs(long_iois.size - short_iois.size) / float(scaled.size)
+        count_factor = min(1.0, scaled.size / 8.0)
+        return {
+            "swingPercent": round(long_med / (long_med + short_med) * 100.0, 1),
+            "swingConfidence": round(max(0.0, balance) * count_factor, 3),
+        }
+
+    # Inter-onset intervals in beats; the 8th-note window first.
+    iois = np.diff(onsets) / beat_dur
+    eighth = iois[(iois >= 0.30) & (iois <= 0.70)]
+
+    if eighth.size >= 4:
+        split = _swung_split(eighth, 0.53, 0.47)
+        if split is not None:
+            mean_abs_offset_ms = round(float(np.mean(np.abs(eighth - 0.5))) * beat_dur * 1000.0, 2)
+            return {
+                "swingPercent": split["swingPercent"],
+                "swingConfidence": split["swingConfidence"],
+                "gridResolution": "8th",
+                "direction": "swung",
+                "meanAbsOffsetMs": mean_abs_offset_ms,
+                "offbeatOnsetCount": int(eighth.size),
+            }
+
+    # 8th grid is straight or absent — probe the 16th grid (PR-G5). Same
+    # split logic at half scale: a 16th pair spans half a beat, so the
+    # straight center is 0.25 and the split thresholds halve.
+    sixteenth = iois[(iois >= 0.15) & (iois <= 0.35)]
+    if sixteenth.size >= 4:
+        split = _swung_split(sixteenth, 0.265, 0.235)
+        if split is not None:
+            mean_abs_offset_ms = round(float(np.mean(np.abs(sixteenth - 0.25))) * beat_dur * 1000.0, 2)
+            return {
+                "swingPercent": split["swingPercent"],
+                "swingConfidence": split["swingConfidence"],
+                "gridResolution": "16th",
+                "direction": "swung",
+                "meanAbsOffsetMs": mean_abs_offset_ms,
+                "offbeatOnsetCount": int(sixteenth.size),
+            }
+
+    if eighth.size < 4:
+        return None
+
+    # No clear long/short split on either grid — a straight 8th grid.
+    swing_percent = 50.0
+    direction = "straight"
+    count_factor = min(1.0, eighth.size / 8.0)
+    # Tighter clustering around 0.5 => more confident it's genuinely straight.
+    spread = float(np.percentile(eighth, 75) - np.percentile(eighth, 25))
+    swing_confidence = round(max(0.0, 1.0 - spread / 0.15) * count_factor, 3)
+
+    mean_abs_offset_ms = round(float(np.mean(np.abs(eighth - 0.5))) * beat_dur * 1000.0, 2)
+
+    return {
+        "swingPercent": swing_percent,
+        "swingConfidence": swing_confidence,
+        "gridResolution": "8th",
+        "direction": direction,
+        "meanAbsOffsetMs": mean_abs_offset_ms,
+        "offbeatOnsetCount": int(eighth.size),
+    }
+
+
+# Candidate tempo ratios for the octave-evidence field. 1:2/2:1 are the
+# classic halving/doubling errors; 2:3/3:2 cover the measured halftime-at-174
+# failure mode (117 BPM = 174 x 2/3). Labels read "candidate:shipped".
+_OCTAVE_RATIOS: tuple[tuple[str, float], ...] = (
+    ("1:2", 0.5),
+    ("2:3", 2.0 / 3.0),
+    ("1:1", 1.0),
+    ("3:2", 1.5),
+    ("2:1", 2.0),
+)
+_OCTAVE_BPM_RANGE = (40.0, 220.0)
+_OCTAVE_IOI_TOLERANCE_BEATS = 0.15
+_OCTAVE_MAX_BEAT_MULTIPLE = 8
+
+
+def _stream_octave_score(
+    iois: np.ndarray, beat_s: float, *, allow_half: bool
+) -> float:
+    """Fit-over-economy score of one onset stream against one candidate beat.
+
+    An IOI "fits" when it sits within tolerance of an allowed multiple of the
+    candidate beat — IOIs are local, so this is immune to the grid drift that
+    defeats absolute-grid alignment on near-miss candidates. Fit is divided
+    by the median fitted multiple (floored at 1) so a pulse the stream
+    actually articulates outranks one it merely aggregates: a kick on every
+    true beat scores 1.0 at the true tempo but 0.5 at half tempo.
+
+    ``allow_half`` admits the 0.5 multiple (an 8th-note stream half a beat
+    apart). The low-band stream must NOT allow it — kicks articulate the
+    pulse or a slower division of it, and admitting 0.5 there would let a
+    half-tempo candidate re-explain every kick as 8ths and tie the truth.
+    """
+    if iois.size < 4:
+        return 0.0
+    multiples = iois / beat_s
+    nearest = np.round(multiples)
+    fits = (
+        (nearest >= 1)
+        & (nearest <= _OCTAVE_MAX_BEAT_MULTIPLE)
+        & (np.abs(multiples - nearest) <= _OCTAVE_IOI_TOLERANCE_BEATS)
+    )
+    if allow_half:
+        fits |= np.abs(multiples - 0.5) <= _OCTAVE_IOI_TOLERANCE_BEATS
+    if not np.any(fits):
+        return 0.0
+    valid_fraction = float(np.count_nonzero(fits)) / float(iois.size)
+    fitted = np.where(
+        np.abs(multiples - 0.5) <= _OCTAVE_IOI_TOLERANCE_BEATS, 0.5, nearest
+    ) if allow_half else nearest
+    economy = float(np.median(fitted[fits]))
+    return valid_fraction / max(economy, 1.0)
+
+
+def _score_octave_candidates(
+    lowband_iois: np.ndarray,
+    fullband_iois: np.ndarray,
+    shipped_bpm: float,
+) -> list[dict] | None:
+    """Score simple-ratio tempo candidates against two inter-onset streams.
+
+    The low-band (kick) stream carries pulse-articulation evidence; the
+    full-band stream adds the hat/snare grid, which is what pins the notated
+    tempo when the kick only marks bars (halftime: a kick every 4 beats reads
+    as a half-tempo pulse on its own, but the 8th-note hats fit the notated
+    beat's 0.5 multiple and nothing at the halved candidate). Score =
+    lowbandScore + fullbandScore, each in [0, 1].
+    """
+    low = np.asarray(lowband_iois, dtype=np.float64)
+    low = low[low > 0.05]
+    full = np.asarray(fullband_iois, dtype=np.float64)
+    full = full[full > 0.05]
+    if (low.size < 4 and full.size < 4) or shipped_bpm is None or shipped_bpm <= 0:
+        return None
+
+    candidates: list[dict] = []
+    for label, ratio in _OCTAVE_RATIOS:
+        candidate_bpm = float(shipped_bpm) * ratio
+        if not (_OCTAVE_BPM_RANGE[0] <= candidate_bpm <= _OCTAVE_BPM_RANGE[1]):
+            continue
+        beat_s = 60.0 / candidate_bpm
+        lowband_score = _stream_octave_score(low, beat_s, allow_half=False)
+        fullband_score = _stream_octave_score(full, beat_s, allow_half=True)
+        candidates.append({
+            "bpm": round(candidate_bpm, 1),
+            "ratio": label,
+            "lowbandScore": round(lowband_score, 4),
+            "fullbandScore": round(fullband_score, 4),
+            "score": round(lowband_score + fullband_score, 4),
+        })
+
+    if not candidates:
+        return None
+    # Ties go to the shipped tempo (ratio distance from 1.0 breaks them).
+    candidates.sort(key=lambda c: (-c["score"], abs(_ratio_value(c["ratio"]) - 1.0)))
+    return candidates
+
+
+def _ratio_value(label: str) -> float:
+    numerator, _colon, denominator = label.partition(":")
+    try:
+        return float(numerator) / float(denominator)
+    except (ValueError, ZeroDivisionError):
+        return 1.0
+
+
+def analyze_bpm_octave_evidence(
+    mono: np.ndarray,
+    sample_rate: int,
+    shipped_bpm: float | None,
+) -> dict:
+    """Surfacing-only tempo-octave evidence (accuracy program PR-G3).
+
+    Never touches ``bpm`` — the shipped value stays authoritative
+    (PURPOSE.md invariant #1). This field records how well each simple-ratio
+    alternative explains the low-band (kick) pulse, so the measured octave
+    failures at tempo extremes (174/190 halving, halftime 2:3) become
+    visible evidence instead of silent errors. Promotion of any correction
+    into the shipped ``bpm`` requires the pre-registered GiantSteps gate —
+    see plans/genre-generalization-program.md PR-G3.
+
+    Full-mode only. Emits ``{"bpmOctaveEvidence": None}`` whenever the
+    evidence would be dishonest: no shipped BPM, too few low-band onsets
+    (sparse/beatless material), or filter/onset failure.
+    """
+    try:
+        if shipped_bpm is None or not np.isfinite(float(shipped_bpm)) or float(shipped_bpm) <= 0:
+            return {"bpmOctaveEvidence": None}
+
+        from dsp_bandbank import BatchedBandpass
+
+        full_onsets = _detect_onset_times(mono, sample_rate)
+        low = BatchedBandpass(sample_rate).filter_one(mono, 30.0, 150.0)
+        low_onsets = (
+            _detect_onset_times(low, sample_rate)
+            if low is not None
+            else np.asarray([], dtype=np.float64)
+        )
+        if full_onsets.size < 5 and low_onsets.size < 5:
+            return {"bpmOctaveEvidence": None}
+
+        low_iois = np.diff(np.sort(low_onsets)) if low_onsets.size >= 2 else np.asarray([])
+        full_iois = np.diff(np.sort(full_onsets)) if full_onsets.size >= 2 else np.asarray([])
+        candidates = _score_octave_candidates(low_iois, full_iois, float(shipped_bpm))
+        if not candidates:
+            return {"bpmOctaveEvidence": None}
+
+        top = candidates[0]
+        second_score = candidates[1]["score"] if len(candidates) > 1 else 0.0
+        dominance = (
+            round(top["score"] / second_score, 3) if second_score > 0 else None
+        )
+        return {
+            "bpmOctaveEvidence": {
+                "candidates": candidates,
+                "preferredBpm": top["bpm"],
+                "preferredRatio": top["ratio"],
+                "supportsShipped": top["ratio"] == "1:1",
+                "dominance": dominance,
+                "lowbandIoiCount": int(low_iois[low_iois > 0.05].size),
+                "fullbandIoiCount": int(full_iois[full_iois > 0.05].size),
+            }
+        }
+    except Exception as e:
+        print(f"[warn] BPM octave evidence failed: {e}", file=sys.stderr)
+        return {"bpmOctaveEvidence": None}
+
+
 def analyze_rhythm_detail(
     mono: np.ndarray,
     sample_rate: int,
@@ -272,6 +554,9 @@ def analyze_rhythm_detail(
         # DJ-tool transitions that the single mean BPM scalar conflates away.
         tempo_curve = _compute_tempo_curve_from_ticks(ticks)
 
+        # Reuse the onset array already computed above (no extra DSP pass).
+        swing_detail = compute_swing_detail(onset_times, ticks)
+
         return {
             "rhythmDetail": {
                 "onsetRate": round(onset_rate, 2),
@@ -284,6 +569,7 @@ def analyze_rhythm_detail(
                 "tempoStability": tempo_stability,
                 "phraseGrid": phrase_grid,
                 "tempoCurve": tempo_curve,
+                "swingDetail": swing_detail,
             }
         }
     except Exception as e:

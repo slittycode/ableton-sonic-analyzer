@@ -322,6 +322,22 @@ export interface TempoCurvePoint {
 
 export type DownbeatSource = 'kick_accent' | 'stride';
 
+/**
+ * Real micro-timing swing (accuracy program PR-B2), measured from the
+ * long/short alternation of 8th-note inter-onset intervals. `swingPercent`
+ * is on Ableton's Groove Pool 50-75 scale (50 = straight, 66.7 = full
+ * triplet swing), so it drops straight into a groove template. `null` when
+ * there isn't enough 8th-note activity to measure.
+ */
+export interface SwingDetail {
+  swingPercent: number;
+  swingConfidence: number;
+  gridResolution: string;
+  direction: "straight" | "swung";
+  meanAbsOffsetMs: number;
+  offbeatOnsetCount: number;
+}
+
 export interface RhythmDetail {
   onsetRate: number;
   beatGrid: number[];
@@ -348,6 +364,8 @@ export interface RhythmDetail {
    * and DJ-tool transitions that the single mean BPM scalar conflates away.
    */
   tempoCurve?: TempoCurvePoint[] | null;
+  /** Real 8th-note swing / micro-timing. Null when unmeasurable. */
+  swingDetail?: SwingDetail | null;
 }
 
 export interface GrooveDetail {
@@ -430,6 +448,8 @@ export interface SegmentKeyEntry {
   segmentIndex: number;
   key: string | null;
   keyConfidence?: number | null;
+  /** Which audio the per-segment key ran on (accuracy program PR-B4). */
+  source?: "full_mix" | "harmonic_stems";
 }
 
 /**
@@ -461,6 +481,12 @@ export interface ChordDetail {
   chordTimelineSource?: string | null;
   /** Phase 1.D #2: true when Viterbi's dominant matches Essentia's dominantChords[0] after enharmonic normalization. */
   chordTimelineAgreement?: boolean | null;
+  /**
+   * Which audio the chroma ran on (accuracy program PR-B4): `harmonic_stems`
+   * = bass-removed stem mix (higher chord accuracy on dense material),
+   * `full_mix` = whole track (when stems were unavailable).
+   */
+  chordSource?: "full_mix" | "harmonic_stems";
 }
 
 export interface PerceptualDetail {
@@ -623,13 +649,105 @@ export interface GenreDetail {
   genre: string;
   confidence: number;
   secondaryGenre: string | null;
-  genreFamily: "house" | "techno" | "dnb" | "ambient" | "trance" | "dubstep" | "breaks" | "other";
+  genreFamily:
+    | "house" | "techno" | "dnb" | "ambient" | "trance" | "dubstep" | "breaks"
+    | "garage" | "hardcore" | "trap" | "electro" | "downtempo"
+    | "other";
   topScores: Array<{ genre: string; score: number }>;
+}
+
+/**
+ * One meter candidate from analyze_time_signature's accent autocorrelation.
+ * `dominance` = mean accent at bar position 1 / mean of the other positions;
+ * `positionMeans` = the per-bar-position onset-count means behind it.
+ */
+export interface TimeSignatureCandidate {
+  timeSignature: string;
+  dominance: number;
+  positionMeans: number[];
+  /**
+   * Low-band loudness-accent dominance at this bar length (PR-G4), folded
+   * over bar phase. 1.0 = neutral/no evidence; null on pre-G4 snapshots.
+   */
+  loudnessDominance?: number | null;
+}
+
+/**
+ * Multi-profile key cross-check (accuracy program PR-B3). Full mode only.
+ * EDMA stays the authoritative shipped `key`; this records what temperley
+ * and krumhansl also read, how many agree, and the distinct alternates.
+ * Surfacing-only until the GiantSteps gate proves the vote beats EDMA-alone
+ * (incorporations/key-ensemble-decision-2026-07-04.md).
+ */
+export interface KeyEnsembleProfile {
+  profile: string;
+  key: string;
+  strength: number;
+}
+
+export interface KeyEnsemble {
+  method: string;
+  /** How many profiles (0-3) match the shipped EDMA label. */
+  agreement: number;
+  profiles: KeyEnsembleProfile[];
+  alternates: Array<{ key: string; strength: number }>;
+}
+
+/**
+ * One simple-ratio tempo candidate scored against the low-band (kick) and
+ * full-band inter-onset streams (accuracy program PR-G3). Full mode only.
+ * Surfacing-only — never an override of the shipped `bpm`.
+ */
+export interface BpmOctaveCandidate {
+  bpm: number;
+  /** Candidate:shipped ratio label, e.g. "2:1", "3:2", "1:1". */
+  ratio: string;
+  /** Kick-pulse articulation evidence, 0-1. */
+  lowbandScore: number;
+  /** Hat/snare-grid evidence (admits the 8th-note 0.5 multiple), 0-1. */
+  fullbandScore: number;
+  /** lowbandScore + fullbandScore. */
+  score: number;
+}
+
+export interface BpmOctaveEvidence {
+  /** Candidates sorted by score, strongest first. */
+  candidates: BpmOctaveCandidate[];
+  preferredBpm: number;
+  preferredRatio: string;
+  /** True when the shipped bpm's own 1:1 candidate wins the ranking. */
+  supportsShipped: boolean;
+  /** Top score / runner-up score; null when the runner-up scored 0. */
+  dominance: number | null;
+  lowbandIoiCount: number;
+  fullbandIoiCount: number;
+}
+
+export type FundamentalsQualityStatus = "authoritative" | "ambiguous" | "failed" | "not_run";
+
+export interface FundamentalsQualityDomain {
+  status: FundamentalsQualityStatus;
+  plainEnglish: string;
+  source: string | null;
+  confidence: number | null;
+  evidence: Record<string, unknown>;
+}
+
+export interface FundamentalsQuality {
+  schemaVersion: "fundamentals-quality.v1";
+  targetProfile: "electronic_ableton_v1";
+  analysisMode: string;
+  localOnly: boolean;
+  llmExcluded: boolean;
+  overallStatus: FundamentalsQualityStatus;
+  domains: Record<string, FundamentalsQualityDomain>;
 }
 
 export interface Phase1Result {
   /** Phase 1 schema version, e.g. "phase1.v2". Absent on pre-v2 snapshots. */
   phase1Version?: string | null;
+  /** Local-only trust summary for musical fundamentals. LLMs must not write this. */
+  fundamentalsQuality?: FundamentalsQuality | null;
   bpm: number;
   /** Tempo confidence, normalized 0-1 (Phase 1 v2; raw Essentia ~0-5.32 in v1). */
   bpmConfidence: number;
@@ -638,14 +756,28 @@ export interface Phase1Result {
   bpmDoubletime?: boolean | null;
   bpmSource?: string | null;
   bpmRawOriginal?: number | null;
+  /**
+   * Full mode only. Simple-ratio octave/tempo candidates scored against the
+   * low-band pulse (accuracy program PR-G3). Evidence surface — never an
+   * override of `bpm`.
+   */
+  bpmOctaveEvidence?: BpmOctaveEvidence | null;
   key: string | null;
   keyConfidence: number;
   keyProfile?: string | null;
+  /** Full-only multi-profile key cross-check (surfacing-only). */
+  keyEnsemble?: KeyEnsemble | null;
   tuningFrequency?: number | null;
   tuningCents?: number | null;
   timeSignature: string;
   timeSignatureSource?: string | null;
   timeSignatureConfidence?: number | null;
+  /**
+   * Full mode only. Per-candidate meter evidence from the onset-accent
+   * autocorrelation, strongest first (accuracy program PR-B1). Evidence
+   * surface — never an override of `timeSignature`.
+   */
+  timeSignatureCandidates?: TimeSignatureCandidate[] | null;
   durationSeconds: number;
   sampleRate?: number | null;
   lufsIntegrated: number;

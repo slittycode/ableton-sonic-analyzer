@@ -63,6 +63,7 @@ from analyze_audio_io import (  # noqa: E402
     _load_stem_stereo,
     analyze_crepe_pitch,
     cleanup_stems,
+    mix_stems_mono,
 )
 from separation_backend import separate_stems_backend  # noqa: E402
 from analyze_estimate import (  # noqa: E402
@@ -137,6 +138,7 @@ from analyze_structure import (  # noqa: E402
 from analyze_rhythm import (  # noqa: E402
     _extract_beat_loudness_data,
     _detect_onset_times,
+    analyze_bpm_octave_evidence,
     analyze_rhythm_detail,
     analyze_melody,
     analyze_groove,
@@ -197,6 +199,7 @@ from analyze_transcription import (  # noqa: E402
     TorchcrepeBackend,
     analyze_transcription,
 )
+from fundamentals_quality import build_fundamentals_quality  # noqa: E402
 
 
 def analyze_structure(
@@ -1531,6 +1534,10 @@ def main():
             "perceptual": result.get("perceptual"),
             "essentiaFeatures": result.get("essentiaFeatures"),
         }
+        output["fundamentalsQuality"] = build_fundamentals_quality(
+            output,
+            analysis_mode="fast",
+        )
         _emit_progress_marker("complete", "Analysis complete.", 1.0)
         print("Done.", file=sys.stderr)
         print(json.dumps(output, indent=2))
@@ -1580,8 +1587,19 @@ def main():
     result = {}
 
     result.update(analyze_bpm(rhythm_data, mono, sample_rate))
+    # Full-only, surfacing-only: octave/ratio candidates for the shipped bpm
+    # (accuracy PR-G3). Never overrides bpm — see analyze_bpm_octave_evidence.
+    result.update(analyze_bpm_octave_evidence(mono, sample_rate, result.get("bpm")))
     result.update(analyze_key(mono))
-    result.update(analyze_time_signature(rhythm_data, mono=mono, sample_rate=sample_rate))
+    # Shared beat-domain loudness data, extracted once and reused by meter
+    # detection (PR-G4 loudness-accent stream), rhythm detail, groove, and
+    # sidechain below. Hoisted above analyze_time_signature deliberately.
+    beat_data = _extract_beat_loudness_data(mono, sample_rate, rhythm_data)
+    result.update(
+        analyze_time_signature(
+            rhythm_data, mono=mono, sample_rate=sample_rate, beat_data=beat_data
+        )
+    )
     result.update(analyze_duration_and_sr(mono, sample_rate))
 
     # LUFS + LRA (needs stereo at its native sample rate — load_stereo does
@@ -1637,11 +1655,9 @@ def main():
     )
     result.update(analyze_plr(result.get("lufsIntegrated"), result.get("truePeak")))
 
-    # Shared beat-domain loudness data used by rhythm detail + groove + sidechain.
-    beat_data = _extract_beat_loudness_data(mono, sample_rate, rhythm_data)
-
     # Rhythm detail — real meter-aware downbeats derived from the per-beat
-    # kick-accent pattern (beat_data) and the detected time signature.
+    # kick-accent pattern (beat_data, extracted above) and the detected
+    # time signature.
     result.update(
         analyze_rhythm_detail(
             mono,
@@ -1787,14 +1803,21 @@ def main():
                 sample_rate=sample_rate,
             )
         )
-        result.update(analyze_segment_key(result.get("structure"), mono, sample_rate))
+        # Harmonic-source mix (bass/drums removed) for chord + key chroma when
+        # stems are available; None -> full-mix path, bit-identical to before.
+        harmonic_mono = mix_stems_mono(stems, ("other", "vocals"), sample_rate)
+        result.update(
+            analyze_segment_key(
+                result.get("structure"), mono, sample_rate, harmonic_mono=harmonic_mono
+            )
+        )
 
         # Stereo array no longer needed — release memory.
         del stereo
         gc.collect()
 
         # Chords
-        result.update(analyze_chords(mono, sample_rate))
+        result.update(analyze_chords(mono, sample_rate, harmonic_mono=harmonic_mono))
 
         # Perceptual
         result.update(analyze_perceptual(mono, sample_rate))
@@ -1887,14 +1910,20 @@ def main():
         "bpmDoubletime": result.get("bpmDoubletime"),
         "bpmSource": result.get("bpmSource"),
         "bpmRawOriginal": result.get("bpmRawOriginal"),
+        # Full-only (like keyEnsemble): surfacing-only octave/ratio evidence.
+        "bpmOctaveEvidence": result.get("bpmOctaveEvidence"),
         "key": result.get("key"),
         "keyConfidence": result.get("keyConfidence"),
         "keyProfile": result.get("keyProfile"),
+        # Full-only (like keyProfile/tuning*): multi-profile key cross-check.
+        "keyEnsemble": result.get("keyEnsemble"),
         "tuningFrequency": result.get("tuningFrequency"),
         "tuningCents": result.get("tuningCents"),
         "timeSignature": result.get("timeSignature"),
         "timeSignatureSource": result.get("timeSignatureSource"),
         "timeSignatureConfidence": result.get("timeSignatureConfidence"),
+        # Full-only (like keyProfile/tuning*): per-candidate meter evidence.
+        "timeSignatureCandidates": result.get("timeSignatureCandidates", []),
         "durationSeconds": result.get("durationSeconds"),
         "sampleRate": result.get("sampleRate"),
         "lufsIntegrated": result.get("lufsIntegrated"),
@@ -1946,6 +1975,10 @@ def main():
         "perceptual": result.get("perceptual"),
         "essentiaFeatures": result.get("essentiaFeatures"),
     }
+    output["fundamentalsQuality"] = build_fundamentals_quality(
+        output,
+        analysis_mode="standard" if run_standard else "full",
+    )
 
     # Conditional MT3 namespace — *absent* (not null) by default. Only added
     # when ASA_ENABLE_MT3=1 AND the transcribe() call succeeded. See the gate

@@ -1051,17 +1051,47 @@ _GENRE_SIGNATURES: list[dict] = [
     {"id": "detroit-techno", "bpm": (125, 135), "subBassDb": (-22, -10), "crestFactor": (7, 14), "onsetDensity": (4, 8), "spectralCentroid": (1800, 4500), "sidechainStrength": (0.2, 0.45), "bassDecay": (0.4, 0.75)},
     # TRANCE & PROGRESSIVE
     {"id": "trance", "bpm": (136, 142), "subBassDb": (-20, -8), "crestFactor": (6, 12), "onsetDensity": (4, 8), "spectralCentroid": (2000, 5000), "sidechainStrength": (0.25, 0.55), "bassDecay": (0.35, 0.65)},
-    {"id": "psytrance", "bpm": (140, 148), "subBassDb": (-18, -6), "crestFactor": (5, 11), "onsetDensity": (7, 14), "spectralCentroid": (2200, 5500), "sidechainStrength": (0.35, 0.65), "bassDecay": (0.3, 0.6)},
+    # Retuned PR-G7 from GiantSteps psy-trance n=10 (old windows never fired
+    # on real audio — measured centroid 860-1910 vs (2200, 5500), rolling
+    # bass decay 60-190 ms vs (0.3, 0.6)).
+    {"id": "psytrance", "bpm": (138, 150), "subBassDb": (-11.5, -6.5), "crestFactor": (9.5, 13.5), "onsetDensity": (4, 7), "spectralCentroid": (850, 2400), "sidechainStrength": (0.26, 0.37), "bassDecay": (0.05, 0.22)},
     # BASS MUSIC
-    {"id": "dubstep", "bpm": (138, 145), "subBassDb": (-18, -4), "crestFactor": (7, 14), "onsetDensity": (3, 7), "spectralCentroid": (1200, 3500), "sidechainStrength": (0.2, 0.5), "bassDecay": (0.6, 1.2)},
+    # Retuned PR-G7 from GiantSteps dubstep n=10 (old windows never fired —
+    # the assumed 0.6-1.2 s wobble decay measures 0.11-0.40 s on real clips).
+    {"id": "dubstep", "bpm": (137, 146), "subBassDb": (-10.5, -4), "crestFactor": (7.5, 12), "onsetDensity": (3.2, 5.5), "spectralCentroid": (900, 2900), "sidechainStrength": (0.24, 0.37), "bassDecay": (0.1, 0.45)},
     {"id": "bass-house", "bpm": (124, 130), "subBassDb": (-18, -6), "crestFactor": (5, 10), "onsetDensity": (5, 9), "spectralCentroid": (2000, 4800), "sidechainStrength": (0.4, 0.7), "bassDecay": (0.25, 0.5)},
     # D&B & BREAKS
     {"id": "drum-bass", "bpm": (168, 180), "subBassDb": (-18, -6), "crestFactor": (6, 13), "onsetDensity": (8, 18), "spectralCentroid": (2000, 5000), "sidechainStrength": (0.3, 0.6), "bassDecay": (0.3, 0.6)},
     {"id": "neurofunk", "bpm": (170, 180), "subBassDb": (-16, -4), "crestFactor": (5, 11), "onsetDensity": (9, 20), "spectralCentroid": (2200, 5500), "sidechainStrength": (0.25, 0.55), "bassDecay": (0.25, 0.55)},
-    {"id": "breaks", "bpm": (125, 135), "subBassDb": (-22, -10), "crestFactor": (7, 14), "onsetDensity": (5, 10), "spectralCentroid": (2200, 5200), "sidechainStrength": (0.25, 0.55), "bassDecay": (0.3, 0.6)},
+    # Retuned PR-G7 from GiantSteps breaks n=15 (was reading acid-techno on
+    # 8/15 real clips): measured centroid runs 1300-2230 vs the old
+    # (2200, 5200) window, sidechain 0.22-0.34 vs (0.25, 0.55).
+    {"id": "breaks", "bpm": (124, 141), "subBassDb": (-14.5, -7.5), "crestFactor": (9.5, 14.5), "onsetDensity": (4, 6.6), "spectralCentroid": (1300, 2500), "sidechainStrength": (0.2, 0.36), "bassDecay": (0.08, 0.48)},
     # UK BASS / GARAGE
     {"id": "uk-garage", "bpm": (128, 136), "subBassDb": (-20, -8), "crestFactor": (6, 12), "onsetDensity": (5, 10), "spectralCentroid": (2200, 5000), "sidechainStrength": (0.35, 0.65), "bassDecay": (0.25, 0.5)},
     {"id": "bassline", "bpm": (130, 138), "subBassDb": (-18, -6), "crestFactor": (5, 11), "onsetDensity": (6, 12), "spectralCentroid": (2500, 5500), "sidechainStrength": (0.4, 0.7), "bassDecay": (0.2, 0.45)},
+    # PR-G7 knowledge-based (no local reference audio on 2015 Beatport —
+    # see audits/genre-coverage-2026-07-13.md): rhythm/character ranges from
+    # standard genre facts, same provenance as the original table. Real-audio
+    # refinement is a named follow-up. two-step's LOW sidechain range is the
+    # audit's uk-garage fix: classic 2-step has a broken kick, not 4x4 pumping.
+    {"id": "two-step", "bpm": (128, 140), "subBassDb": (-16, -6), "crestFactor": (7, 12), "onsetDensity": (4, 9), "spectralCentroid": (1400, 3600), "sidechainStrength": (0.1, 0.35), "bassDecay": (0.2, 0.5)},
+    {"id": "speed-garage", "bpm": (128, 140), "subBassDb": (-12, -4), "crestFactor": (6, 10), "onsetDensity": (4, 9), "spectralCentroid": (1500, 3600), "sidechainStrength": (0.3, 0.6), "bassDecay": (0.3, 0.7)},
+    # TRAP / HALFTIME / FOOTWORK (knowledge-based, PR-G7)
+    {"id": "trap", "bpm": (130, 170), "subBassDb": (-12, -3), "crestFactor": (7, 12), "onsetDensity": (2, 6), "spectralCentroid": (900, 2600), "sidechainStrength": (0.1, 0.35), "bassDecay": (0.3, 0.9)},
+    {"id": "footwork", "bpm": (152, 168), "subBassDb": (-14, -5), "crestFactor": (8, 14), "onsetDensity": (3, 8), "spectralCentroid": (800, 2400), "sidechainStrength": (0.1, 0.3), "bassDecay": (0.2, 0.6)},
+    {"id": "halftime-dnb", "bpm": (165, 180), "subBassDb": (-12, -4), "crestFactor": (8, 13), "onsetDensity": (2, 5), "spectralCentroid": (1000, 2800), "sidechainStrength": (0.1, 0.3), "bassDecay": (0.3, 0.8)},
+    # HARD DANCE (PR-G7, measured: GiantSteps hard-dance n=11 / hardcore n=17
+    # via the octave-corrected tempo view — every hardcore clip ships a
+    # halved bpm, so the bpm windows key on the TRUE tempo and rely on the
+    # octave-aware scoring below. Spectral windows widened on the bright
+    # side: LOFI previews under-read the top octave.)
+    {"id": "hardstyle", "bpm": (140, 155), "subBassDb": (-11.5, -6), "crestFactor": (8.5, 12), "onsetDensity": (2.4, 5.2), "spectralCentroid": (1600, 3200), "sidechainStrength": (0.12, 0.36), "bassDecay": (0.1, 0.32), "kickDistortion": (0.55, 0.8)},
+    {"id": "gabber", "bpm": (155, 200), "subBassDb": (-12, -5.5), "crestFactor": (7.5, 12), "onsetDensity": (2.8, 5.2), "spectralCentroid": (1850, 3400), "sidechainStrength": (0.12, 0.35), "bassDecay": (0.08, 0.38), "kickDistortion": (0.5, 0.78)},
+    # ELECTRO / DOWNTEMPO (PR-G7, measured: GiantSteps electro-house n=15,
+    # chill-out n=15; same LOFI bright-side widening.)
+    {"id": "electro", "bpm": (122, 134), "subBassDb": (-10.5, -6), "crestFactor": (8.5, 11.5), "onsetDensity": (2.5, 5.5), "spectralCentroid": (1250, 2800), "sidechainStrength": (0.15, 0.4), "bassDecay": (0.1, 0.28)},
+    {"id": "downtempo", "bpm": (78, 130), "subBassDb": (-21, -7), "crestFactor": (11, 16.5), "onsetDensity": (2.5, 6), "spectralCentroid": (600, 2000), "sidechainStrength": (0.2, 0.42), "bassDecay": (0.08, 0.45)},
     # LEGACY / BROAD GENRES
     {"id": "edm", "bpm": (120, 135), "subBassDb": (-16, -8), "crestFactor": (5, 9), "onsetDensity": (4, 10), "spectralCentroid": (1500, 4000), "sidechainStrength": (0.3, 0.6), "bassDecay": (0.25, 0.5)},
     {"id": "hiphop", "bpm": (70, 110), "subBassDb": (-16, -4), "crestFactor": (7, 11), "onsetDensity": (2, 7), "spectralCentroid": (800, 2500), "sidechainStrength": (0.1, 0.4), "bassDecay": (0.3, 0.6)},
@@ -1083,11 +1113,21 @@ _GENRE_FAMILY_MAP: dict[str, str] = {
     "driving-techno": "techno", "industrial-techno": "techno", "hard-techno": "techno",
     "acid-techno": "techno", "detroit-techno": "techno", "dub-techno": "techno",
     "ambient-techno": "techno",
-    "drum-bass": "dnb", "neurofunk": "dnb", "dnb": "dnb",
+    "drum-bass": "dnb", "neurofunk": "dnb", "dnb": "dnb", "halftime-dnb": "dnb",
     "ambient": "ambient", "ambient-drone": "ambient",
     "trance": "trance", "psytrance": "trance",
     "dubstep": "dubstep",
     "breaks": "breaks",
+    # PR-G7: families for the previously unmapped/missing genres. The UI
+    # mirrors this union in types/measurement.ts + backendPhase1Client.ts
+    # (validFamilies) and mix-doctor resolves family -> profile fallback
+    # via mapLegacyToEnhanced in genreProfiles.ts — all four move together.
+    "uk-garage": "garage", "bassline": "garage", "garage": "garage",
+    "speed-garage": "garage", "two-step": "garage",
+    "hardstyle": "hardcore", "gabber": "hardcore",
+    "trap": "trap", "footwork": "trap",
+    "electro": "electro",
+    "downtempo": "downtempo",
 }
 
 
@@ -1146,6 +1186,22 @@ def analyze_genre_detail(result: dict) -> dict:
             return {"genreDetail": None}
 
         bpm = float(_bpm_raw) if _bpm_raw is not None else 120.0
+        # PR-G7: octave-aware bpm axis. When the surfacing-only octave
+        # evidence (PR-G3) contests the shipped bpm, score each signature's
+        # bpm window against BOTH hypotheses and keep the better, with the
+        # alternate discounted 10% so the shipped value wins ties. Measured
+        # motivation: every GiantSteps hardcore clip ships a halved bpm
+        # (84-128 for true 156-190) — a gabber signature keyed on the true
+        # tempo can never fire on the shipped value alone. Never touches
+        # `bpm` itself (invariant #1).
+        octave_evidence = result.get("bpmOctaveEvidence") or {}
+        _alt_bpm_raw = octave_evidence.get("preferredBpm")
+        alt_bpm = (
+            float(_alt_bpm_raw)
+            if isinstance(_alt_bpm_raw, (int, float))
+            and octave_evidence.get("supportsShipped") is False
+            else None
+        )
         crest_factor = float(_crest_raw) if _crest_raw is not None else 10.0
         sub_bass_db = float(_sub_raw) if _sub_raw is not None else -25.0
         spectral_centroid = float(_cent_raw) if _cent_raw is not None else 2000.0
@@ -1168,8 +1224,11 @@ def analyze_genre_detail(result: dict) -> dict:
         scores: list[tuple[str, float]] = []
 
         for sig in _GENRE_SIGNATURES:
+            bpm_score = _genre_range_score(bpm, *sig["bpm"])
+            if alt_bpm is not None:
+                bpm_score = max(bpm_score, 0.9 * _genre_range_score(alt_bpm, *sig["bpm"]))
             raw: dict[str, float] = {
-                "bpm": _genre_range_score(bpm, *sig["bpm"]),
+                "bpm": bpm_score,
                 "subBassDb": _genre_range_score(sub_bass_db, *sig["subBassDb"], 1.5),
                 "crestFactor": _genre_range_score(crest_factor, *sig["crestFactor"], 1.5),
                 "onsetDensity": _genre_range_score(onset_density, *sig["onsetDensity"], 1.5),

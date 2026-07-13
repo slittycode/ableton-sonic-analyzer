@@ -1,5 +1,6 @@
 import {
   AbletonRecommendation,
+  InterpretationValidationWarning,
   Phase1Result,
   Phase2Result,
   RecommendationContractEntry,
@@ -1395,4 +1396,183 @@ export function calculateStereoBandStyle(width: number): { left: string; width: 
     left: `${left}%`,
     width: `${bandWidth}%`,
   };
+}
+
+export interface InterpretationWarningMapping {
+  originalValue?: string;
+  coercedValue?: string;
+  path?: string;
+}
+
+export interface GroupedInterpretationWarning {
+  key: string;
+  code?: string;
+  count: number;
+  tone: "adjustment" | "warning";
+  title: string;
+  message: string;
+  paths: string[];
+  mappings: InterpretationWarningMapping[];
+}
+
+// Audit Finding #1C: the Interpretation Caution panel used to render the
+// backend's `originalValue` / `coercedValue` strings verbatim inside small
+// badges. For dropped Phase 2 recommendations, the backend JSON-dumps the
+// whole AbletonRecommendation object into `originalValue` (see
+// `_stringify_warning_value` / `_build_phase2_validation_warning` in
+// `apps/backend/server_phase2.py`). The producer would see a literal
+// `{"advancedTip":"…","device":"$Saturator","phase1Fields":[...],…}` string
+// inside the panel — engine output leaking through.
+//
+// `formatDroppedValue` keeps the backend contract intact and renders a
+// compact human summary for JSON-shaped values: parse, pick a few headline
+// keys (device, parameter, value, …), join as "k: v · k: v". Non-JSON
+// strings pass through. Invalid JSON falls back to a truncated raw string.
+const FORMAT_DROPPED_VALUE_HEADLINE_KEYS = [
+  "device",
+  "parameter",
+  "value",
+  "category",
+  "name",
+  "field",
+] as const;
+const FORMAT_DROPPED_VALUE_MAX_CHARS = 80;
+
+export function formatDroppedValue(raw: unknown): string {
+  if (raw === null || raw === undefined) return "—";
+  const str = String(raw).trim();
+  if (str.length === 0) return "—";
+  const looksLikeJson = str.startsWith("{") || str.startsWith("[");
+  if (!looksLikeJson) {
+    return str.length > FORMAT_DROPPED_VALUE_MAX_CHARS
+      ? `${str.slice(0, FORMAT_DROPPED_VALUE_MAX_CHARS - 1)}…`
+      : str;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(str);
+  } catch {
+    return str.length > FORMAT_DROPPED_VALUE_MAX_CHARS
+      ? `${str.slice(0, FORMAT_DROPPED_VALUE_MAX_CHARS - 1)}…`
+      : str;
+  }
+
+  if (Array.isArray(parsed)) {
+    const n = parsed.length;
+    const noun = `${n} item${n === 1 ? "" : "s"}`;
+    const first = parsed[0];
+    if (first && typeof first === "object" && !Array.isArray(first)) {
+      const firstRec = first as Record<string, unknown>;
+      const label =
+        (typeof firstRec.device === "string" && firstRec.device) ||
+        (typeof firstRec.name === "string" && firstRec.name) ||
+        null;
+      if (label) return `${noun} (${label}${n > 1 ? ", …" : ""})`;
+    }
+    return noun;
+  }
+
+  if (parsed && typeof parsed === "object") {
+    const record = parsed as Record<string, unknown>;
+    const parts: string[] = [];
+    for (const key of FORMAT_DROPPED_VALUE_HEADLINE_KEYS) {
+      if (parts.length >= 3) break;
+      const value = record[key];
+      if (value === null || value === undefined || value === "") continue;
+      const valueStr = typeof value === "string" ? value : JSON.stringify(value);
+      if (!valueStr) continue;
+      parts.push(`${key}: ${valueStr}`);
+    }
+    if (parts.length === 0) {
+      const entries = Object.entries(record).filter(
+        ([, v]) => v !== null && v !== undefined && v !== "",
+      );
+      for (const [k, v] of entries.slice(0, 2)) {
+        const valueStr = typeof v === "string" ? v : JSON.stringify(v);
+        parts.push(`${k}: ${valueStr}`);
+      }
+    }
+    if (parts.length === 0) return "—";
+    const joined = parts.join(" · ");
+    return joined.length > FORMAT_DROPPED_VALUE_MAX_CHARS
+      ? `${joined.slice(0, FORMAT_DROPPED_VALUE_MAX_CHARS - 1)}…`
+      : joined;
+  }
+
+  // Primitive that happened to start with `{` / `[` (very unlikely after the
+  // JSON.parse succeeded into an object, but defensive).
+  return str.length > FORMAT_DROPPED_VALUE_MAX_CHARS
+    ? `${str.slice(0, FORMAT_DROPPED_VALUE_MAX_CHARS - 1)}…`
+    : str;
+}
+
+function describeInterpretationWarning(
+  warning: InterpretationValidationWarning,
+): Pick<GroupedInterpretationWarning, "tone" | "title" | "message"> {
+  if (warning.code === "COERCED_TRACK_CONTEXT") {
+    // Two distinct repair reasons produce different titles so they stay as separate rows.
+    // "to match the required" → _normalize_track_context_value (format repair)
+    // "by matching against declared" → _repair_return_track_context (blueprint match)
+    const isFormatRepair = warning.message?.includes("to match the required") ?? true;
+    const title = isFormatRepair ? "Reformatted routing label" : "Matched routing label to declared return";
+    const originalValue = warning.originalValue ? `"${warning.originalValue}"` : "the AI-generated routing label";
+    const coercedValue = warning.coercedValue ? `"${warning.coercedValue}"` : "the detected return-track label";
+    return {
+      tone: "adjustment",
+      title,
+      message: `The backend kept the result and corrected ${originalValue} to ${coercedValue} so the routing labels match the detected session structure.`,
+    };
+  }
+
+  return {
+    tone: "warning",
+    title: warning.code ? warning.code.replace(/_/g, " ") : "Validation warning",
+    message: truncateAtSentenceBoundary(warning.message, 240),
+  };
+}
+
+export function groupInterpretationWarnings(
+  warnings: InterpretationValidationWarning[],
+): GroupedInterpretationWarning[] {
+  const grouped = new Map<string, GroupedInterpretationWarning>();
+
+  warnings.forEach((warning, index) => {
+    const description = describeInterpretationWarning(warning);
+    // Key on code + tone + title only: multiple instances of the same repair reason
+    // collapse into one row; different repair reasons (different titles) stay separate.
+    const key = [warning.code ?? "warning", description.tone, description.title].join("::");
+    const existing = grouped.get(key);
+
+    const mapping: InterpretationWarningMapping = {
+      originalValue: warning.originalValue,
+      coercedValue: warning.coercedValue,
+      path: warning.path,
+    };
+
+    if (existing) {
+      existing.count += 1;
+      if (warning.path) {
+        existing.paths.push(warning.path);
+      }
+      existing.mappings.push(mapping);
+      return;
+    }
+
+    grouped.set(key, {
+      key: `${key}::${index}`,
+      code: warning.code,
+      count: 1,
+      tone: description.tone,
+      title: description.title,
+      message: description.message,
+      paths: warning.path ? [warning.path] : [],
+      mappings: [mapping],
+    });
+  });
+
+  return Array.from(grouped.values()).map((warning) => ({
+    ...warning,
+    paths: Array.from(new Set(warning.paths)),
+  }));
 }

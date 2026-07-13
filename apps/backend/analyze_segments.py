@@ -467,13 +467,24 @@ def analyze_segment_key(
     structure_data: dict | None,
     mono: np.ndarray,
     sample_rate: int = 44100,
+    *,
+    harmonic_mono: np.ndarray | None = None,
 ) -> dict:
-    """Compute key and confidence per segment using KeyExtractor."""
+    """Compute key and confidence per segment using KeyExtractor.
+
+    When ``harmonic_mono`` (bass-removed stem mix) is provided, per-segment
+    key runs on it instead of the full mix — same harmonic-isolation rationale
+    as ``analyze_chords``. Each entry records its ``source``. Falls back to the
+    full mix (bit-identical) when stems are unavailable.
+    """
+    source = "harmonic_stems" if harmonic_mono is not None else "full_mix"
     try:
         if structure_data is None:
             return {"segmentKey": None}
 
-        mono_arr = np.asarray(mono, dtype=np.float32)
+        mono_arr = np.asarray(
+            harmonic_mono if harmonic_mono is not None else mono, dtype=np.float32
+        )
         if mono_arr.ndim != 1 or mono_arr.size == 0:
             return {"segmentKey": None}
 
@@ -508,6 +519,7 @@ def analyze_segment_key(
                     "segmentIndex": index,
                     "key": key_value,
                     "keyConfidence": key_confidence,
+                    "source": source,
                 }
             )
 
@@ -517,11 +529,41 @@ def analyze_segment_key(
         return {"segmentKey": None}
 
 
-def analyze_chords(mono: np.ndarray, sample_rate: int = 44100) -> dict:
-    """Frame-wise HPCP analysis and chord detection via ChordsDetection."""
+def _empty_chord_detail(source: str) -> dict:
+    return {
+        "chordDetail": {
+            "chordSequence": [],
+            "chordStrength": 0.0,
+            "progression": [],
+            "dominantChords": [],
+            "chordTimeline": [],
+            "chordChangeCount": 0,
+            "chordTimelineSource": "librosa_viterbi",
+            "chordTimelineAgreement": None,
+            "chordSource": source,
+        }
+    }
+
+
+def analyze_chords(
+    mono: np.ndarray,
+    sample_rate: int = 44100,
+    *,
+    harmonic_mono: np.ndarray | None = None,
+) -> dict:
+    """Frame-wise HPCP analysis and chord detection via ChordsDetection.
+
+    When ``harmonic_mono`` is provided (a bass-removed stem mix), chroma runs
+    on it instead of the full mix — the bassline is the biggest polluter of
+    full-mix chroma, so harmonic-source isolation lifts chord accuracy on
+    dense material. Falls back to the full mix (bit-identical to before) when
+    stems are unavailable. ``chordSource`` records which path ran.
+    """
+    source = "harmonic_stems" if harmonic_mono is not None else "full_mix"
     try:
+        analysis_mono = harmonic_mono if harmonic_mono is not None else mono
         hp_filter = es.HighPass(cutoffFrequency=120, sampleRate=sample_rate)
-        mono_filtered = hp_filter(mono)
+        mono_filtered = hp_filter(analysis_mono)
 
         frame_size = 4096
         hop_size = 2048
@@ -550,36 +592,14 @@ def analyze_chords(mono: np.ndarray, sample_rate: int = 44100) -> dict:
                 continue
 
         if len(hpcp_sequence) == 0:
-            return {
-                "chordDetail": {
-                    "chordSequence": [],
-                    "chordStrength": 0.0,
-                    "progression": [],
-                    "dominantChords": [],
-                    "chordTimeline": [],
-                    "chordChangeCount": 0,
-                    "chordTimelineSource": "librosa_viterbi",
-                    "chordTimelineAgreement": None,
-                }
-            }
+            return _empty_chord_detail(source)
 
         chords, strength = chords_algo(np.asarray(hpcp_sequence, dtype=np.float32))
         chords = [str(c) for c in chords]
         strength = np.asarray(strength, dtype=np.float64)
 
         if len(chords) == 0:
-            return {
-                "chordDetail": {
-                    "chordSequence": [],
-                    "chordStrength": 0.0,
-                    "progression": [],
-                    "dominantChords": [],
-                    "chordTimeline": [],
-                    "chordChangeCount": 0,
-                    "chordTimelineSource": "librosa_viterbi",
-                    "chordTimelineAgreement": None,
-                }
-            }
+            return _empty_chord_detail(source)
 
         # Keep payload manageable.
         if len(chords) > 32:
@@ -650,6 +670,7 @@ def analyze_chords(mono: np.ndarray, sample_rate: int = 44100) -> dict:
                 "chordChangeCount": chord_change_count,
                 "chordTimelineSource": "librosa_viterbi",
                 "chordTimelineAgreement": chord_timeline_agreement,
+                "chordSource": source,
             }
         }
     except Exception as e:

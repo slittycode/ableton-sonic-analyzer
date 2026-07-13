@@ -1,6 +1,8 @@
 # beat_this measurement gate — pre-registration & decision record
 
-**Status:** PRE-REGISTERED (bar frozen) — results PENDING.
+**Status:** GTZAN MEASURED 2026-07-05 (both measurable bars PASS) — **ASA
+electronic slice still PENDING**, so the gate is NOT finalized: product
+recommendation `adopt_pending_asa_slice`. See [Results](#results--gtzan-measured-2026-07-05).
 **Date opened:** 2026-05-20.
 **Anchors to:** `PURPOSE.md` invariant #1 — *Phase 1 measurements are ground truth.* This gate
 decides whether to change how a ground-truth measurement (downbeats) is produced, so it must itself
@@ -73,23 +75,78 @@ do not finalize.
 beat_this is **MIT** (CPJKU/beat_this) — compatible with ASA. No licensing barrier to adoption.
 `dbn=False` keeps it madmom-free.
 
-## Results — PENDING
+## Results — GTZAN MEASURED (2026-07-05)
 
-Run (eval venv with `requirements-eval.txt`):
+GTZAN audio (marsyas/gtzan, 1000 × 30 s WAV) + GTZAN-Rhythm beat/downbeat
+annotations (TempoBeatDownbeat/gtzan_tempo_beat, 999 clips) fetched locally and
+staged per `tests/fixtures/beat_tracks/README.md`. The gate is always computed
+on the **asaRelevant subset** (disco/hiphop/pop, **300 clips** — clears
+`MIN_CLIPS_PRIMARY=200`); `beat_this` checkpoint `final0`, `dbn=False`,
+`mir_eval` metrics. Reproduce (from `apps/backend/`, eval venv):
+
+```bash
+# build the manifest from the staged corpus, then run (gate auto-restricts to asaRelevant)
+./venv/bin/python scripts/build_beat_manifest.py \
+  --root tests/fixtures/beat_tracks --out tests/fixtures/beat_eval_manifest.gtzan.json
+./venv-eval/bin/python scripts/evaluate_beats.py \
+  --manifest tests/fixtures/beat_eval_manifest.gtzan.json --html
+./venv-eval/bin/python scripts/evaluate_beats.py \
+  --manifest tests/fixtures/beat_eval_manifest.gtzan.json \
+  --methods kick_accent --use-annotated-meter
 ```
-apps/backend/venv-eval/bin/python apps/backend/scripts/evaluate_beats.py \
-  --manifest apps/backend/tests/fixtures/beat_eval_manifest.gtzan.json --html
-# + a --use-annotated-meter diagnostic run, then the ASA slice manifest.
-```
-To be filled after the runs: per-method beat/downbeat F1 (full + asaRelevant + ASA slice, both
-meter configs), meter-detection accuracy, the `gate.productRecommendation`, and the verdict with
-"what would change it."
+
+(The numbers below were produced on an asaRelevant-only 300-clip manifest for
+speed; the asaRelevant metrics are identical either way — the gate scores the
+same 300 clips.)
 
 | | beat F1 | downbeat F1 (strict) | downbeat F1 (phase-tol) |
 |---|---|---|---|
-| stride | _pending_ | _pending_ | _pending_ |
-| kick_accent (detected meter) | _pending_ | _pending_ | _pending_ |
-| kick_accent (annotated meter) | _pending_ | _pending_ | _pending_ |
-| beat_this | _pending_ | _pending_ | _pending_ |
+| stride | 0.9132 | 0.2717 | 0.9021 |
+| kick_accent (detected meter — SHIPPING) | 0.9132 | 0.4722 | 0.7009 |
+| kick_accent (annotated meter) | 0.9132 | 0.5446 | 0.9040 |
+| **beat_this** | **0.9647** | **0.9244** | **0.9427** |
 
-**Verdict:** _pending the measurement._
+Meter detection (asaRelevant): exact-match rate **0.6767** — 96/300 4/4 clips
+misread as odd meters (only 1 clip is genuinely non-4/4). Meter is the weak
+layer, as the synthetic baseline predicted.
+
+**Frozen bar — the two measurable conditions PASS:**
+1. `downbeatF1(beat_this) − downbeatF1(best non-neural) ≥ 0.10` → **PASS**:
+   0.9244 − 0.4722 = **+0.4522** (≫ 0.10 `ADOPT_MARGIN`).
+2. `beatF1(beat_this) ≥ beatF1(kick_accent) − 0.02` → **PASS**: 0.9647 ≥ 0.9132
+   − 0.02 (beat_this is *better* on beats too — no regression).
+3. ASA electronic slice confirms the ≥0.10 gain → **NOT RUN** (blocked on the
+   one manual labeling task — see below).
+
+Power: 300 ≥ 200 = `sufficientlyPowered: true`. `gate.productRecommendation =
+adopt_pending_asa_slice`.
+
+**Cheap-fix escape hatch does NOT trigger.** It fires only if product-faithful
+kick_accent fails but annotated-meter kick_accent would pass. Feeding kick_accent
+the *correct* meter lifts strict downbeat F1 only 0.4722 → 0.5446 — still 0.38
+below beat_this. So fixing `analyze_time_signature` alone can't substitute; the
+residual gap is phase estimation (kick_accent picks the wrong beat as bar-1:
+its phase-tolerant F1 is 0.90 with annotated meter but strict is 0.54). beat_this
+is genuinely the better downbeat producer.
+
+**Verdict:** On contamination-free GTZAN electronic-adjacent audio, beat_this is
+a decisive downbeat improvement (+0.45 strict F1, product-faithful) with no beat
+regression, and the meter cheap-fix cannot close the gap. **Both measurable bars
+pass; adoption is gated only on the ASA electronic slice** (`MIN_CLIPS_ASA=15`
+hand-annotated bar-1 downbeats on modern-electronic tracks — the program's one
+manual labeling task). **What would change it:** the ASA slice failing to
+reproduce a ≥0.10 gain (e.g. if beat_this generalizes worse to modern electronic
+than to GTZAN disco/hiphop/pop), or an unacceptable per-clip latency for the
+torch model on the product path.
+
+**Full 10-genre run (diagnostic, non-gating, same day):** all 999 clips
+evaluated; the gate block recomputed on the full manifest reproduces the
+asaRelevant numbers exactly (0.4722 → 0.9244, gain +0.4522), confirming the
+subset shortcut changed nothing. Full-corpus macro means — stride beat 0.8029 /
+downbeat-strict 0.2040; kick_accent 0.8029 / 0.3097; beat_this **0.8910 /
+0.7822**. The ordering is unchanged on hard mixed-genre material (jazz,
+classical, blues drag every method down; beat_this still leads by +0.47
+strict). Meter detection over the full corpus: 0.5968 exact, and only 6/63
+genuinely non-4/4 clips read correctly (0.0952) — both weaker than the
+asaRelevant subset, reinforcing meter as the layer to replace rather than
+patch.

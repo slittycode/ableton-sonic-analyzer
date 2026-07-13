@@ -8,7 +8,7 @@
     "lufsIntegrated": -5.6,
     "lufsMomentaryMax": -4.8,
     "lufsRange": 0.8,
-    "lufsShortTermMax": -5.2,
+    "lufsShortTermMax": -5.1,
     "monoCompatible": true,
     "plr": 5.6,
     "sampleRate": 44100,
@@ -68,12 +68,14 @@
     "bpmAgreement": "bool",
     "bpmConfidence": "number",
     "bpmDoubletime": "bool",
+    "bpmOctaveEvidence": "null",
     "bpmPercival": "number",
     "bpmRawOriginal": "number",
     "bpmSource": "str",
     "chordDetail": {
       "chordChangeCount": "number",
       "chordSequence": "scalarList",
+      "chordSource": "str",
       "chordStrength": "number",
       "chordTimeline": {
         "[]": {
@@ -116,6 +118,100 @@
       "spectralComplexity": "number",
       "zeroCrossingRate": "number"
     },
+    "fundamentalsQuality": {
+      "analysisMode": "str",
+      "domains": {
+        "beatGrid": {
+          "confidence": "number",
+          "evidence": {
+            "beatCount": "number",
+            "firstBeatSec": "number",
+            "lastBeatSec": "number"
+          },
+          "plainEnglish": "str",
+          "source": "str",
+          "status": "str"
+        },
+        "chords": {
+          "confidence": "number",
+          "evidence": {
+            "chordChangeCount": "number",
+            "chordStrength": "number",
+            "chordTimelineAgreement": "bool",
+            "dominantChords": "scalarList"
+          },
+          "plainEnglish": "str",
+          "source": "str",
+          "status": "str"
+        },
+        "downbeats": {
+          "confidence": "number",
+          "evidence": {
+            "downbeatCount": "number"
+          },
+          "plainEnglish": "str",
+          "source": "str",
+          "status": "str"
+        },
+        "key": {
+          "confidence": "number",
+          "evidence": {
+            "key": "str",
+            "tuningCents": "number",
+            "tuningFrequency": "number"
+          },
+          "plainEnglish": "str",
+          "source": "str",
+          "status": "str"
+        },
+        "meter": {
+          "confidence": "number",
+          "evidence": {
+            "timeSignature": "str"
+          },
+          "plainEnglish": "str",
+          "source": "str",
+          "status": "str"
+        },
+        "percussion": {
+          "confidence": "number",
+          "evidence": {
+            "hihatHitCount": "null",
+            "kickCount": "number",
+            "kickFundamentalHz": "number",
+            "snareHitCount": "number"
+          },
+          "plainEnglish": "str",
+          "source": "str",
+          "status": "str"
+        },
+        "tempo": {
+          "confidence": "number",
+          "evidence": {
+            "bpm": "number",
+            "bpmAgreement": "bool",
+            "bpmDoubletime": "bool",
+            "bpmPercival": "number",
+            "bpmRawOriginal": "number"
+          },
+          "plainEnglish": "str",
+          "source": "str",
+          "status": "str"
+        },
+        "transcription": {
+          "confidence": "null",
+          "evidence": {},
+          "plainEnglish": "str",
+          "source": "null",
+          "status": "str"
+        }
+      },
+      "llmExcluded": "bool",
+      "localOnly": "bool",
+      "overallStatus": "str",
+      "schemaVersion": "str",
+      "targetProfile": "str"
+    },
     "genreDetail": {
       "confidence": "number",
       "genre": "str",
@@ -142,6 +238,18 @@
     "hihatDetail": "null",
     "key": "str",
     "keyConfidence": "number",
+    "keyEnsemble": {
+      "agreement": "number",
+      "alternates": "list",
+      "method": "str",
+      "profiles": {
+        "[]": {
+          "key": "str",
+          "profile": "str",
+          "strength": "number"
+        }
+      }
+    },
     "keyProfile": "str",
     "kickDetail": {
       "fundamentalHz": "number",
@@ -221,6 +329,7 @@
         "totalBars": "number",
         "totalPhrases8Bar": "number"
       },
+      "swingDetail": "null",
       "tempoCurve": {
         "[]": {
           "bpm": "number",
@@ -260,7 +369,8 @@
       "[]": {
         "key": "str",
         "keyConfidence": "number",
-        "segmentIndex": "number"
+        "segmentIndex": "number",
+        "source": "str"
       }
     },
     "segmentLoudness": {
@@ -393,6 +503,7 @@
       "textureScore": "number"
     },
     "timeSignature": "str",
+    "timeSignatureCandidates": "list",
     "timeSignatureConfidence": "number",
     "timeSignatureSource": "str",
     "transcriptionDetail": "null",
@@ -462,6 +573,7 @@
     "bpmAgreement",
     "bpmConfidence",
     "bpmDoubletime",
+    "bpmOctaveEvidence",
     "bpmPercival",
     "bpmRawOriginal",
     "bpmSource",
@@ -473,11 +585,13 @@
     "dynamicSpread",
     "effectsDetail",
     "essentiaFeatures",
+    "fundamentalsQuality",
     "genreDetail",
     "grooveDetail",
     "hihatDetail",
     "key",
     "keyConfidence",
+    "keyEnsemble",
     "keyProfile",
     "kickDetail",
     "lufsCurve",
@@ -512,6 +626,7 @@
     "synthesisCharacter",
     "textureCharacter",
     "timeSignature",
+    "timeSignatureCandidates",
     "timeSignatureConfidence",
     "timeSignatureSource",
     "transcriptionDetail",
@@ -530,6 +645,7 @@
     "bpmAgreement": "bool",
     "bpmConfidence": "number",
     "bpmDoubletime": "bool",
+    "bpmOctaveEvidence": "null",
     "bpmPercival": "number",
     "bpmRawOriginal": "number",
     "bpmSource": "str",
@@ -541,11 +657,13 @@
     "dynamicSpread": "number",
     "effectsDetail": "dict",
     "essentiaFeatures": "dict",
+    "fundamentalsQuality": "dict",
     "genreDetail": "dict",
     "grooveDetail": "dict",
     "hihatDetail": "null",
     "key": "str",
     "keyConfidence": "number",
+    "keyEnsemble": "dict",
     "keyProfile": "str",
     "kickDetail": "dict",
     "lufsCurve": "dict",
@@ -580,6 +698,7 @@
     "synthesisCharacter": "dict",
     "textureCharacter": "dict",
     "timeSignature": "str",
+    "timeSignatureCandidates": "list",
     "timeSignatureConfidence": "number",
     "timeSignatureSource": "str",
     "transcriptionDetail": "null",

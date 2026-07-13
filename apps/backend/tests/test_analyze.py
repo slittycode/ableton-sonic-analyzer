@@ -38,6 +38,7 @@ EXPECTED_SPECTRAL_BANDS = {
 # "absent when off" contract. See JSON_SCHEMA.md "Optional MT3 Namespace".
 EXPECTED_TOP_LEVEL_KEYS = {
     "phase1Version",
+    "fundamentalsQuality",
     "bpm", "bpmConfidence", "bpmPercival", "bpmAgreement",
     "bpmDoubletime", "bpmSource", "bpmRawOriginal",
     "key", "keyConfidence", "timeSignature", "timeSignatureSource",
@@ -59,6 +60,7 @@ EXPECTED_TOP_LEVEL_KEYS = {
 # Fields fast mode populates with real values.
 FAST_MODE_POPULATED_FIELDS = {
     "phase1Version",
+    "fundamentalsQuality",
     "bpm", "bpmConfidence", "bpmPercival", "bpmAgreement",
     "bpmDoubletime", "bpmSource", "bpmRawOriginal",
     "key", "keyConfidence", "timeSignature", "timeSignatureSource",
@@ -258,6 +260,36 @@ class AnalyzeStructuralSnapshotTests(unittest.TestCase):
         self.assertGreater(self.payload["sampleRate"], 0)
         self.assertIsInstance(self.payload["lufsIntegrated"], (int, float))
         self.assertTrue(np.isfinite(self.payload["lufsIntegrated"]))
+
+    def test_fundamentals_quality_declares_local_authority(self) -> None:
+        quality = self.payload.get("fundamentalsQuality")
+        self.assertIsInstance(quality, dict)
+        self.assertEqual(quality["schemaVersion"], "fundamentals-quality.v1")
+        self.assertEqual(quality["targetProfile"], "electronic_ableton_v1")
+        self.assertEqual(quality["analysisMode"], "full")
+        self.assertTrue(quality["localOnly"])
+        self.assertTrue(quality["llmExcluded"])
+        domains = quality["domains"]
+        for domain in (
+            "tempo",
+            "beatGrid",
+            "downbeats",
+            "meter",
+            "key",
+            "chords",
+            "percussion",
+            "transcription",
+        ):
+            with self.subTest(domain=domain):
+                self.assertIn(domain, domains)
+                self.assertIn(domains[domain]["status"], {
+                    "authoritative",
+                    "ambiguous",
+                    "failed",
+                    "not_run",
+                })
+                self.assertIsInstance(domains[domain]["plainEnglish"], str)
+                self.assertTrue(domains[domain]["plainEnglish"].strip())
         self.assertIsInstance(self.payload["truePeak"], (int, float))
         self.assertTrue(np.isfinite(self.payload["truePeak"]))
 
@@ -376,7 +408,8 @@ class AnalyzeFastStructuralSnapshotTests(unittest.TestCase):
         """Fast mode must emit exactly the shared top-level key set (EXPECTED_TOP_LEVEL_KEYS).
 
         Full mode emits these keys *plus* a few detail-only fields (keyProfile,
-        tuningFrequency, tuningCents, lufsMomentaryMax, lufsShortTermMax, pitchDetail), so
+        tuningFrequency, tuningCents, lufsMomentaryMax, lufsShortTermMax, pitchDetail,
+        timeSignatureCandidates, keyEnsemble, bpmOctaveEvidence), so
         this asserts the shared contract — not a byte-for-byte match with full mode.
         """
         self.assertEqual(
@@ -403,8 +436,8 @@ class AnalyzeFastStructuralSnapshotTests(unittest.TestCase):
         self.assertTrue(self.payload["key"].strip(), "key should be a non-empty string")
         self.assertIsInstance(self.payload["timeSignature"], str)
         self.assertTrue(self.payload["timeSignature"].strip(), "timeSignature should be non-empty")
-        self.assertEqual(self.payload["timeSignatureSource"], "assumed_four_four")
-        self.assertEqual(self.payload["timeSignatureConfidence"], 0.0)
+        self.assertIsInstance(self.payload["fundamentalsQuality"], dict)
+        self.assertEqual(self.payload["fundamentalsQuality"]["analysisMode"], "fast")
 
     def test_duration_matches_fixture(self) -> None:
         """Regression: audio must actually be loaded and measured correctly in fast mode."""

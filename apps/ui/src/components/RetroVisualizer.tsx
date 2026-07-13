@@ -321,6 +321,7 @@ export function RetroVisualizer({ analyser, isPlaying, audioBuffer, onBeat, curr
       <div className="relative bg-black rounded-sm overflow-hidden" style={{ height: 160 }}>
         <canvas
           ref={canvasRef}
+          aria-hidden="true"
           width={800}
           height={160}
           className="w-full h-full"

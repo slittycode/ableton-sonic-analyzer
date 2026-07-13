@@ -135,8 +135,62 @@ def analyze_bpm(
         }
 
 
-def analyze_key(mono: np.ndarray) -> dict:
-    """Extract musical key and confidence using KeyExtractor with EDMA profile."""
+# Key profiles run in the full-mode ensemble. EDMA stays the authoritative
+# shipped label (tuned for electronic dance music); temperley and krumhansl
+# are cross-checks whose agreement calibrates confidence and whose
+# disagreements surface as alternates. Order fixed so the emitted list is
+# deterministic.
+_KEY_ENSEMBLE_PROFILES = ("edma", "temperley", "krumhansl")
+
+
+def _run_key_profile(mono: np.ndarray, profile: str) -> dict | None:
+    """Run one KeyExtractor profile → {profile, key, strength} or None on failure."""
+    try:
+        key, scale, strength = es.KeyExtractor(profileType=profile)(mono)
+        return {
+            "profile": profile,
+            "key": f"{key} {scale.capitalize()}",
+            "strength": round(float(strength), 3),
+        }
+    except Exception:
+        return None
+
+
+def _build_key_ensemble(mono: np.ndarray, primary_key: str | None) -> dict | None:
+    """Cross-check EDMA against temperley/krumhansl (accuracy program PR-B3).
+
+    Surfacing-only: records each profile's read, how many agree with the
+    shipped EDMA label, and the distinct alternates. Does NOT override the
+    shipped ``key`` — the vote is evidence until the GiantSteps gate proves it
+    beats EDMA-alone (see incorporations/key-ensemble-decision-2026-07-04.md).
+    """
+    profiles = [p for p in (_run_key_profile(mono, name) for name in _KEY_ENSEMBLE_PROFILES) if p]
+    if not profiles:
+        return None
+    agreement = sum(1 for p in profiles if primary_key is not None and p["key"] == primary_key)
+    seen: set[str] = set()
+    alternates: list[dict] = []
+    for p in profiles:
+        if p["key"] != primary_key and p["key"] not in seen:
+            seen.add(p["key"])
+            alternates.append({"key": p["key"], "strength": p["strength"]})
+    return {
+        "method": "profile_vote.v1",
+        "agreement": agreement,
+        "profiles": profiles,
+        "alternates": alternates,
+    }
+
+
+def analyze_key(mono: np.ndarray, *, include_tuning: bool = True) -> dict:
+    """Extract musical key and confidence using KeyExtractor with EDMA profile.
+
+    ``include_tuning`` gates the per-frame spectral-peak tuning-frequency pass,
+    which is the dominant cost of key analysis on a full track. Fast mode does
+    not surface ``tuningFrequency``/``tuningCents``, so it passes ``False`` to
+    skip that work while keeping the return shape identical. It also gates the
+    full-only ``keyEnsemble`` cross-check for the same reason.
+    """
     try:
         extractor = es.KeyExtractor(profileType="edma")
         key, scale, strength = extractor(mono)
@@ -146,6 +200,13 @@ def analyze_key(mono: np.ndarray) -> dict:
             "keyConfidence": round(float(strength), 2),
             "keyProfile": "edma",
         }
+
+        if not include_tuning:
+            result["tuningFrequency"] = None
+            result["tuningCents"] = None
+            return result
+
+        result["keyEnsemble"] = _build_key_ensemble(mono, key_str)
 
         try:
             frame_size = 2048
@@ -1226,12 +1287,93 @@ def analyze_duration_and_sr(mono: np.ndarray, sample_rate: int = 44100) -> dict:
 _TIME_SIG_BAR_CANDIDATES = (3, 4, 5, 6, 7)
 _TIME_SIG_LABELS = {3: "3/4", 4: "4/4", 5: "5/4", 6: "6/8", 7: "7/8"}
 _TIME_SIG_MARGIN_THRESHOLD = 0.20  # winner must beat 4/4 by 20% to override
+# With the loudness-accent stream contributing (PR-G4), the combined evidence
+# is richer than onset counts alone, so the override margin relaxes slightly.
+# Calibrated on the synthetic corpus: 6/8's measured combined margin is ~17%,
+# and every true-4/4 clip wins outright (no margin test at all).
+_TIME_SIG_ACCENT_MARGIN_THRESHOLD = 0.15
+_TIME_SIG_LOUDNESS_MIN_BARS = 4      # folds with fewer bars are noise, stay neutral
+_TIME_SIG_LOUDNESS_DOMINANCE_CAP = 10.0  # near-silent off-beat positions explode the ratio
+
+
+def _loudness_meter_dominance(low_band: np.ndarray | None, bar_length: int) -> float:
+    """Downbeat dominance of the per-beat low-band loudness folded at bar_length.
+
+    The onset-count accent stream is loudness-blind: a kick on every beat
+    yields identical counts at every bar position no matter which beat is
+    accented (the measured failure on the odd-meter corpus clips). Folding
+    the kick-band loudness recovers the accent. Maximized over bar phase
+    (unlike the count stream, which trusts tick 1) because the loudness
+    fold is about periodicity, not phase — the downbeat phase is resolved
+    separately by ``_compute_downbeat_phase``.
+
+    Returns 1.0 (neutral — no evidence either way) when the signal is
+    missing, too short (< _TIME_SIG_LOUDNESS_MIN_BARS bars), or degenerate.
+    Clamped to _TIME_SIG_LOUDNESS_DOMINANCE_CAP: a near-silent off-beat
+    position (broken-kick patterns) makes the ratio arbitrarily large
+    without carrying more meter information than "clearly dominant".
+    """
+    if low_band is None:
+        return 1.0
+    arr = np.asarray(low_band, dtype=np.float64)
+    arr = np.where(np.isfinite(arr), arr, 0.0)
+    n_bars = arr.size // bar_length
+    if bar_length < 2 or n_bars < _TIME_SIG_LOUDNESS_MIN_BARS:
+        return 1.0
+    folded = arr[: n_bars * bar_length].reshape(n_bars, bar_length).mean(axis=0)
+    best = 1.0
+    for position in range(bar_length):
+        others_mean = float(np.mean(np.delete(folded, position)))
+        if others_mean <= 0.0:
+            # Off-positions are dead silent: maximal dominance if this
+            # position carries anything at all (synthetic-clean case).
+            if float(folded[position]) > 0.0:
+                best = _TIME_SIG_LOUDNESS_DOMINANCE_CAP
+            continue
+        best = max(best, float(folded[position]) / others_mean)
+    return float(min(best, _TIME_SIG_LOUDNESS_DOMINANCE_CAP))
+
+
+_TIME_SIG_HARMONIC_ECHO_PROMINENCE = 0.15
+
+
+def _is_harmonic_of_shorter_bar(
+    low_band: np.ndarray | None, bar_length: int, divisor: int
+) -> bool:
+    """True when the accent profile at bar_length is really divisor-periodic.
+
+    A 3/4 accent pattern folded at 6 repeats its accent at the divisor
+    offset — the fold scores high but describes the shorter bar twice, not
+    a 6-beat bar. A genuine 6/8 fold accents one position only. The test is
+    the echo's PROMINENCE — how far the position at (peak + divisor) rises
+    above the remaining positions, relative to the peak's own rise — not
+    its raw ratio to the peak: baseline noise puts echo/peak near 0.7 for
+    BOTH cases, while prominence measures 0.26 (true 3/4) vs 0.00 (true
+    6/8) on the corpus clips.
+    """
+    if low_band is None or divisor <= 1 or bar_length % divisor != 0:
+        return False
+    arr = np.asarray(low_band, dtype=np.float64)
+    arr = np.where(np.isfinite(arr), arr, 0.0)
+    n_bars = arr.size // bar_length
+    if n_bars < _TIME_SIG_LOUDNESS_MIN_BARS:
+        return False
+    folded = arr[: n_bars * bar_length].reshape(n_bars, bar_length).mean(axis=0)
+    peak_position = int(np.argmax(folded))
+    echo_position = (peak_position + divisor) % bar_length
+    baseline = float(np.mean(np.delete(folded, [peak_position, echo_position])))
+    peak_rise = float(folded[peak_position]) - baseline
+    if peak_rise <= 0.0:
+        return False
+    echo_rise = float(folded[echo_position]) - baseline
+    return echo_rise / peak_rise >= _TIME_SIG_HARMONIC_ECHO_PROMINENCE
 
 
 def analyze_time_signature(
     rhythm_data: dict | None,
     mono: np.ndarray | None = None,
     sample_rate: int = 44100,
+    beat_data: dict | None = None,
 ) -> dict:
     """Phase 1.C #0 — onset-accent autocorrelation for meter detection.
 
@@ -1244,22 +1386,49 @@ def analyze_time_signature(
     3. For each candidate bar length B in (3, 4, 5, 6, 7), reshape the
        per-beat onset counts into bars of B and compute "downbeat
        dominance" = mean accent at position 1 / mean accent at positions 2..B.
-    4. The candidate with the highest dominance wins, but only overrides 4/4
-       when it beats 4/4's dominance by ``_TIME_SIG_MARGIN_THRESHOLD`` (20%).
+    4. (PR-G4) When ``beat_data`` is provided, fold its per-beat low-band
+       loudness at each B for a second, loudness-aware accent stream
+       (``_loudness_meter_dominance``) — onset counts alone are blind to a
+       kick that plays every beat but accents the downbeat, the measured
+       odd-meter failure. Harmonics collapse (a 3-periodic accent folded at
+       6 scores high but is not a 6-beat bar), and the decision runs on the
+       product of both streams.
+    5. The candidate with the highest combined score wins, but only
+       overrides 4/4 by ``_TIME_SIG_ACCENT_MARGIN_THRESHOLD`` (15%) when the
+       loudness stream contributed, or the original
+       ``_TIME_SIG_MARGIN_THRESHOLD`` (20%) count-only margin otherwise —
+       legacy callers without beat_data (including --fast) are byte-identical.
 
     Falls back cleanly to the previous "assumed 4/4" behavior when:
     - rhythm_data is missing
     - fewer than 16 beats are detected
     - mono is not provided (legacy callers)
     - onset detection fails
+
+    Also emits ``timeSignatureCandidates`` — the per-candidate accent evidence
+    (dominance + per-bar-position onset means, plus ``loudnessDominance``)
+    that was previously computed and discarded. Additive, full-mode-only at
+    the top level; downstream meter work (and fundamentalsQuality's meter
+    evidence) reads it instead of recomputing. Empty list on every fallback
+    branch.
     """
+
+    def _result(
+        label: str | None,
+        source: str | None,
+        confidence: float | None,
+        candidates: list[dict] | None = None,
+    ) -> dict:
+        return {
+            "timeSignature": label,
+            "timeSignatureSource": source,
+            "timeSignatureConfidence": confidence,
+            "timeSignatureCandidates": candidates or [],
+        }
+
     try:
         if rhythm_data is None:
-            return {
-                "timeSignature": None,
-                "timeSignatureSource": None,
-                "timeSignatureConfidence": None,
-            }
+            return _result(None, None, None)
 
         raw_ticks = rhythm_data.get("ticks")
         # Defensive: rhythm_data["ticks"] may already be a numpy array.
@@ -1272,39 +1441,23 @@ def analyze_time_signature(
         if mono is None or ticks.size < 16:
             # Not enough information to disambiguate — preserve the
             # "assumed 4/4" contract that consumers expect today.
-            return {
-                "timeSignature": "4/4",
-                "timeSignatureSource": "assumed_four_four",
-                "timeSignatureConfidence": 0.0,
-            }
+            return _result("4/4", "assumed_four_four", 0.0)
 
         # Lazy import — analyze_rhythm is loaded after analyze_core at the
         # module level. Importing at function-call time avoids the cycle.
         try:
             from analyze_rhythm import _detect_onset_times
         except Exception:
-            return {
-                "timeSignature": "4/4",
-                "timeSignatureSource": "assumed_four_four",
-                "timeSignatureConfidence": 0.0,
-            }
+            return _result("4/4", "assumed_four_four", 0.0)
 
         onset_times = _detect_onset_times(mono, sample_rate)
         if onset_times.size < 16:
-            return {
-                "timeSignature": "4/4",
-                "timeSignatureSource": "assumed_four_four",
-                "timeSignatureConfidence": 0.0,
-            }
+            return _result("4/4", "assumed_four_four", 0.0)
 
         beat_diffs = np.diff(ticks)
         beat_diffs = beat_diffs[beat_diffs > 0]
         if beat_diffs.size == 0:
-            return {
-                "timeSignature": "4/4",
-                "timeSignatureSource": "assumed_four_four",
-                "timeSignatureConfidence": 0.0,
-            }
+            return _result("4/4", "assumed_four_four", 0.0)
         beat_duration = float(np.median(beat_diffs))
         half_beat = beat_duration / 2.0
 
@@ -1338,46 +1491,62 @@ def analyze_time_signature(
 
         if 4 not in scores:
             # We couldn't even score 4/4 — fall back to the assumption.
-            return {
-                "timeSignature": "4/4",
-                "timeSignatureSource": "assumed_four_four",
-                "timeSignatureConfidence": 0.0,
-            }
+            return _result("4/4", "assumed_four_four", 0.0)
 
-        baseline = scores[4]
-        best_B = max(scores, key=scores.get)
-        best_score = scores[best_B]
+        # PR-G4: fold the per-beat low-band loudness (when the caller has it)
+        # into a second accent stream. Harmonic folds collapse to neutral —
+        # their evidence belongs to the shorter bar they repeat.
+        low_band = (
+            np.asarray(beat_data.get("lowBand", []), dtype=np.float64)
+            if isinstance(beat_data, dict)
+            else None
+        )
+        loudness_dominance: dict[int, float] = {}
+        for B in scores:
+            dominance = _loudness_meter_dominance(low_band, B)
+            if dominance > 1.0 and any(
+                d in scores and d < B and B % d == 0 and _is_harmonic_of_shorter_bar(low_band, B, d)
+                for d in scores
+            ):
+                dominance = 1.0
+            loudness_dominance[B] = dominance
+        loudness_contributed = any(v != 1.0 for v in loudness_dominance.values())
+        combined = {B: scores[B] * loudness_dominance[B] for B in scores}
+
+        # Surface the previously discarded evidence, strongest first.
+        candidates = [
+            {
+                "timeSignature": _TIME_SIG_LABELS.get(B, f"{B}/4"),
+                "dominance": round(float(scores[B]), 3),
+                "loudnessDominance": round(float(loudness_dominance[B]), 3),
+                "positionMeans": per_position_means[B],
+            }
+            for B in sorted(combined, key=combined.get, reverse=True)
+        ]
+
+        baseline = combined[4]
+        best_B = max(combined, key=combined.get)
+        best_score = combined[best_B]
         winner_label = _TIME_SIG_LABELS.get(best_B, "4/4")
 
         if best_B == 4:
             # 4/4 won outright; confidence rises with downbeat dominance.
             confidence = max(0.0, min(1.0, (baseline - 1.0) / 2.0))
-            return {
-                "timeSignature": "4/4",
-                "timeSignatureSource": "onset_autocorrelation",
-                "timeSignatureConfidence": round(float(confidence), 2),
-            }
+            return _result("4/4", "onset_autocorrelation", round(float(confidence), 2), candidates)
 
         # Non-4/4 candidate won. Require a margin over 4/4 to override.
+        margin_threshold = (
+            _TIME_SIG_ACCENT_MARGIN_THRESHOLD
+            if loudness_contributed
+            else _TIME_SIG_MARGIN_THRESHOLD
+        )
         margin = (best_score - baseline) / max(baseline, 0.1)
-        if margin < _TIME_SIG_MARGIN_THRESHOLD:
+        if margin < margin_threshold:
             confidence = max(0.0, min(1.0, (baseline - 1.0) / 2.0))
-            return {
-                "timeSignature": "4/4",
-                "timeSignatureSource": "onset_autocorrelation_low_margin",
-                "timeSignatureConfidence": round(float(confidence), 2),
-            }
+            return _result("4/4", "onset_autocorrelation_low_margin", round(float(confidence), 2), candidates)
 
         confidence = max(0.0, min(1.0, margin))
-        return {
-            "timeSignature": winner_label,
-            "timeSignatureSource": "onset_autocorrelation",
-            "timeSignatureConfidence": round(float(confidence), 2),
-        }
+        return _result(winner_label, "onset_autocorrelation", round(float(confidence), 2), candidates)
     except Exception as exc:
         print(f"[warn] Time signature estimation failed: {exc}", file=sys.stderr)
-        return {
-            "timeSignature": None,
-            "timeSignatureSource": None,
-            "timeSignatureConfidence": None,
-        }
+        return _result(None, None, None)

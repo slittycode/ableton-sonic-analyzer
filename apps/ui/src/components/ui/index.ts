@@ -4,6 +4,7 @@ export type { Tone, Status, Size } from './variants';
 export { Button, buttonVariants, type ButtonProps } from './Button';
 export { ChainSeparator, type ChainSeparatorProps, type SignalTone } from './ChainSeparator';
 export { Checkbox, checkboxVariants, type CheckboxProps } from './Checkbox';
+export { CollapsibleCard, type CollapsibleCardProps } from './CollapsibleCard';
 export {
   DataTable,
   type DataTableColumn,

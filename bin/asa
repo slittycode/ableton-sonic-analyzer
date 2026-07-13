@@ -296,6 +296,14 @@ cmd_verify() {
     echo "== Backend unittest discover =="
     # Must run from apps/backend: test modules do `import server` and rely on CWD.
     ( cd "$BACKEND_DIR" && ./venv/bin/python -m unittest discover -s tests ) || be=$?
+    if [[ "$be" -eq 0 ]]; then
+      echo "== Backend synthetic fundamentals corpus =="
+      ( cd "$BACKEND_DIR" && ./venv/bin/python scripts/build_synthetic_corpus.py --out-dir tests/fixtures/fundamentals_tracks --manifest tests/fixtures/fundamentals_eval_manifest.json --check --audio-only ) || be=$?
+    fi
+    if [[ "$be" -eq 0 ]]; then
+      echo "== Backend fundamentals evaluation =="
+      ( cd "$BACKEND_DIR" && ./venv/bin/python scripts/evaluate_fundamentals.py --fail-on-skip ) || be=$?
+    fi
   fi
 
   echo "----"

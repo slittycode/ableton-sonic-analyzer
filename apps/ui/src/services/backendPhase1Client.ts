@@ -11,6 +11,9 @@ import {
   ChordTimelineEntry,
   DanceabilityResult,
   DynamicCharacter,
+  FundamentalsQuality,
+  FundamentalsQualityStatus,
+  TimeSignatureCandidate,
   GenreDetail,
   KickDetail,
   Phase1Result,
@@ -577,6 +580,7 @@ export function parsePhase1Result(value: unknown): Phase1Result {
 
   return {
     phase1Version: toOptionalStringOrNull(phase1.phase1Version),
+    fundamentalsQuality: parseOptionalFundamentalsQuality(phase1.fundamentalsQuality),
     bpm: expectNumber(phase1, "bpm"),
     bpmConfidence: expectNumber(phase1, "bpmConfidence"),
     bpmPercival: toNumber(phase1.bpmPercival),
@@ -584,14 +588,21 @@ export function parsePhase1Result(value: unknown): Phase1Result {
     bpmDoubletime: phase1.bpmDoubletime === true ? true : phase1.bpmDoubletime === false ? false : null,
     bpmSource: typeof phase1.bpmSource === "string" ? phase1.bpmSource : null,
     bpmRawOriginal: toNumber(phase1.bpmRawOriginal),
+    bpmOctaveEvidence: isRecord(phase1.bpmOctaveEvidence)
+      ? (phase1.bpmOctaveEvidence as unknown as Phase1Result["bpmOctaveEvidence"])
+      : null,
     key: expectNullableString(phase1, "key"),
     keyConfidence: expectNumber(phase1, "keyConfidence"),
     keyProfile: toOptionalStringOrNull(phase1.keyProfile),
+    keyEnsemble: isRecord(phase1.keyEnsemble)
+      ? (phase1.keyEnsemble as unknown as Phase1Result["keyEnsemble"])
+      : null,
     tuningFrequency: toNumber(phase1.tuningFrequency),
     tuningCents: toNumber(phase1.tuningCents),
     timeSignature: expectString(phase1, "timeSignature"),
     timeSignatureSource: toOptionalStringOrNull(phase1.timeSignatureSource),
     timeSignatureConfidence: toNumber(phase1.timeSignatureConfidence),
+    timeSignatureCandidates: parseOptionalTimeSignatureCandidates(phase1.timeSignatureCandidates),
     durationSeconds: expectNumber(phase1, "durationSeconds"),
     sampleRate: toNumber(phase1.sampleRate),
     lufsIntegrated,
@@ -667,6 +678,69 @@ export function parsePhase1Result(value: unknown): Phase1Result {
     kickDetail: parseOptionalKickDetail(phase1.kickDetail),
     genreDetail: parseOptionalGenreDetail(phase1.genreDetail),
   };
+}
+
+const FUNDAMENTALS_QUALITY_STATUSES = new Set<FundamentalsQualityStatus>([
+  "authoritative",
+  "ambiguous",
+  "failed",
+  "not_run",
+]);
+
+function parseOptionalTimeSignatureCandidates(value: unknown): TimeSignatureCandidate[] | null {
+  if (!Array.isArray(value)) return null;
+  const candidates: TimeSignatureCandidate[] = [];
+  for (const entry of value) {
+    if (!isRecord(entry)) continue;
+    const timeSignature = typeof entry.timeSignature === "string" ? entry.timeSignature : null;
+    const dominance = toNumber(entry.dominance);
+    if (timeSignature === null || dominance === null) continue;
+    const positionMeans = Array.isArray(entry.positionMeans)
+      ? entry.positionMeans.filter((v): v is number => typeof v === "number" && Number.isFinite(v))
+      : [];
+    // Optional (PR-G4): absent on pre-G4 snapshots — forward as null.
+    const loudnessDominance = toNumber(entry.loudnessDominance);
+    candidates.push({ timeSignature, dominance, positionMeans, loudnessDominance });
+  }
+  return candidates;
+}
+
+function parseOptionalFundamentalsQuality(value: unknown): FundamentalsQuality | null {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value)) return null;
+
+  const rawDomains = isRecord(value.domains) ? value.domains : {};
+  const domains: FundamentalsQuality["domains"] = {};
+  for (const [name, rawDomain] of Object.entries(rawDomains)) {
+    if (!isRecord(rawDomain)) continue;
+    const status = parseFundamentalsQualityStatus(rawDomain.status);
+    const plainEnglish = typeof rawDomain.plainEnglish === "string"
+      ? rawDomain.plainEnglish
+      : "";
+    domains[name] = {
+      status,
+      plainEnglish,
+      source: toOptionalStringOrNull(rawDomain.source),
+      confidence: toNumber(rawDomain.confidence),
+      evidence: isRecord(rawDomain.evidence) ? { ...rawDomain.evidence } : {},
+    };
+  }
+
+  return {
+    schemaVersion: "fundamentals-quality.v1",
+    targetProfile: "electronic_ableton_v1",
+    analysisMode: typeof value.analysisMode === "string" ? value.analysisMode : "unknown",
+    localOnly: value.localOnly === true,
+    llmExcluded: value.llmExcluded === true,
+    overallStatus: parseFundamentalsQualityStatus(value.overallStatus),
+    domains,
+  };
+}
+
+function parseFundamentalsQualityStatus(value: unknown): FundamentalsQualityStatus {
+  return typeof value === "string" && FUNDAMENTALS_QUALITY_STATUSES.has(value as FundamentalsQualityStatus)
+    ? value as FundamentalsQualityStatus
+    : "ambiguous";
 }
 
 function roundToTwoDecimals(value: number): number {
@@ -875,6 +949,10 @@ function parseOptionalChordDetail(value: unknown): ChordDetail | null {
         : null;
 
   const chordTimeline = parseOptionalChordTimeline(value.chordTimeline);
+  const chordSource =
+    value.chordSource === "harmonic_stems" || value.chordSource === "full_mix"
+      ? value.chordSource
+      : undefined;
 
   return {
     chordSequence,
@@ -885,6 +963,7 @@ function parseOptionalChordDetail(value: unknown): ChordDetail | null {
     chordChangeCount,
     chordTimelineSource,
     chordTimelineAgreement,
+    chordSource,
   };
 }
 
@@ -1057,7 +1136,11 @@ function parseOptionalGenreDetail(value: unknown): GenreDetail | null {
   if (!isRecord(value)) return null;
   const confidence = toNumber(value.confidence);
   if (confidence === null || typeof value.genre !== "string") return null;
-  const validFamilies = ["house", "techno", "dnb", "ambient", "trance", "dubstep", "breaks", "other"] as const;
+  const validFamilies = [
+    "house", "techno", "dnb", "ambient", "trance", "dubstep", "breaks",
+    "garage", "hardcore", "trap", "electro", "downtempo",
+    "other",
+  ] as const;
   const genreFamily = validFamilies.includes(value.genreFamily as typeof validFamilies[number])
     ? (value.genreFamily as typeof validFamilies[number])
     : "other";

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import WaveSurfer from 'wavesurfer.js';
-import { Play, Pause, Loader2, Activity } from 'lucide-react';
+import { Play, Pause, Loader2 } from 'lucide-react';
 
 import { RetroVisualizer } from './RetroVisualizer';
 
@@ -269,11 +269,7 @@ export function WaveformPlayer({ audioUrl, audioFile, onAudioElement }: Waveform
         beatPulse ? 'border-accent/50' : 'border-border'
       }`}
     >
-      <div className={`flex items-center justify-between px-4 pt-1 border-b border-border/30 pb-2 transition-colors duration-200 ${hasJustLoaded ? 'bg-accent/8' : ''}`}>
-        <div className="flex items-center space-x-2">
-          <Activity className="w-4 h-4 text-accent" />
-          <span className="text-xs font-bold text-text-primary tracking-widest uppercase">Signal Monitor</span>
-        </div>
+      <div className={`flex items-center justify-end px-4 pt-1 border-b border-border/30 pb-2 transition-colors duration-200 ${hasJustLoaded ? 'bg-accent/8' : ''}`}>
         <div className="flex items-center space-x-1">
           <div className={`w-2 h-2 rounded-full transition-all duration-200 ${
             isReady

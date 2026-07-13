@@ -27,6 +27,8 @@ apps/backend/dist/
 apps/backend/venv
 apps/backend/venv/
 apps/backend/venv.*
+apps/backend/venv-eval
+apps/backend/venv-eval/
 apps/backend/.venv
 apps/backend/.venv/
 apps/backend/.venv*
