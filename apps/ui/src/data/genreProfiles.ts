@@ -625,6 +625,77 @@ export const GENRE_PROFILES: GenreProfile[] = [
       Brilliance: { minDb: -30, maxDb: -18, optimalDb: -24 },
     },
   },
+
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // MEASURED PROFILES (PR-G7) — targets sourced from GiantSteps reference
+  // clips (p25/p75 band ranges, p50 optimal; audits/genre-coverage-2026-07-13.md
+  // program). Caveat: sources are LOFI previews, which under-read the top
+  // octave — Highs/Brilliance maxDb are widened ~+3 dB to compensate.
+  // ═══════════════════════════════════════════════════════════════════════════════
+  {
+    id: 'electro',
+    name: 'Electro / Electro House',
+    targetCrestFactorRange: [8.5, 11.5],
+    targetPlrRange: [7, 10.5],
+    targetLufsRange: [-10, -5],
+    spectralTargets: {
+      'Sub Bass': { minDb: -9.5, maxDb: -7, optimalDb: -8 },
+      'Low Bass': { minDb: -12, maxDb: -9, optimalDb: -11 },
+      'Low Mids': { minDb: -19, maxDb: -16, optimalDb: -17 },
+      Mids: { minDb: -15.5, maxDb: -13, optimalDb: -15 },
+      'Upper Mids': { minDb: -20, maxDb: -17, optimalDb: -19 },
+      Highs: { minDb: -23.5, maxDb: -16.5, optimalDb: -21 },
+      Brilliance: { minDb: -28.5, maxDb: -22, optimalDb: -26 },
+    },
+  },
+  {
+    id: 'downtempo',
+    name: 'Downtempo / Chill Out',
+    targetCrestFactorRange: [12, 16],
+    targetPlrRange: [11.5, 14.5],
+    targetLufsRange: [-15, -10],
+    spectralTargets: {
+      'Sub Bass': { minDb: -18, maxDb: -9.5, optimalDb: -13 },
+      'Low Bass': { minDb: -17, maxDb: -13.5, optimalDb: -16 },
+      'Low Mids': { minDb: -22, maxDb: -17.5, optimalDb: -20 },
+      Mids: { minDb: -20.5, maxDb: -15, optimalDb: -19.5 },
+      'Upper Mids': { minDb: -31, maxDb: -23.5, optimalDb: -28.5 },
+      Highs: { minDb: -36, maxDb: -26, optimalDb: -34 },
+      Brilliance: { minDb: -43, maxDb: -29.5, optimalDb: -38.5 },
+    },
+  },
+  {
+    id: 'hardstyle',
+    name: 'Hardstyle / Hard Dance',
+    targetCrestFactorRange: [8, 12],
+    targetPlrRange: [6.5, 10.5],
+    targetLufsRange: [-9.5, -5.5],
+    spectralTargets: {
+      'Sub Bass': { minDb: -10.5, maxDb: -7, optimalDb: -9.5 },
+      'Low Bass': { minDb: -13.5, maxDb: -11.5, optimalDb: -12.5 },
+      'Low Mids': { minDb: -19, maxDb: -16, optimalDb: -18 },
+      Mids: { minDb: -16, maxDb: -12.5, optimalDb: -14.5 },
+      'Upper Mids': { minDb: -19, maxDb: -16.5, optimalDb: -18.5 },
+      Highs: { minDb: -22, maxDb: -16, optimalDb: -20.5 },
+      Brilliance: { minDb: -28, maxDb: -21.5, optimalDb: -25 },
+    },
+  },
+  {
+    id: 'gabber',
+    name: 'Gabber / Hardcore',
+    targetCrestFactorRange: [7.5, 12],
+    targetPlrRange: [6, 10],
+    targetLufsRange: [-8.5, -4],
+    spectralTargets: {
+      'Sub Bass': { minDb: -9, maxDb: -7, optimalDb: -8.5 },
+      'Low Bass': { minDb: -11.5, maxDb: -8, optimalDb: -9 },
+      'Low Mids': { minDb: -18, maxDb: -14.5, optimalDb: -16 },
+      Mids: { minDb: -15, maxDb: -12, optimalDb: -13.5 },
+      'Upper Mids': { minDb: -17, maxDb: -15, optimalDb: -16.5 },
+      Highs: { minDb: -20, maxDb: -13.5, optimalDb: -17 },
+      Brilliance: { minDb: -25.5, maxDb: -17.5, optimalDb: -23.5 },
+    },
+  },
 ];
 
 /**
@@ -654,6 +725,13 @@ export function mapLegacyToEnhanced(legacyId: string): string[] {
     ambient: ['ambient-drone', 'ambient-techno', 'dub-techno'],
     dnb: ['drum-bass', 'neurofunk'],
     garage: ['uk-garage', 'bassline'],
+    // PR-G7 family fallbacks. trap has no measured profile yet (no
+    // reference audio on 2015 Beatport) — hiphop is its honest lineage
+    // fallback rather than an invented target set.
+    hardcore: ['gabber', 'hardstyle'],
+    trap: ['hiphop'],
+    electro: ['electro'],
+    downtempo: ['downtempo'],
   };
   return mapping[legacyId] || [legacyId];
 }

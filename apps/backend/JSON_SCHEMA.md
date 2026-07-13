@@ -832,7 +832,7 @@ Type: `object \| null`
 | `genreDetail.genre` | `string` | Predicted primary genre from heuristic signature matching. | label | Treat as context only — Phase 2 invariant says genre is short context, not the main blueprint. |
 | `genreDetail.confidence` | `float` | Match-score against the predicted genre signature. | 0.0-1.0 | Genre detection on electronic music is noisy; hedge when below 0.7. |
 | `genreDetail.secondaryGenre` | `string` | Second-best signature match. | label | Use to triangulate when primary is borderline — e.g. "psytrance + acid-techno" both indicates Goa-style content. |
-| `genreDetail.genreFamily` | `string` | Coarse parent family (`trance`, `house`, `hip-hop`, etc.). | label | More stable than the specific genre; safer to anchor recommendations against the family. |
+| `genreDetail.genreFamily` | `string` | Coarse parent family. Closed set mirrored by the UI (`types/measurement.ts` + `backendPhase1Client.ts` validFamilies): `house`, `techno`, `dnb`, `ambient`, `trance`, `dubstep`, `breaks`, `garage`, `hardcore`, `trap`, `electro`, `downtempo`, `other` (PR-G7 added the last five before `other`). | label | More stable than the specific genre; safer to anchor recommendations against the family. Adding a family requires touching both UI sites plus `_GENRE_FAMILY_MAP` — see the map's comment in analyze_detection.py. |
 | `genreDetail.topScores` | `array<{genre, score}>` | Top-5 candidate scores. | (label, 0.0-1.0) | Surface as alternates when primary confidence is below 0.7. |
 
 ## Danceability
