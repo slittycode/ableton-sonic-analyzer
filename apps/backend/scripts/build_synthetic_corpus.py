@@ -183,6 +183,7 @@ def render_grid_pattern(
 
     truth = {
         "bpm": bpm,
+        "bpmOctave": bpm,
         "timeSignature": meter,
         "beatGrid": [round(b * beat_s, 6) for b in range(total_beats)],
         "downbeats": [round(i * beats_per_bar * beat_s, 6) for i in range(bars)],
@@ -227,6 +228,7 @@ def render_broken_grid(
 
     truth = {
         "bpm": bpm,
+        "bpmOctave": bpm,
         "timeSignature": "4/4",
         "beatGrid": [round(b * beat_s, 6) for b in range(total_beats)],
         "downbeats": [round(i * beats_per_bar * beat_s, 6) for i in range(bars)],
@@ -496,7 +498,7 @@ def _render_spec(spec: dict[str, Any]) -> RenderedClip:
 # under the manifest entry's "truth" key (inert for the harness) so later PRs —
 # e.g. the swing measurement — can promote it to an active check deliberately.
 _EXPECTED_KEYS_BY_KIND: dict[str, tuple[str, ...]] = {
-    "grid": ("bpm", "timeSignature", "beatGrid", "downbeats"),
+    "grid": ("bpm", "bpmOctave", "timeSignature", "beatGrid", "downbeats"),
     "counts": ("bpm", "percussion"),
     # Swing clips: their swung "and" hats corrupt the meter autocorrelation,
     # so meter/beat checks stay off; BPM and swingPercent are the active checks.
@@ -507,24 +509,25 @@ _EXPECTED_KEYS_BY_KIND: dict[str, tuple[str, ...]] = {
     # Genre-generalization clips (accuracy program PR-G2): broken-kick
     # patterns share the grid checks; shuffle16 shares the swing checks
     # (its swung 16ths corrupt the meter autocorrelation the same way);
-    # ambient is key + abstention-honesty only.
-    "twostep": ("bpm", "timeSignature", "beatGrid", "downbeats"),
-    "halftime": ("bpm", "timeSignature", "beatGrid", "downbeats"),
-    "breakbeat": ("bpm", "timeSignature", "beatGrid", "downbeats"),
+    # ambient is key + abstention-honesty only. bpmOctave (PR-G3) gates the
+    # surfacing-only bpmOctaveEvidence field on every rhythm-kind clip.
+    "twostep": ("bpm", "bpmOctave", "timeSignature", "beatGrid", "downbeats"),
+    "halftime": ("bpm", "bpmOctave", "timeSignature", "beatGrid", "downbeats"),
+    "breakbeat": ("bpm", "bpmOctave", "timeSignature", "beatGrid", "downbeats"),
     "shuffle16": ("bpm", "swingPercent"),
     "ambient": ("key", "honesty"),
 }
 
 _THRESHOLDS_BY_KIND: dict[str, dict[str, Any]] = {
-    "grid": {"bpmTolerance": 1.0, "beatF1": 0.9, "downbeatF1": 0.75},
+    "grid": {"bpmTolerance": 1.0, "beatF1": 0.9, "downbeatF1": 0.75, "octaveTolerance": 2.0},
     "counts": {"bpmTolerance": 1.0, "percussionCountTolerance": 1},
     "swing": {"bpmTolerance": 1.0, "swingTolerance": 3.0},
     "chords": {"chordSegmentAccuracy": 0.65},
     "multi": {"chordSegmentAccuracy": 0.45, "allowRelativeMajorMinor": True},
     "bass": {"transcriptionNoteF1": 0.75},
-    "twostep": {"bpmTolerance": 1.0, "beatF1": 0.9, "downbeatF1": 0.75},
-    "halftime": {"bpmTolerance": 1.0, "beatF1": 0.9, "downbeatF1": 0.75},
-    "breakbeat": {"bpmTolerance": 1.0, "beatF1": 0.9, "downbeatF1": 0.75},
+    "twostep": {"bpmTolerance": 1.0, "beatF1": 0.9, "downbeatF1": 0.75, "octaveTolerance": 2.0},
+    "halftime": {"bpmTolerance": 1.0, "beatF1": 0.9, "downbeatF1": 0.75, "octaveTolerance": 2.0},
+    "breakbeat": {"bpmTolerance": 1.0, "beatF1": 0.9, "downbeatF1": 0.75, "octaveTolerance": 2.0},
     "shuffle16": {"bpmTolerance": 1.0, "swingTolerance": 3.0},
     "ambient": {},
 }
@@ -539,8 +542,11 @@ _KNOWN_GAPS_BY_ID: dict[str, list[str]] = {
     # as 4/4, and the bar-1 phase depends on the meter, so downbeats follow.
     "grid_3_4_90": ["meter:timeSignature", "downbeats:f1"],
     "grid_6_8_110": ["meter:timeSignature", "downbeats:f1"],
-    # 7/8 additionally confuses the tempo estimate (142.6 vs 140).
-    "grid_7_8_140": ["meter:timeSignature", "downbeats:f1", "tempo:bpm"],
+    # 7/8 additionally confuses the tempo estimate (142.6 vs 140). The
+    # octave-evidence check also stays informational here: the shipped bpm
+    # is smeared (a meter artifact, PR-G4's problem), not octave-wrong, so
+    # no simple ratio of 142.6 can land on 140.
+    "grid_7_8_140": ["meter:timeSignature", "downbeats:f1", "tempo:bpm", "tempoOctave:preferredBpm"],
     # RhythmExtractor halves 174 BPM to 86.9 (octave preference); the beat
     # grid and downbeats still score >= 0.87 against truth.
     "grid_4_4_174": ["tempo:bpm"],
