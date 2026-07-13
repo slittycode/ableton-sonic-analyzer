@@ -210,6 +210,88 @@ class FundamentalsEvaluationTests(unittest.TestCase):
             self.assertFalse(report["summary"]["allPassed"])
             self.assertEqual(report["summary"]["checksFailed"], 1)
 
+    def test_honesty_checks_assert_abstention_on_beatless_material(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="asa_fundamentals_eval_honesty_") as temp_dir:
+            temp_root = Path(temp_dir)
+            tracks_dir = temp_root / "tracks"
+            tracks_dir.mkdir()
+            (tracks_dir / "pad.wav").write_bytes(b"placeholder")
+            manifest_path = temp_root / "manifest.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "tracks": [
+                            {
+                                "id": "pad",
+                                "audioPath": "pad.wav",
+                                "category": "ambient",
+                                "expected": {
+                                    "key": "A minor",
+                                    "honesty": {
+                                        "maxBpmConfidence": 0.4,
+                                        "swingDetailAbsent": True,
+                                        "meterSources": ["assumed_four_four"],
+                                    },
+                                },
+                                "thresholds": {},
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            def honest_runner(_path: Path, _flags: list[str] | None) -> dict:
+                return {
+                    "key": "A Minor",
+                    "bpmConfidence": 0.12,
+                    "timeSignatureSource": "assumed_four_four",
+                    "rhythmDetail": {"swingDetail": None},
+                }
+
+            report = run_fundamentals_evaluation(
+                manifest_path=manifest_path,
+                tracks_dir=tracks_dir,
+                report_path=temp_root / "report.json",
+                runner=honest_runner,
+            )
+            self.assertTrue(report["summary"]["allPassed"])
+            names = {check["name"] for check in report["tracks"][0]["checks"]}
+            self.assertEqual(
+                names,
+                {"key:label", "honesty:bpmConfidence", "honesty:swingAbsent", "honesty:meterSource"},
+            )
+
+            def overconfident_runner(_path: Path, _flags: list[str] | None) -> dict:
+                return {
+                    "key": "A Minor",
+                    "bpmConfidence": 0.93,
+                    "timeSignatureSource": "onset_autocorrelation",
+                    "rhythmDetail": {"swingDetail": {"swingPercent": 58.0}},
+                }
+
+            report = run_fundamentals_evaluation(
+                manifest_path=manifest_path,
+                tracks_dir=tracks_dir,
+                report_path=temp_root / "report.json",
+                runner=overconfident_runner,
+            )
+            self.assertFalse(report["summary"]["allPassed"])
+            failed = {c["name"] for c in report["tracks"][0]["checks"] if not c["passed"]}
+            self.assertEqual(
+                failed,
+                {"honesty:bpmConfidence", "honesty:swingAbsent", "honesty:meterSource"},
+            )
+
+    def test_honesty_bpm_confidence_passes_when_field_is_absent(self) -> None:
+        # A pipeline that cannot say anything (bpmConfidence None/missing) is
+        # abstaining, which is exactly what the honesty gate wants.
+        from fundamentals_evaluation import _evaluate_honesty
+
+        checks = _evaluate_honesty({}, {"maxBpmConfidence": 0.4})
+        self.assertEqual(len(checks), 1)
+        self.assertTrue(checks[0].passed)
+
 
 if __name__ == "__main__":
     unittest.main()

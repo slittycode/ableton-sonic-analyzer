@@ -193,6 +193,105 @@ def render_grid_pattern(
     return RenderedClip(_peak_guard(buf), truth)
 
 
+def render_broken_grid(
+    *,
+    bpm: float,
+    bars: int,
+    kick_offsets: tuple[float, ...],
+    snare_offsets: tuple[float, ...],
+) -> RenderedClip:
+    """Broken-kick 4/4 pattern for the genre-generalization rhythm clips.
+
+    kick_offsets/snare_offsets are 0-indexed beat positions within a 4/4 bar
+    (e.g. 2-step: kick (0, 1.5), snare (1, 3)). Straight 8th-note hats ride on
+    top so the beat tracker has pulse evidence at the notated tempo — that is
+    what makes the halftime clip an honest tempo-octave trap rather than an
+    ambiguous one (a real halftime arrangement carries its notated tempo in
+    the hat grid). Truth checks are the same as grid clips: bpm, 4/4,
+    beatGrid, downbeats.
+    """
+    beats_per_bar = 4
+    total_beats = bars * beats_per_bar
+    beat_s = 60.0 / bpm
+    buf = _new_buffer(bpm, total_beats)
+    kick, snare, hat = _eng_kick(), _eng_snare(), _eng_hat()
+
+    for bar in range(bars):
+        bar_start = bar * beats_per_bar
+        for offset in kick_offsets:
+            _overlay(buf, kick, (bar_start + offset) * beat_s, 1.0 if offset == 0.0 else 0.85)
+        for offset in snare_offsets:
+            _overlay(buf, snare, (bar_start + offset) * beat_s, 0.85)
+    for eighth in range(total_beats * 2):
+        _overlay(buf, hat, eighth * 0.5 * beat_s, 0.45)
+
+    truth = {
+        "bpm": bpm,
+        "timeSignature": "4/4",
+        "beatGrid": [round(b * beat_s, 6) for b in range(total_beats)],
+        "downbeats": [round(i * beats_per_bar * beat_s, 6) for i in range(bars)],
+        "hitTimes": {
+            "kick": [round((bar * beats_per_bar + o) * beat_s, 6) for bar in range(bars) for o in kick_offsets],
+            "snare": [round((bar * beats_per_bar + o) * beat_s, 6) for bar in range(bars) for o in snare_offsets],
+        },
+    }
+    return RenderedClip(_peak_guard(buf), truth)
+
+
+def render_shuffle16_pattern(*, bpm: float, bars: int, swing_percent: float) -> RenderedClip:
+    """Four-on-the-floor kicks + 16th-note shuffled hats (UKG/2-step shuffle).
+
+    The same long/short alternation as the 8th-grid swing clips, one metrical
+    level down: each 8th-note span [x, x+0.5] carries its inner 16th delayed
+    to x + (swing/100)*0.5 beats. The truth swingPercent is the 16th-grid
+    ratio — what the swing measurement SHOULD report once it detects the
+    dominant grid instead of hardwiring 8ths (accuracy program PR-G5).
+    """
+    total_beats = bars * 4
+    beat_s = 60.0 / bpm
+    buf = _new_buffer(bpm, total_beats)
+    kick, hat = _eng_kick(), _eng_hat()
+
+    hat_times: list[float] = []
+    for beat in range(total_beats):
+        _overlay(buf, kick, beat * beat_s, 1.0 if beat % 4 == 0 else 0.8)
+        for eighth_offset in (0.0, 0.5):
+            base = beat + eighth_offset
+            _overlay(buf, hat, base * beat_s, 0.6)
+            swung = base + swing_percent / 100.0 * 0.5
+            hat_times.append(round(swung * beat_s, 6))
+            _overlay(buf, hat, swung * beat_s, 0.6)
+
+    truth = {
+        "bpm": bpm,
+        "swingPercent": swing_percent,
+        "gridResolution": "16th",
+        "hitTimes": {"hihat": hat_times},
+    }
+    return RenderedClip(_peak_guard(buf), truth)
+
+
+def render_ambient_pad(key_root: str, mode: str, bpm: float) -> RenderedClip:
+    """Sparse beatless pad — the abstention clip.
+
+    Two slow triads, no percussion. Active checks assert the key is still
+    right AND that the rhythm stack abstains: low tempo confidence, no
+    swingDetail, meter on the assumed-4/4 fallback. The honesty block is
+    check configuration (it rides in `expected`), not signal truth.
+    """
+    chords = render_chord_progression(key_root, mode, [1, 6], bpm, 16.0)
+    truth = {
+        "key": chords.truth["key"],
+        "honesty": {
+            "maxBpmConfidence": 0.4,
+            "swingDetailAbsent": True,
+            "meterSources": ["assumed_four_four"],
+        },
+        "chordTimeline": chords.truth["chordTimeline"],
+    }
+    return RenderedClip(chords.samples, truth)
+
+
 def render_count_pattern(*, bpm: float, bars: int) -> RenderedClip:
     """Band-disjoint, never-coincident placement for percussion-count checks.
 
@@ -329,9 +428,20 @@ def _default_specs() -> list[dict[str, Any]]:
     ]
 
 
+# Broken-kick bar patterns (0-indexed beat offsets in a 4/4 bar). Sources:
+# classic 2-step (kick 1 + "and" of 2, backbeat snares), halftime (kick 1 /
+# snare 3 — the tempo-octave trap), and a breakbeat-style syncopation with
+# an anticipated second kick and the "and" of 3.
+_BROKEN_PATTERNS: dict[str, dict[str, tuple[float, ...]]] = {
+    "twostep": {"kick": (0.0, 1.5), "snare": (1.0, 3.0)},
+    "halftime": {"kick": (0.0,), "snare": (2.0,)},
+    "breakbeat": {"kick": (0.0, 1.75, 2.5), "snare": (1.0, 3.0)},
+}
+
+
 def _synthetic_specs() -> list[dict[str, Any]]:
     specs = list(_default_specs())
-    for bpm, meter in [(70, "4/4"), (90, "3/4"), (110, "6/8"), (128, "4/4"), (140, "7/8"), (174, "4/4")]:
+    for bpm, meter in [(70, "4/4"), (85, "4/4"), (90, "3/4"), (110, "6/8"), (128, "4/4"), (140, "7/8"), (150, "4/4"), (174, "4/4"), (190, "4/4")]:
         specs.append({"id": f"grid_{meter.replace('/', '_')}_{bpm}", "kind": "grid", "bpm": bpm, "meter": meter, "bars": 8})
     roots = ["C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"]
     for i, root in enumerate(roots):
@@ -342,6 +452,12 @@ def _synthetic_specs() -> list[dict[str, Any]]:
         specs.append({"id": f"swing_hats_{swing}", "kind": "swing", "bpm": 124, "bars": 8, "swing": swing})
     for root, mode, bpm in [("A", "minor", 128), ("F", "major", 122)]:
         specs.append({"id": f"multi_{root}_{mode}", "kind": "multi", "root": root, "mode": mode, "bpm": bpm})
+    specs.append({"id": "twostep_132", "kind": "twostep", "bpm": 132, "bars": 8})
+    for bpm in (140, 174):
+        specs.append({"id": f"halftime_{bpm}", "kind": "halftime", "bpm": bpm, "bars": 8})
+    specs.append({"id": "breakbeat_136", "kind": "breakbeat", "bpm": 136, "bars": 8})
+    specs.append({"id": "shuffle16_130_62", "kind": "shuffle16", "bpm": 130, "bars": 8, "swing": 62})
+    specs.append({"id": "ambient_beatless_70", "kind": "ambient", "root": "A", "mode": "minor", "bpm": 70})
     return specs
 
 
@@ -353,6 +469,18 @@ def _render_spec(spec: dict[str, Any]) -> RenderedClip:
         return render_count_pattern(bpm=float(spec["bpm"]), bars=int(spec.get("bars", 8)))
     if kind == "swing":
         return render_grid_pattern(bpm=float(spec["bpm"]), meter="4/4", bars=int(spec.get("bars", 8)), with_hats=True, swing_percent=float(spec["swing"]))
+    if kind in _BROKEN_PATTERNS:
+        pattern = _BROKEN_PATTERNS[kind]
+        return render_broken_grid(
+            bpm=float(spec["bpm"]),
+            bars=int(spec.get("bars", 8)),
+            kick_offsets=pattern["kick"],
+            snare_offsets=pattern["snare"],
+        )
+    if kind == "shuffle16":
+        return render_shuffle16_pattern(bpm=float(spec["bpm"]), bars=int(spec.get("bars", 8)), swing_percent=float(spec["swing"]))
+    if kind == "ambient":
+        return render_ambient_pad(spec["root"], spec["mode"], float(spec["bpm"]))
     if kind == "chords":
         return render_chord_progression(spec["root"], spec["mode"], list(spec["degrees"]), float(spec["bpm"]), float(spec["beats_per_chord"]))
     if kind == "multi":
@@ -376,6 +504,15 @@ _EXPECTED_KEYS_BY_KIND: dict[str, tuple[str, ...]] = {
     "chords": ("key", "chordTimeline"),
     "multi": ("key", "chordTimeline", "timeSignature"),
     "bass": ("transcriptionNotes",),
+    # Genre-generalization clips (accuracy program PR-G2): broken-kick
+    # patterns share the grid checks; shuffle16 shares the swing checks
+    # (its swung 16ths corrupt the meter autocorrelation the same way);
+    # ambient is key + abstention-honesty only.
+    "twostep": ("bpm", "timeSignature", "beatGrid", "downbeats"),
+    "halftime": ("bpm", "timeSignature", "beatGrid", "downbeats"),
+    "breakbeat": ("bpm", "timeSignature", "beatGrid", "downbeats"),
+    "shuffle16": ("bpm", "swingPercent"),
+    "ambient": ("key", "honesty"),
 }
 
 _THRESHOLDS_BY_KIND: dict[str, dict[str, Any]] = {
@@ -385,6 +522,11 @@ _THRESHOLDS_BY_KIND: dict[str, dict[str, Any]] = {
     "chords": {"chordSegmentAccuracy": 0.65},
     "multi": {"chordSegmentAccuracy": 0.45, "allowRelativeMajorMinor": True},
     "bass": {"transcriptionNoteF1": 0.75},
+    "twostep": {"bpmTolerance": 1.0, "beatF1": 0.9, "downbeatF1": 0.75},
+    "halftime": {"bpmTolerance": 1.0, "beatF1": 0.9, "downbeatF1": 0.75},
+    "breakbeat": {"bpmTolerance": 1.0, "beatF1": 0.9, "downbeatF1": 0.75},
+    "shuffle16": {"bpmTolerance": 1.0, "swingTolerance": 3.0},
+    "ambient": {},
 }
 
 # Measured baseline weaknesses (calibrated 2026-07-03 by running the full
@@ -402,6 +544,20 @@ _KNOWN_GAPS_BY_ID: dict[str, list[str]] = {
     # RhythmExtractor halves 174 BPM to 86.9 (octave preference); the beat
     # grid and downbeats still score >= 0.87 against truth.
     "grid_4_4_174": ["tempo:bpm"],
+    # Genre-generalization baseline (calibrated 2026-07-13; PR-G3/PR-G5 own
+    # these). At 190 the octave halving worsens: unlike 174 (where the beat
+    # grid survived), the halved grid drags beatGrid to 0.625 and downbeats
+    # to 0.667.
+    "grid_4_4_190": ["tempo:bpm", "beatGrid:f1", "downbeats:f1"],
+    # Halftime at 174 (kick 1 / snare 3, 8th hats) reads 117.0 — a 2:3
+    # ratio error, not a clean octave — and the grid follows it down
+    # (beatGrid 0.370, downbeats 0.308). The same arrangement at 140 passes
+    # every check, so the trap is specifically tempo-extreme halftime.
+    "halftime_174": ["tempo:bpm", "beatGrid:f1", "downbeats:f1"],
+    # 16th-grid shuffle is invisible to the swing measurement (swingDetail
+    # None): compute_swing_detail keeps only 8th-scale IOIs (0.30-0.70
+    # beats) and hardwires gridResolution "8th". PR-G5 target.
+    "shuffle16_130_62": ["swing:swingPercent"],
 }
 
 

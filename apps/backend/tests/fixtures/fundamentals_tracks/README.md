@@ -36,6 +36,13 @@ missing audio fail the gate instead of producing a vacuous green run.
   `scripts/build_synthetic_corpus.py`.
 - **Swing clips** carry swung-hat ground truth (under each manifest entry's
   `truth` key) for the future swing measurement; only BPM is an active check.
+- **Genre-generalization clips** (accuracy program PR-G2) widen the rhythm
+  surface beyond steady four-on-the-floor: broken-kick patterns (2-step,
+  halftime, breakbeat — all with straight 8th hats carrying the notated
+  pulse), a 16th-grid shuffle, a beatless ambient pad whose active checks
+  assert *abstention* (the `honesty` block in `expected`), and grid clips
+  at the 85/150/190 BPM extremes. See `_BROKEN_PATTERNS` and the PR-G2
+  entries in `_KNOWN_GAPS_BY_ID`.
 - **`knownGaps`** entries mark measured baseline weaknesses (odd-meter
   detection, tempo octave errors at range extremes). Those checks still run
   and report scores but don't gate the run — they are the accuracy program's
