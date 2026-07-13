@@ -283,6 +283,53 @@ def _evaluate_expected(
     if isinstance(required_quality, dict):
         checks.extend(_evaluate_required_quality(payload, required_quality))
 
+    honesty = expected.get("honesty")
+    if isinstance(honesty, dict):
+        checks.extend(_evaluate_honesty(payload, honesty))
+
+    return checks
+
+
+def _evaluate_honesty(
+    payload: dict[str, Any],
+    honesty: dict[str, Any],
+) -> list[FundamentalsCheck]:
+    """Abstention checks: assert what the pipeline must NOT claim.
+
+    Beatless/sparse clips carry no honest rhythm evidence, so their gates
+    invert — a confident tempo, a swing reading, or an evidence-backed meter
+    on such material is the failure (PURPOSE.md invariant #4).
+    """
+    checks: list[FundamentalsCheck] = []
+
+    max_bpm_confidence = honesty.get("maxBpmConfidence")
+    if isinstance(max_bpm_confidence, (int, float)):
+        actual = _number(payload.get("bpmConfidence"))
+        passed = actual is None or actual <= float(max_bpm_confidence)
+        checks.append(FundamentalsCheck(
+            "honesty:bpmConfidence",
+            passed,
+            f"max={max_bpm_confidence} actual={actual}",
+        ))
+
+    if honesty.get("swingDetailAbsent") is True:
+        actual = _nested_value(payload, "rhythmDetail.swingDetail")
+        checks.append(FundamentalsCheck(
+            "honesty:swingAbsent",
+            actual is None,
+            f"expected=absent actual={'present' if actual is not None else 'absent'}",
+        ))
+
+    meter_sources = honesty.get("meterSources")
+    if isinstance(meter_sources, list) and meter_sources:
+        allowed = [str(source) for source in meter_sources]
+        actual_source = payload.get("timeSignatureSource")
+        checks.append(FundamentalsCheck(
+            "honesty:meterSource",
+            str(actual_source) in allowed,
+            f"allowed={allowed} actual={actual_source}",
+        ))
+
     return checks
 
 

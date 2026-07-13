@@ -10,10 +10,14 @@ from fundamentals_evaluation import (
 )
 from scripts.build_synthetic_corpus import (
     _EXPECTED_KEYS_BY_KIND,
+    _THRESHOLDS_BY_KIND,
     build_corpus,
+    render_ambient_pad,
+    render_broken_grid,
     render_chord_progression,
     render_count_pattern,
     render_grid_pattern,
+    render_shuffle16_pattern,
     _render_spec,
     _synthetic_specs,
 )
@@ -131,6 +135,50 @@ class BuildSyntheticCorpusTests(unittest.TestCase):
         self.assertEqual(_normalize_chord_label("A minor"), _normalize_chord_label("Am"))
         self.assertNotEqual(_normalize_chord_label("Am"), _normalize_chord_label("A"))
         self.assertEqual(_chord_segment_accuracy(rendered.truth["chordTimeline"], rendered.truth["chordTimeline"]), 1.0)
+
+    def test_broken_grid_truth_matches_placement(self) -> None:
+        # 2-step at 120 BPM (beat = 0.5 s): kicks at 0 and 1.5 beats, snares
+        # at 1 and 3 — the beat grid and downbeats stay on the notated pulse.
+        rendered = render_broken_grid(
+            bpm=120, bars=2, kick_offsets=(0.0, 1.5), snare_offsets=(1.0, 3.0)
+        )
+        self.assertEqual(rendered.truth["bpm"], 120)
+        self.assertEqual(rendered.truth["timeSignature"], "4/4")
+        self.assertEqual(len(rendered.truth["beatGrid"]), 8)
+        self.assertEqual(rendered.truth["downbeats"], [0.0, 2.0])
+        self.assertEqual(rendered.truth["hitTimes"]["kick"], [0.0, 0.75, 2.0, 2.75])
+        self.assertEqual(rendered.truth["hitTimes"]["snare"], [0.5, 1.5, 2.5, 3.5])
+
+    def test_shuffle16_truth_places_swung_16ths(self) -> None:
+        rendered = render_shuffle16_pattern(bpm=120, bars=1, swing_percent=62)
+        self.assertEqual(rendered.truth["swingPercent"], 62)
+        self.assertEqual(rendered.truth["gridResolution"], "16th")
+        # First swung 16th: 62% of a half-beat into beat 0 => 0.31 beats = 0.155 s.
+        self.assertAlmostEqual(rendered.truth["hitTimes"]["hihat"][0], 0.155, places=4)
+
+    def test_ambient_pad_expected_carries_key_and_honesty_only(self) -> None:
+        rendered = render_ambient_pad("A", "minor", 70)
+        self.assertEqual(rendered.truth["key"], "A minor")
+        self.assertEqual(
+            set(rendered.truth["honesty"].keys()),
+            {"maxBpmConfidence", "swingDetailAbsent", "meterSources"},
+        )
+        # chordTimeline stays inert truth: it is not an active ambient check.
+        self.assertNotIn("chordTimeline", _EXPECTED_KEYS_BY_KIND["ambient"])
+        self.assertIn("chordTimeline", rendered.truth)
+
+    def test_genre_generalization_specs_are_declared(self) -> None:
+        ids = {spec["id"] for spec in _synthetic_specs()}
+        for expected_id in (
+            "grid_4_4_85", "grid_4_4_150", "grid_4_4_190",
+            "twostep_132", "halftime_140", "halftime_174",
+            "breakbeat_136", "shuffle16_130_62", "ambient_beatless_70",
+        ):
+            self.assertIn(expected_id, ids)
+        # Every declared kind has both check tables filled in.
+        for spec in _synthetic_specs():
+            self.assertIn(spec["kind"], _EXPECTED_KEYS_BY_KIND)
+            self.assertIn(spec["kind"], _THRESHOLDS_BY_KIND)
 
     def test_keys_match_folds_enharmonics(self) -> None:
         self.assertTrue(_keys_match("C# Minor", "Db minor", allow_relative=False))
