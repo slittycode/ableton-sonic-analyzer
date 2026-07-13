@@ -538,15 +538,12 @@ _THRESHOLDS_BY_KIND: dict[str, dict[str, Any]] = {
 # upgrades land. Only checks that actually fail at baseline belong here; the
 # rest of each clip's checks gate normally.
 _KNOWN_GAPS_BY_ID: dict[str, list[str]] = {
-    # analyze_time_signature's 20%-margin conservatism reads every odd meter
-    # as 4/4, and the bar-1 phase depends on the meter, so downbeats follow.
-    "grid_3_4_90": ["meter:timeSignature", "downbeats:f1"],
-    "grid_6_8_110": ["meter:timeSignature", "downbeats:f1"],
-    # 7/8 additionally confuses the tempo estimate (142.6 vs 140). The
-    # octave-evidence check also stays informational here: the shipped bpm
-    # is smeared (a meter artifact, PR-G4's problem), not octave-wrong, so
-    # no simple ratio of 142.6 can land on 140.
-    "grid_7_8_140": ["meter:timeSignature", "downbeats:f1", "tempo:bpm", "tempoOctave:preferredBpm"],
+    # PR-G4 (loudness-accent meter stream) closed the odd-meter meter and
+    # downbeat gaps on 3/4, 6/8, and 7/8. What remains on 7/8 is the tempo
+    # smear (142.6 vs 140 — a beat-tracker artifact on odd meters, not a
+    # meter read), which also keeps the octave-evidence check informational:
+    # no simple ratio of 142.6 lands on 140.
+    "grid_7_8_140": ["tempo:bpm", "tempoOctave:preferredBpm"],
     # RhythmExtractor halves 174 BPM to 86.9 (octave preference); the beat
     # grid and downbeats still score >= 0.87 against truth.
     "grid_4_4_174": ["tempo:bpm"],

@@ -1591,7 +1591,15 @@ def main():
     # (accuracy PR-G3). Never overrides bpm — see analyze_bpm_octave_evidence.
     result.update(analyze_bpm_octave_evidence(mono, sample_rate, result.get("bpm")))
     result.update(analyze_key(mono))
-    result.update(analyze_time_signature(rhythm_data, mono=mono, sample_rate=sample_rate))
+    # Shared beat-domain loudness data, extracted once and reused by meter
+    # detection (PR-G4 loudness-accent stream), rhythm detail, groove, and
+    # sidechain below. Hoisted above analyze_time_signature deliberately.
+    beat_data = _extract_beat_loudness_data(mono, sample_rate, rhythm_data)
+    result.update(
+        analyze_time_signature(
+            rhythm_data, mono=mono, sample_rate=sample_rate, beat_data=beat_data
+        )
+    )
     result.update(analyze_duration_and_sr(mono, sample_rate))
 
     # LUFS + LRA (needs stereo at its native sample rate — load_stereo does
@@ -1647,11 +1655,9 @@ def main():
     )
     result.update(analyze_plr(result.get("lufsIntegrated"), result.get("truePeak")))
 
-    # Shared beat-domain loudness data used by rhythm detail + groove + sidechain.
-    beat_data = _extract_beat_loudness_data(mono, sample_rate, rhythm_data)
-
     # Rhythm detail — real meter-aware downbeats derived from the per-beat
-    # kick-accent pattern (beat_data) and the detected time signature.
+    # kick-accent pattern (beat_data, extracted above) and the detected
+    # time signature.
     result.update(
         analyze_rhythm_detail(
             mono,

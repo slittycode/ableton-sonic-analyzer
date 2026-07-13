@@ -169,8 +169,8 @@ export const phase1EnvelopeFixture = {
   timeSignatureSource: 'assumed_four_four',
   timeSignatureConfidence: 0,
   timeSignatureCandidates: [
-    { timeSignature: '4/4', dominance: 1.42, positionMeans: [2.1, 1.4, 1.6, 1.5] },
-    { timeSignature: '3/4', dominance: 1.11, positionMeans: [1.9, 1.7, 1.6] },
+    { timeSignature: '4/4', dominance: 1.42, positionMeans: [2.1, 1.4, 1.6, 1.5], loudnessDominance: 1.31 },
+    { timeSignature: '3/4', dominance: 1.11, positionMeans: [1.9, 1.7, 1.6], loudnessDominance: 1.05 },
   ],
   durationSeconds: 184.2,
   sampleRate: 44100,

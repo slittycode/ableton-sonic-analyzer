@@ -39,7 +39,7 @@ describe('parseBackendAnalyzeResponse', () => {
       phase1: {
         ...validPayload.phase1,
         timeSignatureCandidates: [
-          { timeSignature: '4/4', dominance: 1.42, positionMeans: [2.1, 1.4, 1.6, 1.5] },
+          { timeSignature: '4/4', dominance: 1.42, positionMeans: [2.1, 1.4, 1.6, 1.5], loudnessDominance: 1.31 },
           { timeSignature: '3/4', dominance: 1.11, positionMeans: [1.9, 1.7, 'bad'] },
           { dominance: 1.0 },
           'garbage',
@@ -47,9 +47,11 @@ describe('parseBackendAnalyzeResponse', () => {
       },
     });
 
+    // loudnessDominance (PR-G4) forwards when present and reads null on
+    // pre-G4 snapshots that lack it.
     expect(parsed.phase1.timeSignatureCandidates).toEqual([
-      { timeSignature: '4/4', dominance: 1.42, positionMeans: [2.1, 1.4, 1.6, 1.5] },
-      { timeSignature: '3/4', dominance: 1.11, positionMeans: [1.9, 1.7] },
+      { timeSignature: '4/4', dominance: 1.42, positionMeans: [2.1, 1.4, 1.6, 1.5], loudnessDominance: 1.31 },
+      { timeSignature: '3/4', dominance: 1.11, positionMeans: [1.9, 1.7], loudnessDominance: null },
     ]);
   });
 
