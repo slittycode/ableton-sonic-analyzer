@@ -267,7 +267,7 @@ def render_shuffle16_pattern(*, bpm: float, bars: int, swing_percent: float) -> 
     truth = {
         "bpm": bpm,
         "swingPercent": swing_percent,
-        "gridResolution": "16th",
+        "swingGrid": "16th",
         "hitTimes": {"hihat": hat_times},
     }
     return RenderedClip(_peak_guard(buf), truth)
@@ -514,7 +514,7 @@ _EXPECTED_KEYS_BY_KIND: dict[str, tuple[str, ...]] = {
     "twostep": ("bpm", "bpmOctave", "timeSignature", "beatGrid", "downbeats"),
     "halftime": ("bpm", "bpmOctave", "timeSignature", "beatGrid", "downbeats"),
     "breakbeat": ("bpm", "bpmOctave", "timeSignature", "beatGrid", "downbeats"),
-    "shuffle16": ("bpm", "swingPercent"),
+    "shuffle16": ("bpm", "swingPercent", "swingGrid"),
     "ambient": ("key", "honesty"),
 }
 
@@ -557,9 +557,13 @@ _KNOWN_GAPS_BY_ID: dict[str, list[str]] = {
     # (beatGrid 0.370, downbeats 0.308). The same arrangement at 140 passes
     # every check, so the trap is specifically tempo-extreme halftime.
     "halftime_174": ["tempo:bpm", "beatGrid:f1", "downbeats:f1"],
-    # 16th-grid shuffle is invisible to the swing measurement (swingDetail
-    # None): compute_swing_detail keeps only 8th-scale IOIs (0.30-0.70
-    # beats) and hardwires gridResolution "8th". PR-G5 target.
+    # PR-G5 made the 16th-grid shuffle DETECTABLE (swing:gridResolution now
+    # gates: swung, 16th, confidence 0.99). The ratio VALUE stays
+    # informational: onset detection quantizes to 11.6 ms frames (hop 512)
+    # and shows a measured one-frame-per-side inward bias, compressing
+    # 62% shuffle to a read of 55% at 130 BPM (one frame ~ 2.7 swing
+    # points at 16th scale). Value accuracy needs finer onset timing —
+    # a future, separately gated refinement.
     "shuffle16_130_62": ["swing:swingPercent"],
 }
 

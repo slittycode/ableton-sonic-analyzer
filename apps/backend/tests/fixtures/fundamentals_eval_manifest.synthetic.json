@@ -2223,14 +2223,14 @@
       "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
       "expected": {
         "bpm": 130.0,
-        "swingPercent": 62.0
+        "swingPercent": 62.0,
+        "swingGrid": "16th"
       },
       "thresholds": {
         "bpmTolerance": 1.0,
         "swingTolerance": 3.0
       },
       "truth": {
-        "gridResolution": "16th",
         "hitTimes": {
           "hihat": [
             0.143077,
