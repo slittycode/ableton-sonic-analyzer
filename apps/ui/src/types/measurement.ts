@@ -662,6 +662,11 @@ export interface TimeSignatureCandidate {
   timeSignature: string;
   dominance: number;
   positionMeans: number[];
+  /**
+   * Low-band loudness-accent dominance at this bar length (PR-G4), folded
+   * over bar phase. 1.0 = neutral/no evidence; null on pre-G4 snapshots.
+   */
+  loudnessDominance?: number | null;
 }
 
 /**

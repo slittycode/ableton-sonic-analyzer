@@ -393,11 +393,7 @@
         "beatF1": 0.9,
         "downbeatF1": 0.75,
         "octaveTolerance": 2.0
-      },
-      "knownGaps": [
-        "meter:timeSignature",
-        "downbeats:f1"
-      ]
+      }
     },
     {
       "id": "grid_6_8_110",
@@ -474,11 +470,7 @@
         "beatF1": 0.9,
         "downbeatF1": 0.75,
         "octaveTolerance": 2.0
-      },
-      "knownGaps": [
-        "meter:timeSignature",
-        "downbeats:f1"
-      ]
+      }
     },
     {
       "id": "grid_4_4_128",
@@ -626,8 +618,6 @@
         "octaveTolerance": 2.0
       },
       "knownGaps": [
-        "meter:timeSignature",
-        "downbeats:f1",
         "tempo:bpm",
         "tempoOctave:preferredBpm"
       ]

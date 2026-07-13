@@ -698,7 +698,9 @@ function parseOptionalTimeSignatureCandidates(value: unknown): TimeSignatureCand
     const positionMeans = Array.isArray(entry.positionMeans)
       ? entry.positionMeans.filter((v): v is number => typeof v === "number" && Number.isFinite(v))
       : [];
-    candidates.push({ timeSignature, dominance, positionMeans });
+    // Optional (PR-G4): absent on pre-G4 snapshots — forward as null.
+    const loudnessDominance = toNumber(entry.loudnessDominance);
+    candidates.push({ timeSignature, dominance, positionMeans, loudnessDominance });
   }
   return candidates;
 }

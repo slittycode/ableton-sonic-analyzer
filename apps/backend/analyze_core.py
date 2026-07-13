@@ -1287,12 +1287,93 @@ def analyze_duration_and_sr(mono: np.ndarray, sample_rate: int = 44100) -> dict:
 _TIME_SIG_BAR_CANDIDATES = (3, 4, 5, 6, 7)
 _TIME_SIG_LABELS = {3: "3/4", 4: "4/4", 5: "5/4", 6: "6/8", 7: "7/8"}
 _TIME_SIG_MARGIN_THRESHOLD = 0.20  # winner must beat 4/4 by 20% to override
+# With the loudness-accent stream contributing (PR-G4), the combined evidence
+# is richer than onset counts alone, so the override margin relaxes slightly.
+# Calibrated on the synthetic corpus: 6/8's measured combined margin is ~17%,
+# and every true-4/4 clip wins outright (no margin test at all).
+_TIME_SIG_ACCENT_MARGIN_THRESHOLD = 0.15
+_TIME_SIG_LOUDNESS_MIN_BARS = 4      # folds with fewer bars are noise, stay neutral
+_TIME_SIG_LOUDNESS_DOMINANCE_CAP = 10.0  # near-silent off-beat positions explode the ratio
+
+
+def _loudness_meter_dominance(low_band: np.ndarray | None, bar_length: int) -> float:
+    """Downbeat dominance of the per-beat low-band loudness folded at bar_length.
+
+    The onset-count accent stream is loudness-blind: a kick on every beat
+    yields identical counts at every bar position no matter which beat is
+    accented (the measured failure on the odd-meter corpus clips). Folding
+    the kick-band loudness recovers the accent. Maximized over bar phase
+    (unlike the count stream, which trusts tick 1) because the loudness
+    fold is about periodicity, not phase — the downbeat phase is resolved
+    separately by ``_compute_downbeat_phase``.
+
+    Returns 1.0 (neutral — no evidence either way) when the signal is
+    missing, too short (< _TIME_SIG_LOUDNESS_MIN_BARS bars), or degenerate.
+    Clamped to _TIME_SIG_LOUDNESS_DOMINANCE_CAP: a near-silent off-beat
+    position (broken-kick patterns) makes the ratio arbitrarily large
+    without carrying more meter information than "clearly dominant".
+    """
+    if low_band is None:
+        return 1.0
+    arr = np.asarray(low_band, dtype=np.float64)
+    arr = np.where(np.isfinite(arr), arr, 0.0)
+    n_bars = arr.size // bar_length
+    if bar_length < 2 or n_bars < _TIME_SIG_LOUDNESS_MIN_BARS:
+        return 1.0
+    folded = arr[: n_bars * bar_length].reshape(n_bars, bar_length).mean(axis=0)
+    best = 1.0
+    for position in range(bar_length):
+        others_mean = float(np.mean(np.delete(folded, position)))
+        if others_mean <= 0.0:
+            # Off-positions are dead silent: maximal dominance if this
+            # position carries anything at all (synthetic-clean case).
+            if float(folded[position]) > 0.0:
+                best = _TIME_SIG_LOUDNESS_DOMINANCE_CAP
+            continue
+        best = max(best, float(folded[position]) / others_mean)
+    return float(min(best, _TIME_SIG_LOUDNESS_DOMINANCE_CAP))
+
+
+_TIME_SIG_HARMONIC_ECHO_PROMINENCE = 0.15
+
+
+def _is_harmonic_of_shorter_bar(
+    low_band: np.ndarray | None, bar_length: int, divisor: int
+) -> bool:
+    """True when the accent profile at bar_length is really divisor-periodic.
+
+    A 3/4 accent pattern folded at 6 repeats its accent at the divisor
+    offset — the fold scores high but describes the shorter bar twice, not
+    a 6-beat bar. A genuine 6/8 fold accents one position only. The test is
+    the echo's PROMINENCE — how far the position at (peak + divisor) rises
+    above the remaining positions, relative to the peak's own rise — not
+    its raw ratio to the peak: baseline noise puts echo/peak near 0.7 for
+    BOTH cases, while prominence measures 0.26 (true 3/4) vs 0.00 (true
+    6/8) on the corpus clips.
+    """
+    if low_band is None or divisor <= 1 or bar_length % divisor != 0:
+        return False
+    arr = np.asarray(low_band, dtype=np.float64)
+    arr = np.where(np.isfinite(arr), arr, 0.0)
+    n_bars = arr.size // bar_length
+    if n_bars < _TIME_SIG_LOUDNESS_MIN_BARS:
+        return False
+    folded = arr[: n_bars * bar_length].reshape(n_bars, bar_length).mean(axis=0)
+    peak_position = int(np.argmax(folded))
+    echo_position = (peak_position + divisor) % bar_length
+    baseline = float(np.mean(np.delete(folded, [peak_position, echo_position])))
+    peak_rise = float(folded[peak_position]) - baseline
+    if peak_rise <= 0.0:
+        return False
+    echo_rise = float(folded[echo_position]) - baseline
+    return echo_rise / peak_rise >= _TIME_SIG_HARMONIC_ECHO_PROMINENCE
 
 
 def analyze_time_signature(
     rhythm_data: dict | None,
     mono: np.ndarray | None = None,
     sample_rate: int = 44100,
+    beat_data: dict | None = None,
 ) -> dict:
     """Phase 1.C #0 — onset-accent autocorrelation for meter detection.
 
@@ -1305,8 +1386,18 @@ def analyze_time_signature(
     3. For each candidate bar length B in (3, 4, 5, 6, 7), reshape the
        per-beat onset counts into bars of B and compute "downbeat
        dominance" = mean accent at position 1 / mean accent at positions 2..B.
-    4. The candidate with the highest dominance wins, but only overrides 4/4
-       when it beats 4/4's dominance by ``_TIME_SIG_MARGIN_THRESHOLD`` (20%).
+    4. (PR-G4) When ``beat_data`` is provided, fold its per-beat low-band
+       loudness at each B for a second, loudness-aware accent stream
+       (``_loudness_meter_dominance``) — onset counts alone are blind to a
+       kick that plays every beat but accents the downbeat, the measured
+       odd-meter failure. Harmonics collapse (a 3-periodic accent folded at
+       6 scores high but is not a 6-beat bar), and the decision runs on the
+       product of both streams.
+    5. The candidate with the highest combined score wins, but only
+       overrides 4/4 by ``_TIME_SIG_ACCENT_MARGIN_THRESHOLD`` (15%) when the
+       loudness stream contributed, or the original
+       ``_TIME_SIG_MARGIN_THRESHOLD`` (20%) count-only margin otherwise —
+       legacy callers without beat_data (including --fast) are byte-identical.
 
     Falls back cleanly to the previous "assumed 4/4" behavior when:
     - rhythm_data is missing
@@ -1315,10 +1406,11 @@ def analyze_time_signature(
     - onset detection fails
 
     Also emits ``timeSignatureCandidates`` — the per-candidate accent evidence
-    (dominance + per-bar-position onset means) that was previously computed
-    and discarded. Additive, full-mode-only at the top level; downstream meter
-    work (and fundamentalsQuality's meter evidence) reads it instead of
-    recomputing. Empty list on every fallback branch.
+    (dominance + per-bar-position onset means, plus ``loudnessDominance``)
+    that was previously computed and discarded. Additive, full-mode-only at
+    the top level; downstream meter work (and fundamentalsQuality's meter
+    evidence) reads it instead of recomputing. Empty list on every fallback
+    branch.
     """
 
     def _result(
@@ -1401,19 +1493,40 @@ def analyze_time_signature(
             # We couldn't even score 4/4 — fall back to the assumption.
             return _result("4/4", "assumed_four_four", 0.0)
 
+        # PR-G4: fold the per-beat low-band loudness (when the caller has it)
+        # into a second accent stream. Harmonic folds collapse to neutral —
+        # their evidence belongs to the shorter bar they repeat.
+        low_band = (
+            np.asarray(beat_data.get("lowBand", []), dtype=np.float64)
+            if isinstance(beat_data, dict)
+            else None
+        )
+        loudness_dominance: dict[int, float] = {}
+        for B in scores:
+            dominance = _loudness_meter_dominance(low_band, B)
+            if dominance > 1.0 and any(
+                d in scores and d < B and B % d == 0 and _is_harmonic_of_shorter_bar(low_band, B, d)
+                for d in scores
+            ):
+                dominance = 1.0
+            loudness_dominance[B] = dominance
+        loudness_contributed = any(v != 1.0 for v in loudness_dominance.values())
+        combined = {B: scores[B] * loudness_dominance[B] for B in scores}
+
         # Surface the previously discarded evidence, strongest first.
         candidates = [
             {
                 "timeSignature": _TIME_SIG_LABELS.get(B, f"{B}/4"),
                 "dominance": round(float(scores[B]), 3),
+                "loudnessDominance": round(float(loudness_dominance[B]), 3),
                 "positionMeans": per_position_means[B],
             }
-            for B in sorted(scores, key=scores.get, reverse=True)
+            for B in sorted(combined, key=combined.get, reverse=True)
         ]
 
-        baseline = scores[4]
-        best_B = max(scores, key=scores.get)
-        best_score = scores[best_B]
+        baseline = combined[4]
+        best_B = max(combined, key=combined.get)
+        best_score = combined[best_B]
         winner_label = _TIME_SIG_LABELS.get(best_B, "4/4")
 
         if best_B == 4:
@@ -1422,8 +1535,13 @@ def analyze_time_signature(
             return _result("4/4", "onset_autocorrelation", round(float(confidence), 2), candidates)
 
         # Non-4/4 candidate won. Require a margin over 4/4 to override.
+        margin_threshold = (
+            _TIME_SIG_ACCENT_MARGIN_THRESHOLD
+            if loudness_contributed
+            else _TIME_SIG_MARGIN_THRESHOLD
+        )
         margin = (best_score - baseline) / max(baseline, 0.1)
-        if margin < _TIME_SIG_MARGIN_THRESHOLD:
+        if margin < margin_threshold:
             confidence = max(0.0, min(1.0, (baseline - 1.0) / 2.0))
             return _result("4/4", "onset_autocorrelation_low_margin", round(float(confidence), 2), candidates)
 
