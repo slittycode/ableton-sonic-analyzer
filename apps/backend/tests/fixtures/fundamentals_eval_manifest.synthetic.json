@@ -2334,6 +2334,63 @@
           }
         ]
       }
+    },
+    {
+      "id": "ambient_beatless_Db_major",
+      "audioPath": "synthetic/ambient_beatless_Db_major.wav",
+      "category": "ambient",
+      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
+      "expected": {
+        "key": "Db major",
+        "honesty": {
+          "maxBpmConfidence": 0.4,
+          "swingDetailAbsent": true,
+          "meterSources": [
+            "assumed_four_four"
+          ]
+        }
+      },
+      "thresholds": {},
+      "truth": {
+        "chordTimeline": [
+          {
+            "startSec": 0.0,
+            "endSec": 14.545455,
+            "label": "Db"
+          },
+          {
+            "startSec": 14.545455,
+            "endSec": 29.090909,
+            "label": "Bbm"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ambient_drone_60",
+      "audioPath": "synthetic/ambient_drone_60.wav",
+      "category": "ambient",
+      "description": "Deterministic NumPy-rendered synthetic fundamentals fixture.",
+      "expected": {
+        "key": "E minor",
+        "honesty": {
+          "maxBpmConfidence": 0.4,
+          "swingDetailAbsent": true,
+          "meterSources": [
+            "assumed_four_four"
+          ]
+        }
+      },
+      "thresholds": {},
+      "truth": {
+        "chordTimeline": [
+          {
+            "startSec": 0.0,
+            "endSec": 32.0,
+            "label": "Em"
+          }
+        ]
+      }
     }
   ]
 }

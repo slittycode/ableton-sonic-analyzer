@@ -273,15 +273,23 @@ def render_shuffle16_pattern(*, bpm: float, bars: int, swing_percent: float) -> 
     return RenderedClip(_peak_guard(buf), truth)
 
 
-def render_ambient_pad(key_root: str, mode: str, bpm: float) -> RenderedClip:
-    """Sparse beatless pad — the abstention clip.
+def render_ambient_pad(
+    key_root: str,
+    mode: str,
+    bpm: float,
+    degrees: list[int] | None = None,
+    beats_per_chord: float = 16.0,
+) -> RenderedClip:
+    """Sparse beatless pad — the abstention clip (PR-G2, variants PR-G6).
 
-    Two slow triads, no percussion. Active checks assert the key is still
+    Slow triads, no percussion. Active checks assert the key is still
     right AND that the rhythm stack abstains: low tempo confidence, no
     swingDetail, meter on the assumed-4/4 fallback. The honesty block is
     check configuration (it rides in `expected`), not signal truth.
+    ``degrees=[1]`` renders a single sustained drone triad — the hardest
+    key case (no harmonic motion to disambiguate mode).
     """
-    chords = render_chord_progression(key_root, mode, [1, 6], bpm, 16.0)
+    chords = render_chord_progression(key_root, mode, degrees or [1, 6], bpm, beats_per_chord)
     truth = {
         "key": chords.truth["key"],
         "honesty": {
@@ -460,6 +468,10 @@ def _synthetic_specs() -> list[dict[str, Any]]:
     specs.append({"id": "breakbeat_136", "kind": "breakbeat", "bpm": 136, "bars": 8})
     specs.append({"id": "shuffle16_130_62", "kind": "shuffle16", "bpm": 130, "bars": 8, "swing": 62})
     specs.append({"id": "ambient_beatless_70", "kind": "ambient", "root": "A", "mode": "minor", "bpm": 70})
+    # PR-G6 ambient variants: a flat-side MAJOR pad and a single-chord
+    # drone (no harmonic motion — the hardest honest-key case).
+    specs.append({"id": "ambient_beatless_Db_major", "kind": "ambient", "root": "Db", "mode": "major", "bpm": 66})
+    specs.append({"id": "ambient_drone_60", "kind": "ambient", "root": "E", "mode": "minor", "bpm": 60, "degrees": [1], "beats_per_chord": 32})
     return specs
 
 
@@ -482,7 +494,13 @@ def _render_spec(spec: dict[str, Any]) -> RenderedClip:
     if kind == "shuffle16":
         return render_shuffle16_pattern(bpm=float(spec["bpm"]), bars=int(spec.get("bars", 8)), swing_percent=float(spec["swing"]))
     if kind == "ambient":
-        return render_ambient_pad(spec["root"], spec["mode"], float(spec["bpm"]))
+        return render_ambient_pad(
+            spec["root"],
+            spec["mode"],
+            float(spec["bpm"]),
+            degrees=list(spec["degrees"]) if "degrees" in spec else None,
+            beats_per_chord=float(spec.get("beats_per_chord", 16.0)),
+        )
     if kind == "chords":
         return render_chord_progression(spec["root"], spec["mode"], list(spec["degrees"]), float(spec["bpm"]), float(spec["beats_per_chord"]))
     if kind == "multi":
