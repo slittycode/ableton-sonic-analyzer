@@ -206,8 +206,17 @@ def compute_swing_detail(
     offbeat hat, which would flip a phase measurement (58% read as 42%). The
     long/short interval structure is invariant to that choice.
 
-    Returns ``None`` when there isn't enough 8th-note activity to say anything
-    honest.
+    Grid resolution (accuracy program PR-G5): the 8th grid is analyzed first
+    and, when it swings, wins — unchanged from the original measurement. When
+    the 8th grid reads straight (or has too little activity), the 16th grid
+    is probed with the same long/short-split logic at half scale: UKG/2-step
+    shuffle lives on the 16ths and was previously invisible (its swung-16th
+    IOIs never split the 8th window, reading "straight"). A 16th split only
+    ships when a genuine long/short alternation exists — straight material
+    and sparse material keep their original outputs byte-identical.
+
+    Returns ``None`` when there isn't enough 8th- or 16th-note activity to
+    say anything honest.
     """
     ticks = np.asarray(ticks, dtype=np.float64)
     onsets = np.sort(np.asarray(onset_times, dtype=np.float64))
@@ -222,33 +231,65 @@ def compute_swing_detail(
     if beat_dur <= 0:
         return None
 
-    # Inter-onset intervals in beats; keep the 8th-note-scale ones.
+    def _swung_split(scaled: np.ndarray, long_threshold: float, short_threshold: float) -> dict | None:
+        """Long/short alternation within one grid span; None without a genuine split."""
+        long_iois = scaled[scaled > long_threshold]
+        short_iois = scaled[scaled < short_threshold]
+        if long_iois.size < 2 or short_iois.size < 2:
+            return None
+        long_med = float(np.median(long_iois))
+        short_med = float(np.median(short_iois))
+        balance = 1.0 - abs(long_iois.size - short_iois.size) / float(scaled.size)
+        count_factor = min(1.0, scaled.size / 8.0)
+        return {
+            "swingPercent": round(long_med / (long_med + short_med) * 100.0, 1),
+            "swingConfidence": round(max(0.0, balance) * count_factor, 3),
+        }
+
+    # Inter-onset intervals in beats; the 8th-note window first.
     iois = np.diff(onsets) / beat_dur
     eighth = iois[(iois >= 0.30) & (iois <= 0.70)]
+
+    if eighth.size >= 4:
+        split = _swung_split(eighth, 0.53, 0.47)
+        if split is not None:
+            mean_abs_offset_ms = round(float(np.mean(np.abs(eighth - 0.5))) * beat_dur * 1000.0, 2)
+            return {
+                "swingPercent": split["swingPercent"],
+                "swingConfidence": split["swingConfidence"],
+                "gridResolution": "8th",
+                "direction": "swung",
+                "meanAbsOffsetMs": mean_abs_offset_ms,
+                "offbeatOnsetCount": int(eighth.size),
+            }
+
+    # 8th grid is straight or absent — probe the 16th grid (PR-G5). Same
+    # split logic at half scale: a 16th pair spans half a beat, so the
+    # straight center is 0.25 and the split thresholds halve.
+    sixteenth = iois[(iois >= 0.15) & (iois <= 0.35)]
+    if sixteenth.size >= 4:
+        split = _swung_split(sixteenth, 0.265, 0.235)
+        if split is not None:
+            mean_abs_offset_ms = round(float(np.mean(np.abs(sixteenth - 0.25))) * beat_dur * 1000.0, 2)
+            return {
+                "swingPercent": split["swingPercent"],
+                "swingConfidence": split["swingConfidence"],
+                "gridResolution": "16th",
+                "direction": "swung",
+                "meanAbsOffsetMs": mean_abs_offset_ms,
+                "offbeatOnsetCount": int(sixteenth.size),
+            }
+
     if eighth.size < 4:
         return None
 
-    long_iois = eighth[eighth > 0.53]
-    short_iois = eighth[eighth < 0.47]
-
-    if long_iois.size >= 2 and short_iois.size >= 2:
-        long_med = float(np.median(long_iois))
-        short_med = float(np.median(short_iois))
-        swing_percent = round(long_med / (long_med + short_med) * 100.0, 1)
-        direction = "swung"
-        # Confidence: long/short populations should be balanced (a real
-        # alternation) and plentiful.
-        balance = 1.0 - abs(long_iois.size - short_iois.size) / float(eighth.size)
-        count_factor = min(1.0, eighth.size / 8.0)
-        swing_confidence = round(max(0.0, balance) * count_factor, 3)
-    else:
-        # No clear long/short split — a straight 8th grid.
-        swing_percent = 50.0
-        direction = "straight"
-        count_factor = min(1.0, eighth.size / 8.0)
-        # Tighter clustering around 0.5 => more confident it's genuinely straight.
-        spread = float(np.percentile(eighth, 75) - np.percentile(eighth, 25))
-        swing_confidence = round(max(0.0, 1.0 - spread / 0.15) * count_factor, 3)
+    # No clear long/short split on either grid — a straight 8th grid.
+    swing_percent = 50.0
+    direction = "straight"
+    count_factor = min(1.0, eighth.size / 8.0)
+    # Tighter clustering around 0.5 => more confident it's genuinely straight.
+    spread = float(np.percentile(eighth, 75) - np.percentile(eighth, 25))
+    swing_confidence = round(max(0.0, 1.0 - spread / 0.15) * count_factor, 3)
 
     mean_abs_offset_ms = round(float(np.mean(np.abs(eighth - 0.5))) * beat_dur * 1000.0, 2)
 

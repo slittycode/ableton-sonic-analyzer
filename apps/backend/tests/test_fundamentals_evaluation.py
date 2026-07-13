@@ -283,6 +283,23 @@ class FundamentalsEvaluationTests(unittest.TestCase):
                 {"honesty:bpmConfidence", "honesty:swingAbsent", "honesty:meterSource"},
             )
 
+    def test_swing_grid_check_gates_detection_separately_from_ratio(self) -> None:
+        from fundamentals_evaluation import _evaluate_expected
+
+        payload = {
+            "rhythmDetail": {
+                "swingDetail": {"swingPercent": 55.0, "gridResolution": "16th"},
+            },
+        }
+        checks = _evaluate_expected(
+            payload,
+            {"swingPercent": 62.0, "swingGrid": "16th"},
+            {"swingTolerance": 3.0},
+        )
+        by_name = {check.name: check for check in checks}
+        self.assertFalse(by_name["swing:swingPercent"].passed)  # value compressed
+        self.assertTrue(by_name["swing:gridResolution"].passed)  # detection gates
+
     def test_honesty_bpm_confidence_passes_when_field_is_absent(self) -> None:
         # A pipeline that cannot say anything (bpmConfidence None/missing) is
         # abstaining, which is exactly what the honesty gate wants.

@@ -277,6 +277,18 @@ def _evaluate_expected(
             f"target={swing} tolerance={tolerance} actual={actual}",
         ))
 
+    swing_grid = expected.get("swingGrid")
+    if isinstance(swing_grid, str) and swing_grid.strip():
+        # Gates grid DETECTION separately from ratio accuracy (PR-G5): a
+        # 16th shuffle must be seen as swung on the 16th grid even while
+        # the ratio value is limited by onset frame resolution.
+        actual_grid = _nested_value(payload, "rhythmDetail.swingDetail.gridResolution")
+        checks.append(FundamentalsCheck(
+            "swing:gridResolution",
+            actual_grid == swing_grid,
+            f"expected={swing_grid} actual={actual_grid}",
+        ))
+
     percussion = expected.get("percussion")
     if isinstance(percussion, dict):
         checks.extend(_evaluate_percussion_counts(payload, percussion, thresholds))

@@ -152,7 +152,7 @@ class BuildSyntheticCorpusTests(unittest.TestCase):
     def test_shuffle16_truth_places_swung_16ths(self) -> None:
         rendered = render_shuffle16_pattern(bpm=120, bars=1, swing_percent=62)
         self.assertEqual(rendered.truth["swingPercent"], 62)
-        self.assertEqual(rendered.truth["gridResolution"], "16th")
+        self.assertEqual(rendered.truth["swingGrid"], "16th")
         # First swung 16th: 62% of a half-beat into beat 0 => 0.31 beats = 0.155 s.
         self.assertAlmostEqual(rendered.truth["hitTimes"]["hihat"][0], 0.155, places=4)
 
