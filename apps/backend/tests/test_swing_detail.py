@@ -52,5 +52,51 @@ class SwingDetailTests(unittest.TestCase):
         self.assertIsNone(compute_swing_detail(np.array([]), np.array([])))
 
 
+def _shuffled_16th_onsets(bpm: float, bars: int, swing: float) -> tuple[np.ndarray, np.ndarray]:
+    """Straight 8ths plus swung inner 16ths (UKG shuffle), PR-G5."""
+    beat_s = 60.0 / bpm
+    beats = bars * 4
+    ticks = np.array([b * beat_s for b in range(beats + 1)], dtype=np.float64)
+    onsets = []
+    for b in range(beats):
+        for eighth in (0.0, 0.5):
+            base = b + eighth
+            onsets.append(base * beat_s)
+            onsets.append((base + swing / 100.0 * 0.5) * beat_s)
+    return np.asarray(onsets, dtype=np.float64), ticks
+
+
+class SixteenthShuffleTests(unittest.TestCase):
+    def test_shuffled_16ths_recovered_on_the_16th_grid(self) -> None:
+        for swing in (58.0, 62.0, 66.0):
+            onsets, ticks = _shuffled_16th_onsets(130, 8, swing)
+            result = compute_swing_detail(onsets, ticks)
+            self.assertIsNotNone(result, f"shuffle {swing}")
+            self.assertEqual(result["gridResolution"], "16th")
+            self.assertEqual(result["direction"], "swung")
+            self.assertLessEqual(
+                abs(result["swingPercent"] - swing), 3.0,
+                f"shuffle {swing} -> {result['swingPercent']}",
+            )
+
+    def test_swung_8ths_still_win_over_the_16th_probe(self) -> None:
+        # The 8th grid keeps priority: a swung-8th stream must report the
+        # 8th grid exactly as before PR-G5.
+        onsets, ticks = _swung_onsets(124, 8, 58.0)
+        result = compute_swing_detail(onsets, ticks)
+        self.assertEqual(result["gridResolution"], "8th")
+        self.assertEqual(result["direction"], "swung")
+
+    def test_straight_16ths_do_not_fabricate_a_shuffle(self) -> None:
+        # Straight 16th activity (all IOIs at 0.25 beats) has no long/short
+        # split — nothing on the 16th grid may ship, preserving the original
+        # output (None here: no 8th-scale IOIs at all).
+        beat_s = 60.0 / 130
+        beats = 8 * 4
+        ticks = np.array([b * beat_s for b in range(beats + 1)], dtype=np.float64)
+        onsets = np.arange(0, beats, 0.25) * beat_s
+        self.assertIsNone(compute_swing_detail(onsets, ticks))
+
+
 if __name__ == "__main__":
     unittest.main()
