@@ -335,6 +335,7 @@ function parseAnalysisRunSnapshot(value: unknown): AnalysisRunSnapshot {
 
   return {
     runId: expectString(root.runId, 'runId'),
+    source: parseAnalysisRunSource(root.source),
     requestedStages: parseRequestedStages(root.requestedStages),
     artifacts: {
       sourceAudio: parseArtifact(expectRecord(artifactsRaw.sourceAudio, 'sourceAudio')),
@@ -361,6 +362,30 @@ function parseAnalysisRunSnapshot(value: unknown): AnalysisRunSnapshot {
       interpretation: parseInterpretationStage(interpretation),
       mt3: mt3 == null ? defaultMt3Stage() : parseMt3Stage(mt3),
     },
+  };
+}
+
+function parseAnalysisRunSource(value: unknown): AnalysisRunSnapshot['source'] {
+  if (value == null) {
+    return {
+      kind: 'upload',
+      provider: 'upload',
+      title: null,
+      creator: null,
+      attributionUrl: null,
+      rightsConfirmedAt: null,
+      experimental: false,
+    };
+  }
+  const source = expectRecord(value, 'analysis run source');
+  return {
+    kind: source.kind === 'link' ? 'link' : 'upload',
+    provider: asString(source.provider) ?? 'upload',
+    title: asString(source.title),
+    creator: asString(source.creator),
+    attributionUrl: asString(source.attributionUrl),
+    rightsConfirmedAt: asString(source.rightsConfirmedAt),
+    experimental: source.experimental === true,
   };
 }
 

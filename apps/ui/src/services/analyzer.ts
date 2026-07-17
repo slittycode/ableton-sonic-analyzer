@@ -51,6 +51,12 @@ export interface AnalyzeAudioOptions {
   phase2ConfigEnabled?: boolean;
 }
 
+export interface AnalysisSourceMetadata {
+  name: string;
+  size: number;
+  type: string;
+}
+
 function throwIfUserCancelled(signal?: AbortSignal) {
   if (signal?.aborted) {
     throw createUserCancelledError();
@@ -290,7 +296,7 @@ export async function analyzeAudio(
 
 export async function monitorAnalysisRun(
   runId: string,
-  file: File,
+  source: AnalysisSourceMetadata,
   modelName: string,
   onPhase1Complete: (result: Phase1Result, log: DiagnosticLogEntry) => void,
   onPhase2Complete: (result: Phase2Result | null, log: DiagnosticLogEntry) => void,
@@ -298,9 +304,9 @@ export async function monitorAnalysisRun(
   analysisOptions?: AnalyzeAudioOptions,
 ) {
   const audioMetadata: DiagnosticLogEntry['audioMetadata'] = {
-    name: file.name,
-    size: file.size,
-    type: getAudioMimeTypeOrDefault(file),
+    name: source.name,
+    size: source.size,
+    type: source.type,
   };
   const interpretationRequested = resolveInterpretationRequested(analysisOptions);
   const pitchNoteRequested = resolvePitchNoteRequested(analysisOptions);

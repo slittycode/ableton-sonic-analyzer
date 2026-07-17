@@ -18,7 +18,7 @@ import {
   isMt3ConfigEnabled,
 } from './config';
 import { getAudioMimeTypeOrDefault, isSupportedAudioFile } from './services/audioFile';
-import { analyzeAudio, monitorAnalysisRun } from './services/analyzer';
+import { AnalysisSourceMetadata, analyzeAudio, monitorAnalysisRun } from './services/analyzer';
 import {
   createInterpretationAttempt,
   createPitchNoteTranslationAttempt,
@@ -30,6 +30,17 @@ import {
   projectPhase2ValidationWarningsFromRun,
   projectStemSummaryFromRun,
 } from './services/analysisRunsClient';
+import {
+  AudioSourceCapabilities,
+  AudioSourceIntake,
+  createAnalysisRunFromIntake,
+  createAudioSourceIntake,
+  estimateAudioSourceIntake,
+  fetchRunSourceAudio,
+  getAudioSourceCapabilities,
+  interruptAudioSourceIntake,
+  waitForAudioSourceIntake,
+} from './services/audioSourceIntakesClient';
 import { buildDisplayDiagnosticLogs } from './services/diagnosticLogs';
 import {
   BackendClientError,
@@ -83,6 +94,10 @@ function buildAudioMetadata(file: File): DiagnosticLogEntry['audioMetadata'] {
     type: getAudioMimeTypeOrDefault(file),
   };
 }
+
+type SelectedInput =
+  | { kind: 'file'; file: File }
+  | { kind: 'link'; intake: AudioSourceIntake; playbackFile: File | null };
 
 type StageKey = NonNullable<DiagnosticLogEntry['stageKey']>;
 
@@ -252,6 +267,13 @@ export default function App() {
 
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [inputMode, setInputMode] = useState<'upload' | 'link'>('upload');
+  const [linkUrl, setLinkUrl] = useState('');
+  const [rightsConfirmed, setRightsConfirmed] = useState(false);
+  const [audioSourceIntake, setAudioSourceIntake] = useState<AudioSourceIntake | null>(null);
+  const [linkPlaybackFile, setLinkPlaybackFile] = useState<File | null>(null);
+  const [isCheckingLink, setIsCheckingLink] = useState(false);
+  const [audioSourceCapabilities, setAudioSourceCapabilities] = useState<AudioSourceCapabilities | null>(null);
   const [isDemoLoading, setIsDemoLoading] = useState(false);
   // Audit N9: after analysis completes the Input Source panel collapses into a
   // compact summary so the results below get the full top-of-page real estate.
@@ -271,6 +293,7 @@ export default function App() {
 
   const analysisStartedAtRef = useRef<number | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const intakeAbortControllerRef = useRef<AbortController | null>(null);
   const currentRunIdRef = useRef<string | null>(null);
   const ignoredRunIdsRef = useRef<Set<string>>(new Set());
   // Set when the user stops monitoring; consulted by the run's onError to
@@ -285,6 +308,40 @@ export default function App() {
   const phase2HelperCopy = getInterpretationHelperCopy(phase2ConfigEnabled, interpretationRequested);
   const phase2ModelSelectorDisabled = isAnalyzing || !phase2ConfigEnabled || !interpretationRequested;
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
+  const selectedInput: SelectedInput | null = inputMode === 'upload'
+    ? audioFile ? { kind: 'file', file: audioFile } : null
+    : audioSourceIntake ? { kind: 'link', intake: audioSourceIntake, playbackFile: linkPlaybackFile } : null;
+  const linkedSourceReady = Boolean(
+    audioSourceIntake && ['ready', 'completed'].includes(audioSourceIntake.status) && audioSourceIntake.metadata,
+  );
+  const hasAnalyzableSource = inputMode === 'upload' ? Boolean(audioFile) : linkedSourceReady;
+  const playbackFile = inputMode === 'upload' ? audioFile : linkPlaybackFile;
+  const selectedSourceName = selectedInput?.kind === 'file'
+    ? selectedInput.file.name
+    : selectedInput?.intake.metadata?.title ?? null;
+  const selectedAudioMetadata: AnalysisSourceMetadata | null = selectedInput?.kind === 'file'
+    ? buildAudioMetadata(selectedInput.file)
+    : selectedInput?.intake.metadata
+      ? {
+          name: selectedInput.intake.metadata.filename,
+          size: selectedInput.intake.metadata.sizeBytes,
+          type: selectedInput.intake.metadata.mimeType,
+        }
+      : null;
+
+  useEffect(() => {
+    const controller = new AbortController();
+    getAudioSourceCapabilities(controller.signal)
+      .then(setAudioSourceCapabilities)
+      .catch(() => setAudioSourceCapabilities(null));
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (audioUrl) URL.revokeObjectURL(audioUrl);
+    };
+  }, [audioUrl]);
 
   // Audit N9: reset the manual-expand override whenever a new analysis kicks
   // off, so every completion re-collapses (predictable). Without this, a user
@@ -320,11 +377,15 @@ export default function App() {
   }, [interpretationRequested]);
 
   useEffect(() => {
-    if (!audioFile) {
+    if (!hasAnalyzableSource) {
       setAnalysisEstimate(null);
       setIsEstimateLoading(false);
       setEstimateError(null);
       setEstimateWrongService(false);
+      return;
+    }
+    if (inputMode === 'link' && audioSourceIntake?.status === 'completed') {
+      setIsEstimateLoading(false);
       return;
     }
 
@@ -334,7 +395,7 @@ export default function App() {
     setEstimateWrongService(false);
     setIsEstimateLoading(true);
 
-    estimateAnalysisRun(audioFile, {
+    const options = {
       apiBaseUrl: appConfig.apiBaseUrl,
       analysisMode,
       pitchNoteMode: pitchNoteTranslationRequested ? 'stem_notes' : 'off',
@@ -343,7 +404,14 @@ export default function App() {
       interpretationProfile: 'producer_summary',
       interpretationModel: interpretationWillRun ? selectedModel : undefined,
       mt3Mode: mt3Requested && mt3ConfigEnabled ? 'enabled' : 'off',
-    })
+    } as const;
+    const estimateRequest = inputMode === 'upload' && audioFile
+      ? estimateAnalysisRun(audioFile, options)
+      : audioSourceIntake
+        ? estimateAudioSourceIntake(audioSourceIntake.intakeId, options)
+        : Promise.reject(new Error('No audio source is ready.'));
+
+    estimateRequest
       .then((result) => {
         if (isCancelled) return;
         setAnalysisEstimate(result.estimate);
@@ -363,7 +431,7 @@ export default function App() {
     return () => {
       isCancelled = true;
     };
-  }, [analysisMode, audioFile, interpretationWillRun, mt3Requested, mt3ConfigEnabled, pitchNoteTranslationRequested, selectedModel]);
+  }, [analysisMode, audioFile, audioSourceIntake, hasAnalyzableSource, inputMode, interpretationWillRun, mt3Requested, mt3ConfigEnabled, pitchNoteTranslationRequested, selectedModel]);
 
   useEffect(() => {
     if (!isAnalyzing || analysisStartedAtRef.current === null) {
@@ -384,6 +452,7 @@ export default function App() {
   const handleFileSelect = useCallback((file: File) => {
     if (audioUrl) URL.revokeObjectURL(audioUrl);
     ignoredRunIdsRef.current.clear();
+    setInputMode('upload');
     setAudioFile(file);
     setAudioUrl(URL.createObjectURL(file));
     clearActiveRunState();
@@ -391,6 +460,80 @@ export default function App() {
     setEstimateWrongService(false);
     setIsDemoLoading(false);
   }, [audioUrl, clearActiveRunState]);
+
+  const clearLinkSource = useCallback(async () => {
+    intakeAbortControllerRef.current?.abort();
+    intakeAbortControllerRef.current = null;
+    const intake = audioSourceIntake;
+    if (intake && !['completed', 'failed', 'interrupted', 'expired'].includes(intake.status)) {
+      try {
+        await interruptAudioSourceIntake(intake.intakeId);
+      } catch {
+        // Clearing the local selection must not be blocked by a best-effort server cleanup.
+      }
+    }
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    setAudioUrl(null);
+    setAudioSourceIntake(null);
+    setLinkPlaybackFile(null);
+    setIsCheckingLink(false);
+    clearActiveRunState();
+    setAnalysisEstimate(null);
+    setEstimateError(null);
+    setError(null);
+  }, [audioSourceIntake, audioUrl, clearActiveRunState]);
+
+  const handleInputModeChange = useCallback(async (mode: 'upload' | 'link') => {
+    if (mode === inputMode || isAnalyzing || isCheckingLink) return;
+    if (inputMode === 'link') await clearLinkSource();
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    setAudioUrl(mode === 'upload' && audioFile ? URL.createObjectURL(audioFile) : null);
+    setInputMode(mode);
+    setError(null);
+  }, [audioFile, audioUrl, clearLinkSource, inputMode, isAnalyzing, isCheckingLink]);
+
+  const handleCheckLink = useCallback(async () => {
+    if (!linkUrl.trim() || !rightsConfirmed || isCheckingLink || isAnalyzing) return;
+    intakeAbortControllerRef.current?.abort();
+    const controller = new AbortController();
+    intakeAbortControllerRef.current = controller;
+    setIsCheckingLink(true);
+    setError(null);
+    setErrorRetryable(false);
+    setAudioSourceIntake(null);
+    setLinkPlaybackFile(null);
+    if (audioUrl) {
+      URL.revokeObjectURL(audioUrl);
+      setAudioUrl(null);
+    }
+    clearActiveRunState();
+
+    try {
+      if (audioSourceIntake && !['completed', 'failed', 'interrupted', 'expired'].includes(audioSourceIntake.status)) {
+        await interruptAudioSourceIntake(audioSourceIntake.intakeId, controller.signal);
+      }
+      const created = await createAudioSourceIntake(linkUrl.trim(), true, controller.signal);
+      setAudioSourceIntake(created);
+      const ready = await waitForAudioSourceIntake(created.intakeId, setAudioSourceIntake, controller.signal);
+      setAudioSourceIntake(ready);
+    } catch (rawError) {
+      const mapped = mapBackendError(rawError);
+      if (mapped.code !== 'USER_CANCELLED') setError(mapped.message);
+    } finally {
+      if (intakeAbortControllerRef.current === controller) intakeAbortControllerRef.current = null;
+      setIsCheckingLink(false);
+    }
+  }, [audioSourceIntake, audioUrl, clearActiveRunState, isAnalyzing, isCheckingLink, linkUrl, rightsConfirmed]);
+
+  const handleCancelLinkCheck = useCallback(() => {
+    intakeAbortControllerRef.current?.abort();
+    intakeAbortControllerRef.current = null;
+    if (audioSourceIntake && !['completed', 'failed', 'interrupted', 'expired'].includes(audioSourceIntake.status)) {
+      void interruptAudioSourceIntake(audioSourceIntake.intakeId).catch(() => undefined);
+    }
+    setAudioSourceIntake((current) => current ? { ...current, status: 'interrupted' } : current);
+    setIsCheckingLink(false);
+  }, [audioSourceIntake]);
 
   const handleFileClear = useCallback(() => {
     ignoredRunIdsRef.current.clear();
@@ -405,6 +548,10 @@ export default function App() {
     setEstimateWrongService(false);
     setIsDemoLoading(false);
   }, [audioUrl, clearActiveRunState]);
+
+  useEffect(() => () => {
+    intakeAbortControllerRef.current?.abort();
+  }, []);
 
   const handleGlobalFilesDrop = useCallback(
     (files: File[]) => {
@@ -530,13 +677,13 @@ export default function App() {
   };
 
   const handleStartAnalysis = async (overrides: StartAnalysisOverrides = {}) => {
-    if (!audioFile) return;
+    if (!selectedInput || !selectedAudioMetadata || !hasAnalyzableSource) return;
 
-    const activeFile = audioFile;
+    const activeInput = selectedInput;
     const activeModel = selectedModel;
     const activeEstimate = analysisEstimate;
     const activeTimeoutMs = deriveAnalyzeTimeoutMs(activeEstimate?.totalHighMs);
-    const audioMetadata = buildAudioMetadata(activeFile);
+    const audioMetadata = selectedAudioMetadata;
     const activePitchNoteRequested =
       overrides.pitchNoteRequested ?? pitchNoteTranslationRequested;
     if (
@@ -545,6 +692,76 @@ export default function App() {
     ) {
       setPitchNoteTranslationRequested(overrides.pitchNoteRequested);
     }
+
+    const analyzeSelectedSource = (
+      onPhase1Complete: Parameters<typeof analyzeAudio>[3],
+      onPhase2Complete: Parameters<typeof analyzeAudio>[4],
+      onError: Parameters<typeof analyzeAudio>[5],
+      options: Parameters<typeof analyzeAudio>[6],
+    ) => {
+      if (activeInput.kind === 'file') {
+        return analyzeAudio(
+          activeInput.file,
+          activeModel,
+          null,
+          onPhase1Complete,
+          onPhase2Complete,
+          onError,
+          options,
+        );
+      }
+
+      return (async () => {
+        try {
+          const initialRun = await createAnalysisRunFromIntake(
+            activeInput.intake.intakeId,
+            {
+              analysisMode,
+              pitchNoteMode: activePitchNoteRequested ? 'stem_notes' : 'off',
+              pitchNoteBackend: 'auto',
+              interpretationMode: interpretationWillRun ? 'async' : 'off',
+              interpretationProfile: 'producer_summary',
+              interpretationModel: interpretationWillRun ? activeModel : undefined,
+              mt3Mode: mt3Requested && mt3ConfigEnabled ? 'enabled' : 'off',
+            },
+            options?.signal,
+          );
+          options?.onRunUpdate?.({
+            runId: initialRun.runId,
+            snapshot: initialRun,
+            displayPhase1: projectPhase1FromRun(initialRun),
+            displayPhase2: projectPhase2FromRun(initialRun),
+          });
+          setAudioSourceIntake((current) => current
+            ? { ...current, status: 'completed', runId: initialRun.runId, expiresAt: null }
+            : current);
+
+          try {
+            const preparedFile = await fetchRunSourceAudio(initialRun.runId, options?.signal);
+            setLinkPlaybackFile(preparedFile);
+            setAudioUrl((previous) => {
+              if (previous) URL.revokeObjectURL(previous);
+              return URL.createObjectURL(preparedFile);
+            });
+          } catch (playbackError) {
+            if (options?.signal?.aborted) throw playbackError;
+            console.warn('[App] linked source playback could not be loaded', playbackError);
+          }
+
+          await monitorAnalysisRun(
+            initialRun.runId,
+            audioMetadata,
+            activeModel,
+            onPhase1Complete,
+            onPhase2Complete,
+            onError,
+            options,
+          );
+        } catch (rawError) {
+          onError(mapBackendError(rawError));
+        }
+      })();
+    };
 
     startRenderBenchmarkCycle(window);
     ignoredRunIdsRef.current.clear();
@@ -583,10 +800,7 @@ export default function App() {
     ]);
 
     try {
-      await analyzeAudio(
-        activeFile,
-        activeModel,
-        null,
+      await analyzeSelectedSource(
         (result, log) => {
           if (shouldIgnoreRun(currentRunIdRef.current)) {
             return;
@@ -789,7 +1003,7 @@ export default function App() {
   }, [activeRunId, clearActiveRunState]);
 
   const handleRetryPitchNoteExtraction = useCallback(async () => {
-    if (!audioFile || !activeRunId) return;
+    if (!selectedAudioMetadata || !activeRunId) return;
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -807,7 +1021,7 @@ export default function App() {
       });
       await monitorAnalysisRun(
         activeRunId,
-        audioFile,
+        selectedAudioMetadata,
         selectedModel,
         (result, log) => {
           if (shouldIgnoreRun(currentRunIdRef.current)) {
@@ -854,10 +1068,10 @@ export default function App() {
       analysisStartedAtRef.current = null;
       setElapsedMs(0);
     }
-  }, [activeRunId, audioFile, interpretationRequested, phase2ConfigEnabled, selectedModel, pitchNoteTranslationRequested, shouldIgnoreRun]);
+  }, [activeRunId, interpretationRequested, phase2ConfigEnabled, selectedAudioMetadata, selectedModel, pitchNoteTranslationRequested, shouldIgnoreRun]);
 
   const handleRetryInterpretation = useCallback(async () => {
-    if (!audioFile || !activeRunId) return;
+    if (!selectedAudioMetadata || !activeRunId) return;
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -876,7 +1090,7 @@ export default function App() {
       });
       await monitorAnalysisRun(
         activeRunId,
-        audioFile,
+        selectedAudioMetadata,
         selectedModel,
         (result, log) => {
           if (shouldIgnoreRun(currentRunIdRef.current)) {
@@ -923,7 +1137,7 @@ export default function App() {
       analysisStartedAtRef.current = null;
       setElapsedMs(0);
     }
-  }, [activeRunId, audioFile, interpretationRequested, phase2ConfigEnabled, selectedModel, pitchNoteTranslationRequested, shouldIgnoreRun]);
+  }, [activeRunId, interpretationRequested, phase2ConfigEnabled, selectedAudioMetadata, selectedModel, pitchNoteTranslationRequested, shouldIgnoreRun]);
 
   const handleAudioElement = useCallback((el: HTMLAudioElement) => {
     audioElementRef.current = el;
@@ -934,10 +1148,10 @@ export default function App() {
       buildDisplayDiagnosticLogs({
         logs,
         analysisRun,
-        audioMetadata: audioFile ? buildAudioMetadata(audioFile) : null,
+        audioMetadata: selectedAudioMetadata,
         interpretationModel: selectedModel,
       }),
-    [analysisRun, audioFile, logs, selectedModel],
+    [analysisRun, logs, selectedAudioMetadata, selectedModel],
   );
 
   const handleSpectrogramSeek = useCallback((timeSeconds: number) => {
@@ -946,7 +1160,7 @@ export default function App() {
     }
   }, []);
 
-  const isAnalyzeDisabled = isAnalyzing || estimateWrongService;
+  const isAnalyzeDisabled = isAnalyzing || isCheckingLink || estimateWrongService || !hasAnalyzableSource;
   const hasRetryableRunStage = Boolean(
     analysisRun &&
       (
@@ -955,7 +1169,7 @@ export default function App() {
         ['failed', 'interrupted'].includes(analysisRun.stages.interpretation.status)
       ),
   );
-  const shouldShowStatusPanel = Boolean(audioUrl && audioFile && analysisRun && (isAnalyzing || hasRetryableRunStage));
+  const shouldShowStatusPanel = Boolean(audioUrl && playbackFile && analysisRun && (isAnalyzing || hasRetryableRunStage));
   const phase1ForRender: Phase1Result | null = analysisRun ? projectPhase1FromRun(analysisRun) : null;
   // Audit N9: collapse the Input Source panel when results are visible and we
   // aren't actively analyzing. A failed run keeps the panel open so the user
@@ -1057,7 +1271,7 @@ export default function App() {
               <div className="lg:col-span-4 flex flex-col gap-4">
                 <DeviceRack
                   name="Input Source"
-                  status={audioFile ? (isAnalyzing ? 'active' : 'success') : 'idle'}
+                  status={hasAnalyzableSource ? (isAnalyzing ? 'active' : 'success') : isCheckingLink ? 'active' : 'idle'}
                 >
                   {/* bg-bg-card on the inner div: locked by
                       tests/smoke/theme-shell.spec.ts:41 which asserts the
@@ -1070,7 +1284,7 @@ export default function App() {
                     data-testid="input-panel"
                     className="bg-bg-card flex flex-col min-h-[220px] p-4"
                   >
-                    {showInputCollapsed && audioFile ? (
+                    {showInputCollapsed && selectedSourceName ? (
                       // Audit N9: compact post-analysis summary. Replaces the
                       // FileUpload dropzone + 3 toggles + estimate + run button
                       // with one-line context + two actions. The user can swap
@@ -1093,19 +1307,19 @@ export default function App() {
                           </div>
                           <p
                             className="text-xs font-mono text-text-primary truncate"
-                            title={audioFile.name}
+                            title={selectedSourceName}
                           >
-                            {audioFile.name}
+                            {selectedSourceName}
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
                           <Button
                             variant="secondary"
                             size="md"
-                            onClick={handleFileClear}
+                            onClick={inputMode === 'upload' ? handleFileClear : clearLinkSource}
                             className="flex-1"
                           >
-                            ↺ Analyze new file
+                            {inputMode === 'upload' ? '↺ Analyze new file' : '↺ Analyze another link'}
                           </Button>
                           <Button
                             variant="secondary"
@@ -1134,14 +1348,110 @@ export default function App() {
                             </Button>
                           </div>
                         )}
-                    <FileUpload
-                      onFileSelect={handleFileSelect}
-                      onFileClear={handleFileClear}
-                      onLoadDemoTrack={handleLoadDemoTrack}
-                      isLoading={isAnalyzing}
-                      isDemoLoading={isDemoLoading}
-                      selectedFile={audioFile}
-                    />
+                    <div className="mb-3 grid grid-cols-2 gap-2" role="group" aria-label="Audio input type">
+                      <Button
+                        variant={inputMode === 'upload' ? 'primary' : 'secondary'}
+                        size="sm"
+                        onClick={() => void handleInputModeChange('upload')}
+                        disabled={isAnalyzing || isCheckingLink}
+                      >
+                        Upload file
+                      </Button>
+                      <Button
+                        variant={inputMode === 'link' ? 'primary' : 'secondary'}
+                        size="sm"
+                        onClick={() => void handleInputModeChange('link')}
+                        disabled={isAnalyzing || isCheckingLink}
+                      >
+                        Paste link
+                      </Button>
+                    </div>
+                    {inputMode === 'upload' ? (
+                      <FileUpload
+                        onFileSelect={handleFileSelect}
+                        onFileClear={handleFileClear}
+                        onLoadDemoTrack={handleLoadDemoTrack}
+                        isLoading={isAnalyzing}
+                        isDemoLoading={isDemoLoading}
+                        selectedFile={audioFile}
+                      />
+                    ) : (
+                      <div className="rounded-sm border border-border bg-bg-panel p-3 space-y-3">
+                        <div className="space-y-1">
+                          <label htmlFor="music-link" className="text-meta font-mono uppercase tracking-wider text-text-secondary">
+                            Music link
+                          </label>
+                          <input
+                            id="music-link"
+                            type="url"
+                            value={linkUrl}
+                            onChange={(event) => {
+                              if (audioSourceIntake) void clearLinkSource();
+                              setLinkUrl(event.target.value);
+                            }}
+                            placeholder="https://example.com/track.mp3"
+                            disabled={isAnalyzing || isCheckingLink}
+                            className="w-full rounded-sm border border-border bg-bg-card px-2.5 py-2 text-xs text-text-primary focus:border-accent focus:outline-none disabled:opacity-50"
+                          />
+                        </div>
+                        <label className="flex items-start gap-2 text-xs leading-snug text-text-secondary">
+                          <input
+                            type="checkbox"
+                            checked={rightsConfirmed}
+                            onChange={(event) => setRightsConfirmed(event.target.checked)}
+                            disabled={isAnalyzing || isCheckingLink}
+                            aria-label="I own this audio or have permission to analyse it"
+                            className="mt-0.5 h-4 w-4 accent-accent"
+                          />
+                          <span>I own this audio or have permission to analyse it.</span>
+                        </label>
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-xs text-text-secondary">
+                            {isCheckingLink
+                              ? audioSourceIntake?.status === 'normalizing'
+                                ? 'Preparing audio…'
+                                : 'Fetching source audio…'
+                              : audioSourceIntake?.metadata
+                                ? `${audioSourceIntake.metadata.creator ? `${audioSourceIntake.metadata.creator} — ` : ''}${audioSourceIntake.metadata.title}`
+                                : 'Public single-track links only. Maximum 15 minutes and 100 MiB.'}
+                          </p>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => isCheckingLink ? handleCancelLinkCheck() : void handleCheckLink()}
+                            disabled={!isCheckingLink && (!linkUrl.trim() || !rightsConfirmed || isAnalyzing)}
+                          >
+                            {isCheckingLink ? 'Cancel' : linkedSourceReady ? 'Check again' : 'Check link'}
+                          </Button>
+                        </div>
+                        {audioSourceIntake?.metadata && (
+                          <div data-testid="link-source-summary" className="space-y-1 border-t border-border pt-2 text-xs text-text-secondary">
+                            <p>
+                              {audioSourceIntake.provider}{audioSourceIntake.metadata.experimental ? ' · Experimental' : ''}
+                              {' · '}{formatTrackDuration(audioSourceIntake.metadata.durationSeconds)}
+                            </p>
+                            {audioSourceIntake.metadata.attributionUrl && (
+                              <a
+                                href={audioSourceIntake.metadata.attributionUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-accent hover:underline"
+                              >
+                                View original source
+                              </a>
+                            )}
+                          </div>
+                        )}
+                        {audioSourceCapabilities && (
+                          <p className="text-meta leading-snug text-text-secondary/80">
+                            {audioSourceCapabilities.providers
+                              .filter((provider) => !provider.enabled && provider.missingSetup.length > 0)
+                              .map((provider) => `${provider.id}: ${provider.missingSetup.join(', ')}`)
+                              .join(' · ')}
+                          </p>
+                        )}
+                      </div>
+                    )}
                     <div className="mt-4 rounded-sm border border-border bg-bg-panel px-3 py-3">
                       <div className="flex items-center justify-between gap-3">
                         <div className="space-y-1">
@@ -1291,7 +1601,7 @@ export default function App() {
                         </select>
                       </div>
                     </div>
-                    {!phase1ForRender && audioFile && (
+                    {!phase1ForRender && hasAnalyzableSource && (
                       <>
                         <motion.div
                           initial={{ opacity: 0, y: 8 }}
@@ -1362,9 +1672,9 @@ export default function App() {
                   <div
                     className="flex-grow bg-bg-card p-4 relative flex flex-col"
                   >
-                  {audioUrl && audioFile ? (
+                  {audioUrl && playbackFile ? (
                     <div className="flex flex-col relative z-10 gap-4">
-                      <WaveformPlayer audioUrl={audioUrl} audioFile={audioFile} onAudioElement={handleAudioElement} />
+                      <WaveformPlayer audioUrl={audioUrl} audioFile={playbackFile} onAudioElement={handleAudioElement} />
 
                       {shouldShowStatusPanel && (
                         <AnalysisStatusPanel
@@ -1373,7 +1683,7 @@ export default function App() {
                           estimate={analysisEstimate}
                           isActive={isAnalyzing}
                           onStopAnalysis={handleStopAnalysis}
-                          onRetryMeasurement={audioFile ? handleStartAnalysis : undefined}
+                          onRetryMeasurement={inputMode === 'upload' && hasAnalyzableSource ? handleStartAnalysis : undefined}
                           onRetryPitchNote={analysisRun && ['failed', 'interrupted'].includes(analysisRun.stages.pitchNoteTranslation.status) ? handleRetryPitchNoteExtraction : undefined}
                           onRetryInterpretation={analysisRun && ['failed', 'interrupted'].includes(analysisRun.stages.interpretation.status) ? handleRetryInterpretation : undefined}
                         />
@@ -1394,13 +1704,13 @@ export default function App() {
                   <span className="truncate">ERROR: {error}</span>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  {errorRetryable && audioFile && (
+                  {errorRetryable && hasAnalyzableSource && (
                     <button
-                      onClick={() => handleStartAnalysis()}
+                      onClick={() => inputMode === 'upload' ? handleStartAnalysis() : void handleCheckLink()}
                       disabled={isAnalyzing}
                       className="px-2 py-1 bg-accent/20 text-accent border border-accent/30 rounded-sm hover:bg-accent/30 transition-colors uppercase tracking-wider text-meta disabled:opacity-50"
                     >
-                      Retry
+                      {inputMode === 'upload' ? 'Retry' : 'Check again'}
                     </button>
                   )}
                   <button
@@ -1441,8 +1751,8 @@ export default function App() {
                   phase2ValidationWarnings={phase2ValidationWarnings}
                   phase2ConsistencyReport={phase2ConsistencyReport}
                   phase2StatusMessage={phase2StatusMessage}
-                  sourceFileName={audioFile?.name ?? null}
-                  audioFile={audioFile}
+                  sourceFileName={selectedSourceName}
+                  audioFile={playbackFile}
                   spectralArtifacts={analysisRun?.artifacts?.spectral ?? null}
                   measurementAvailability={{
                     analysisMode: analysisRun?.requestedStages.analysisMode,
@@ -1458,7 +1768,7 @@ export default function App() {
                   // AnalysisResults skips the checkbox affordance.
                   audioContentHash={analysisRun?.artifacts?.sourceAudio?.contentSha256 ?? null}
                   onReanalyzeWithStemAware={
-                    audioFile && !isAnalyzing
+                    inputMode === 'upload' && hasAnalyzableSource && !isAnalyzing
                       ? () => handleStartAnalysis({ pitchNoteRequested: true })
                       : undefined
                   }

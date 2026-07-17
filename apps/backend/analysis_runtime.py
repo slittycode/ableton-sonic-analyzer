@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
+import shutil
 import sqlite3
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -22,6 +23,7 @@ from mt3_transcription import MT3_CHECKPOINT_ID as DEFAULT_MT3_CHECKPOINT_ID
 SQLITE_BUSY_TIMEOUT_MS = 5_000
 MEASUREMENT_PIPELINE_PROGRESS_STATUSES = {"pending", "running", "completed"}
 LOCAL_RUNTIME_OWNER_USER_ID = "local-dev"
+AUDIO_SOURCE_READY_TTL_MINUTES = 15
 
 # Stage-status values for the MT3 stage. Mirrors pitch_note_translation:
 # {queued, running, completed, failed, interrupted}. Added to the public
@@ -66,6 +68,14 @@ class UnsupportedMt3ModeError(ValueError):
     def __init__(self, mt3_mode: str):
         self.mt3_mode = mt3_mode
         super().__init__(f"Unsupported mt3 mode '{mt3_mode}'.")
+
+
+class AudioSourceIntakeCapacityError(RuntimeError):
+    pass
+
+
+class AudioSourceIntakeStateError(RuntimeError):
+    pass
 
 
 class AnalysisRuntime:
@@ -178,6 +188,36 @@ class AnalysisRuntime:
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS audio_source_intakes (
+                    id TEXT PRIMARY KEY,
+                    owner_user_id TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    raw_url TEXT,
+                    rights_confirmed_at TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    metadata_json TEXT,
+                    artifact_id TEXT,
+                    artifact_filename TEXT,
+                    artifact_mime_type TEXT,
+                    artifact_size_bytes INTEGER,
+                    artifact_sha256 TEXT,
+                    artifact_path TEXT,
+                    diagnostics_json TEXT,
+                    error_json TEXT,
+                    analysis_options_json TEXT,
+                    run_id TEXT,
+                    expires_at TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE UNIQUE INDEX IF NOT EXISTS one_active_audio_source_intake_per_owner
+                ON audio_source_intakes(owner_user_id)
+                WHERE status IN ('queued', 'fetching', 'normalizing', 'ready');
+
+                CREATE INDEX IF NOT EXISTS audio_source_intakes_status_created
+                ON audio_source_intakes(status, created_at);
                 """
             )
             self._ensure_column(
@@ -384,6 +424,453 @@ class AnalysisRuntime:
                 ),
             )
 
+        return {"runId": run_id}
+
+    @staticmethod
+    def _public_audio_source_intake(row: sqlite3.Row) -> dict[str, Any]:
+        metadata = _json_loads(row["metadata_json"])
+        error = _json_loads(row["error_json"])
+        return {
+            "intakeId": str(row["id"]),
+            "provider": str(row["provider"]),
+            "status": str(row["status"]),
+            "rightsConfirmedAt": str(row["rights_confirmed_at"]),
+            "metadata": metadata if isinstance(metadata, dict) else None,
+            "error": error if isinstance(error, dict) else None,
+            "expiresAt": row["expires_at"],
+            "runId": row["run_id"],
+            "createdAt": str(row["created_at"]),
+            "updatedAt": str(row["updated_at"]),
+        }
+
+    def create_audio_source_intake(
+        self,
+        *,
+        owner_user_id: str,
+        provider: str,
+        raw_url: str,
+        rights_confirmed: bool,
+        max_active_intakes: int = 4,
+    ) -> dict[str, Any]:
+        if not rights_confirmed:
+            raise ValueError("Permission confirmation is required before checking a link.")
+        self.cleanup_expired_audio_source_intakes()
+        now = _utc_now_iso()
+        intake_id = str(uuid4())
+        try:
+            with self._connect() as conn:
+                conn.execute("BEGIN IMMEDIATE")
+                active_count = conn.execute(
+                    """
+                    SELECT COUNT(*) AS count
+                    FROM audio_source_intakes
+                    WHERE status IN ('queued', 'fetching', 'normalizing', 'ready')
+                    """
+                ).fetchone()
+                if int(active_count["count"]) >= max_active_intakes:
+                    raise AudioSourceIntakeCapacityError(
+                        "The link preparation queue is full. Try again after another intake finishes."
+                    )
+                conn.execute(
+                    """
+                    INSERT INTO audio_source_intakes (
+                        id, owner_user_id, provider, raw_url,
+                        rights_confirmed_at, status, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, 'queued', ?, ?)
+                    """,
+                    (
+                        intake_id,
+                        owner_user_id or LOCAL_RUNTIME_OWNER_USER_ID,
+                        provider,
+                        raw_url,
+                        now,
+                        now,
+                        now,
+                    ),
+                )
+        except sqlite3.IntegrityError as exc:
+            raise AudioSourceIntakeCapacityError(
+                "You already have a link being prepared. Stop it or use it before checking another link."
+            ) from exc
+        return self.get_audio_source_intake(intake_id, owner_user_id=owner_user_id)
+
+    def _get_audio_source_intake_row(
+        self,
+        intake_id: str,
+        *,
+        owner_user_id: str | None = None,
+    ) -> sqlite3.Row:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM audio_source_intakes WHERE id = ?",
+                (intake_id,),
+            ).fetchone()
+        if row is None:
+            raise KeyError(f"Unknown audio source intake {intake_id}")
+        if owner_user_id is not None:
+            stored_owner = str(row["owner_user_id"] or LOCAL_RUNTIME_OWNER_USER_ID)
+            if stored_owner != owner_user_id:
+                raise PermissionError(f"Audio source intake '{intake_id}' does not belong to this user.")
+        return row
+
+    def get_audio_source_intake(
+        self,
+        intake_id: str,
+        *,
+        owner_user_id: str | None = None,
+    ) -> dict[str, Any]:
+        row = self._get_audio_source_intake_row(intake_id, owner_user_id=owner_user_id)
+        if row["status"] == "ready" and row["expires_at"]:
+            expires_at = datetime.fromisoformat(str(row["expires_at"]))
+            if expires_at <= datetime.now(UTC):
+                self._expire_audio_source_intake(intake_id)
+                row = self._get_audio_source_intake_row(intake_id, owner_user_id=owner_user_id)
+        return self._public_audio_source_intake(row)
+
+    def reserve_next_audio_source_intake(self) -> dict[str, Any] | None:
+        now = _utc_now_iso()
+        with self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                """
+                SELECT * FROM audio_source_intakes
+                WHERE status = 'queued'
+                ORDER BY created_at ASC
+                LIMIT 1
+                """
+            ).fetchone()
+            if row is None:
+                return None
+            cursor = conn.execute(
+                """
+                UPDATE audio_source_intakes
+                SET status = 'fetching', updated_at = ?
+                WHERE id = ? AND status = 'queued'
+                """,
+                (now, row["id"]),
+            )
+            if cursor.rowcount == 0:
+                return None
+        return {
+            "intakeId": str(row["id"]),
+            "ownerUserId": str(row["owner_user_id"]),
+            "provider": str(row["provider"]),
+            "rawUrl": str(row["raw_url"]),
+            "rightsConfirmedAt": str(row["rights_confirmed_at"]),
+        }
+
+    def set_audio_source_intake_status(self, intake_id: str, status: str) -> bool:
+        if status not in {"fetching", "normalizing"}:
+            raise ValueError(f"Unsupported active intake status '{status}'.")
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE audio_source_intakes
+                SET status = ?, updated_at = ?
+                WHERE id = ? AND status IN ('fetching', 'normalizing')
+                """,
+                (status, _utc_now_iso(), intake_id),
+            )
+        return cursor.rowcount > 0
+
+    def is_audio_source_intake_cancelled(self, intake_id: str) -> bool:
+        try:
+            row = self._get_audio_source_intake_row(intake_id)
+        except KeyError:
+            return True
+        return str(row["status"]) in {"interrupted", "expired"}
+
+    def complete_audio_source_intake(
+        self,
+        intake_id: str,
+        *,
+        source_path: str,
+        filename: str,
+        mime_type: str,
+        metadata: dict[str, Any],
+        diagnostics: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        artifact_id = str(uuid4())
+        stored = self.artifact_storage.store_file(
+            artifact_id=artifact_id,
+            filename=filename,
+            source_path=source_path,
+        )
+        now = datetime.now(UTC)
+        expires_at = now + timedelta(minutes=AUDIO_SOURCE_READY_TTL_MINUTES)
+        public_metadata = {
+            **metadata,
+            "filename": filename,
+            "mimeType": mime_type,
+            "sizeBytes": stored.size_bytes,
+        }
+        adopted = False
+        try:
+            with self._connect() as conn:
+                cursor = conn.execute(
+                    """
+                    UPDATE audio_source_intakes
+                    SET status = 'ready', raw_url = NULL,
+                        metadata_json = ?, artifact_id = ?, artifact_filename = ?,
+                        artifact_mime_type = ?, artifact_size_bytes = ?, artifact_sha256 = ?,
+                        artifact_path = ?, diagnostics_json = ?, error_json = NULL,
+                        expires_at = ?, updated_at = ?
+                    WHERE id = ? AND status IN ('fetching', 'normalizing')
+                    """,
+                    (
+                        _json_dumps(public_metadata),
+                        artifact_id,
+                        filename,
+                        mime_type,
+                        stored.size_bytes,
+                        stored.content_sha256,
+                        stored.storage_ref,
+                        _json_dumps(diagnostics),
+                        expires_at.isoformat(),
+                        now.isoformat(),
+                        intake_id,
+                    ),
+                )
+                adopted = cursor.rowcount > 0
+        finally:
+            if not adopted:
+                self.artifact_storage.delete(stored.storage_ref)
+        if not adopted:
+            raise AudioSourceIntakeStateError("Link preparation finished after it was stopped.")
+        return self.get_audio_source_intake(intake_id)
+
+    def fail_audio_source_intake(
+        self,
+        intake_id: str,
+        *,
+        error: dict[str, Any],
+        diagnostics: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        now = _utc_now_iso()
+        failed = False
+        with self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT artifact_path FROM audio_source_intakes WHERE id = ?",
+                (intake_id,),
+            ).fetchone()
+            cursor = conn.execute(
+                """
+                UPDATE audio_source_intakes
+                SET status = 'failed', raw_url = NULL, error_json = ?, diagnostics_json = ?,
+                    artifact_path = NULL, expires_at = NULL, updated_at = ?
+                WHERE id = ? AND status IN ('queued', 'fetching', 'normalizing')
+                """,
+                (_json_dumps(error), _json_dumps(diagnostics), now, intake_id),
+            )
+            failed = cursor.rowcount > 0
+        if failed and row and row["artifact_path"]:
+            self.artifact_storage.delete(str(row["artifact_path"]))
+        return self.get_audio_source_intake(intake_id)
+
+    def interrupt_audio_source_intake(
+        self,
+        intake_id: str,
+        *,
+        owner_user_id: str | None = None,
+    ) -> dict[str, Any]:
+        self._get_audio_source_intake_row(intake_id, owner_user_id=owner_user_id)
+        now = _utc_now_iso()
+        interrupted = False
+        with self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT status, artifact_path FROM audio_source_intakes WHERE id = ?",
+                (intake_id,),
+            ).fetchone()
+            if row["status"] == "completed":
+                raise AudioSourceIntakeStateError(
+                    "This intake already created an analysis run; interrupt the run instead."
+                )
+            cursor = conn.execute(
+                """
+                UPDATE audio_source_intakes
+                SET status = 'interrupted', raw_url = NULL, artifact_path = NULL,
+                    expires_at = NULL, updated_at = ?
+                WHERE id = ? AND status IN ('queued', 'fetching', 'normalizing', 'ready')
+                """,
+                (now, intake_id),
+            )
+            interrupted = cursor.rowcount > 0
+        if interrupted and row["artifact_path"]:
+            self.artifact_storage.delete(str(row["artifact_path"]))
+        return self.get_audio_source_intake(intake_id, owner_user_id=owner_user_id)
+
+    def _expire_audio_source_intake(self, intake_id: str) -> None:
+        now = _utc_now_iso()
+        expired = False
+        with self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT status, artifact_path FROM audio_source_intakes WHERE id = ?",
+                (intake_id,),
+            ).fetchone()
+            if row is None or row["status"] != "ready":
+                return
+            cursor = conn.execute(
+                """
+                UPDATE audio_source_intakes
+                SET status = 'expired', raw_url = NULL, artifact_path = NULL, updated_at = ?
+                WHERE id = ? AND status = 'ready'
+                """,
+                (now, intake_id),
+            )
+            expired = cursor.rowcount > 0
+        if expired and row["artifact_path"]:
+            self.artifact_storage.delete(str(row["artifact_path"]))
+
+    def cleanup_expired_audio_source_intakes(self) -> int:
+        now = datetime.now(UTC)
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT id FROM audio_source_intakes
+                WHERE status = 'ready' AND expires_at IS NOT NULL AND expires_at <= ?
+                """,
+                (now.isoformat(),),
+            ).fetchall()
+        for row in rows:
+            self._expire_audio_source_intake(str(row["id"]))
+        return len(rows)
+
+    def create_run_from_intake(
+        self,
+        intake_id: str,
+        *,
+        owner_user_id: str,
+        analysis_mode: str,
+        pitch_note_mode: str,
+        pitch_note_backend: str,
+        interpretation_mode: str,
+        interpretation_profile: str,
+        interpretation_model: str | None,
+        mt3_mode: str = "off",
+    ) -> dict[str, Any]:
+        self.get_audio_source_intake(intake_id, owner_user_id=owner_user_id)
+        if mt3_mode not in {"off", "enabled"}:
+            raise UnsupportedMt3ModeError(mt3_mode)
+        resolved_analysis_mode = self._resolve_analysis_mode(analysis_mode)
+        run_id = str(uuid4())
+        created_at = _utc_now_iso()
+        with self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT * FROM audio_source_intakes WHERE id = ?",
+                (intake_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"Unknown audio source intake {intake_id}")
+            stored_owner = str(row["owner_user_id"] or LOCAL_RUNTIME_OWNER_USER_ID)
+            if stored_owner != owner_user_id:
+                raise PermissionError("Audio source intake does not belong to this user.")
+            if row["run_id"]:
+                return {"runId": str(row["run_id"])}
+            if row["status"] != "ready":
+                raise AudioSourceIntakeStateError(
+                    f"Audio source intake is '{row['status']}', not ready."
+                )
+            required_artifact_fields = (
+                "artifact_id",
+                "artifact_filename",
+                "artifact_mime_type",
+                "artifact_size_bytes",
+                "artifact_sha256",
+                "artifact_path",
+            )
+            if any(row[field] is None for field in required_artifact_fields):
+                raise AudioSourceIntakeStateError("Prepared audio artifact is missing.")
+            metadata = _json_loads(row["metadata_json"])
+            source = {
+                "kind": "link",
+                "provider": str(row["provider"]),
+                "title": metadata.get("title") if isinstance(metadata, dict) else None,
+                "creator": metadata.get("creator") if isinstance(metadata, dict) else None,
+                "attributionUrl": metadata.get("attributionUrl") if isinstance(metadata, dict) else None,
+                "rightsConfirmedAt": str(row["rights_confirmed_at"]),
+                "experimental": bool(metadata.get("experimental")) if isinstance(metadata, dict) else False,
+            }
+            conn.execute(
+                """
+                INSERT INTO analysis_runs (
+                    id, source_artifact_id, requested_analysis_mode, owner_user_id,
+                    requested_pitch_note_mode, requested_pitch_note_backend,
+                    requested_interpretation_mode, requested_interpretation_profile,
+                    requested_interpretation_model, requested_mt3_mode,
+                    legacy_request_id, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+                """,
+                (
+                    run_id,
+                    row["artifact_id"],
+                    resolved_analysis_mode,
+                    owner_user_id,
+                    pitch_note_mode,
+                    pitch_note_backend,
+                    interpretation_mode,
+                    interpretation_profile,
+                    interpretation_model,
+                    mt3_mode,
+                    created_at,
+                    created_at,
+                ),
+            )
+            conn.execute(
+                """
+                INSERT INTO run_artifacts (
+                    id, run_id, kind, filename, mime_type, size_bytes,
+                    content_sha256, path, provenance_json, created_at
+                ) VALUES (?, ?, 'source_audio', ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    row["artifact_id"],
+                    run_id,
+                    row["artifact_filename"],
+                    row["artifact_mime_type"],
+                    row["artifact_size_bytes"],
+                    row["artifact_sha256"],
+                    row["artifact_path"],
+                    _json_dumps({"source": source}),
+                    created_at,
+                ),
+            )
+            conn.execute(
+                """
+                INSERT INTO measurement_outputs (
+                    id, run_id, status, result_json, provenance_json, diagnostics_json,
+                    error_json, created_at, updated_at
+                ) VALUES (?, ?, 'queued', NULL, NULL, NULL, NULL, ?, ?)
+                """,
+                (str(uuid4()), run_id, created_at, created_at),
+            )
+            conn.execute(
+                """
+                UPDATE audio_source_intakes
+                SET status = 'completed', raw_url = NULL, artifact_path = NULL,
+                    analysis_options_json = ?, run_id = ?, expires_at = NULL, updated_at = ?
+                WHERE id = ? AND status = 'ready'
+                """,
+                (
+                    _json_dumps(
+                        {
+                            "analysisMode": resolved_analysis_mode,
+                            "pitchNoteMode": pitch_note_mode,
+                            "pitchNoteBackend": pitch_note_backend,
+                            "interpretationMode": interpretation_mode,
+                            "interpretationProfile": interpretation_profile,
+                            "interpretationModel": interpretation_model,
+                            "mt3Mode": mt3_mode,
+                        }
+                    ),
+                    run_id,
+                    created_at,
+                    intake_id,
+                ),
+            )
         return {"runId": run_id}
 
     def get_run_by_legacy_request_id(
@@ -670,8 +1157,22 @@ class AnalysisRuntime:
             else "off"
         )
 
+        source_artifact_provenance = _json_loads(artifact_row["provenance_json"]) or {}
+        public_source = source_artifact_provenance.get("source")
+        if not isinstance(public_source, dict):
+            public_source = {
+                "kind": "upload",
+                "provider": "upload",
+                "title": artifact_row["filename"],
+                "creator": None,
+                "attributionUrl": None,
+                "rightsConfirmedAt": None,
+                "experimental": False,
+            }
+
         return {
             "runId": run_id,
+            "source": public_source,
             "requestedStages": {
                 "analysisMode": run_row["requested_analysis_mode"],
                 "pitchNoteMode": run_row["requested_pitch_note_mode"],
@@ -1485,6 +1986,17 @@ class AnalysisRuntime:
                 """,
                 (now,),
             )
+            conn.execute(
+                """
+                UPDATE audio_source_intakes
+                SET status = 'interrupted', raw_url = NULL, updated_at = ?
+                WHERE status IN ('fetching', 'normalizing')
+                """,
+                (now,),
+            )
+        for temp_dir in self.runtime_dir.glob("asa_intake_*"):
+            if temp_dir.is_dir():
+                shutil.rmtree(temp_dir, ignore_errors=True)
 
     def interrupt_run(self, run_id: str) -> dict[str, Any]:
         now = _utc_now_iso()

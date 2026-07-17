@@ -28,15 +28,20 @@ except ImportError:
 from fastapi import FastAPI, File, Form, Header, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
+from pydantic import BaseModel, ConfigDict
 
 import auth_context
 from auth_context import AuthenticationRequiredError, UserContext, resolve_api_user_context
 from analysis_runtime import (
     AnalysisRuntime,
+    AudioSourceIntakeCapacityError,
+    AudioSourceIntakeStateError,
     UnsupportedMt3ModeError,
     UnsupportedPitchNoteBackendError,
     UnsupportedPitchNoteModeError,
 )
+import audio_source_providers
+from audio_source_providers import AudioSourceError
 from analyze import (
     build_analysis_estimate,
     get_audio_duration_seconds,
@@ -184,6 +189,23 @@ _ACTIVE_CHILD_PROCESSES: dict[tuple[str, str], subprocess.Popen[Any]] = {}
 _ACTIVE_CHILD_PROCESSES_LOCK = threading.Lock()
 
 
+class CreateAudioSourceIntakeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    url: str
+    rightsConfirmed: bool = False
+
+
+class AudioSourceAnalysisOptions(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    analysisMode: str = "full"
+    pitchNoteMode: str = "off"
+    pitchNoteBackend: str = "auto"
+    interpretationMode: str = "off"
+    interpretationProfile: str = "producer_summary"
+    interpretationModel: str | None = None
+    mt3Mode: str = "off"
+
+
 
 def _register_active_child_process(
     run_id: str,
@@ -313,6 +335,7 @@ def _create_background_tasks(
     if include_workers:
         tasks.extend(
             [
+                asyncio.create_task(_audio_source_intake_worker_loop()),
                 asyncio.create_task(_measurement_worker_loop()),
                 asyncio.create_task(_pitch_note_worker_loop()),
                 asyncio.create_task(_interpretation_worker_loop()),
@@ -369,6 +392,7 @@ async def _start_background_tasks() -> None:
 async def _artifact_cleanup_loop(runtime_dir: Path) -> None:
     while True:
         try:
+            await asyncio.to_thread(get_analysis_runtime().cleanup_expired_audio_source_intakes)
             await asyncio.to_thread(cleanup_artifacts, runtime_dir)
         except Exception as exc:
             logger.warning("[warn] artifact cleanup failed: %s", exc)
@@ -2326,6 +2350,100 @@ def _resolve_phase2_run_id(
     raise KeyError("Missing analysis context")
 
 
+def _audio_source_error_payload(exc: Exception) -> dict[str, Any]:
+    if isinstance(exc, AudioSourceError):
+        return {
+            "code": exc.code,
+            "message": str(exc),
+            "retryable": exc.retryable,
+            "phase": "audio_source_intake",
+        }
+    if isinstance(exc, url_ingest.UrlIngestionError):
+        return {
+            "code": exc.code,
+            "message": str(exc),
+            "retryable": isinstance(exc, url_ingest.UrlFetchFailedError),
+            "phase": "audio_source_intake",
+        }
+    return {
+        "code": "AUDIO_SOURCE_PREPARATION_FAILED",
+        "message": "The linked audio could not be prepared.",
+        "retryable": True,
+        "phase": "audio_source_intake",
+    }
+
+
+def _execute_reserved_audio_source_intake(
+    runtime: AnalysisRuntime,
+    intake: dict[str, Any],
+) -> None:
+    intake_id = str(intake["intakeId"])
+    temp_dir = tempfile.mkdtemp(prefix=f"asa_intake_{intake_id[:8]}_", dir=str(runtime.runtime_dir))
+    started = _current_time()
+    try:
+        provider = audio_source_providers.provider_for(str(intake["provider"]))
+        prepared = provider.prepare(
+            str(intake["rawUrl"]),
+            Path(temp_dir),
+            should_cancel=lambda: runtime.is_audio_source_intake_cancelled(intake_id),
+            update_status=lambda status: runtime.set_audio_source_intake_status(intake_id, status),
+        )
+        runtime.complete_audio_source_intake(
+            intake_id,
+            source_path=prepared.path,
+            filename=prepared.filename,
+            mime_type=prepared.mime_type,
+            metadata=prepared.metadata(),
+            diagnostics={
+                "provider": prepared.provider,
+                "preparationDurationMs": round(_elapsed_ms(started, _current_time()), 2),
+            },
+        )
+    except AudioSourceIntakeStateError:
+        # Cancellation/expiry won the race with a completed download. The
+        # runtime already owns the terminal state and staged-file cleanup.
+        return
+    except Exception as exc:
+        runtime.fail_audio_source_intake(
+            intake_id,
+            error=_audio_source_error_payload(exc),
+            diagnostics={
+                "provider": str(intake.get("provider") or "unknown"),
+                "preparationDurationMs": round(_elapsed_ms(started, _current_time()), 2),
+            },
+        )
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+async def _audio_source_intake_worker_loop() -> None:
+    last_expiry_reap = 0.0
+    while True:
+        try:
+            loop_time = asyncio.get_running_loop().time()
+            if loop_time - last_expiry_reap >= 60:
+                await asyncio.to_thread(
+                    get_analysis_runtime().cleanup_expired_audio_source_intakes
+                )
+                last_expiry_reap = loop_time
+            intake = await asyncio.to_thread(
+                get_analysis_runtime().reserve_next_audio_source_intake
+            )
+            if intake is None:
+                await asyncio.sleep(WORKER_IDLE_SECONDS)
+                continue
+            await asyncio.to_thread(
+                _execute_reserved_audio_source_intake,
+                get_analysis_runtime(),
+                intake,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            print(f"[warn] audio-source intake worker failed: {exc}", file=sys.stderr)
+            await asyncio.sleep(WORKER_IDLE_SECONDS)
+
+
 async def _measurement_worker_loop() -> None:
     while True:
         try:
@@ -2467,6 +2585,228 @@ def _legacy_upload_too_large_file_response(request_id: str) -> JSONResponse:
             "diagnostics": {"requestId": request_id},
         },
     )
+
+def _audio_source_intake_not_found_response(intake_id: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=404,
+        content={
+            "error": {
+                "code": "AUDIO_SOURCE_INTAKE_NOT_FOUND",
+                "message": f"Audio-source check '{intake_id}' was not found.",
+                "retryable": False,
+            }
+        },
+    )
+
+
+@app.get("/api/audio-source-capabilities")
+async def get_audio_source_capabilities() -> JSONResponse:
+    return JSONResponse(content=audio_source_providers.audio_source_capabilities())
+
+
+@app.post("/api/audio-source-intakes")
+async def create_audio_source_intake(
+    request: CreateAudioSourceIntakeRequest,
+    x_asa_user_id: str | None = Header(None),
+    x_asa_user_email: str | None = Header(None),
+) -> JSONResponse:
+    user_context = _resolve_route_user_context(x_asa_user_id, x_asa_user_email)
+    if isinstance(user_context, JSONResponse):
+        return user_context
+    try:
+        provider = audio_source_providers.classify_audio_source(request.url)
+        if provider in {"bandcamp", "spotify", "apple_music"}:
+            audio_source_providers.provider_for(provider)
+        snapshot = get_analysis_runtime().create_audio_source_intake(
+            owner_user_id=user_context.user_id,
+            provider=provider,
+            raw_url=request.url,
+            rights_confirmed=request.rightsConfirmed,
+        )
+        return JSONResponse(status_code=202, content=snapshot)
+    except ValueError as exc:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "code": "AUDIO_SOURCE_RIGHTS_CONFIRMATION_REQUIRED",
+                    "message": str(exc),
+                    "retryable": False,
+                }
+            },
+        )
+    except AudioSourceError as exc:
+        return JSONResponse(
+            status_code=400,
+            content={"error": _audio_source_error_payload(exc)},
+        )
+    except url_ingest.UrlIngestionError as exc:
+        return _url_ingest_error_response(exc)
+    except AudioSourceIntakeCapacityError as exc:
+        return JSONResponse(
+            status_code=429,
+            content={
+                "error": {
+                    "code": "AUDIO_SOURCE_INTAKE_CAPACITY_REACHED",
+                    "message": str(exc),
+                    "retryable": True,
+                }
+            },
+        )
+
+
+@app.get("/api/audio-source-intakes/{intake_id}")
+async def get_audio_source_intake(
+    intake_id: str,
+    x_asa_user_id: str | None = Header(None),
+    x_asa_user_email: str | None = Header(None),
+) -> JSONResponse:
+    user_context = _resolve_route_user_context(x_asa_user_id, x_asa_user_email)
+    if isinstance(user_context, JSONResponse):
+        return user_context
+    try:
+        snapshot = get_analysis_runtime().get_audio_source_intake(
+            intake_id,
+            owner_user_id=user_context.user_id,
+        )
+        return JSONResponse(content=snapshot)
+    except (KeyError, PermissionError):
+        return _audio_source_intake_not_found_response(intake_id)
+
+
+@app.post("/api/audio-source-intakes/{intake_id}/estimate")
+async def estimate_audio_source_intake(
+    intake_id: str,
+    options: AudioSourceAnalysisOptions,
+    x_asa_user_id: str | None = Header(None),
+    x_asa_user_email: str | None = Header(None),
+) -> JSONResponse:
+    user_context = _resolve_route_user_context(x_asa_user_id, x_asa_user_email)
+    if isinstance(user_context, JSONResponse):
+        return user_context
+    runtime = get_analysis_runtime()
+    try:
+        intake = runtime.get_audio_source_intake(intake_id, owner_user_id=user_context.user_id)
+        if intake["status"] != "ready" or not isinstance(intake.get("metadata"), dict):
+            raise AudioSourceIntakeStateError(
+                f"Audio source intake is '{intake['status']}', not ready for an estimate."
+            )
+        analysis_mode = _resolve_analysis_mode_value(options.analysisMode)
+        run_separation, run_transcribe = runtime.resolve_measurement_flags(options.pitchNoteMode)
+        duration = float(intake["metadata"].get("durationSeconds") or 0)
+        estimate = _build_backend_estimate_from_duration(
+            duration,
+            run_separation,
+            run_transcribe,
+            analysis_mode=analysis_mode,
+            run_mt3=options.mt3Mode == "enabled",
+        )
+        return JSONResponse(content={"estimate": estimate})
+    except (KeyError, PermissionError):
+        return _audio_source_intake_not_found_response(intake_id)
+    except (ValueError, UnsupportedPitchNoteModeError, AudioSourceIntakeStateError) as exc:
+        return JSONResponse(
+            status_code=409 if isinstance(exc, AudioSourceIntakeStateError) else 400,
+            content={
+                "error": {
+                    "code": "AUDIO_SOURCE_INTAKE_NOT_READY"
+                    if isinstance(exc, AudioSourceIntakeStateError)
+                    else "ANALYSIS_OPTIONS_INVALID",
+                    "message": str(exc),
+                    "retryable": isinstance(exc, AudioSourceIntakeStateError),
+                }
+            },
+        )
+
+
+@app.post("/api/audio-source-intakes/{intake_id}/analysis-runs")
+async def create_analysis_run_from_audio_source_intake(
+    intake_id: str,
+    options: AudioSourceAnalysisOptions,
+    x_asa_user_id: str | None = Header(None),
+    x_asa_user_email: str | None = Header(None),
+) -> JSONResponse:
+    user_context = _resolve_route_user_context(x_asa_user_id, x_asa_user_email)
+    if isinstance(user_context, JSONResponse):
+        return user_context
+    runtime = get_analysis_runtime()
+    try:
+        if options.interpretationMode != "off":
+            _resolve_interpretation_profile_config(options.interpretationProfile)
+        created = runtime.create_run_from_intake(
+            intake_id,
+            owner_user_id=user_context.user_id,
+            analysis_mode=options.analysisMode,
+            pitch_note_mode=options.pitchNoteMode,
+            pitch_note_backend=options.pitchNoteBackend,
+            interpretation_mode=options.interpretationMode,
+            interpretation_profile=options.interpretationProfile,
+            interpretation_model=options.interpretationModel,
+            mt3_mode=options.mt3Mode,
+        )
+        return JSONResponse(
+            status_code=202,
+            content={
+                "intakeId": intake_id,
+                "status": "completed",
+                "runId": created["runId"],
+            },
+        )
+    except (KeyError, PermissionError):
+        return _audio_source_intake_not_found_response(intake_id)
+    except AudioSourceIntakeStateError as exc:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": {
+                    "code": "AUDIO_SOURCE_INTAKE_NOT_READY",
+                    "message": str(exc),
+                    "retryable": True,
+                }
+            },
+        )
+    except (ValueError, UnsupportedMt3ModeError) as exc:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "code": "ANALYSIS_OPTIONS_INVALID",
+                    "message": str(exc),
+                    "retryable": False,
+                }
+            },
+        )
+
+
+@app.post("/api/audio-source-intakes/{intake_id}/interrupt")
+async def interrupt_audio_source_intake(
+    intake_id: str,
+    x_asa_user_id: str | None = Header(None),
+    x_asa_user_email: str | None = Header(None),
+) -> JSONResponse:
+    user_context = _resolve_route_user_context(x_asa_user_id, x_asa_user_email)
+    if isinstance(user_context, JSONResponse):
+        return user_context
+    try:
+        snapshot = get_analysis_runtime().interrupt_audio_source_intake(
+            intake_id,
+            owner_user_id=user_context.user_id,
+        )
+        return JSONResponse(status_code=202, content=snapshot)
+    except (KeyError, PermissionError):
+        return _audio_source_intake_not_found_response(intake_id)
+    except AudioSourceIntakeStateError as exc:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": {
+                    "code": "AUDIO_SOURCE_INTAKE_ALREADY_CONSUMED",
+                    "message": str(exc),
+                    "retryable": False,
+                }
+            },
+        )
+
 
 @app.post("/api/analysis-runs")
 async def create_analysis_run(
@@ -3688,6 +4028,24 @@ def _build_backend_estimate(
         duration_seconds = get_audio_duration_seconds(audio_path)
     except Exception:
         duration_seconds = None
+
+    return _build_backend_estimate_from_duration(
+        duration_seconds,
+        run_separation,
+        run_transcribe,
+        analysis_mode=analysis_mode,
+        run_mt3=run_mt3,
+    )
+
+
+def _build_backend_estimate_from_duration(
+    duration_seconds: float | None,
+    run_separation: bool,
+    run_transcribe: bool,
+    *,
+    analysis_mode: str = "full",
+    run_mt3: bool = False,
+) -> dict[str, Any]:
 
     safe_duration = duration_seconds if duration_seconds is not None else 0.0
     if analysis_mode == "standard":

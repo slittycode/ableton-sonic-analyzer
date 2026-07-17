@@ -178,11 +178,9 @@ class CleanupStartupHookTests(unittest.TestCase):
 
         runtime.recover_incomplete_attempts.assert_called_once_with()
         cleanup_loop.assert_called_once_with(runtime.runtime_dir)
-        # 5 tasks: cache eviction, measurement worker, pitch_note worker,
-        # interpretation worker, mt3 worker. (The mt3 worker was added when
-        # MT3 polyphonic transcription became its own staged stage —
-        # see analysis_runtime.py and server.py::_mt3_worker_loop.)
-        self.assertEqual(create_task_mock.call_count, 5)
+        # 6 tasks: audio-source intake, measurement, pitch-note,
+        # interpretation, MT3, and recurring artifact cleanup.
+        self.assertEqual(create_task_mock.call_count, 6)
         info_mock.assert_called_once_with(
             "Upload limits configured: raw_audio_limit_bytes=%s edge_request_limit_bytes=%s",
             server.upload_limits.MAX_UPLOAD_SIZE_BYTES,

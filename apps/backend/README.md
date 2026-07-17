@@ -28,6 +28,20 @@ Canonical live-analysis routes:
 - `POST /api/analysis-runs/{run_id}/interpretations`
 - `POST /api/analysis-runs/{run_id}/samples` and `GET /api/analysis-runs/{run_id}/samples` — on-demand Phase 3 audition samples
 
+Link preparation routes:
+
+- `GET /api/audio-source-capabilities`
+- `POST /api/audio-source-intakes` — starts a bounded background link check
+- `GET /api/audio-source-intakes/{intake_id}` — preparation status and safe track details
+- `POST /api/audio-source-intakes/{intake_id}/estimate`
+- `POST /api/audio-source-intakes/{intake_id}/analysis-runs` — adopts the prepared audio into a canonical run
+- `POST /api/audio-source-intakes/{intake_id}/interrupt`
+
+In plain English: the browser checks and prepares a music link first, then the
+normal analysis pipeline takes over. Results, polling, and recommendations are
+the same as for an uploaded file. A checked link expires after 15 minutes if it
+is not used.
+
 Legacy compatibility routes:
 
 - `POST /api/analyze` (legacy compatibility wrapper)
@@ -210,6 +224,36 @@ Hosted worker entry point:
 cd apps/backend
 SONIC_ANALYZER_RUNTIME_PROFILE=hosted SONIC_ANALYZER_PROCESS_ROLE=worker ./venv/bin/python worker.py
 ```
+
+### Music-link providers
+
+Direct public audio links are enabled by default. Each redirect is checked
+against the private-network block list, downloads are streamed to disk, and
+the decoded track must be no larger than 100 MiB or longer than 15 minutes.
+
+SoundCloud is off until all three server-side settings are present:
+
+```bash
+ASA_ENABLE_SOUNDCLOUD_LINKS=1
+SOUNDCLOUD_CLIENT_ID=...
+SOUNDCLOUD_CLIENT_SECRET=...
+```
+
+Experimental YouTube and YouTube Music support is local-only. Install `yt-dlp`
+and FFmpeg, then opt in:
+
+```bash
+ASA_ENABLE_YOUTUBE_LINKS=1
+```
+
+Bandcamp, Spotify, and Apple Music links are recognised so the API can return a
+clear “not supported yet” message. They are not downloaded.
+
+Link analysis always creates a temporary local copy. In local mode that copy is
+on the user's computer. In hosted mode it is on the single ASA server shared by
+the API and worker. Temporary preparation files are removed after success,
+failure, cancellation, restart recovery, or expiry; the adopted run artifact
+uses the normal 24-hour cleanup policy.
 
 Current bind:
 
@@ -427,4 +471,3 @@ Current upload limit values:
 - Raw audio upload limit: `104857600` bytes (`100 MiB`)
 - Multipart request envelope limit: `105906176` bytes
 - Contract renderer: `./venv/bin/python scripts/render_upload_limit_contract.py`
-

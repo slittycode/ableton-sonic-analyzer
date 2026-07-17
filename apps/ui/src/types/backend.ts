@@ -250,6 +250,15 @@ export interface InterpretationStageSnapshot {
 
 export interface AnalysisRunSnapshot {
   runId: string;
+  source: {
+    kind: 'upload' | 'link';
+    provider: string;
+    title: string | null;
+    creator: string | null;
+    attributionUrl: string | null;
+    rightsConfirmedAt: string | null;
+    experimental: boolean;
+  };
   requestedStages: AnalysisRunRequestedStages;
   artifacts: {
     sourceAudio: AnalysisRunArtifact;
