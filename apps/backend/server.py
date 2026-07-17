@@ -1842,8 +1842,8 @@ def _run_interpretation_request_with_profile_config(
 
     # Phase 2 provider seam (default-off; see phase2_provider.py). None means
     # "use the native Gemini path below", which stays byte-for-byte unchanged.
-    # An external provider (ASA_PHASE2_PROVIDER=moss) routes the SAME request to a
-    # sidecar and flows back through the identical parse/validate/citation tail.
+    # An external provider (ASA_PHASE2_PROVIDER=claude) routes the SAME request
+    # and flows back through the identical parse/validate/citation tail.
     external_provider = resolve_external_phase2_provider()
 
     if external_provider is None:
@@ -1906,7 +1906,7 @@ def _run_interpretation_request_with_profile_config(
 
     try:
         if external_provider is not None:
-            # MOSS (or other non-Gemini) provider — default-off experiment. The
+            # Non-Gemini provider (claude) — default-off experiment. The
             # provider returns a raw Phase2Result JSON string (or None for a
             # skip) that flows through the SAME parse/citation/catalogue tail as
             # Gemini below, guaranteeing an identical recommendation schema.
@@ -2106,8 +2106,8 @@ def _run_interpretation_request_with_profile_config(
             "diagnostics": diagnostics,
         }
     except Phase2ProviderError as exc:
-        # Non-Gemini provider (MOSS sidecar) failure → execution error dict,
-        # surfaced the same way a Gemini failure is (never a silent success).
+        # Non-Gemini provider failure → execution error dict, surfaced the same
+        # way a Gemini failure is (never a silent success).
         diagnostics = _build_diagnostics(
             response_ready_at=_current_time(),
             request_id=request_id,
