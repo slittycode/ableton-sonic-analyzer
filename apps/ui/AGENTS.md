@@ -91,39 +91,17 @@ RUN_GEMINI_LIVE_SMOKE=true VITE_ENABLE_PHASE2_GEMINI=true GEMINI_API_KEY=your_ke
 
 ## File Map
 
-- `src/App.tsx`: upload flow, estimate flow, phase orchestration, diagnostic log state.
-- `src/services/analysisRunsClient.ts`: canonical transport — creates runs against `/api/analysis-runs`, polls stage snapshots, fetches pitch/note translations and interpretations.
-- `src/services/backendPhase1Client.ts`: legacy multipart transport (typed errors, `AbortController` timeouts). Kept only for the compatibility wrappers; new flows go through `analysisRunsClient.ts`.
-- `src/services/analyzer.ts`: phase orchestration — sequences run creation, polling, and display payload projection.
-- `src/services/httpClient.ts`: shared fetch helpers and request-header injection used by the run/artifact/sample clients.
-- `src/services/spectralArtifactsClient.ts`: spectrogram and spectral-evolution artifact fetches via `/api/analysis-runs/{run_id}/artifacts/…`.
-- `src/services/transcriptionPianorollClient.ts`: velocity-encoded transcription pianoroll matrix via `/api/analysis-runs/{run_id}/transcription/pianoroll`. Backed by `apps/backend/transcription_pianoroll.py`; rendered in `components/TranscriptionPianoroll.tsx` / `TranscriptionPianorollBlock.tsx`.
-- `src/services/mt3Client.ts`: opt-in MT3 polyphonic transcription client. POSTs `/api/analysis-runs/{run_id}/mt3-transcriptions` and polls the run snapshot for the additive `mt3` namespace. Surfaced only when the user opts in; measurement remains authoritative.
-- `src/services/sampleGenerationClient.ts`: Phase 3 audition-sample POST/GET against `/api/analysis-runs/{run_id}/samples` plus per-clip artifact streaming.
-- `src/services/patchSmith.ts`: Phase 3 Vital preset generation — builds a `.vital` preset JSON from Phase 1 measurements alone, with every parameter citing the exact Phase 1 field(s) that justify it. Surfaced in `components/PatchSmithPanel.tsx`.
-- `src/services/browserLoudness/`: browser-side WASM loudness integration (WS3c). `loader.ts` dynamically imports the built `loudness-spectro-wasm` web glue from `VITE_BROWSER_LOUDNESS_WASM_URL` (off by default — `pkg/` is not a build dep). `wavDecoder.ts` decodes audio to PCM; `parity.ts` defines `BrowserLoudnessReading`. Degrades gracefully when the URL is unset.
-- `src/services/audioFile.ts`: client-side audio validation, blank-MIME extension fallback, and preview-URL lifecycle.
-- `src/services/mixDoctor.ts`: client-side spectral-balance scoring against genre profiles. Genre profile data lives in `src/data/genreProfiles.ts`.
-- `src/services/phase2Validator.ts` + `loudnessGuardrails.ts`: runtime guardrail — chain-of-custody checks of Phase 2 against Phase 1 (BPM, key, LUFS, genre/DSP, numeric bounds, and a `MISSING_LOUDNESS_ACTION` check). `loudnessGuardrails.ts` defines the objective loudness defects (clipping, true-peak overs) a Phase 2 mastering/dynamics card must address. Surfaced in the UI via `components/Phase2ConsistencyReport.tsx`.
-- `src/services/recommendationVerification.ts` + `src/data/recommendationVerification.ts` + `components/RecommendationVerificationBadge.tsx`: per-recommendation corpus-verification badge for the recommendation-proof campaign (`../../GOAL.md` sub-goal 4). The data module is a generated artifact from `apps/backend/scripts/evaluate_recommendations.py --verification-artifact` (all-`NONE` until the ground-truth corpus has renders); the service infers a card's domain (mirroring the backend scorer's `infer_domain`) and looks up its confidence band; the badge renders nothing when confidence is `NONE` so the surface degrades gracefully.
-- `src/services/phase1Picker.ts` + `phaseLabels.ts`: phase-snapshot projection helpers used by the results surface.
-- `src/services/recommendationsContract.ts`: UI-side reader for the frozen `recommendations.v1` envelope (ADR 0003). Indexes the backend-projected envelope so render surfaces can pair each raw device card with its validated contract entry. Matching is by `(device, parameter, normalized value)`; the value parser is a deliberate TS mirror of the backend's `parse_value` in `recommendations_contract.py` — keep both in sync. The `RecommendationsContract` interface lives in `src/types/interpretation.ts`.
-- `src/services/appliedRecommendations.ts` + `userLabels.ts`: applied-recommendations tracker and persisted label state used by the audit overhaul.
-- `src/services/fieldAnalytics.ts` + `diagnosticLogs.ts`: instrumentation hooks and diagnostic log capture for the request panel.
-- `src/services/midi/`: MIDI export, preview, and quantization (`midiExport.ts`, `midiPreview.ts`, `quantization.ts`, `types.ts`).
-- `src/services/sessionMusician/`: Session Musician helpers — `confidenceBand.ts`, `index.ts`, `noteConversion.ts`, `renderState.ts`, `stemListeningNotes.ts`.
-- `src/data/genreProfiles.ts`: genre profile definitions consumed by `mixDoctor.ts` for spectral-balance scoring and recommendations.
-- `src/types.ts` + `src/types/`: shared frontend contract types. `types.ts` re-exports through `./types/index.ts`, which re-exports `measurement.ts`, `interpretation.ts`, and `backend.ts`. `./types/samples.ts` exists but is imported directly, not through the barrel.
-- `src/hooks/`: custom React hooks — `useCpuMeter.ts`, `useGlobalDrag.ts`, `useImageZoom.ts`, `useSpectralCursorBus.tsx`.
-- `src/utils/`: pure utility helpers — `appView.ts`, `assertNever.ts`, `chordTheory.ts`, `colorScales.ts`, `displayText.ts`, `exportUtils.ts`, `phase2Preference.ts`, `renderBenchmark.ts`, `spectralScales.ts`.
-- `src/index.css`: Tailwind theme tokens and visual language.
-- `src/components/sessionMusician/`: Session Musician UI components — `ConfidenceBandBadge.tsx`, `MelodyContourBlock.tsx`, `MidiControlsRow.tsx`, `NoteDraftBlock.tsx`, `PianoRollCanvas.tsx`, `QuantizeControls.tsx`, `usePreviewController.ts`. Mounted inside `SessionMusicianPanel.tsx`; separate from the service helpers in `src/services/sessionMusician/`.
-- `src/components/analysisResultsViewModel.ts`: ViewModel helpers and pure projection functions for `AnalysisResults.tsx` — keeps large render-logic out of the component body.
-- `src/components/analysisResults/`: Extracted Phase 2 static section components split from `AnalysisResults.tsx` in the UI overhaul Phase 5 series — `AudioObservationsSection.tsx`, `DetectedCharacteristicsSection.tsx`, `ProjectSetupSection.tsx`, `RoutingBlueprintSection.tsx`, `TrackLayoutSection.tsx`, `WarpGuideSection.tsx`, `shared.tsx`. Don't merge these back into the monolith.
-- `src/components/waveformPlayerUtils.ts`: Utility functions for `WaveformPlayer.tsx` (peak tracking, spectrum activity).
-- `tests/services/*`: unit and service tests.
-- `tests/smoke/*`: smoke and live smoke coverage.
-- `tests/e2e/*`: canonical no-Gemini integration spec plus live full-stack Gemini specs (Playwright).
+See `ARCHITECTURE.md` for the full frontend service list. The core services are summarized in root `CLAUDE.md` ("Frontend (apps/ui)" section). Key modules include:
+
+- `analysisRunsClient.ts` — canonical transport.
+- `analyzer.ts` — phase orchestration.
+- `phase2Validator.ts` + `loudnessGuardrails.ts` — chain-of-custody guardrail.
+- `recommendationsContract.ts` — frozen `recommendations.v1` reader.
+- `recommendationVerification.ts` — corpus badge (PROXY-SCORED — non-authoritative).
+- `patchSmith.ts` — Phase 3 Vital preset generator (FROZEN).
+- `browserLoudness/` — WASM loudness loader (off by default).
+
+Extracted Phase 2 sections live in `src/components/analysisResults/`. Design-system primitives live in `src/components/ui/`. Frozen subsystems carry `FROZEN 2026-07` banners.
 
 ## Code Style
 

@@ -22,4 +22,4 @@ Campaign status (read alongside `GOAL.md`):
 - [`apps/backend/NEEDS.md`](apps/backend/NEEDS.md) — living status of the recommendation-proof campaign (PROXY-SCORED — non-authoritative).
 - [`apps/backend/RECOMMENDATION_VERDICT.md`](apps/backend/RECOMMENDATION_VERDICT.md) — provisional Gemini-vs-deterministic write-up (PROXY-SCORED — non-authoritative; do not cite as settled).
 
-Historical plan and audit documents live in [`docs/history/`](docs/history/) — past-tense, not living docs.
+Historical plan and audit documents were archived in the 2026-07 trust diet. Restore via `git checkout archive/pre-trust-diet-2026-07 -- docs/history`. See `docs/history/README.md`.

@@ -108,69 +108,16 @@ python3.11 -m venv venv
 
 ## File Map
 
-- `analyze.py`: CLI entry point. Coordinates the split `analyze_*.py` feature modules and emits the raw JSON.
-- `analyze_core.py`, `analyze_audio_io.py`, `analyze_detection.py`, `analyze_estimate.py`, `analyze_rhythm.py`, `analyze_segments.py`, `analyze_structure.py`, `analyze_transcription.py`, `analyze_fast.py`: Feature modules (BPM/key/LUFS/stereo, rhythm/melody/groove, segments, structure, transcription, the `--fast` pipeline). Split from the original `analyze.py` monolith — keep the split when adding features, don't merge them back in.
-- `mt3_transcription.py`: Optional polyphonic transcription via Google MT3 (research-grade T5X model). Gated on the env var `ASA_ENABLE_MT3=1` for the legacy CLI path and on run-level `mt3_mode=enabled` for the staged API. Additive only — never overrides measurement (PURPOSE.md invariant #1). Heavy dependency footprint pinned separately in `requirements-mt3.txt`. Driven from `_execute_mt3_attempt`/`_mt3_worker_loop` in `server.py`; the staged-run handler emits per-stem MIDI as artifacts and surfaces an `mt3` namespace per the "Optional MT3 Namespace" section of `JSON_SCHEMA.md`.
-- `server.py` + `server_phase1.py`, `server_phase2.py`, `server_upload.py`, `server_samples.py`: FastAPI app + route modules. Multipart/URL upload handling, subprocess execution, envelope normalization, and the on-demand Phase 3 audition-sample routes.
-- `analysis_runtime.py`: SQLite-backed run state, stage queue, artifact metadata.
-- `worker.py`, `runtime_profile.py`, `auth_context.py`, `artifact_storage.py`: Hosted-mode foundation. Local mode shouldn't branch through these unless it has to.
-- `upload_limits.py`: Canonical 100 MiB raw-audio / 101 MiB request-envelope limits. Operator contract is generated, not hand-edited.
-- `url_ingest.py`: SSRF-guarded URL-mode ingestion for `POST /api/analysis-runs`. Fetches a public `http`/`https` audio file and streams the bytes through the same downstream pipeline as a multipart upload, enforcing the shared 100 MiB cap.
-- `audio_mime.py`: Canonical, host-independent filename→MIME map for ingested audio (`canonical_audio_mime`). Mirrors `apps/ui/src/services/audioFile.ts` so a `.flac` resolves to `audio/flac` on every OS (stdlib `mimetypes` is host-dependent). Imported directly by `server_phase2.py` and `url_ingest.py`, and reached by `server.py` via `server_phase2._get_audio_mime_type` — keep the two maps in sync.
-- `csv_export.py`: CSV exporters for Phase 1 time-series fields; backs `GET /api/analysis-runs/{run_id}/export/csv/{field_path}`.
-- `phase2_export.py`: Versioned `phase2-export.v1` handoff envelope for downstream consumers (the sibling `asa-ableton` `.als` generator; `scripts/evaluate_recommendations.py --phase2`); backs `GET /api/analysis-runs/{run_id}/export/phase2`. Same thin lookup-and-serve pattern as `csv_export.py`. Cross-repo contract documented in `docs/ASA_ABLETON_BOUNDARY.md`.
-- `stage_status.py`: Collapses the eight internal stage statuses into the additive client-facing `publicStatus` field carried on every stage in the run snapshot.
-- `sample_generation.py`, `sample_theory.py`, `sample_synthesis.py`, `sample_drums.py`: Phase 3 audition-sample generation — PyTheory plan, FluidSynth/sine-additive render, NumPy drum one-shots, citation manifest. On-demand only.
-- `dsp_bandbank.py`, `dsp_utils.py`: Shared DSP primitives — `BatchedBandpass` Butterworth bank and cross-module utilities.
-- `spectral_viz.py`: Librosa spectrogram and spectral time-series artifacts. Non-critical — failures don't break a run.
-- `phase1_evaluation.py` + `phase1_report_html.py`: Offline Phase 1 evaluation harness — deterministic-metric and detector-stability reporting, with a standalone HTML render. Not on the product path; driven by `scripts/evaluate_phase1.py`.
-- `polyphonic_evaluation.py` + `scripts/evaluate_polyphonic.py`: **Research-only.** Offline polyphonic-transcription evaluation harness, not part of the shipped product path.
-- `beat_evaluation.py` + `beat_report_html.py`: **Research-only.** Beat/downbeat measurement gate benchmarking CPJKU/beat_this against the shipping kick-accent downbeat heuristic. Driven by `scripts/evaluate_beats.py`; deleting it restores the product exactly.
-- `loudness_rec_evaluation.py`: **Eval/test-only.** Reachability check for the deterministic subset of a loudness recommendation (gain-to-target-LUFS + true-peak ceiling). Must not be imported by `analyze.py` or `server.py`.
-- `recommendation_evaluation.py` + `scripts/evaluate_recommendations.py`: **Research-only.** Recommendation-quality scorer for `GOAL.md`'s recommendation-proof campaign. Grades Phase 2 recs against `tests/fixtures/recommendation_tracks/` known-settings fixtures using a role/parameter/direction-band rubric, per-domain breakdown, and a chain-of-custody penalty that mirrors `phase2Validator.ts`. CLI supports `--source baseline|gemini|deterministic`, `--self-test`, `--report`, `--verification-artifact`. Companion: `scripts/emit_deterministic_recs.ts` is the Node 23+ TS bridge that wraps `apps/ui/src/data/abletonDevices.ts` into the scorer's normalized shape. Status doc: `NEEDS.md`; verdict write-up: `RECOMMENDATION_VERDICT.md`. Off the product path.
-- `recommendation_fixture_intake.py` + `scripts/intake_recommendation_fixture.py`: **Research-only.** One-command real-render intake for the recommendation corpus. Validates 48 kHz/24-bit audio and measurable intent, stores the canonical Phase 1 contract, drives Claude + deterministic generation, scores Claude/deterministic/baseline, and refreshes the UI verification artifact only after the fixture passes. Covered by `tests/test_recommendation_fixture_intake.py`.
-- `live12_catalogue.py`: Source-extracted Live 12 device/parameter catalogue loader. Reads `data/live12_catalogue.json` (generated by repo-root `scripts/build_live12_catalogue.py` from upstream `gluon/AbletonLive12_MIDIRemoteScripts`), validates against the published schema, and exposes `Live12Catalogue.has_device` (case-insensitive), exact-match parameter lookup, and `fuzzy_resolve`. Static-source extraction carries no `type/min/max/unit/default`; reserved for future runtime-introspection enrichment. Imported by `phase2_catalogue_gates.py` and the catalogue tests.
-- `loudness_backend.py`: Selectable Phase 1 loudness backend (default-off experiment, WS3b). `ASA_LOUDNESS_BACKEND=wasm` overrides the four integrated/range/momentary-max/short-term-max LUFS scalars with readings from the native `measure-cli` binary (source-identical to `packages/loudness-spectro-wasm`). `truePeak` and `lufsCurve` stay on Essentia. Any failure degrades back to Essentia silently. Default is `essentia` (no-op). Covered by `tests/test_loudness_backend.py`.
-- `separation_backend.py`: Thin Phase 1 stem-separation seam over torchaudio Hybrid Demucs (`analyze_audio_io.separate_stems`). The former MSST/BS-RoFormer optional path was removed in the 2026-07 trust diet (research-only licence gate, no recorded win). Covered by `tests/test_separation_backend.py`.
-- `phase2_provider.py`: Selectable Phase 2 interpretation provider (default-off experiment). `ASA_PHASE2_PROVIDER=claude` routes the producer_summary to the local Claude Code CLI (text-only, measurement-grounded); both paths run through the same parse/citation/catalogue validators. The former MOSS sidecar was a permanent licence dead-end and was removed in the 2026-07 trust diet — see `docs/PHASE2_PROVIDER.md`. Covered by `tests/test_phase2_provider.py`.
-- `phase2_catalogue_gates.py`: **Warn-and-keep** Live 12 source-catalogue annotation of Phase 2 recommendations. Cross-checks every `{device, parameter, value, phase1Fields}` record against `Live12Catalogue` and emits `RECOMMENDATION_UNVERIFIED` events on `validationWarnings` for `device_unknown`, `parameter_unknown`, `value_out_of_range`, `citation_missing`. NEVER drops or rewrites — an earlier fuzzy-rewrite path produced confidently-wrong output (wrong EQ band + wrong A/B curve), so the contract is warn-only. Wired into `server.py` after `_validate_phase2_citation_paths`. Lives separately from `server_phase2.py` so unit tests can run without the FastAPI/pydantic import chain.
-- `utils/cleanup.py`: Periodic artifact cleanup helpers used by the server background-task loop. Covered by `tests/test_cleanup.py`.
-- `tests/test_server.py`: OpenAPI and envelope contract tests.
-- `tests/test_analyze.py`: generated WAV fixture, `EXPECTED_TOP_LEVEL_KEYS` snapshot, raw payload assertions.
-- `tests/test_csv_export.py`, `tests/test_sample_*.py`, `tests/test_server_samples.py`: Coverage for CSV export and Phase 3 audition samples.
-- `tests/test_phase1_golden.py`: golden-snapshot regression gate over measured Phase 1 values (`tests/fixtures/golden/phase1_default.json`). Re-baseline deliberately when a measurement change is intended.
-- `tests/test_beat_evaluation.py`, `tests/test_loudness_rec_evaluation.py`: unit coverage for the research/eval-only beat and loudness-recommendation harnesses.
-- `tests/test_mt3_transcription.py`: unit coverage for the optional MT3 polyphonic backend module.
-- `tests/test_loudness_backend.py`: unit coverage for `loudness_backend.py` (the selectable LUFS backend).
-- `tests/test_separation_backend.py`: unit coverage for `separation_backend.py` (demucs-only thin seam).
-- `tests/test_loudness_r128.py`: contract tests for ADR 0002 unit changes — `analyze_true_peak` emits dBTP, `analyze_plr` is a dB-domain subtraction.
-- `tests/test_analysis_runtime.py`: SQLite run-state, stage queue, and artifact-metadata behavior.
-- `tests/test_server_phase2.py`: Phase 2 route contracts, `_validate_phase2_citation_paths`, and Gemini upload path behavior.
-- `tests/test_transcription_pianoroll.py`: pianoroll matrix rendering and chain-of-custody header contracts.
-- `tests/test_url_ingest.py`: SSRF guard, MIME detection, and URL-mode ingestion behavior.
-- `tests/test_upload_limits.py`: upload-limit constant contracts (matches `upload_limits.py`).
-- `tests/test_worker.py`: hosted-mode worker entry point contracts.
-- `tests/test_audio_mime.py`: canonical MIME map parity with the frontend `audioFile.ts` contract (tripwire #9 in `CLAUDE.md`).
-- `tests/test_artifact_storage.py`: storage-boundary contracts and profile-switching behavior.
-- `tests/test_stage_status.py`: `publicStatus` collapse behavior for all eight internal stage statuses.
-- `tests/test_analyze_audio_io.py`, `tests/test_analyze_detection_*.py`: coverage for the audio-I/O and detection feature modules.
-- `tests/test_auth_context.py`, `tests/test_runtime_profile.py`: hosted-mode auth and profile-switching contracts.
-- `tests/test_dsp_bandbank.py`, `tests/test_dsp_utils.py`: shared DSP primitive contracts.
-- `tests/test_live12_catalogue.py`, `tests/test_phase2_validator_catalogue.py`, `tests/test_phase2_citation_paths.py`: catalogue lookup and Phase 2 warn-and-keep gate behavior.
-- `tests/test_spectral_viz.py`, `tests/test_transcription_backends.py`: spectral-artifact and transcription-backend contracts.
-- `tests/test_phase1_evaluation.py`, `tests/test_polyphonic_evaluation.py`, `tests/test_recommendation_evaluation.py`: unit coverage for research/eval-only harnesses (mirror their production counterparts).
-- `tests/test_phase1_evaluation_transcription.py`: pure-function tests for the Layer 2 transcription evaluation harness path in `phase1_evaluation.py` (no torchcrepe model load required).
-- `tests/test_audio_fixture.py`: WAV-fixture helper used by tests that need a deterministic audio file without running the full CLI; carries a copy of `EXPECTED_TOP_LEVEL_KEYS` for structural assertions.
-- `tests/test_audio_fixture_smoke.py`: deterministic 440 Hz sine wave generation and basic audio-I/O smoke (no model load required).
-- `tests/test_bootstrap_scripts.py`: unit coverage for `bin/asa` install / bootstrap / cleanup script contracts.
-- `tests/test_cleanup.py`: unit coverage for `utils/cleanup.py` artifact-cleanup helpers.
-- `tests/test_genre_check.py`: unit coverage for `scripts/genre_check.py`.
-- `tests/test_phase2_grammar_fix.py`: regression tests for the Phase 2 gerund-fix post-process in `server_phase2.py` (audit-final round fix).
-- `tests/test_phase2_prompt_catalog.py`: regression tests for Phase 2 prompt examples against the Live 12 catalogue (`prompts/live12_device_catalog.json`).
-- `tests/test_root_dev_script.py`: unit coverage for root `scripts/dev.sh` env-loading behavior.
-- `tests/test_root_e2e_script.py`: unit coverage for root `scripts/test-e2e.sh` / `scripts/test-e2e-integration.sh` script contracts.
-- `ARCHITECTURE.md`: backend responsibilities and request flow.
-- `JSON_SCHEMA.md`: raw CLI schema plus HTTP mapping notes.
+See `ARCHITECTURE.md` for the full backend component list and request flow. The core files are summarized in root `CLAUDE.md` ("Backend (apps/backend)" section). Key modules include:
+
+- `analyze.py` + `analyze_*.py` — DSP pipeline entry point and feature modules.
+- `server.py` + `server_phase*.py` — FastAPI routes and envelope normalization.
+- `analysis_runtime.py` — staged run state and queue.
+- `live12_catalogue.py` + `phase2_catalogue_gates.py` — catalogue + warn-and-keep validation.
+- `recommendations_contract.py` — frozen `recommendations.v1` envelope.
+- `phase2_provider.py`, `separation_backend.py`, `loudness_backend.py` — optional seams (see `docs/OPTIONAL_BACKENDS.md`).
+
+Frozen subsystems (MT3, samples, hosted) carry `FROZEN 2026-07` banners. MOSS and MSST paths were removed in the 2026-07 trust diet.
 
 ## Operator and Research Scripts
 
