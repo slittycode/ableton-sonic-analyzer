@@ -188,8 +188,8 @@ The backend supports two profiles, selected via `SONIC_ANALYZER_RUNTIME_PROFILE`
 - **`local`** — SQLite + local artifact files + in-process workers. Default for development.
 - **`hosted`** — Adds auth-context resolution and worker-process separation. The local product path is unaffected.
 
-Implementation record for the hosted foundation (archived):
-[`docs/history/public-hosting-foundation-2026-04-01.md`](history/public-hosting-foundation-2026-04-01.md).
+Implementation record for the hosted foundation: `docs/history/public-hosting-foundation-2026-04-01.md`,
+archived in the 2026-07 trust diet — restore via `git checkout archive/pre-trust-diet-2026-07 -- docs/history`.
 
 ## Release position
 

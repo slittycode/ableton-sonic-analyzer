@@ -13,7 +13,7 @@ Source: `active/sonic-architect-app` (keep in `active/` as reference). Most of t
 All eight detectors emit fields visible in [`apps/backend/tests/test_analyze.py`](apps/backend/tests/test_analyze.py) `EXPECTED_TOP_LEVEL_KEYS` and run inside [`apps/backend/analyze_detection.py`](apps/backend/analyze_detection.py).
 
 - ✅ `sidechainDetection.ts` → `sidechainDetail`
-- ✅ `acidDetection.ts` → `acidDetail` (historical implementation record archived at [`docs/history/archive/acid-detection-implementation.md`](docs/history/archive/acid-detection-implementation.md))
+- ✅ `acidDetection.ts` → `acidDetail` (implementation record `docs/history/archive/acid-detection-implementation.md`, archived 2026-07 trust diet — restore via tag `archive/pre-trust-diet-2026-07`)
 - ✅ `reverbAnalysis.ts` → `reverbDetail`
 - ✅ `vocalDetection.ts` → `vocalDetail`
 - ✅ `supersawDetection.ts` → `supersawDetail`
