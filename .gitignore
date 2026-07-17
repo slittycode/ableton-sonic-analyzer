@@ -76,3 +76,4 @@ apps/backend/models/
 .claude/scheduled_tasks.lock
 .continue.sh
 .plan.md
+apps/backend/tests/fixtures/beat_eval_manifest.gtzan*.json
