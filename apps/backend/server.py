@@ -1996,9 +1996,11 @@ def _run_interpretation_request_with_profile_config(
                 media_part = {"inline_data": {"data": audio_b64, "mime_type": mime_type}}
 
                 def _generate_inline() -> Any:
+                    # Vertex rejects role-less contents ("Please use a valid
+                    # role"); AI Studio merely defaults it. Always send "user".
                     return client.models.generate_content(
                         model=model_name,
-                        contents=[{"parts": [media_part, {"text": prompt}]}],
+                        contents=[{"role": "user", "parts": [media_part, {"text": prompt}]}],
                         config=generate_config,
                     )
 
@@ -2030,7 +2032,7 @@ def _run_interpretation_request_with_profile_config(
                 def _generate_files_api() -> Any:
                     return client.models.generate_content(
                         model=model_name,
-                        contents=[{"parts": [media_part, {"text": prompt}]}],
+                        contents=[{"role": "user", "parts": [media_part, {"text": prompt}]}],
                         config=generate_config,
                     )
 

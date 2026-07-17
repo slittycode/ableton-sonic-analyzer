@@ -40,4 +40,9 @@ references to "GOAL.md" are historical context for the scorer's design.
 1. Analyze ~5 real reference tracks you know by ear; check BPM/key/LUFS against your own metering (Phase 1 trust).
 2. Render 5 recommendation blueprints in real Ableton Live 12; feed captures through `recommendation_fixture_intake.py`.
 3. Re-run `recommendation_evaluation.py` on real renders — only then unfreeze badges/verdict language.
-4. Optional: Vertex smoke — `ASA_GEMINI_BACKEND=vertex GOOGLE_CLOUD_PROJECT=<proj>` + ADC login, run one interpretation end-to-end (unit matrix is tested; live ADC call is not).
+4. ~~Vertex smoke~~ **DONE 2026-07-18**: full pipeline on a real track (VTSS "Cant Catch Me": 144.9 BPM,
+   C minor 0.93 conf, -7.5 LUFS, +0.7 dBTP) with `ASA_GEMINI_BACKEND=vertex` + ADC on project
+   `sonic-analysis` — measurement + interpretation completed, measurement-cited recommendations
+   returned (`flagsUsed: vertex:us-central1`). Required fix: Vertex rejects role-less `contents`;
+   both `generate_content` sites now send `role: "user"`. Note: the `files-api` path
+   (>20MB uploads) uses the AI Studio Files API and is untested on Vertex.
