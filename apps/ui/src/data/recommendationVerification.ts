@@ -2,15 +2,21 @@
  * Corpus-verification artifact — the data source for the per-recommendation
  * verification badge (GOAL.md sub-goal 4).
  *
- * GENERATED. Regenerate after scoring the corpus:
+ * NON-AUTHORITATIVE (proxy-scored). Do not cite these bands as settled.
+ * FROZEN 2026-07 (trust diet): never regenerate from proxy data again — only the
+ * real-render intake (`recommendation_fixture_intake.py` / evaluate path after
+ * real Live 12 renders) may regenerate this artifact. See
+ * plans/trust-diet-2026-07.md (Wave 3 D2).
+ *
+ * GENERATED. Regenerate after scoring the corpus (real renders only):
  *   ./venv/bin/python apps/backend/scripts/evaluate_recommendations.py \
  *     --source gemini --verification-artifact /tmp/verification.json
  *
  * ⚠️ The current values are from SYNTHETIC PROXY renders (not Ableton) scored
- * against the live Gemini source — see apps/backend/RECOMMENDATION_VERDICT.md.
- * Re-generate from real Live renders for authoritative bands. Confidence factors
- * BOTH corpus support and observed match quality (invariant #4): a domain the
- * corpus exercised but where recs rarely matched stays NONE/LOW, never confident.
+ * against the live Gemini source — see apps/backend/RECOMMENDATION_VERDICT.md
+ * (PROXY-SCORED — non-authoritative). Confidence factors BOTH corpus support and
+ * observed match quality (invariant #4): a domain the corpus exercised but where
+ * recs rarely matched stays NONE/LOW, never confident.
  */
 
 export type VerificationConfidence = 'NONE' | 'LOW' | 'MED' | 'HIGH';

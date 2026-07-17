@@ -1,5 +1,7 @@
 # Polyphonic Full-Track Research Spike
 
+> **FROZEN 2026-07 (trust diet):** default-off/non-goal. Do not expand without the owner naming this subsystem. See `plans/trust-diet-2026-07.md`.
+
 **Status:** Offline research harness. The MT3 candidate has since shipped as an **opt-in** product stage; this harness remains the comparison rig for other candidates.  
 **Updated:** 2026-05-30
 

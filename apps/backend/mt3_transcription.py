@@ -1,5 +1,8 @@
 """MT3 polyphonic transcription — additive, flag-gated Phase 1 extension.
 
+FROZEN 2026-07 (trust diet): default-off/non-goal. Do not expand without the
+owner naming this subsystem. See plans/trust-diet-2026-07.md.
+
 This module wraps Magenta's MT3 (Multi-Task Multitrack Music Transcription)
 checkpoint as an *optional* secondary transcription stage. It runs only when
 the env var ``ASA_ENABLE_MT3`` is set to ``"1"`` (default off) and is purely

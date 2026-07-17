@@ -19,7 +19,7 @@ App-local entry points:
 
 Campaign status (read alongside `GOAL.md`):
 
-- [`apps/backend/NEEDS.md`](apps/backend/NEEDS.md) — living status of the recommendation-proof campaign.
-- [`apps/backend/RECOMMENDATION_VERDICT.md`](apps/backend/RECOMMENDATION_VERDICT.md) — provisional Gemini-vs-deterministic write-up (proxy-render caveats inside).
+- [`apps/backend/NEEDS.md`](apps/backend/NEEDS.md) — living status of the recommendation-proof campaign (PROXY-SCORED — non-authoritative).
+- [`apps/backend/RECOMMENDATION_VERDICT.md`](apps/backend/RECOMMENDATION_VERDICT.md) — provisional Gemini-vs-deterministic write-up (PROXY-SCORED — non-authoritative; do not cite as settled).
 
 Historical plan and audit documents live in [`docs/history/`](docs/history/) — past-tense, not living docs.

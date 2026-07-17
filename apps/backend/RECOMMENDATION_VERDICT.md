@@ -3,13 +3,18 @@
 Does Gemini interpretation beat the deterministic rules? **Yes — decisively, and
 specifically on the chain-of-custody invariant.** Numbers below. Research note.
 
-> ⚠️ **SYNTHETIC-PROXY CORPUS.** The 5 fixtures were scored against **numpy proxy
-> renders** (`synth_fixtures.py`), NOT Ableton renders, because the owner directed
-> "continue without input." The proxies realize each spec's *acoustic intent*
-> (tempo, kick fundamental, brightness, sidechain) closely enough for Phase 1 to
-> measure plausibly, but they are not Ableton device timbres. **Re-run on real Live
-> renders for an authoritative known-settings verdict.** See "Where real input is
-> needed" at the bottom and `NEEDS.md`.
+> **NON-AUTHORITATIVE (proxy-scored).** Campaign paused pending real Live 12
+> renders; do not cite these numbers as settled. See
+> `plans/trust-diet-2026-07.md` (Wave 3 D1).
+
+> ⚠️ **SYNTHETIC-PROXY CORPUS (PROXY-SCORED — non-authoritative).** The 5 fixtures
+> were scored against **numpy proxy renders** (`synth_fixtures.py`), NOT Ableton
+> renders, because the owner directed "continue without input." The proxies
+> realize each spec's *acoustic intent* (tempo, kick fundamental, brightness,
+> sidechain) closely enough for Phase 1 to measure plausibly, but they are not
+> Ableton device timbres. **Re-run on real Live renders for an authoritative
+> known-settings verdict.** See "Where real input is needed" at the bottom and
+> `NEEDS.md`.
 
 > **Corpus composition changed 2026-06-10, after this verdict.** Two fixtures were
 > re-authored to owner genres: `techno_rumble_130` → `hard_techno_rumble_145`

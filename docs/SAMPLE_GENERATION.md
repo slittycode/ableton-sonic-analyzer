@@ -1,5 +1,7 @@
 # Sample Generation (Phase 3 — Audition)
 
+> **FROZEN 2026-07 (trust diet):** default-off/non-goal. Do not expand without the owner naming this subsystem. See `plans/trust-diet-2026-07.md`.
+
 > **Status:** Shipped on `main` as an on-demand feature (`POST/GET /api/analysis-runs/{run_id}/samples`). Not part of the staged-execution queue — the UI requests it explicitly after interpretation completes.
 > **Mission fit:** Improves the user's ability to *act on* Phase 2 results by producing audible reference clips they can A/B against the source track.
 

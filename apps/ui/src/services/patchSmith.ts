@@ -2,6 +2,9 @@
  * patchSmith — downloadable Vital (`.vital`) synth presets derived from Phase 1
  * synthesis measurements.
  *
+ * FROZEN 2026-07 (trust diet): default-off/non-goal. Do not expand without the
+ * owner naming this subsystem. See plans/trust-diet-2026-07.md.
+ *
  * Why this exists (PURPOSE.md): ASA answers "how do I make something that sounds
  * like this?". A citable, downloadable preset turns measured synthesis character
  * into a concrete starting point the producer can load and play.

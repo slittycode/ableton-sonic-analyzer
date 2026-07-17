@@ -1,3 +1,13 @@
+"""Runtime profile resolution (local vs hosted).
+
+FROZEN 2026-07 (trust diet): default-off/non-goal. Do not expand without the
+owner naming this subsystem. See plans/trust-diet-2026-07.md.
+
+Hosted is a declared non-goal; local is the product. The seams remain because
+they serve local mode and are woven through core tests — do not expand hosted
+infrastructure or invent a deployment path without an explicit owner request.
+"""
+
 from __future__ import annotations
 
 import os

@@ -3,6 +3,10 @@
 Full setup, environment variables, and verification details for ASA. For a
 30-second overview, see the root [`README.md`](../README.md).
 
+> **FROZEN 2026-07 (trust diet):** hosted runtime profile is a non-goal. Local is
+> the product. Do not expand hosted deployment without the owner naming that
+> subsystem. See `plans/trust-diet-2026-07.md`.
+
 ## Prerequisites
 
 - **Python `3.11.x`** — Essentia 2.1b6 wheels are only published for 3.11.

@@ -1,5 +1,9 @@
 # NEEDS — Recommendation-Proof Campaign (GOAL.md)
 
+> **NON-AUTHORITATIVE (proxy-scored).** Campaign paused pending real Live 12
+> renders; do not cite these numbers as settled. See
+> `plans/trust-diet-2026-07.md` (Wave 3 D1).
+
 Status of the campaign and the queue of work that needs the **owner's hands** (a
 render, a listen, a Gemini key) before an agent can finish it. Read alongside
 `GOAL.md` (the why), `tests/fixtures/recommendation_tracks/README.md` (the corpus
@@ -7,7 +11,7 @@ authoring checklist), and `recommendation_evaluation.py` (the scorer).
 
 ---
 
-## ALL FOUR SUB-GOALS MECHANICALLY COMPLETE — with proxy caveats
+## ALL FOUR SUB-GOALS MECHANICALLY COMPLETE — with proxy caveats (PROXY-SCORED — non-authoritative)
 
 Under the owner's "continue without input" directive, the campaign was driven to
 completion of every sub-goal's stated Done criteria. The honest caveat: sub-goals
