@@ -129,7 +129,7 @@ function getInterpretationHelperCopy(
     // Audit #12: drop developer-flavored copy. Give the user a concrete next step
     // instead of a config-state assertion. On hosted deployments, an operator
     // configures GEMINI_API_KEY on the backend; on local setups the user does it themselves.
-    return 'AI interpretation isn’t configured. Set GEMINI_API_KEY on the backend to enable Ableton recommendations.';
+    return 'AI interpretation isn’t configured. Configure Gemini (Vertex AI or GEMINI_API_KEY) on the backend to enable Ableton recommendations.';
   }
 
   if (!phase2Requested) {

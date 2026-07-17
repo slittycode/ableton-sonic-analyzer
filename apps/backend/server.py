@@ -177,6 +177,68 @@ GEMINI_TIMEOUT_SECONDS = 300  # 5 minutes — matches TS httpOptions.timeout
 GEMINI_MAX_RETRIES = 3
 GEMINI_RETRY_BASE_DELAY_MS = 2_000
 
+
+class GeminiClientBuildError(Exception):
+    def __init__(self, error_code: str, message: str) -> None:
+        super().__init__(message)
+        self.error_code = error_code
+        self.message = message
+
+
+def _build_gemini_client() -> tuple[Any, list[str]]:
+    backend = os.getenv("ASA_GEMINI_BACKEND", "").strip().lower()
+    flags: list[str] = []
+
+    if not backend:
+        project = (os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("ASA_GCP_PROJECT") or "").strip()
+        api_key = os.getenv("GEMINI_API_KEY", "").strip()
+        if project:
+            backend = "vertex"
+        elif api_key:
+            backend = "apistudio"
+        else:
+            raise GeminiClientBuildError(
+                "GEMINI_NOT_CONFIGURED",
+                "Gemini is not configured. Set ASA_GEMINI_BACKEND=vertex with GOOGLE_CLOUD_PROJECT (and ADC) or ASA_GCP_PROJECT, or set GEMINI_API_KEY for AI Studio.",
+            )
+
+    if backend == "vertex":
+        project = (os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("ASA_GCP_PROJECT") or "").strip()
+        if not project:
+            raise GeminiClientBuildError(
+                "GEMINI_VERTEX_NOT_CONFIGURED",
+                "ASA_GEMINI_BACKEND=vertex requires GOOGLE_CLOUD_PROJECT or ASA_GCP_PROJECT.",
+            )
+        location = (os.getenv("GOOGLE_CLOUD_LOCATION") or os.getenv("ASA_GCP_LOCATION") or "us-central1").strip()
+        client = _genai.Client(
+            vertexai=True,
+            project=project,
+            location=location,
+            http_options={"timeout": GEMINI_TIMEOUT_SECONDS * 1_000},
+        )
+        flags.append(f"vertex:{location}")
+        return client, flags
+
+    if backend == "apistudio":
+        api_key = os.getenv("GEMINI_API_KEY", "").strip()
+        if not api_key:
+            raise GeminiClientBuildError(
+                "GEMINI_NOT_CONFIGURED",
+                "ASA_GEMINI_BACKEND=apistudio requires GEMINI_API_KEY.",
+            )
+        client = _genai.Client(
+            api_key=api_key,
+            http_options={"timeout": GEMINI_TIMEOUT_SECONDS * 1_000},
+        )
+        flags.append("apistudio")
+        return client, flags
+
+    raise GeminiClientBuildError(
+        "GEMINI_NOT_CONFIGURED",
+        f"Unknown ASA_GEMINI_BACKEND={backend}. Use vertex or apistudio.",
+    )
+
+
 _ANALYSIS_RUNTIME: AnalysisRuntime | None = None
 _BACKGROUND_TASKS: list[asyncio.Task[Any]] = []
 logger = logging.getLogger(__name__)
@@ -1857,17 +1919,6 @@ def _run_interpretation_request_with_profile_config(
                 "diagnostics": None,
             }
 
-        api_key = os.getenv("GEMINI_API_KEY", "").strip()
-        if not api_key:
-            return {
-                "ok": False,
-                "statusCode": 500,
-                "errorCode": "GEMINI_NOT_CONFIGURED",
-                "message": "GEMINI_API_KEY is not set on the backend.",
-                "retryable": False,
-                "diagnostics": None,
-            }
-
         if model_name not in ALLOWED_GEMINI_MODELS:
             return {
                 "ok": False,
@@ -1892,10 +1943,18 @@ def _run_interpretation_request_with_profile_config(
     client = None
     generate_config = None
     if external_provider is None:
-        client = _genai.Client(
-            api_key=api_key,
-            http_options={"timeout": GEMINI_TIMEOUT_SECONDS * 1_000},
-        )
+        try:
+            client, gemini_flags = _build_gemini_client()
+            flags_used.extend(gemini_flags)
+        except GeminiClientBuildError as exc:
+            return {
+                "ok": False,
+                "statusCode": 500,
+                "errorCode": exc.error_code,
+                "message": str(exc),
+                "retryable": False,
+                "diagnostics": None,
+            }
         generate_config = _genai_types.GenerateContentConfig(
             response_mime_type="application/json",
             response_schema=profile_config["responseSchema"],
@@ -4063,21 +4122,6 @@ async def analyze_phase2(
                     "error": {
                         "code": "GEMINI_NOT_INSTALLED",
                         "message": "google-genai package is not installed on the backend.",
-                        "phase": ERROR_PHASE_GEMINI,
-                        "retryable": False,
-                    },
-                },
-            ), endpoint="/api/phase2")
-
-        api_key = os.getenv("GEMINI_API_KEY", "").strip()
-        if not api_key:
-            return _mark_legacy_endpoint_response(JSONResponse(
-                status_code=500,
-                content={
-                    "requestId": request_id,
-                    "error": {
-                        "code": "GEMINI_NOT_CONFIGURED",
-                        "message": "GEMINI_API_KEY is not set on the backend.",
                         "phase": ERROR_PHASE_GEMINI,
                         "retryable": False,
                     },

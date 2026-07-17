@@ -98,7 +98,12 @@ VITE_ENABLE_PHASE2_GEMINI="true"
 
 # Backend (no .env file)
 SONIC_ANALYZER_PORT=8100
-GEMINI_API_KEY="your_key_here"
+GEMINI_API_KEY="your_key_here"          # AI Studio (legacy)
+# Vertex AI + ADC (preferred; bills to Cloud credits):
+# GOOGLE_CLOUD_PROJECT=your-project-id
+# ASA_GCP_PROJECT=...                   # alias
+# ASA_GEMINI_BACKEND=vertex             # auto if project set; or "apistudio"
+# GOOGLE_CLOUD_LOCATION=us-central1     # optional (default)
 SONIC_ANALYZER_ADMIN_KEY="optional"
 ASA_SAMPLE_SYNTH_BACKEND="auto"
 ASA_SEPARATION_BACKEND="demucs"
@@ -106,7 +111,7 @@ ASA_PHASE2_PROVIDER="gemini"
 ASA_CLAUDE_CLI="claude"
 ```
 
-Phase 2 is gated by `VITE_ENABLE_PHASE2_GEMINI`. `GEMINI_API_KEY` is backend-only.
+Phase 2 is gated by `VITE_ENABLE_PHASE2_GEMINI`. Gemini backend config uses `GEMINI_API_KEY` (AI Studio) or Vertex ADC + `GOOGLE_CLOUD_PROJECT` (or `ASA_GCP_PROJECT`). `ASA_GEMINI_BACKEND` forces the path.
 
 ## Key Guardrails
 

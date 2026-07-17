@@ -3106,12 +3106,34 @@ class Phase2EndpointTests(unittest.TestCase):
         self.assertEqual(body["error"]["code"], "GEMINI_NOT_INSTALLED")
         self.assertFalse(body["error"]["retryable"])
 
-    def test_returns_500_when_api_key_missing(self) -> None:
-        with (
-            patch.object(server, "_GENAI_AVAILABLE", True),
-            patch.dict(server.os.environ, {}, clear=True),
-        ):
-            response = self._call()
+    def test_returns_500_when_gemini_not_configured(self) -> None:
+        # Must supply a completed analysis context; legacy /api/phase2 rejects
+        # missing context with 400 before reaching Gemini client construction.
+        from analysis_runtime import AnalysisRuntime
+        with tempfile.TemporaryDirectory(prefix="asa_gemini_no_config_") as temp_dir:
+            runtime = AnalysisRuntime(Path(temp_dir) / "runtime")
+            created = runtime.create_run(
+                filename="track.mp3",
+                content=b"server-owned-audio",
+                mime_type="audio/mpeg",
+                pitch_note_mode="off",
+                pitch_note_backend="auto",
+                interpretation_mode="off",
+                interpretation_profile="producer_summary",
+                interpretation_model=None,
+            )
+            runtime.complete_measurement(
+                created["runId"],
+                payload={"bpm": 128, "key": "A minor", "durationSeconds": 60.0},
+                provenance={"schemaVersion": "measurement.v1"},
+                diagnostics={"backendDurationMs": 1000},
+            )
+            with (
+                patch.object(server, "_GENAI_AVAILABLE", True),
+                patch.dict(server.os.environ, {}, clear=True),
+                patch.object(server, "get_analysis_runtime", return_value=runtime),
+            ):
+                response = self._call(analysis_run_id=created["runId"])
         self.assertEqual(response.status_code, 500)
         body = self._decode(response)
         self.assertEqual(body["error"]["code"], "GEMINI_NOT_CONFIGURED")
