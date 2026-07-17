@@ -38,7 +38,10 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { parsePhase1Result } from '../../src/services/backendPhase1Client';
-import { getAnalysisRun } from '../../src/services/analysisRunsClient';
+import {
+  getAnalysisRun,
+  projectPhase1FromRun,
+} from '../../src/services/analysisRunsClient';
 import { phase1EnvelopeFixture } from '../fixtures/phase1FullPayload';
 
 type UnknownRecord = Record<string, unknown>;
@@ -47,12 +50,19 @@ const goldenPath = resolve(
   dirname(fileURLToPath(import.meta.url)),
   '../../../backend/tests/fixtures/golden/phase1_default.json',
 );
+const sharedContractPath = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../../backend/tests/fixtures/contracts/phase1.v2.json',
+);
 
 const golden = JSON.parse(readFileSync(goldenPath, 'utf8')) as {
   topLevelKeys: string[];
   topLevelTypes: Record<string, string>;
   keyTree?: Record<string, unknown>;
 };
+const sharedPhase1EnvelopeFixture = JSON.parse(
+  readFileSync(sharedContractPath, 'utf8'),
+) as UnknownRecord;
 
 // ---------------------------------------------------------------------------
 // Declared raw→envelope transform map. The backend normalizes raw analyze.py
@@ -157,9 +167,10 @@ function collectDroppedPaths(
  * keyTree encoding (mirrors `_key_tree` in
  * apps/backend/tests/test_phase1_golden.py):
  * - object node                → dict: recurse per key
- * - `{"[]": <subtree>}` node   → list of objects: compare against the union
- *                                of the fixture's element keys
- * - `"list"` leaf              → scalar/empty list: presence already checked
+ * - `{"[]": <subtree>}` node   → array: object elements compare against the
+ *                                union of fixture element keys; scalar leaves
+ *                                assert only that the fixture value is an array
+ *                                (indexes and lengths are deliberately ignored)
  * - `"pruned"` leaf            → backend-declared unstable subtree: skip
  * - other string leaf          → scalar type category: presence already checked
  */
@@ -175,8 +186,14 @@ function collectMissingKeyTreePaths(
   if (!isRecord(tree)) return missing;
 
   if ('[]' in tree) {
-    if (!Array.isArray(fixture) || fixture.length === 0) {
-      missing.push(`${toDotted(segments)} (fixture needs a non-empty array of objects here)`);
+    if (!Array.isArray(fixture)) {
+      missing.push(`${toDotted(segments)} (fixture must preserve this [] array path)`);
+      return missing;
+    }
+    const elementTree = tree['[]'];
+    if (typeof elementTree === 'string') return missing;
+    if (fixture.length === 0) {
+      missing.push(`${toDotted(segments)} (fixture needs an object element to cover nested keys)`);
       return missing;
     }
     const union: UnknownRecord = {};
@@ -186,7 +203,13 @@ function collectMissingKeyTreePaths(
         if (!(key in union) || union[key] == null) union[key] = value;
       }
     }
-    return collectMissingKeyTreePaths(tree['[]'], union, [...segments, '[]' as string], parentKey, missing);
+    return collectMissingKeyTreePaths(
+      elementTree,
+      union,
+      [...segments, '[]' as string],
+      parentKey,
+      missing,
+    );
   }
 
   for (const [goldenKey, subtree] of Object.entries(tree)) {
@@ -219,6 +242,70 @@ const remediation = (paths: string[], where: string): string =>
     'with a server_phase1.py / analysis_runtime.py citation instead.',
   ].join('\n');
 
+function buildRunSnapshot(pitchNoteResult: unknown = null) {
+  return {
+    runId: 'run_parity',
+    requestedStages: {
+      pitchNoteMode: pitchNoteResult == null ? 'off' : 'stem_notes',
+      pitchNoteBackend: 'auto',
+      interpretationMode: 'off',
+      interpretationProfile: 'producer_summary',
+    },
+    artifacts: {
+      sourceAudio: {
+        artifactId: 'artifact_parity',
+        filename: 'track.flac',
+        mimeType: 'audio/flac',
+        sizeBytes: 1024,
+        contentSha256: 'parity-sha',
+      },
+    },
+    stages: {
+      measurement: {
+        status: 'completed',
+        authoritative: true,
+        result: sharedPhase1EnvelopeFixture,
+        provenance: null,
+        diagnostics: null,
+        error: null,
+      },
+      pitchNoteTranslation: {
+        status: pitchNoteResult == null ? 'not_requested' : 'completed',
+        authoritative: false,
+        preferredAttemptId: pitchNoteResult == null ? null : 'attempt_parity',
+        attemptsSummary: [],
+        result: pitchNoteResult,
+        provenance: null,
+        diagnostics: null,
+        error: null,
+      },
+      interpretation: {
+        status: 'not_requested',
+        authoritative: false,
+        preferredAttemptId: null,
+        attemptsSummary: [],
+        result: null,
+        provenance: null,
+        diagnostics: null,
+        error: null,
+      },
+    },
+  };
+}
+
+async function loadRunSnapshot(pitchNoteResult: unknown = null) {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: () => Promise.resolve(buildRunSnapshot(pitchNoteResult)),
+    } as Response),
+  );
+  return getAnalysisRun('run_parity', { apiBaseUrl: 'http://127.0.0.1:8100' });
+}
+
 // ---------------------------------------------------------------------------
 // Gates
 // ---------------------------------------------------------------------------
@@ -235,6 +322,7 @@ describe('phase1 cross-boundary contract parity', () => {
     expect(golden.topLevelKeys.length).toBeGreaterThan(60);
     expect(golden.topLevelKeys).toContain('bpm');
     expect(golden.topLevelTypes.bpm).toBe('number');
+    expect(phase1EnvelopeFixture).toEqual(sharedPhase1EnvelopeFixture);
   });
 
   it('Gate A1: every backend golden top-level key is present (non-null) in the frontend fixture', () => {
@@ -279,6 +367,12 @@ describe('phase1 cross-boundary contract parity', () => {
     },
   );
 
+  it('Gate A3 array semantics ignore scalar-array lengths while preserving [] paths', () => {
+    expect(
+      collectMissingKeyTreePaths({ '[]': 'number' }, [], ['spectralDetail', 'mfcc']),
+    ).toEqual([]);
+  });
+
   it('Gate B: no key silently vanishes through the real parsePhase1Result', () => {
     const parsed = parsePhase1Result(phase1EnvelopeFixture);
     const dropped = collectDroppedPaths(phase1EnvelopeFixture, parsed);
@@ -286,65 +380,7 @@ describe('phase1 cross-boundary contract parity', () => {
   });
 
   it('Gate C: the canonical run path strips exactly the declared keys and nothing else', async () => {
-    const runSnapshot = {
-      runId: 'run_parity',
-      requestedStages: {
-        pitchNoteMode: 'off',
-        pitchNoteBackend: 'auto',
-        interpretationMode: 'off',
-        interpretationProfile: 'producer_summary',
-      },
-      artifacts: {
-        sourceAudio: {
-          artifactId: 'artifact_parity',
-          filename: 'track.flac',
-          mimeType: 'audio/flac',
-          sizeBytes: 1024,
-          contentSha256: 'parity-sha',
-        },
-      },
-      stages: {
-        measurement: {
-          status: 'completed',
-          authoritative: true,
-          result: phase1EnvelopeFixture,
-          provenance: null,
-          diagnostics: null,
-          error: null,
-        },
-        pitchNoteTranslation: {
-          status: 'not_requested',
-          authoritative: false,
-          preferredAttemptId: null,
-          attemptsSummary: [],
-          result: null,
-          provenance: null,
-          diagnostics: null,
-          error: null,
-        },
-        interpretation: {
-          status: 'not_requested',
-          authoritative: false,
-          preferredAttemptId: null,
-          attemptsSummary: [],
-          result: null,
-          provenance: null,
-          diagnostics: null,
-          error: null,
-        },
-      },
-    };
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        json: () => Promise.resolve(runSnapshot),
-      } as Response),
-    );
-
-    const snapshot = await getAnalysisRun('run_parity', { apiBaseUrl: 'http://127.0.0.1:8100' });
+    const snapshot = await loadRunSnapshot();
     const measurement = snapshot.stages.measurement.result as UnknownRecord | null;
     expect(measurement).not.toBeNull();
 
@@ -362,5 +398,22 @@ describe('phase1 cross-boundary contract parity', () => {
     const expected = { ...parsePhase1Result(phase1EnvelopeFixture) } as UnknownRecord;
     for (const key of CANONICAL_PATH_STRIPS) delete expected[key];
     expect(measurement).toEqual(expected);
+  });
+
+  it('Gate D1: projectPhase1FromRun preserves the shared fixture minus staged transcription', async () => {
+    const snapshot = await loadRunSnapshot();
+    const projected = projectPhase1FromRun(snapshot) as UnknownRecord | null;
+    const expected = { ...parsePhase1Result(sharedPhase1EnvelopeFixture) } as UnknownRecord;
+    delete expected.transcriptionDetail;
+
+    expect(projected).toEqual(expected);
+  });
+
+  it('Gate D2: projectPhase1FromRun restores pitch-note transcription from its stage', async () => {
+    const transcriptionDetail = sharedPhase1EnvelopeFixture.transcriptionDetail;
+    const snapshot = await loadRunSnapshot(transcriptionDetail);
+    const projected = projectPhase1FromRun(snapshot);
+
+    expect(projected).toEqual(parsePhase1Result(sharedPhase1EnvelopeFixture));
   });
 });

@@ -8,7 +8,7 @@
     "lufsIntegrated": -5.6,
     "lufsMomentaryMax": -4.8,
     "lufsRange": 0.8,
-    "lufsShortTermMax": -5.2,
+    "lufsShortTermMax": -5.1,
     "monoCompatible": true,
     "plr": 5.6,
     "sampleRate": 44100,
@@ -36,9 +36,13 @@
       "resonanceLevel": "number"
     },
     "arrangementDetail": {
-      "noveltyCurve": "scalarList",
+      "noveltyCurve": {
+        "[]": "number"
+      },
       "noveltyMean": "number",
-      "noveltyPeaks": "list",
+      "noveltyPeaks": {
+        "[]": "unknown"
+      },
       "noveltyStdDev": "number"
     },
     "bassDetail": {
@@ -51,17 +55,27 @@
       "type": "str"
     },
     "beatsLoudness": {
-      "accentPattern": "scalarList",
+      "accentPattern": {
+        "[]": "number"
+      },
       "beatCount": "number",
       "beatLoudnessVariation": "number",
-      "highBandAccentPattern": "scalarList",
+      "highBandAccentPattern": {
+        "[]": "number"
+      },
       "highDominantRatio": "number",
       "kickDominantRatio": "number",
-      "lowBandAccentPattern": "scalarList",
+      "lowBandAccentPattern": {
+        "[]": "number"
+      },
       "meanBeatLoudness": "number",
-      "midBandAccentPattern": "scalarList",
+      "midBandAccentPattern": {
+        "[]": "number"
+      },
       "midDominantRatio": "number",
-      "overallAccentPattern": "scalarList",
+      "overallAccentPattern": {
+        "[]": "number"
+      },
       "patternBeatsPerBar": "number"
     },
     "bpm": "number",
@@ -73,7 +87,9 @@
     "bpmSource": "str",
     "chordDetail": {
       "chordChangeCount": "number",
-      "chordSequence": "scalarList",
+      "chordSequence": {
+        "[]": "str"
+      },
       "chordStrength": "number",
       "chordTimeline": {
         "[]": {
@@ -86,8 +102,12 @@
       },
       "chordTimelineAgreement": "bool",
       "chordTimelineSource": "str",
-      "dominantChords": "scalarList",
-      "progression": "scalarList"
+      "dominantChords": {
+        "[]": "str"
+      },
+      "progression": {
+        "[]": "str"
+      }
     },
     "crestFactor": "number",
     "danceability": {
@@ -129,9 +149,13 @@
       }
     },
     "grooveDetail": {
-      "hihatAccent": "scalarList",
+      "hihatAccent": {
+        "[]": "number"
+      },
       "hihatSwing": "number",
-      "kickAccent": "scalarList",
+      "kickAccent": {
+        "[]": "number"
+      },
       "kickSwing": "number",
       "perDrumSwing": {
         "hihat": "number",
@@ -169,7 +193,9 @@
     "lufsRange": "number",
     "lufsShortTermMax": "number",
     "melodyDetail": {
-      "dominantNotes": "scalarList",
+      "dominantNotes": {
+        "[]": "number"
+      },
       "midiFile": "str",
       "noteCount": "number",
       "notes": {
@@ -207,17 +233,29 @@
       "tailEnergyRatio": "null"
     },
     "rhythmDetail": {
-      "beatGrid": "scalarList",
-      "beatPositions": "scalarList",
+      "beatGrid": {
+        "[]": "number"
+      },
+      "beatPositions": {
+        "[]": "number"
+      },
       "downbeatConfidence": "number",
       "downbeatSource": "str",
-      "downbeats": "scalarList",
+      "downbeats": {
+        "[]": "number"
+      },
       "grooveAmount": "number",
       "onsetRate": "number",
       "phraseGrid": {
-        "phrases16Bar": "scalarList",
-        "phrases4Bar": "scalarList",
-        "phrases8Bar": "scalarList",
+        "phrases16Bar": {
+          "[]": "number"
+        },
+        "phrases4Bar": {
+          "[]": "number"
+        },
+        "phrases8Bar": {
+          "[]": "number"
+        },
         "totalBars": "number",
         "totalPhrases8Bar": "number"
       },
@@ -238,10 +276,18 @@
         "[]": {
           "bars": "number",
           "endBar": "number",
-          "highBandSteps": "scalarList",
-          "lowBandSteps": "scalarList",
-          "midBandSteps": "scalarList",
-          "overallSteps": "scalarList",
+          "highBandSteps": {
+            "[]": "number"
+          },
+          "lowBandSteps": {
+            "[]": "number"
+          },
+          "midBandSteps": {
+            "[]": "number"
+          },
+          "overallSteps": {
+            "[]": "number"
+          },
           "startBar": "number"
         }
       }
@@ -274,7 +320,9 @@
     },
     "segmentSpectral": {
       "[]": {
-        "barkBands": "scalarList",
+        "barkBands": {
+          "[]": "number"
+        },
         "segmentIndex": "number",
         "spectralCentroid": "number",
         "spectralRolloff": "number",
@@ -290,15 +338,21 @@
       }
     },
     "sidechainDetail": {
-      "envelopeShape": "scalarList",
-      "envelopeShape32": "scalarList",
+      "envelopeShape": {
+        "[]": "number"
+      },
+      "envelopeShape32": {
+        "[]": "number"
+      },
       "pumpingConfidence": "number",
       "pumpingRate": "null",
       "pumpingRegularity": "number",
       "pumpingStrength": "number"
     },
     "snareDetail": {
-      "bandHz": "scalarList",
+      "bandHz": {
+        "[]": "number"
+      },
       "hitCount": "number",
       "hitsPerSecond": "number",
       "meanAttackSharpness": "number",
@@ -330,16 +384,28 @@
       }
     },
     "spectralDetail": {
-      "barkBands": "scalarList",
-      "chroma": "scalarList",
-      "erbBands": "scalarList",
-      "mfcc": "scalarList",
+      "barkBands": {
+        "[]": "number"
+      },
+      "chroma": {
+        "[]": "number"
+      },
+      "erbBands": {
+        "[]": "number"
+      },
+      "mfcc": {
+        "[]": "number"
+      },
       "spectralBandwidth": "number",
       "spectralCentroid": "number",
-      "spectralContrast": "scalarList",
+      "spectralContrast": {
+        "[]": "number"
+      },
       "spectralFlatness": "number",
       "spectralRolloff": "number",
-      "spectralValley": "scalarList"
+      "spectralValley": {
+        "[]": "number"
+      }
     },
     "stemAnalysis": "null",
     "stereoDetail": {
