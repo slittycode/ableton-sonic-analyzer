@@ -299,7 +299,7 @@ Type: `object \| null`
 
 Phase 1.B per-stem analytical surface — populated only when stem separation ran successfully (`--separate`). Null when separation wasn't requested or failed. Phase 2 cites individual stems for element-specific recommendations.
 
-The separation backend is **selectable** (`ASA_SEPARATION_BACKEND`, default `demucs`; `msst` drives a stronger MSST/BS-RoFormer model — see `separation_backend.py`), but this schema is **backend-agnostic**: stems are always the canonical `drums`/`bass`/`other`/`vocals` at 44.1 kHz, so `stemAnalysis` is unchanged regardless of which backend produced them.
+Stem separation uses torchaudio Hybrid Demucs via `separation_backend.py` (`ASA_SEPARATION_BACKEND` is accepted for back-compat; only Demucs is supported after the 2026-07 trust diet). This schema is **backend-agnostic**: stems are always the canonical `drums`/`bass`/`other`/`vocals` at 44.1 kHz.
 
 For each available stem (`drums` / `bass` / `other` / `vocals`), the same high-value full-mix analyzers run on the stem's audio:
 

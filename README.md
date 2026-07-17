@@ -24,10 +24,9 @@ Phase 2 never overrides Phase 1. See [`docs/ARCHITECTURE_STRATEGY.md`](docs/ARCH
 ```
 apps/backend/    Python 3.11 + FastAPI + Essentia DSP pipeline
 apps/ui/         React 19 + Vite + TypeScript + Tailwind
-packages/        loudness-spectro-wasm: Rust→WASM loudness + spectrum + spectrogram (Phase 1, not yet wired in)
 scripts/         dev.sh, e2e harnesses
-docs/            ARCHITECTURE_STRATEGY, SETUP, topic docs
-docs/history/    Completed plans and one-shot audits (reference only)
+docs/            ARCHITECTURE_STRATEGY, SETUP, OPTIONAL_BACKENDS, topic docs
+docs/history/    Archived (trust diet 2026-07) — restore via archive/pre-trust-diet-2026-07
 ```
 
 ## Quickstart

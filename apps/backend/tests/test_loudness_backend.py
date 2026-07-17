@@ -46,12 +46,19 @@ class LoudnessBackendNameTests(unittest.TestCase):
             self.assertEqual(lb.loudness_backend_name(), "wasm")
 
     def test_default_measure_cli_path_is_under_repo_packages(self) -> None:
-        # Guards the parents[] index: the package lives at <repo>/packages/...,
-        # NOT <repo>/apps/packages/... An off-by-one would silently degrade
-        # ASA_LOUDNESS_BACKEND=wasm to Essentia by default.
-        package_dir = lb._DEFAULT_MEASURE_CLI.parents[2]
-        self.assertEqual(package_dir.name, "loudness-spectro-wasm")
-        self.assertTrue(package_dir.is_dir(), f"{package_dir} should exist")
+        # Guards the parents[] index: default path is
+        # <repo>/packages/loudness-spectro-wasm/target/release/measure-cli,
+        # NOT <repo>/apps/packages/.... An off-by-one would look in the wrong
+        # tree. The package sources were archived in the 2026-07 trust diet, so
+        # the directory may be absent — path shape is what this asserts.
+        cli = lb._DEFAULT_MEASURE_CLI
+        self.assertEqual(cli.name, "measure-cli")
+        self.assertEqual(cli.parents[0].name, "release")
+        self.assertEqual(cli.parents[1].name, "target")
+        self.assertEqual(cli.parents[2].name, "loudness-spectro-wasm")
+        self.assertEqual(cli.parents[3].name, "packages")
+        # parents[4] is the repo root (sibling of apps/)
+        self.assertTrue((cli.parents[4] / "apps" / "backend").is_dir())
 
 
 class ApplyLoudnessBackendTests(unittest.TestCase):

@@ -156,7 +156,7 @@ Things that look like normal code changes but silently break the contract:
 - Backend/frontend monoliths intentionally split into domain modules (`analyze_*.py`; `src/services/*`). Resist consolidating.
 - Hosted runtime foundation landed without disturbing local mode (`runtime_profile.py`, `worker.py`, `artifact_storage.py`, `auth_context.py`).
 - UI design-system migration ("D-series"): primitives in `src/components/ui/`, semantic tokens in `src/index.css`. Build from these; don't reintroduce one-off boxes or raw hex.
-- WASM loudness/spectro library (`packages/loudness-spectro-wasm/`) partially wired (browser off-by-default; backend degrades to Essentia). Leave Essentia authoritative for LUFS scalars until parity proven. Product reassigned-spectrogram uses librosa.
+- WASM loudness package archived in the 2026-07 trust diet (`archive/loudness-spectro-wasm`). Backend `loudness_backend.py` still degrades to Essentia when measure-cli is absent; leave Essentia authoritative for LUFS scalars. Product reassigned-spectrogram uses librosa.
 
 ## Backport Candidates
 

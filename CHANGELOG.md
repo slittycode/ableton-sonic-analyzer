@@ -4,6 +4,9 @@ All notable changes to `asa` are documented here.
 
 ## Unreleased
 
+### Changed
+- **Trust diet 2026-07** (`plans/trust-diet-2026-07.md`): archived museum docs (`docs/history/`, stale audits); deleted MOSS sidecar/provider arm and MSST separation path + A/B harness; archived unwired `packages/loudness-spectro-wasm` (restore via branch `archive/loudness-spectro-wasm` or tag `archive/pre-trust-diet-2026-07`); froze MT3 / Phase 3 samples / PatchSmith / hosted profile as non-goals; labeled recommendation-proof campaign status PROXY-SCORED (non-authoritative); slimmed agent docs (`CLAUDE.md`, per-app AGENTS, `docs/OPTIONAL_BACKENDS.md`). Nucleus Phase 1 measurement + schema/CI gates + real eval harnesses unchanged.
+
 ### Added
 - **Genre-generalization accuracy program** (`plans/genre-generalization-program.md`; audits: [`audits/genre-coverage-2026-07-13.md`](audits/genre-coverage-2026-07-13.md), [`audits/genre-target-sourcing-2026-07-13.md`](audits/genre-target-sourcing-2026-07-13.md)): the accuracy gates and genre classifier previously proved out almost exclusively on steady four-on-the-floor techno/house at 96–140 BPM; this program widened them across UK bass/garage, halftime/trap/dubstep, hard dance/gabber, and ambient/electro material. Seven PRs (#210–#216):
   - Synthetic fundamentals corpus grew from 29 to 40 known-truth clips (2-step, halftime, breakbeat, 16th-note UKG shuffle, beatless-ambient abstention, tempo extremes to 190 BPM) with a new "honesty" check family in [`fundamentals_evaluation.py`](apps/backend/fundamentals_evaluation.py) that gates correct *abstention* (low confidence, no fabricated swing/meter) on evidence-free audio.

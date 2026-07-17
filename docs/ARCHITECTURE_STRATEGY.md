@@ -119,7 +119,7 @@ Librosa generates spectrogram images and per-frame spectral time-series data for
 
 **Why not Essentia for spectrograms?** Essentia computes frame-by-frame spectral data (bark bands, MFCC, HPCP) but does not provide the perceptually-weighted spectrogram representations (mel, CQT) that producers expect as a "look at your audio" visualization. Librosa fills exactly that gap.
 
-**Note on the WASM DSP package.** `packages/loudness-spectro-wasm/` is a separate, standalone Rust→WASM track (BS.1770-5 / EBU R128 loudness, A-weighted spectrum, reassignment spectrogram) lifted from openmeters. It is **not yet wired into either app**; the librosa path above is what serves the product reassigned-spectrogram endpoint today, and Essentia remains authoritative for Phase 1 loudness until the WASM package is integrated and proven at parity.
+**Note on the WASM DSP package.** The former `packages/loudness-spectro-wasm/` Rust→WASM track (BS.1770-5 / EBU R128 loudness, spectrum, reassignment spectrogram) was **archived** in the 2026-07 trust diet (real EBU work but unwired on both seams). Restore from branch `archive/loudness-spectro-wasm` or tag `archive/pre-trust-diet-2026-07`. Product reassigned-spectrogram remains librosa; Phase 1 loudness remains Essentia. Backend `loudness_backend.py` still degrades to Essentia when a `measure-cli` binary is absent — see `docs/OPTIONAL_BACKENDS.md`.
 
 ---
 
