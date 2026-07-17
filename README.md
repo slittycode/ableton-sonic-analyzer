@@ -73,7 +73,7 @@ asa verify backend                                        # backend tests only
 |---|---|
 | [`PURPOSE.md`](PURPOSE.md) | Why ASA exists; non-negotiable quality invariants. |
 | [`CLAUDE.md`](CLAUDE.md) | Canonical guide for AI coding agents and contributors: commands, architecture, tripwires, change map. |
-| [`GOAL.md`](GOAL.md) | The recommendation-proof campaign — ASA's current north-star goal. Status doc: [`apps/backend/NEEDS.md`](apps/backend/NEEDS.md). Provisional verdict: [`apps/backend/RECOMMENDATION_VERDICT.md`](apps/backend/RECOMMENDATION_VERDICT.md). |
+| `GOAL.md` (retired 2026-07-18, in git history) | The recommendation-proof campaign spec. Status doc: [`apps/backend/NEEDS.md`](apps/backend/NEEDS.md) (proxy-scored, non-authoritative). Provisional verdict: [`apps/backend/RECOMMENDATION_VERDICT.md`](apps/backend/RECOMMENDATION_VERDICT.md). Current record: [`plans/trust-diet-closeout-2026-07.md`](plans/trust-diet-closeout-2026-07.md). |
 | [`docs/ARCHITECTURE_STRATEGY.md`](docs/ARCHITECTURE_STRATEGY.md) | Why the three-layer design is shaped the way it is. |
 | [`docs/SETUP.md`](docs/SETUP.md) | Detailed local setup, env vars, Phase 2 wiring. |
 | [`apps/backend/ARCHITECTURE.md`](apps/backend/ARCHITECTURE.md) | Backend HTTP flow and contract. |

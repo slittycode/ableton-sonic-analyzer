@@ -14,8 +14,10 @@ needs only `PURPOSE.md` + `CLAUDE.md` + this file.
 ## FREEZE (in-tree, default-off, do-not-expand — banners in place)
 
 MT3 · Phase 3 samples · PatchSmith · hosted profile. See `docs/OPTIONAL_BACKENDS.md`.
-Non-authoritative (proxy-scored, do not cite as settled): `GOAL.md` status, `apps/backend/NEEDS.md`,
+Non-authoritative (proxy-scored, do not cite as settled): `apps/backend/NEEDS.md`,
 `RECOMMENDATION_VERDICT.md`, verification badges (never regenerate from proxy data).
+`GOAL.md` retired 2026-07-18 by owner decision (recover via git history); code/docstring
+references to "GOAL.md" are historical context for the scorer's design.
 
 ## PARKED
 

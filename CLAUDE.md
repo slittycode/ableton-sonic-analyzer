@@ -172,8 +172,8 @@ Full original backlog is shipped (genre profiles, Ableton device mappings, mix d
 1. `AGENTS.md` (root) — pointer for Codex / OpenHands. Defers to this file.
 2. `apps/backend/AGENTS.md`, `apps/ui/AGENTS.md` — per-app overlays with stack details and change checklists.
 3. `docs/ARCHITECTURE_STRATEGY.md` — why the three-layer design is shaped the way it is.
-4. `GOAL.md` — recommendation-proof campaign (north-star). `apps/backend/NEEDS.md` and `RECOMMENDATION_VERDICT.md` are PROXY-SCORED — non-authoritative; do not cite as settled.
+4. Recommendation-proof campaign: `GOAL.md` retired 2026-07-18 (recover via git history). `apps/backend/NEEDS.md` and `RECOMMENDATION_VERDICT.md` are PROXY-SCORED — non-authoritative; do not cite as settled. Current record: `plans/trust-diet-closeout-2026-07.md`.
 5. `docs/history/` — archived (trust diet Wave 1). Restore via `git checkout archive/pre-trust-diet-2026-07 -- docs/history`.
 6. `docs/adr/` — Architecture Decision Records (schema stability, loudness units, recommendations contract).
 
-When information conflicts: `PURPOSE.md` > `CLAUDE.md` > `GOAL.md` > per-app `AGENTS.md`.
+When information conflicts: `PURPOSE.md` > `CLAUDE.md` > per-app `AGENTS.md`.
