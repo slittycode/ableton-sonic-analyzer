@@ -224,7 +224,7 @@ export function ContractEntriesBlock({
       {entries.map((entry, idx) => {
         const range = formatContractRange(entry);
         return (
-          <p key={`${entry.parameter}-${idx}`} className="text-xs font-mono text-text-secondary mt-1">
+          <p key={`${entry.parameter}-${idx}`} data-text-role="meta" className={textRoleClassName('meta', 'mt-1')}>
             {entry.parameter}: <span className="text-text-primary font-bold">{formatContractValue(entry)}</span>
             {range ? ` · working range ${range}` : ''}
           </p>

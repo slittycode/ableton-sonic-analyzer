@@ -58,13 +58,13 @@ import {
 // settings menu) and from `main.tsx` for the active-view router.
 import { startRenderBenchmarkCycle } from './utils/renderBenchmark';
 
-// Note: gemini-3.1-flash-preview is intentionally omitted — three live test runs
-// against the Gemini API on 2026-05-11/12 returned 404 NOT_FOUND for this model
-// ID. The 3.1 Pro variant works. Re-add this entry once Google publishes the
-// flash-preview ID; the backend ALLOWED_GEMINI_MODELS set at server.py:151
-// still includes it so it can be enabled with a single line restore.
+// Vertex Gemini 3.x / 3.5 require location=global (us-central1 404s them).
+// gemini-3.5-flash is the current default recommended model for this project.
+// gemini-3.1-flash-preview stays omitted from the picker (historical 404s on
+// AI Studio); backend ALLOWED_GEMINI_MODELS still lists it if needed.
 const MODELS = [
-  { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro Preview (Recommended)' },
+  { id: 'gemini-3.5-flash', name: 'Gemini 3.5 Flash (Recommended)' },
+  { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro Preview' },
   { id: 'gemini-3-pro-preview', name: 'Gemini 3.0 Pro Preview' },
   { id: 'gemini-3-flash-preview', name: 'Gemini 3.0 Flash Preview' },
   { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' },
@@ -1008,10 +1008,13 @@ export default function App() {
   }, [phase1ForRender, phase2ForRender]);
 
   return (
-    <div className="min-h-screen bg-bg-app px-3 py-3 md:px-6 md:py-5 font-sans flex items-center justify-center">
+    // Wave 1 / W1-01: top-anchor the workbench like Live (not a centered
+    // marketing card). Wider max width so INPUT | SIGNAL MONITOR can breathe
+    // at desktop the way design/reference/01 + 06 do.
+    <div className="min-h-screen bg-bg-app px-3 py-3 md:px-5 md:py-4 font-sans flex items-start justify-center">
       <div
         data-testid="app-shell"
-        className="ableton-shell w-full max-w-6xl rounded-sm overflow-hidden flex flex-col"
+        className="ableton-shell w-full max-w-7xl rounded-sm overflow-hidden flex flex-col"
       >
         <div
           data-testid="app-toolbar"
@@ -1074,13 +1077,21 @@ export default function App() {
           </div>
         </div>
 
-        <div className="bg-bg-panel p-3 md:p-5 space-y-5 flex-grow">
-          <main className="space-y-5">
-            <section className="grid grid-cols-1 lg:grid-cols-12 gap-3 md:gap-4">
-              <div className="lg:col-span-4 flex flex-col gap-4">
+        <div className="bg-bg-panel p-3 md:p-4 space-y-4 flex-grow">
+          <main className="space-y-4">
+            {/* W1-01 dual-rack: 4|8 grid kept for responsive-layout smoke
+                (.lg:col-span-4 / .lg:col-span-8). items-stretch + h-full make
+                both DeviceRacks share one instrument row height like Live. */}
+            <section
+              data-testid="dual-rack"
+              className="grid grid-cols-1 lg:grid-cols-12 gap-3 md:gap-3 items-stretch"
+            >
+              <div className="lg:col-span-4 flex flex-col min-h-0">
                 <DeviceRack
                   name="Input Source"
                   status={audioFile ? (isAnalyzing ? 'active' : 'success') : 'idle'}
+                  signalOut={audioFile ? (isAnalyzing ? 'active' : 'success') : 'idle'}
+                  className="h-full flex flex-col"
                 >
                   {/* bg-bg-card on the inner div: locked by
                       tests/smoke/theme-shell.spec.ts:41 which asserts the
@@ -1091,7 +1102,7 @@ export default function App() {
                       here to preserve the palette contract. */}
                   <div
                     data-testid="input-panel"
-                    className="bg-bg-card flex flex-col min-h-[220px] p-4"
+                    className="bg-bg-card flex flex-col flex-1 min-h-[280px] lg:min-h-[420px] p-4"
                   >
                     {showInputCollapsed && audioFile ? (
                       // Audit N9: compact post-analysis summary. Replaces the
@@ -1236,8 +1247,9 @@ export default function App() {
                           initial={{ opacity: 0, y: 6 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ duration: 0.3, ease: 'easeOut', delay: 0.1 }}
-                          className="mt-4 flex justify-end"
+                          className="mt-auto pt-4"
                         >
+                          {/* W1-02: full-width Live-style primary — ref 06 RUN ANALYSIS */}
                           <Button
                             variant="primary"
                             size="lg"
@@ -1246,6 +1258,7 @@ export default function App() {
                             onClick={() => handleStartAnalysis()}
                             disabled={isAnalyzeDisabled}
                             title={estimateWrongService ? 'Point the UI at the Sonic Analyzer backend to enable analysis.' : undefined}
+                            className="w-full"
                           >
                             Run Analysis
                           </Button>
@@ -1258,7 +1271,7 @@ export default function App() {
                 </DeviceRack>
               </div>
 
-              <div className="lg:col-span-8 flex flex-col">
+              <div className="lg:col-span-8 flex flex-col min-h-0">
                 {/* data-testid="signal-panel" lifted onto the DeviceRack so
                     the testid wraps the title strip (containing the
                     visible "Signal Monitor" text the
@@ -1270,10 +1283,11 @@ export default function App() {
                   data-testid="signal-panel"
                   name="Signal Monitor"
                   status={isAnalyzing ? 'active' : audioUrl ? 'success' : 'idle'}
-                  className="flex-grow flex flex-col"
+                  signalIn={audioFile ? (isAnalyzing ? 'active' : 'success') : 'idle'}
+                  className="h-full flex flex-col"
                 >
                   <div
-                    className="flex-grow bg-bg-card p-4 relative flex flex-col"
+                    className="flex-1 bg-bg-card p-4 relative flex flex-col min-h-[280px] lg:min-h-[420px]"
                   >
                   {audioUrl && audioFile ? (
                     <div className="flex flex-col relative z-10 gap-4">
@@ -1370,6 +1384,7 @@ export default function App() {
                   // in localStorage. When absent (e.g., legacy run snapshot),
                   // AnalysisResults skips the checkbox affordance.
                   audioContentHash={analysisRun?.artifacts?.sourceAudio?.contentSha256 ?? null}
+                  sourceSizeBytes={analysisRun?.artifacts?.sourceAudio?.sizeBytes ?? null}
                   onReanalyzeWithStemAware={
                     audioFile && !isAnalyzing
                       ? () => handleStartAnalysis({ pitchNoteRequested: true })

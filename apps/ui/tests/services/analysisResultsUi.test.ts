@@ -509,7 +509,7 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).toContain('bg-error/20 text-error border-error/30');
   });
 
-  it('renders accented top summary cards and splits measured character chips into separate badges', () => {
+  it('renders accented top summary cards with loudness instead of uncalibrated genre', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
         phase1: {
@@ -531,11 +531,14 @@ describe('AnalysisResults UI wiring', () => {
     );
 
     expect((html.match(/border-l-2 border-accent/g) ?? []).length).toBeGreaterThanOrEqual(4);
-    expect(html).toContain('>house<');
-    expect(html).toContain('>techno<');
+    // Genre/Character tile is hidden until calibrated — loudness is the 4th tile.
+    expect(html).toContain('LOUDNESS');
+    expect(html).toContain('LUFS');
+    expect(html).not.toContain('>tech house<');
+    expect(html).not.toContain('Genre Classification');
   });
 
-  it('renders character scanning fallback when phase2 is unavailable', () => {
+  it('renders loudness tile and AI draft state when phase2 is unavailable', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
         phase1: baseMeasurement,
@@ -544,9 +547,11 @@ describe('AnalysisResults UI wiring', () => {
       }),
     );
 
-    expect(html).toContain('SCANNING...');
+    // Genre CHARACTER/SCANNING theater is gone — calibrated loudness stays.
+    expect(html).toContain('LOUDNESS');
     expect(html).toContain('AI Interpretation');
     expect(html).toContain('Draft — AI interpretation is incomplete or unavailable.');
+    expect(html).not.toContain('SCANNING...');
   });
 
   it('renders stem listening notes adjacent to Session Musician with plain-language labels', () => {
@@ -1040,8 +1045,8 @@ describe('AnalysisResults UI wiring', () => {
       }),
     );
 
-    // Measurement Summary + Reconstruction Brief + measurement dashboard.
-    expect((html.match(/>DSP</g) ?? []).length).toBe(3);
+    // Measurement Summary (tempo/key/loudness) + Reconstruction Brief + measurement dashboard.
+    expect((html.match(/>DSP</g) ?? []).length).toBe(4);
     expect((html.match(/>AI</g) ?? []).length).toBe(1);
     expect(html).toContain('Interpretive guidance generated from DSP measurements. Not a ground-truth measurement.');
   });
@@ -2264,13 +2269,13 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).not.toMatch(/CONF\s+\d+%/);
   });
 
-  it('Character card footer renders band pill instead of CONF X% text', () => {
+  it('Loudness card replaces uncalibrated Character/genre tile and never shows CONF X%', () => {
     const phase1WithGenre = {
       ...baseMeasurement,
       genreDetail: {
         genre: 'Techno',
         genreFamily: 'Electronic',
-        confidence: 0.4, // rough band
+        confidence: 0.4, // rough band — must not surface as Character theater
         secondaryGenre: undefined,
       },
     } as typeof baseMeasurement;
@@ -2283,10 +2288,9 @@ describe('AnalysisResults UI wiring', () => {
       }),
     );
 
-    expect(html).toContain('Rough sketch');
-    // Inline `CONF X%` text under the Character card metric bar must be gone.
-    // (The Character card characteristicPills chips are a different vocabulary
-    // out of scope for this PR; they don't render `CONF` text.)
+    expect(html).toContain('LOUDNESS');
+    // Summary tile no longer uses the uncalibrated genre CHARACTER card.
+    expect(html).not.toMatch(/>CHARACTER</i);
     expect(html).not.toMatch(/CONF\s+\d+%/);
   });
 

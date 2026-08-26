@@ -172,10 +172,56 @@ ALLOWED_GEMINI_MODELS = {
     "gemini-3-pro-preview",
     "gemini-3.1-flash-preview",
     "gemini-3.1-pro-preview",
+    "gemini-3.5-flash",
 }
+# Gemini 3.x / 3.5 publisher models on Vertex are served from the multi-region
+# "global" endpoint; us-central1 404s them even when list_models shows the id.
+DEFAULT_VERTEX_LOCATION = "global"
 GEMINI_TIMEOUT_SECONDS = 300  # 5 minutes — matches TS httpOptions.timeout
 GEMINI_MAX_RETRIES = 3
 GEMINI_RETRY_BASE_DELAY_MS = 2_000
+LOCAL_ENV_PATH = Path.home() / ".asa" / "env"
+
+
+def _load_local_env(env_path: Path | None = None) -> dict[str, str]:
+    """Load KEY=VALUE pairs from ~/.asa/env into os.environ.
+
+    Exported shell vars always win — already-set keys are never overridden.
+    Missing file is a no-op. Comments (#) and blank lines are ignored.
+    Returns the keys that were applied (for tests / diagnostics).
+    """
+    path = env_path if env_path is not None else LOCAL_ENV_PATH
+    applied: dict[str, str] = {}
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return applied
+    except OSError:
+        return applied
+
+    for raw_line in raw.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export "):].strip()
+        if "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        if not key or key in os.environ:
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'\""):
+            value = value[1:-1]
+        os.environ[key] = value
+        applied[key] = value
+    return applied
+
+
+# Load machine-local backend secrets (Vertex project, API keys) before any
+# Gemini env read. Never overrides already-exported shell vars.
+_load_local_env()
 
 
 class GeminiClientBuildError(Exception):
@@ -209,7 +255,9 @@ def _build_gemini_client() -> tuple[Any, list[str]]:
                 "GEMINI_VERTEX_NOT_CONFIGURED",
                 "ASA_GEMINI_BACKEND=vertex requires GOOGLE_CLOUD_PROJECT or ASA_GCP_PROJECT.",
             )
-        location = (os.getenv("GOOGLE_CLOUD_LOCATION") or os.getenv("ASA_GCP_LOCATION") or "us-central1").strip()
+        location = (
+            os.getenv("GOOGLE_CLOUD_LOCATION") or os.getenv("ASA_GCP_LOCATION") or DEFAULT_VERTEX_LOCATION
+        ).strip()
         client = _genai.Client(
             vertexai=True,
             project=project,

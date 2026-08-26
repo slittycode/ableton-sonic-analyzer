@@ -1,7 +1,7 @@
 import type { Phase2Result } from '../../types';
 import { truncateAtSentenceBoundary } from '../analysisResultsViewModel';
 import { Panel, Pill } from '../ui';
-import { ResultsSectionHeader } from './shared';
+import { ResultsSectionHeader, textRoleClassName } from './shared';
 
 type WarpGuide = NonNullable<Phase2Result['warpGuide']>;
 
@@ -41,7 +41,7 @@ export function WarpGuideSection({ warpGuide }: { warpGuide: WarpGuide }) {
                 {target.settings}
               </p>
             )}
-            <p className="text-xs font-mono text-text-secondary leading-relaxed">
+            <p data-text-role="body" className={textRoleClassName('body')}>
               {truncateAtSentenceBoundary(target.reason, 220)}
             </p>
           </Panel>
@@ -50,7 +50,7 @@ export function WarpGuideSection({ warpGuide }: { warpGuide: WarpGuide }) {
 
       <Panel variant="surface" padding="lg">
         <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">Why These Modes</p>
-        <p className="mt-2 text-xs font-mono text-text-secondary leading-relaxed">
+        <p data-text-role="body" className={textRoleClassName('body', 'mt-2')}>
           {truncateAtSentenceBoundary(warpGuide.rationale, 320)}
         </p>
       </Panel>

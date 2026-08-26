@@ -1,7 +1,7 @@
 import type { Phase2Result } from '../../types';
 import { truncateAtSentenceBoundary } from '../analysisResultsViewModel';
 import { MetricTile, Panel, Pill, TokenBadgeList } from '../ui';
-import { ResultsSectionHeader, type StyleProfileSectionState } from './shared';
+import { ResultsSectionHeader, textRoleClassName, type StyleProfileSectionState } from './shared';
 
 type StyleProfile = NonNullable<Phase2Result['styleProfile']>;
 
@@ -131,7 +131,7 @@ export function StyleProfileSection({
               <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
                 Style Read
               </p>
-              <p className="text-xs font-mono text-text-secondary leading-relaxed">
+              <p data-text-role="body" className={textRoleClassName('body')}>
                 {truncateAtSentenceBoundary(styleProfile.description, 320)}
               </p>
             </Panel>
@@ -142,7 +142,7 @@ export function StyleProfileSection({
               <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
                 Reusable Prompt
               </p>
-              <p className="text-xs font-mono text-text-secondary leading-relaxed">
+              <p data-text-role="body" className={textRoleClassName('body')}>
                 {truncateAtSentenceBoundary(styleProfile.generationPrompt, 320)}
               </p>
             </Panel>
@@ -155,7 +155,7 @@ export function StyleProfileSection({
               {stateLabel(styleProfileSectionState)}
             </Pill>
           </div>
-          <p className="text-xs font-mono text-text-secondary leading-relaxed">
+          <p data-text-role="body" className={textRoleClassName('body')}>
             {stateDescription(styleProfileSectionState)}
           </p>
           {styleProfileSectionState === 'disabled' && phase2StatusMessage && (

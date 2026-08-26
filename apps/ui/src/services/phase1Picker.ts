@@ -133,12 +133,55 @@ export function formatCitedValue(path: string, value: unknown): string {
     return Number.isInteger(value) ? String(value) : value.toFixed(2);
   }
 
-  // Fallback: stringify whatever it was.
-  try {
-    return String(value);
-  } catch {
-    return '';
+  // Arrays — compact summary. Never stringify objects into "[object Object]".
+  // chordDetail.chordTimeline gets a short progression preview when labels exist.
+  if (Array.isArray(value)) {
+    return formatCitedArray(path, value);
   }
+
+  // Plain objects (and anything else) — safe dash fallback. Invariant: output
+  // must never contain the literal "[object Object]".
+  return '—';
+}
+
+function formatCitedArray(path: string, value: unknown[]): string {
+  const count = value.length;
+  if (count === 0) return '0 entries';
+
+  const isChordTimeline =
+    path === 'chordDetail.chordTimeline' || path.endsWith('.chordTimeline');
+
+  if (isChordTimeline) {
+    const labels = value
+      .map((entry) => {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null;
+        const label = (entry as { label?: unknown }).label;
+        return typeof label === 'string' && label.trim() ? label.trim() : null;
+      })
+      .filter((label): label is string => Boolean(label));
+    if (labels.length > 0) {
+      const preview = labels.slice(0, 3).join(' → ');
+      return `${preview} · ${count} ${count === 1 ? 'entry' : 'entries'}`;
+    }
+  }
+
+  // Homogeneous primitive arrays: show a short join; object arrays: count only.
+  const primitives = value.every(
+    (item) => item === null || ['string', 'number', 'boolean'].includes(typeof item),
+  );
+  if (primitives) {
+    const rendered = value.slice(0, 4).map((item) => {
+      if (item === null) return 'null';
+      if (typeof item === 'number' && Number.isFinite(item)) {
+        return Number.isInteger(item) ? String(item) : item.toFixed(2);
+      }
+      return String(item);
+    });
+    const suffix = count > 4 ? `, … (+${count - 4})` : '';
+    return `${rendered.join(', ')}${suffix}`;
+  }
+
+  return `${count} ${count === 1 ? 'entry' : 'entries'}`;
 }
 
 /**

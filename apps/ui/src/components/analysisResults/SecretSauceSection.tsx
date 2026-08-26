@@ -43,7 +43,7 @@ export function SecretSauceSection({
           <div className="space-y-2">
             <h3
               data-text-role="item-title"
-              className={[getTextRoleClassName('item-title'), 'text-lg'].join(' ')}
+              className={getTextRoleClassName('item-title')}
             >
               {secretSauce.title}
             </h3>
@@ -57,7 +57,7 @@ export function SecretSauceSection({
               {secretSauce.workflowSteps.map((step) => (
                 <div key={step.step} className="rounded-sm border border-border bg-bg-panel/40 p-4 space-y-3">
                   <div className="flex items-center gap-3">
-                    <span className="flex-shrink-0 w-6 h-6 rounded-sm bg-bg-panel border border-border flex items-center justify-center text-accent font-mono text-xs">
+                    <span data-text-role="meta" className={[getTextRoleClassName('meta'), 'flex-shrink-0 w-6 h-6 rounded-sm bg-bg-panel border border-border flex items-center justify-center text-accent font-mono'].join(' ')}>
                       {step.step}
                     </span>
                     <div className="min-w-0">
@@ -78,14 +78,14 @@ export function SecretSauceSection({
                       { label: 'Device', value: step.device },
                     ]}
                   />
-                  <p className="text-xs text-text-secondary leading-relaxed font-mono">
+                  <p data-text-role="body" className={textRoleClassName('body')}>
                     {truncateAtSentenceBoundary(step.instruction, 220)}
                   </p>
                   <div className="border border-accent/20 bg-accent/5 rounded-sm px-2 py-2">
                     <p className="text-meta font-mono text-accent uppercase tracking-wide">
                       Measurement Reason
                     </p>
-                    <p className="text-xs font-mono text-text-secondary mt-1 leading-relaxed">
+                    <p data-text-role="body" className={textRoleClassName('body', 'mt-1')}>
                       {truncateAtSentenceBoundary(step.measurementJustification, 220)}
                     </p>
                   </div>
@@ -99,10 +99,10 @@ export function SecretSauceSection({
                 : []
               ).map((step, idx) => (
                 <div key={idx} className="flex space-x-3">
-                  <span className="flex-shrink-0 w-6 h-6 rounded-sm bg-bg-panel border border-border flex items-center justify-center text-accent font-mono text-xs">
+                  <span data-text-role="meta" className={[getTextRoleClassName('meta'), 'flex-shrink-0 w-6 h-6 rounded-sm bg-bg-panel border border-border flex items-center justify-center text-accent font-mono'].join(' ')}>
                     {idx + 1}
                   </span>
-                  <p className="text-xs text-text-secondary leading-relaxed font-mono pt-1">
+                  <p data-text-role="body" className={textRoleClassName('body', 'pt-1')}>
                     {truncateAtSentenceBoundary(step, 260)}
                   </p>
                 </div>

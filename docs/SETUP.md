@@ -55,10 +55,12 @@ don't break the stack.
 
 ## Phase 2 (Gemini) setup
 
-Phase 2 is gated by `VITE_ENABLE_PHASE2_GEMINI`. The Gemini API key is
-backend-only — it never reaches the browser bundle.
+Phase 2 is gated by `VITE_ENABLE_PHASE2_GEMINI`. Gemini credentials are
+backend-only — they never reach the browser bundle.
 
-Persistent `.env` setup:
+### UI env
+
+Persistent UI `.env` setup:
 
 ```bash
 cd apps/ui
@@ -78,10 +80,40 @@ Optional hosted-mode request-header bootstrap for private beta testing:
 VITE_API_REQUEST_HEADERS_JSON='{"X-ASA-User-Id":"beta-user-123"}'
 ```
 
-Backend Gemini key — must be exported in the same shell that runs `dev.sh`:
+### Backend Gemini / Vertex (`~/.asa/env`)
+
+The backend loads machine-local config from `~/.asa/env` at import time
+(`server._load_local_env`). Format: `KEY=VALUE` lines; `#` comments and blank
+lines ignored; optional `export ` prefix and single/double quotes around values.
+**Exported shell variables always win** — the file never overrides them.
+
+Recommended (Vertex + ADC, preferred):
 
 ```bash
-export GEMINI_API_KEY="your_real_key_here"
+mkdir -p ~/.asa
+cat > ~/.asa/env <<'EOF'
+ASA_GEMINI_BACKEND=vertex
+GOOGLE_CLOUD_PROJECT=your-gcp-project-id
+# GOOGLE_CLOUD_LOCATION=global   # required for Gemini 3.x / 3.5 Flash on Vertex
+EOF
+chmod 600 ~/.asa/env
+```
+
+AI Studio alternative:
+
+```bash
+cat > ~/.asa/env <<'EOF'
+ASA_GEMINI_BACKEND=apistudio
+GEMINI_API_KEY=your_real_key_here
+EOF
+chmod 600 ~/.asa/env
+```
+
+Or export in the same shell that runs `asa` / `dev.sh` (takes precedence):
+
+```bash
+export ASA_GEMINI_BACKEND=vertex
+export GOOGLE_CLOUD_PROJECT=your-gcp-project-id
 ./scripts/dev.sh
 ```
 
@@ -97,6 +129,9 @@ This does **not** work (the variable is not exported to the next command):
 GEMINI_API_KEY="your_real_key_here"
 ./scripts/dev.sh
 ```
+
+Check which backend would be selected: `asa status` (reports vertex / apistudio
+/ NOT CONFIGURED from env + `~/.asa/env`). Never commit `~/.asa/env`.
 
 ## Running services individually
 

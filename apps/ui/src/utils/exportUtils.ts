@@ -13,8 +13,83 @@ export function downloadFile(content: string, fileName: string, contentType: str
   URL.revokeObjectURL(a.href);
 }
 
+/** Track identity carried into exports so re-runs of different rips can't mislead. */
+export interface ExportSourceMeta {
+  filename?: string | null;
+  contentSha256?: string | null;
+  sizeBytes?: number | null;
+  durationSeconds?: number | null;
+  analyzedAt?: string | null;
+  phase1Version?: string | null;
+}
+
+function sanitizeBasename(filename: string | null | undefined): string {
+  const raw = (filename ?? 'track').trim() || 'track';
+  const withoutExt = raw.replace(/\.[^/.]+$/, '');
+  const cleaned = withoutExt
+    .replace(/[^A-Za-z0-9._-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+  return cleaned || 'track';
+}
+
+function exportDateStamp(iso: string | null | undefined): string {
+  const parsed = iso ? new Date(iso) : new Date();
+  if (Number.isNaN(parsed.getTime())) {
+    return new Date().toISOString().slice(0, 10);
+  }
+  return parsed.toISOString().slice(0, 10);
+}
+
+/** `track-analysis-<basename>-<YYYY-MM-DD>.{md,json,pdf,png}` */
+export function buildExportFileName(
+  extension: 'md' | 'json' | 'pdf' | 'png',
+  source: ExportSourceMeta | null | undefined = null,
+): string {
+  const base = sanitizeBasename(source?.filename);
+  const day = exportDateStamp(source?.analyzedAt);
+  const suffix = extension === 'pdf' || extension === 'png' ? `-ui` : '';
+  return `track-analysis-${base}-${day}${suffix}.${extension}`;
+}
+
 function formatMarkdownNumber(value: number): string {
   return value.toFixed(2).replace(/\.?0+$/, '');
+}
+
+function formatShaShort(sha: string | null | undefined): string | null {
+  if (!sha || typeof sha !== 'string') return null;
+  const trimmed = sha.trim();
+  if (!trimmed) return null;
+  return trimmed.length > 12 ? trimmed.slice(0, 12) : trimmed;
+}
+
+function formatBytes(sizeBytes: number | null | undefined): string | null {
+  if (typeof sizeBytes !== 'number' || !Number.isFinite(sizeBytes) || sizeBytes < 0) {
+    return null;
+  }
+  if (sizeBytes < 1024) return `${sizeBytes} B`;
+  if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} KiB`;
+  return `${(sizeBytes / (1024 * 1024)).toFixed(2)} MiB`;
+}
+
+function formatSourceMarkdown(source: ExportSourceMeta | null | undefined): string {
+  if (!source) return '';
+  const lines: string[] = ['## Source'];
+  if (source.filename) lines.push(`- **Filename**: ${source.filename}`);
+  const shaShort = formatShaShort(source.contentSha256);
+  if (shaShort) {
+    const full = source.contentSha256?.trim() ?? shaShort;
+    lines.push(`- **SHA-256**: \`${shaShort}\`${full.length > 12 ? ` (\`${full}\`)` : ''}`);
+  }
+  const sizeLabel = formatBytes(source.sizeBytes ?? null);
+  if (sizeLabel) lines.push(`- **Size**: ${sizeLabel}`);
+  if (typeof source.durationSeconds === 'number' && Number.isFinite(source.durationSeconds)) {
+    lines.push(`- **Duration**: ${formatMarkdownNumber(source.durationSeconds)}s`);
+  }
+  if (source.analyzedAt) lines.push(`- **Analyzed at**: ${source.analyzedAt}`);
+  if (source.phase1Version) lines.push(`- **Phase 1 version**: ${source.phase1Version}`);
+  if (lines.length === 1) return '';
+  return `${lines.join('\n')}\n\n`;
 }
 
 function formatArrangementOverviewMarkdown(arrangementOverview: Phase2Result['arrangementOverview']): string {
@@ -47,8 +122,10 @@ export function generateMarkdown(
   phase1: Phase1Result,
   phase2: Phase2Result | null,
   phase2StatusMessage: string | null = null,
+  source: ExportSourceMeta | null = null,
 ): string {
   let md = '# Track Analysis Report\n\n';
+  md += formatSourceMarkdown(source);
 
   md += '## Phase 1 Metadata\n';
   md += `- **BPM**: ${phase1.bpm}\n`;
@@ -147,4 +224,27 @@ export function generateMarkdown(
   }
 
   return md;
+}
+
+export function buildExportPayload(
+  phase1: Phase1Result,
+  phase2: Phase2Result | null,
+  source: ExportSourceMeta | null = null,
+): Record<string, unknown> {
+  const analyzedAt = source?.analyzedAt ?? new Date().toISOString();
+  return {
+    phase1,
+    phase2,
+    exportedAt: analyzedAt,
+    source: {
+      filename: source?.filename ?? null,
+      contentSha256: source?.contentSha256 ?? null,
+      sizeBytes: source?.sizeBytes ?? null,
+      durationSeconds:
+        source?.durationSeconds ??
+        (typeof phase1.durationSeconds === 'number' ? phase1.durationSeconds : null),
+      analyzedAt,
+      phase1Version: source?.phase1Version ?? phase1.phase1Version ?? null,
+    },
+  };
 }

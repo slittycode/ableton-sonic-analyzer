@@ -96,14 +96,15 @@ Product vars (see `docs/OPTIONAL_BACKENDS.md` for frozen-experiment vars):
 VITE_API_BASE_URL="http://127.0.0.1:8100"
 VITE_ENABLE_PHASE2_GEMINI="true"
 
-# Backend (no .env file)
-SONIC_ANALYZER_PORT=8100
-GEMINI_API_KEY="your_key_here"          # AI Studio (legacy)
-# Vertex AI + ADC (preferred; bills to Cloud credits):
+# Backend — machine-local file loaded by server.py (never committed):
+# ~/.asa/env
+# ASA_GEMINI_BACKEND=vertex
 # GOOGLE_CLOUD_PROJECT=your-project-id
-# ASA_GCP_PROJECT=...                   # alias
-# ASA_GEMINI_BACKEND=vertex             # auto if project set; or "apistudio"
-# GOOGLE_CLOUD_LOCATION=us-central1     # optional (default)
+# GOOGLE_CLOUD_LOCATION=global          # optional (default; required for Gemini 3.x/3.5)
+# GEMINI_API_KEY=...                    # AI Studio alternative
+#
+# Exported shell vars always win over ~/.asa/env.
+SONIC_ANALYZER_PORT=8100
 SONIC_ANALYZER_ADMIN_KEY="optional"
 ASA_SAMPLE_SYNTH_BACKEND="auto"
 ASA_SEPARATION_BACKEND="demucs"
@@ -111,15 +112,19 @@ ASA_PHASE2_PROVIDER="gemini"
 ASA_CLAUDE_CLI="claude"
 ```
 
-Phase 2 is gated by `VITE_ENABLE_PHASE2_GEMINI`. Gemini backend config uses `GEMINI_API_KEY` (AI Studio) or Vertex ADC + `GOOGLE_CLOUD_PROJECT` (or `ASA_GCP_PROJECT`). `ASA_GEMINI_BACKEND` forces the path.
+Phase 2 is gated by `VITE_ENABLE_PHASE2_GEMINI`. Backend loads `~/.asa/env` at import (KEY=VALUE; `#` comments; blanks ignored; **never overrides** already-exported vars). Gemini uses Vertex ADC + `GOOGLE_CLOUD_PROJECT` (or `ASA_GCP_PROJECT`) or AI Studio `GEMINI_API_KEY`. `ASA_GEMINI_BACKEND` forces `vertex` or `apistudio`. Check selection with `asa status`.
 
 ## Key Guardrails
 
+- **Agent cwd is this repo root (`asa/`), never the parent `ableton-sonic-analyzer/` shelf.**
+- Do not create top-level eval/demo sandboxes (`agent-eval/`, throwaway CLIs). Use `/tmp/asa-scratch/` or `.worktrees/`.
+- UI work reads `apps/ui/DESIGN_DIRECTION.md` first (standing visual direction until the owner declares the UI settled).
 - No linter/formatter (follow surrounding style).
 - Backend tests use stdlib `unittest`; frontend uses Vitest in `node` (not jsdom).
 - `npm run lint` only type-checks `src/`; `tests/`, `dist/`, `node_modules/` are excluded.
 - Canonical ports: UI 3100, backend 8100.
 - `--fast` runs the streamlined pipeline; `dsp_json_override` is accepted but ignored.
+- Do not claim tests passed without running the exact command and showing output.
 
 ## Tripwires
 
@@ -171,9 +176,11 @@ Full original backlog is shipped (genre profiles, Ableton device mappings, mix d
 
 1. `AGENTS.md` (root) — pointer for Codex / OpenHands. Defers to this file.
 2. `apps/backend/AGENTS.md`, `apps/ui/AGENTS.md` — per-app overlays with stack details and change checklists.
-3. `docs/ARCHITECTURE_STRATEGY.md` — why the three-layer design is shaped the way it is.
-4. Recommendation-proof campaign: `GOAL.md` retired 2026-07-18 (recover via git history). `apps/backend/NEEDS.md` and `RECOMMENDATION_VERDICT.md` are PROXY-SCORED — non-authoritative; do not cite as settled. Current record: `plans/trust-diet-closeout-2026-07.md`.
-5. `docs/history/` — archived (trust diet Wave 1). Restore via `git checkout archive/pre-trust-diet-2026-07 -- docs/history`.
-6. `docs/adr/` — Architecture Decision Records (schema stability, loudness units, recommendations contract).
+3. `.pi/README.md` + `.pi/settings.json` — Pi project harness (Claude Sonnet default; prompts under `.pi/prompts/`). Start Pi from this repo root only.
+4. `docs/ARCHITECTURE_STRATEGY.md` — why the three-layer design is shaped the way it is.
+5. `docs/PYPI_AUDIO_ANALYSIS_TOP20.md` + `docs/PYPI_AUDIO_ANALYSIS_NEXT20.md` — research-only evaluation of external PyPI audio-analysis packages (#1–#20 priority, #21–#40 second tier) vs ASA's non-Gemini stack (do not product-install without a corpus bake-off).
+6. Recommendation-proof campaign: `GOAL.md` retired 2026-07-18 (recover via git history). `apps/backend/NEEDS.md` and `RECOMMENDATION_VERDICT.md` are PROXY-SCORED — non-authoritative; do not cite as settled. Current record: `plans/trust-diet-closeout-2026-07.md`.
+7. `docs/history/` — archived (trust diet Wave 1). Restore via `git checkout archive/pre-trust-diet-2026-07 -- docs/history`.
+8. `docs/adr/` — Architecture Decision Records (schema stability, loudness units, recommendations contract).
 
 When information conflicts: `PURPOSE.md` > `CLAUDE.md` > per-app `AGENTS.md`.

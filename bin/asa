@@ -261,11 +261,105 @@ cmd_status() {
     echo "  [warn] apps/ui/.env missing or has no VITE_API_BASE_URL — cp apps/ui/.env.example apps/ui/.env"
   fi
 
+  # (f) Gemini backend selection (shell-side approximation of server._build_gemini_client)
+  #     Reads exported env first, then falls back to ~/.asa/env (same precedence as backend).
+  report_gemini_backend_status
+
   if [[ "$hard_fail" -ne 0 ]]; then
     err "Preflight found blocking issues (see [FAIL] above)."
     exit 1
   fi
   echo "Preflight OK."
+}
+
+# Resolve a KEY from the environment or ~/.asa/env (env wins). Empty if unset.
+read_asa_env_value() {
+  local key="$1"
+  local env_file="${HOME}/.asa/env"
+  local value=""
+  # Prefer already-exported shell vars (matches server._load_local_env).
+  value="${!key-}"
+  if [[ -n "$value" ]]; then
+    printf '%s' "$value"
+    return 0
+  fi
+  if [[ -f "$env_file" ]]; then
+    # Strip export/quotes; ignore comments. Last matching line wins.
+    value="$(python3 - "$env_file" "$key" <<'PY'
+from pathlib import Path
+import sys
+env_path = Path(sys.argv[1])
+key = sys.argv[2]
+found = ""
+for raw in env_path.read_text(encoding="utf-8").splitlines():
+    line = raw.strip()
+    if not line or line.startswith("#"):
+        continue
+    if line.startswith("export "):
+        line = line[len("export "):].strip()
+    if "=" not in line:
+        continue
+    k, _, v = line.partition("=")
+    k = k.strip()
+    if k != key:
+        continue
+    v = v.strip()
+    if len(v) >= 2 and v[0] == v[-1] and v[0] in "'\"":
+        v = v[1:-1]
+    found = v
+print(found, end="")
+PY
+)" || value=""
+  fi
+  printf '%s' "$value"
+}
+
+report_gemini_backend_status() {
+  local backend project api_key location
+  backend="$(read_asa_env_value ASA_GEMINI_BACKEND | tr '[:upper:]' '[:lower:]')"
+  project="$(read_asa_env_value GOOGLE_CLOUD_PROJECT)"
+  if [[ -z "$project" ]]; then
+    project="$(read_asa_env_value ASA_GCP_PROJECT)"
+  fi
+  api_key="$(read_asa_env_value GEMINI_API_KEY)"
+  location="$(read_asa_env_value GOOGLE_CLOUD_LOCATION)"
+  if [[ -z "$location" ]]; then
+    location="$(read_asa_env_value ASA_GCP_LOCATION)"
+  fi
+  if [[ -z "$location" ]]; then
+    location="global"
+  fi
+
+  if [[ -z "$backend" ]]; then
+    if [[ -n "$project" ]]; then
+      backend="vertex"
+    elif [[ -n "$api_key" ]]; then
+      backend="apistudio"
+    fi
+  fi
+
+  case "$backend" in
+    vertex)
+      if [[ -n "$project" ]]; then
+        echo "  [ok]   Gemini backend: vertex (${project} @ ${location}; from env or ~/.asa/env)"
+      else
+        echo "  [warn] Gemini backend: vertex selected but GOOGLE_CLOUD_PROJECT/ASA_GCP_PROJECT missing"
+      fi
+      ;;
+    apistudio)
+      if [[ -n "$api_key" ]]; then
+        echo "  [ok]   Gemini backend: apistudio (GEMINI_API_KEY set)"
+      else
+        echo "  [warn] Gemini backend: apistudio selected but GEMINI_API_KEY missing"
+      fi
+      ;;
+    "")
+      echo "  [warn] Gemini backend: NOT CONFIGURED — set ~/.asa/env (ASA_GEMINI_BACKEND=vertex + GOOGLE_CLOUD_PROJECT) or export GEMINI_API_KEY"
+      ;;
+    *)
+      echo "  [warn] Gemini backend: unknown ASA_GEMINI_BACKEND=${backend} (use vertex or apistudio)"
+      ;;
+  esac
 }
 
 cmd_bootstrap() {

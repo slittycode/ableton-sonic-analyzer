@@ -7,6 +7,12 @@
 - The app talks to the local `sonic-analyzer` backend. Gemini is backend-mediated; the UI does **not** import an AI SDK.
 - No repo-local `.cursorrules`, `.cursor/rules/`, or `.github/copilot-instructions.md` exist here as of 2026-05-30.
 
+## Design Direction (read first for UI work)
+
+- **Before any UI change**, read `DESIGN_DIRECTION.md` and glance at `design/reference/`.
+- Standing rule until the owner declares the UI settled: orange-first charcoal/terminal chrome, type sizes only via `text-role-*` / scale tokens, no raw field paths or uncalibrated CONF %, move toward the old screenshots a bit — not a full redesign.
+- Mechanical enforcement: `scripts/check-style-discipline.mjs` (runs under `npm run verify`).
+
 ## Working Style For Agents
 
 - Prefer small, reviewable edits over broad UI rewrites.

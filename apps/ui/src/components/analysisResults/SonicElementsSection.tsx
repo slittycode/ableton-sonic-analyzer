@@ -54,7 +54,7 @@ export function SonicElementsSection({
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm">{card.icon}</span>
+                      <span data-text-role="meta" className={textRoleClassName('meta')}>{card.icon}</span>
                       <h3
                         data-text-role="item-title"
                         className={textRoleClassName('item-title', 'truncate')}

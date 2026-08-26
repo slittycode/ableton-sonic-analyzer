@@ -1,7 +1,7 @@
 import type { Phase2Result } from '../../types';
 import { truncateAtSentenceBoundary } from '../analysisResultsViewModel';
 import { MetricTile, Panel, Pill } from '../ui';
-import { ResultsSectionHeader } from './shared';
+import { ResultsSectionHeader, textRoleClassName } from './shared';
 
 type ProjectSetup = NonNullable<Phase2Result['projectSetup']>;
 
@@ -29,7 +29,7 @@ export function ProjectSetupSection({ projectSetup }: { projectSetup: ProjectSet
         <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
           Session Goal
         </p>
-        <p className="mt-2 text-xs font-mono text-text-secondary leading-relaxed">
+        <p data-text-role="body" className={textRoleClassName('body', 'mt-2')}>
           {truncateAtSentenceBoundary(projectSetup.sessionGoal, 320)}
         </p>
       </Panel>

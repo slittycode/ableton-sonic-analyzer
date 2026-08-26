@@ -5,6 +5,9 @@ OpenHands, and others).
 
 **The canonical agent guidance for this repo is [`CLAUDE.md`](CLAUDE.md).** Read it first.
 
+**Start agents from this directory (`asa/`), not the parent `ableton-sonic-analyzer/` shelf.**
+Pi project config lives in [`.pi/`](.pi/) (see [`.pi/README.md`](.pi/README.md)).
+
 Order of precedence when guidance conflicts:
 
 1. [`PURPOSE.md`](PURPOSE.md) — why ASA exists and the non-negotiable quality invariants.

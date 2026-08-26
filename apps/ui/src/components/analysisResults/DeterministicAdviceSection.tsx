@@ -2,6 +2,7 @@ import type { Phase1Result } from '../../types';
 import { buildDeterministicAdvice } from '../../services/deterministicRecommendations';
 import { CitationBlock } from '../CitationBlock';
 import { DeviceRack, Pill } from '../ui';
+import { textRoleClassName } from './shared';
 
 // Phase-2-off fallback: clearly-labeled deterministic Live 12 advice mapped
 // from the measured spectrum and dynamics. Mounted by AnalysisResults only
@@ -32,12 +33,12 @@ export function DeterministicAdviceSection({ phase1 }: { phase1: Phase1Result })
             {cards.map((card) => (
               <li key={card.id} className="space-y-1.5 border-l-2 border-border-light pl-3">
                 <div className="flex flex-wrap items-baseline gap-2">
-                  <span className="font-mono text-xs uppercase tracking-wider text-accent">
+                  <span data-text-role="eyebrow" className={textRoleClassName('eyebrow', 'text-accent')}>
                     {card.device}
                   </span>
                   <span className="text-micro text-text-secondary">{card.title}</span>
                 </div>
-                <p className="text-xs leading-relaxed text-text-primary">{card.detail}</p>
+                <p data-text-role="body" className={textRoleClassName('body')}>{card.detail}</p>
                 {card.hedges.map((hedge) => (
                   <p key={hedge} className="text-micro text-warning">
                     {hedge}

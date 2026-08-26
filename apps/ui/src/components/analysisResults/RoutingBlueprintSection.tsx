@@ -74,7 +74,7 @@ export function RoutingBlueprintSection({
         <Panel variant="surface" padding="lg" className="space-y-2">
           <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">Routing Notes</p>
           {routingBlueprint.notes.map((note, index) => (
-            <p key={`${note}-${index}`} className="text-xs font-mono text-text-secondary leading-relaxed">
+            <p key={`${note}-${index}`} data-text-role="body" className={textRoleClassName('body')}>
               {truncateAtSentenceBoundary(note, 220)}
             </p>
           ))}

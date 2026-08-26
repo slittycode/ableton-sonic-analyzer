@@ -32,24 +32,21 @@
   --color-warning: #ffb800;
   --color-error: #ff3333;
 
-  /* --- Device chrome (Live 12 mimicry) --- */
-  --shadow-device-face: inset 0 1px 0 rgba(255, 255, 255, 0.04),
-                        inset 0 -1px 0 rgba(0, 0, 0, 0.35);
-  --shadow-device-rack: 0 2px 6px rgba(0, 0, 0, 0.35),
-                        0 1px 0 rgba(255, 255, 255, 0.02) inset;
-  --shadow-device-active: 0 0 0 1px rgba(255, 136, 0, 0.35),
-                          0 0 12px rgba(255, 136, 0, 0.22);
-  --shadow-device-success: 0 0 0 1px rgba(0, 255, 157, 0.25);
-  --shadow-device-error: 0 0 0 1px rgba(255, 51, 51, 0.32),
-                         0 0 10px rgba(255, 51, 51, 0.18);
+  /* --- Device chrome (flat Live panels — no beveled/gradient edges) ---
+     Owner preference 2026-07-18: kill gradient faces + inset highlight lips.
+     Status is a 1px ring only; no soft outer glow. Token names kept so
+     components/stories keep resolving; values are solid ladder colors. */
+  --shadow-device-face: none;
+  --shadow-device-rack: none;
+  --shadow-device-active: 0 0 0 1px rgba(255, 136, 0, 0.45);
+  --shadow-device-success: 0 0 0 1px rgba(0, 255, 157, 0.30);
+  --shadow-device-error: 0 0 0 1px rgba(255, 51, 51, 0.40);
 
-  /* --- Gradients (Live 12 device header band, face) --- */
-  --gradient-title-strip: linear-gradient(180deg, #353535 0%, #2c2c2c 100%);
-  --gradient-title-strip-active: linear-gradient(180deg,
-                                  rgba(255, 136, 0, 0.12) 0%,
-                                  rgba(255, 136, 0, 0.04) 100%);
-  --gradient-device-face: linear-gradient(180deg, #424242 0%, #3a3a3a 100%);
-  --gradient-rail-bg: linear-gradient(180deg, #1f1f1f 0%, #181818 100%);
+  /* Solid fills (legacy --gradient-* names; not gradients anymore). */
+  --gradient-title-strip: #2c2c2c;
+  --gradient-title-strip-active: #33281c;
+  --gradient-device-face: #3c3c3c;
+  --gradient-rail-bg: #1a1a1a;
 
   /* --- LED palette --- */
   --color-led-idle: #4a4a4a;
@@ -237,13 +234,25 @@ body {
 /* `.ableton-panel`, `.ableton-device`, and `.ableton-header` were retired
    by the D.* migration — every consumer now uses the canonical primitives
    from components/ui/ (Panel, DeviceRack, SectionHeader). `.ableton-shell`
-   and `.ableton-toolbar` stay because App.tsx:952,956 still consumes them
-   for the outer app chrome. */
+   and `.ableton-toolbar` stay for App.tsx outer chrome.
+   W1-01: flatter Live device shadow (was soft marketing 18/40 drop). */
 
 .ableton-shell {
   background-color: var(--color-bg-panel);
   border: 1px solid var(--color-border);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.18);
+  box-shadow: none;
+}
+
+/* Dual-rack instrument row: DeviceRack body must fill equal column height. */
+[data-testid="dual-rack"] .device-rack {
+  min-height: 100%;
+}
+
+[data-testid="dual-rack"] .device-rack__body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .ableton-toolbar {
@@ -262,23 +271,22 @@ body {
     background: var(--gradient-device-face);
     border: 1px solid var(--color-border);
     border-radius: 2px;
-    box-shadow: var(--shadow-device-rack), var(--shadow-device-face);
+    box-shadow: none;
     display: flex;
     flex-direction: column;
     overflow: hidden;
   }
   .device-rack--active {
-    box-shadow: var(--shadow-device-rack), var(--shadow-device-face), var(--shadow-device-active);
+    box-shadow: var(--shadow-device-active);
   }
   .device-rack--success {
-    box-shadow: var(--shadow-device-rack), var(--shadow-device-face), var(--shadow-device-success);
+    box-shadow: var(--shadow-device-success);
   }
   .device-rack--warning {
-    box-shadow: var(--shadow-device-rack), var(--shadow-device-face),
-                0 0 0 1px rgba(255, 184, 0, 0.32);
+    box-shadow: 0 0 0 1px rgba(255, 184, 0, 0.32);
   }
   .device-rack--error {
-    box-shadow: var(--shadow-device-rack), var(--shadow-device-face), var(--shadow-device-error);
+    box-shadow: var(--shadow-device-error);
   }
 
   .device-rack__title-strip {

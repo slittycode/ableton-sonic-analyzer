@@ -219,7 +219,7 @@ export function MixChainSection({
                               className="border border-border rounded-sm px-2 py-1 bg-bg-panel/40"
                             >
                               <p className="text-meta font-mono uppercase text-text-secondary">{parameter.label}</p>
-                              <p className="text-xs font-mono text-text-primary font-bold">{parameter.value}</p>
+                              <p data-text-role="value" className={textRoleClassName('value', 'font-mono font-bold')}>{parameter.value}</p>
                             </div>
                           ))}
                         </div>
@@ -231,7 +231,7 @@ export function MixChainSection({
 
                         <div className="border border-accent/20 bg-accent/5 rounded-sm px-2 py-2">
                           <p className="text-meta font-mono text-accent uppercase tracking-wide">PRO TIP</p>
-                          <p className="text-xs font-mono text-text-secondary mt-1 leading-relaxed">
+                          <p data-text-role="body" className={textRoleClassName('body', 'mt-1')}>
                             {truncateAtSentenceBoundary(card.proTip, 320)}
                           </p>
                         </div>

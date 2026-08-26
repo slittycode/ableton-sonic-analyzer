@@ -1,0 +1,17 @@
+{
+  "date": "2026-07-18",
+  "projectRoot": "/Users/christiansmith/code/projects/ableton-sonic-analyzer/asa",
+  "uiRoot": "apps/ui",
+  "findings": {
+    "designMd": null,
+    "designDirection": "apps/ui/DESIGN_DIRECTION.md",
+    "fontStack": "Inter + JetBrains Mono (Google Fonts import in apps/ui/src/index.css)",
+    "palette": "Ableton-inspired flat dark hex tokens in @theme (charcoal panels, #ff8800 accent)",
+    "motion": "motion ^12.35.0 with MotionConfig reducedMotion=user",
+    "spacing": "4px-grid semantic device/rack tokens in index.css",
+    "framework": "React 19 + Vite 6 + Tailwind v4 (@tailwindcss/vite)",
+    "typeScale": "locked text-pico…text-value-xl + style-discipline script"
+  },
+  "preserve": ["font stack", "orange-first Ableton palette", "type-scale lock", "DESIGN_DIRECTION.md constraints", "device-rack chrome"],
+  "introduceOnlyWithExplicitBrief": ["macrostructure", "page-level redesign", "new marketing surfaces"]
+}
