@@ -1,10 +1,12 @@
 import { useMemo } from 'react';
+import { getTextRoleClassName } from '../../utils/displayText';
 
 import type { InterpretationValidationWarning } from '../../types';
 import {
   formatDroppedValue,
   groupInterpretationWarnings,
 } from '../analysisResultsViewModel';
+import { textRoleClassName } from './shared';
 
 export function InterpretationWarningsSection({
   validationWarnings,
@@ -46,11 +48,16 @@ export function InterpretationWarningsSection({
       <div className="flex items-center justify-between gap-3">
         <div>
           <h2
-            className={`text-sm font-mono uppercase tracking-wider ${
-              isMixed
-                ? 'text-text-primary'
-                : allValidationWarningsAreAdjustments ? 'text-accent' : 'text-warning'
-            }`}
+            data-text-role="subsection-title"
+            className={
+              `${getTextRoleClassName('subsection-title')} ${
+                isMixed
+                  ? 'text-text-primary'
+                  : allValidationWarningsAreAdjustments
+                    ? 'text-accent'
+                    : 'text-warning'
+              }`
+            }
           >
             {isMixed
               ? 'Interpretation Notes'
@@ -128,7 +135,7 @@ export function InterpretationWarningsSection({
               >
                 {warning.title}
               </p>
-              <p className="text-xs font-mono text-text-secondary leading-relaxed">
+              <p data-text-role="body" className={textRoleClassName('body')}>
                 {warning.message}
               </p>
             </div>

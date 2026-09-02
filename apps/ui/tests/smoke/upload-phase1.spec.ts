@@ -201,4 +201,9 @@ test('upload + backend phase1 success renders analysis results', async ({ page }
   await expect(page.getByText('Analysis Results')).toBeVisible();
   await expect(page.getByText('System Diagnostics')).toBeVisible();
   await expect(page.getByText('126', { exact: true }).first()).toBeVisible();
+
+  // Tripwire: citation/formatting bugs must never leak "[object Object]" into results DOM.
+  const resultsRoot = page.getByTestId('analysis-results-root');
+  await expect(resultsRoot).toBeVisible();
+  await expect(resultsRoot).not.toContainText('[object Object]');
 });

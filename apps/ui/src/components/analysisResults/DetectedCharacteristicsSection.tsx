@@ -55,7 +55,7 @@ export function DetectedCharacteristicsSection({
                 ) : null;
               })()}
             </div>
-            <p className="text-xs text-text-secondary leading-relaxed font-mono opacity-80 border-t border-border/50 pt-2 mt-2 pl-2">
+            <p data-text-role="body" className={textRoleClassName('body', 'opacity-80 border-t border-border/50 pt-2 mt-2 pl-2')}>
               {truncateAtSentenceBoundary(item.explanation, 600)}
             </p>
           </Panel>

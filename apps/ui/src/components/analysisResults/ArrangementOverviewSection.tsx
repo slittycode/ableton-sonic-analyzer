@@ -4,7 +4,7 @@ import {
   buildArrangementViewModel,
   truncateBySentenceCount,
 } from '../analysisResultsViewModel';
-import { Collapsible, ResultsSectionHeader } from './shared';
+import { Collapsible, ResultsSectionHeader, textRoleClassName } from './shared';
 
 // Arrangement-exclusive helpers, moved verbatim out of the AnalysisResults
 // monolith (Phase 5 split) alongside the section they serve.
@@ -42,7 +42,7 @@ export function ArrangementOverviewSection({
       />
 
       {arrangement.summary && (
-        <p className="text-xs text-text-secondary font-mono leading-relaxed opacity-80">
+        <p data-text-role="body" className={textRoleClassName('body', 'opacity-80')}>
           {arrangement.summary}
         </p>
       )}
@@ -94,7 +94,7 @@ export function ArrangementOverviewSection({
               </span>
               <div className="h-px bg-border/60 flex-1" />
             </div>
-            <p className="text-xs text-text-secondary font-mono leading-relaxed">
+            <p data-text-role="body" className={textRoleClassName('body')}>
               {arrangement.noveltyNotes}
             </p>
           </div>
@@ -128,8 +128,8 @@ export function ArrangementOverviewSection({
                   className="w-full flex items-center justify-between gap-3 px-3 py-2 text-left hover:bg-bg-card transition-colors"
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-xs">{isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}</span>
-                    <span className="text-xs font-mono text-text-primary truncate">{segment.name}</span>
+                    <span data-text-role="meta" className={textRoleClassName('meta')}>{isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}</span>
+                    <span data-text-role="item-title" className={textRoleClassName('item-title', 'truncate')}>{segment.name}</span>
                     <span
                       className="text-meta font-mono px-1.5 py-0.5 rounded border whitespace-nowrap"
                       style={{
@@ -155,7 +155,7 @@ export function ArrangementOverviewSection({
 
                 <Collapsible isOpen={isOpen}>
                   <div className="px-3 pb-3 pt-1 space-y-2 border-t border-border/60">
-                    <p className="text-xs text-text-secondary font-mono leading-relaxed">
+                    <p data-text-role="body" className={textRoleClassName('body')}>
                       {truncateBySentenceCount(segment.description, 4)}
                     </p>
                     {segment.spectralNote && (

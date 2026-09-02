@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
 import { Phase2ConsistencyReport } from './Phase2ConsistencyReport';
-import { LedIndicator } from './ui';
+import { DeviceRack, Pill } from './ui';
 import { BackendTimingDiagnostics, DiagnosticLogEntry, DiagnosticLogStatus } from '../types';
 import { assertNever } from '../utils/assertNever';
 
@@ -14,17 +14,19 @@ function statusLabel(status: DiagnosticLogStatus | undefined): string {
   return (status ?? 'success').toUpperCase();
 }
 
-function statusClass(status: DiagnosticLogStatus | undefined): string {
-  if (status === undefined) return 'text-success border-success/30 bg-success/10';
+function statusPillTone(
+  status: DiagnosticLogStatus | undefined,
+): React.ComponentProps<typeof Pill>['tone'] {
+  if (status === undefined) return 'success';
   switch (status) {
     case 'running':
-      return 'text-accent border-accent/30 bg-accent/10';
+      return 'accent';
     case 'error':
-      return 'text-error border-error/30 bg-error/10';
+      return 'error';
     case 'skipped':
-      return 'text-warning border-warning/30 bg-warning/10';
+      return 'warning';
     case 'success':
-      return 'text-success border-success/30 bg-success/10';
+      return 'success';
     default:
       return assertNever(status);
   }
@@ -53,6 +55,15 @@ function formatTimings(timings: BackendTimingDiagnostics): string {
   ].join(' | ');
 }
 
+function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex justify-between gap-3 min-w-0">
+      <span className="text-text-muted shrink-0">{label}</span>
+      <span className="text-text-primary truncate text-right">{value}</span>
+    </div>
+  );
+}
+
 export function DiagnosticLog({ logs, defaultExpanded }: DiagnosticLogProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded ?? true);
 
@@ -63,117 +74,119 @@ export function DiagnosticLog({ logs, defaultExpanded }: DiagnosticLogProps) {
   if (logs.length === 0) return null;
 
   const showRunningCursor = logs.some((log) => (log.status ?? 'success') === 'running');
+  const rackStatus = showRunningCursor
+    ? 'active'
+    : logs.some((log) => log.status === 'error')
+      ? 'error'
+      : 'success';
 
   return (
-    <div className="mt-12 space-y-4">
-      <button
-        onClick={() => setIsExpanded((prev) => !prev)}
-        className="w-full text-sm font-mono uppercase tracking-wider text-text-secondary flex items-center hover:text-text-primary transition-colors"
-        aria-expanded={isExpanded}
-        aria-label="Toggle diagnostic log"
+    // W1-05: terminal diagnostics as DeviceRack — flat face, mono log density,
+    // Live title strip (no soft cards / left accent stripes).
+    <div className="mt-6" data-testid="system-diagnostics">
+      <DeviceRack
+        name="System Diagnostics"
+        status={rackStatus}
+        density="dense"
+        action={
+          <button
+            type="button"
+            onClick={() => setIsExpanded((prev) => !prev)}
+            className="text-meta font-mono uppercase tracking-[0.14em] text-text-muted hover:text-text-primary transition-colors"
+            aria-expanded={isExpanded}
+            aria-label="Toggle diagnostic log"
+          >
+            {isExpanded ? '▾' : '▸'} {logs.length} {logs.length === 1 ? 'entry' : 'entries'}
+          </button>
+        }
       >
-        <LedIndicator status="active" className="mr-2" />
-        System Diagnostics
-        <span className="ml-2 text-meta">{isExpanded ? '▾' : '▸'}</span>
-        <span className="ml-auto text-meta text-text-secondary/50">{logs.length} {logs.length === 1 ? 'entry' : 'entries'}</span>
-      </button>
-      {isExpanded && (
-        <div className="bg-bg-surface-darker border border-border rounded-sm p-4 font-mono text-xs overflow-x-auto relative shadow-inner">
-          <div className="space-y-4 relative z-10">
-            {logs.map((log, idx) => {
-              const estimateRange = formatEstimateRange(log.estimateLowMs, log.estimateHighMs);
-              return (
-                <div
-                  key={idx}
-                  className="space-y-2 border-l-2 border-border pl-3 ml-1 hover:border-accent/50 transition-colors group"
-                >
-                  <div className="flex flex-wrap items-center gap-3 text-accent/80 group-hover:text-accent">
-                    <span className="opacity-50">[{new Date(log.timestamp).toLocaleTimeString()}]</span>
-                    <span className="font-bold tracking-wide uppercase">&gt;&gt; {log.phase}</span>
-                    <span className={`px-2 py-1 rounded-sm border text-meta ${statusClass(log.status)}`}>
-                      {statusLabel(log.status)}
-                    </span>
+        {/* Keep visible label for smoke that searches "System Diagnostics" in page;
+            title strip already has it; action is collapse only. */}
+        {!isExpanded ? (
+          <button
+            type="button"
+            onClick={() => setIsExpanded(true)}
+            className="w-full text-left text-meta font-mono uppercase tracking-[0.14em] text-text-muted hover:text-text-secondary py-1"
+          >
+            Expand log
+          </button>
+        ) : (
+          <div className="bg-bg-surface-darker border border-border font-mono text-meta overflow-x-auto">
+            <div className="divide-y divide-border/80">
+              {logs.map((log, idx) => {
+                const estimateRange = formatEstimateRange(log.estimateLowMs, log.estimateHighMs);
+                return (
+                  <div key={idx} className="px-3 py-2.5 space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-2 text-accent">
+                      <span className="text-text-muted">
+                        [{new Date(log.timestamp).toLocaleTimeString()}]
+                      </span>
+                      <span className="font-medium tracking-wide uppercase text-text-primary">
+                        &gt;&gt; {log.phase}
+                      </span>
+                      <Pill tone={statusPillTone(log.status)} size="xs">
+                        {statusLabel(log.status)}
+                      </Pill>
+                    </div>
+                    {log.message && (
+                      <p className="text-text-secondary leading-relaxed whitespace-pre-line">
+                        {log.message}
+                      </p>
+                    )}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-0.5 text-body-sm">
+                      <MetaRow label="MODEL:" value={log.model} />
+                      <MetaRow
+                        label="EXEC_TIME:"
+                        value={(log.status ?? 'success') === 'running' ? '--' : `${log.durationMs}ms`}
+                      />
+                      <MetaRow label="TOKENS_IN:" value={log.promptLength} />
+                      <MetaRow label="TOKENS_OUT:" value={log.responseLength} />
+                      {log.requestId && (
+                        <div className="sm:col-span-2">
+                          <MetaRow label="REQUEST_ID:" value={log.requestId} />
+                        </div>
+                      )}
+                      {log.errorCode && <MetaRow label="ERROR_CODE:" value={log.errorCode} />}
+                      {estimateRange && <MetaRow label="ESTIMATE:" value={estimateRange} />}
+                      {idx === 0 && (
+                        <>
+                          <div className="sm:col-span-2">
+                            <MetaRow label="FILE:" value={log.audioMetadata.name} />
+                          </div>
+                          <MetaRow
+                            label="SIZE:"
+                            value={`${(log.audioMetadata.size / 1024).toFixed(1)} KB`}
+                          />
+                          <MetaRow label="TYPE:" value={log.audioMetadata.type} />
+                        </>
+                      )}
+                    </div>
+                    {log.timings && (
+                      <p className="text-text-muted whitespace-nowrap overflow-x-auto">
+                        <span className="text-text-muted">TIMINGS:</span>{' '}
+                        <span className="text-text-secondary">{formatTimings(log.timings)}</span>
+                      </p>
+                    )}
+                    {log.stageKey === 'interpretation' && log.validationReport && (
+                      <div className="pt-1">
+                        <Phase2ConsistencyReport report={log.validationReport} />
+                      </div>
+                    )}
+                    {log.stageKey === 'interpretation' && log.validationError && (
+                      <div className="text-meta font-mono uppercase tracking-wide text-error">
+                        CONSISTENCY CHECK FAILED: {log.validationError}
+                      </div>
+                    )}
                   </div>
-                  {log.message && (
-                    <p className="pl-2 text-text-primary/90 leading-relaxed whitespace-pre-line">
-                      {log.message}
-                    </p>
-                  )}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-1 text-text-secondary/70 pl-2">
-                    <div className="flex justify-between gap-4">
-                      <span className="opacity-50">MODEL:</span>
-                      <span className="text-text-primary">{log.model}</span>
-                    </div>
-                    <div className="flex justify-between gap-4">
-                      <span className="opacity-50">EXEC_TIME:</span>
-                      <span className="text-text-primary">{(log.status ?? 'success') === 'running' ? '--' : `${log.durationMs}ms`}</span>
-                    </div>
-                    <div className="flex justify-between gap-4">
-                      <span className="opacity-50">TOKENS_IN:</span>
-                      <span className="text-text-primary">{log.promptLength}</span>
-                    </div>
-                    <div className="flex justify-between gap-4">
-                      <span className="opacity-50">TOKENS_OUT:</span>
-                      <span className="text-text-primary">{log.responseLength}</span>
-                    </div>
-                    {log.requestId && (
-                      <div className="flex justify-between gap-4 col-span-1 md:col-span-2">
-                        <span className="opacity-50">REQUEST_ID:</span>
-                        <span className="text-text-primary truncate">{log.requestId}</span>
-                      </div>
-                    )}
-                    {log.errorCode && (
-                      <div className="flex justify-between gap-4">
-                        <span className="opacity-50">ERROR_CODE:</span>
-                        <span className="text-text-primary">{log.errorCode}</span>
-                      </div>
-                    )}
-                    {estimateRange && (
-                      <div className="flex justify-between gap-4">
-                        <span className="opacity-50">ESTIMATE:</span>
-                        <span className="text-text-primary">{estimateRange}</span>
-                      </div>
-                    )}
-                    {idx === 0 && (
-                      <>
-                        <div className="flex justify-between gap-4 col-span-1 md:col-span-2">
-                          <span className="opacity-50">FILE:</span>
-                          <span className="text-text-primary truncate">{log.audioMetadata.name}</span>
-                        </div>
-                        <div className="flex justify-between gap-4">
-                          <span className="opacity-50">SIZE:</span>
-                          <span className="text-text-primary">{(log.audioMetadata.size / 1024).toFixed(1)} KB</span>
-                        </div>
-                        <div className="flex justify-between gap-4">
-                          <span className="opacity-50">TYPE:</span>
-                          <span className="text-text-primary">{log.audioMetadata.type}</span>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                  {log.timings && (
-                    <div className="pl-2 text-text-secondary/70 whitespace-nowrap">
-                      <span className="opacity-50">TIMINGS:</span>{' '}
-                      <span className="text-text-primary">{formatTimings(log.timings)}</span>
-                    </div>
-                  )}
-                  {log.stageKey === 'interpretation' && log.validationReport && (
-                    <div className="pl-2 pt-2">
-                      <Phase2ConsistencyReport report={log.validationReport} />
-                    </div>
-                  )}
-                  {log.stageKey === 'interpretation' && log.validationError && (
-                    <div className="pl-2 pt-2 text-meta font-mono uppercase tracking-wide text-error">
-                      CONSISTENCY CHECK FAILED: {log.validationError}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-            {showRunningCursor && <div className="animate-pulse text-accent/50 pl-1">_</div>}
+                );
+              })}
+              {showRunningCursor && (
+                <div className="px-3 py-1 text-accent/60 animate-pulse">_</div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </DeviceRack>
     </div>
   );
 }

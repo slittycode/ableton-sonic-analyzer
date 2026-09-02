@@ -18,8 +18,7 @@ const buttonVariants = cva(
         primary: [
           'bg-bg-panel border border-accent/60 text-accent',
           'hover:bg-accent hover:text-bg-app',
-          'shadow-[0_0_10px_rgba(255,136,0,0.15)]',
-          'hover:shadow-[0_0_18px_rgba(255,136,0,0.4)]',
+          // Flat only — no soft orange glow edges (owner 2026-07-18).
         ],
         secondary: [
           'bg-bg-panel border border-border text-text-secondary',

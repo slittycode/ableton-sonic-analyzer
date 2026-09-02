@@ -138,6 +138,39 @@ describe('formatCitedValue', () => {
     expect(formatCitedValue('bpm', null)).toBe('');
     expect(formatCitedValue('bpm', undefined)).toBe('');
   });
+
+  it('summarizes chord timelines without [object Object]', () => {
+    const timeline = [
+      { startSec: 0, endSec: 2, label: 'Fm', confidence: 0.9 },
+      { startSec: 2, endSec: 4, label: 'A♭', confidence: 0.8 },
+      { startSec: 4, endSec: 6, label: 'Cm', confidence: 0.85 },
+      { startSec: 6, endSec: 8, label: 'B♭', confidence: 0.7 },
+    ];
+    // 4 entries → first 3 labels + count
+    expect(formatCitedValue('chordDetail.chordTimeline', timeline)).toBe(
+      'Fm → A♭ → Cm · 4 entries',
+    );
+    expect(formatCitedValue('chordDetail.chordTimeline', timeline)).not.toContain('[object Object]');
+  });
+
+  it('summarizes object arrays as entry counts', () => {
+    expect(
+      formatCitedValue('someDetail.items', [{ a: 1 }, { b: 2 }, { c: 3 }]),
+    ).toBe('3 entries');
+    expect(formatCitedValue('empty.list', [])).toBe('0 entries');
+  });
+
+  it('joins primitive arrays compactly', () => {
+    expect(formatCitedValue('chordDetail.dominantChords', ['Cm', 'Eb', 'Gm'])).toBe(
+      'Cm, Eb, Gm',
+    );
+    expect(formatCitedValue('vals', [1, 2, 3, 4, 5])).toBe('1, 2, 3, 4, … (+1)');
+  });
+
+  it('never renders [object Object] for plain objects', () => {
+    expect(formatCitedValue('kickDetail', { fundamentalHz: 60 })).toBe('—');
+    expect(formatCitedValue('anything', { nested: true })).not.toContain('[object Object]');
+  });
 });
 
 describe('pickPhase1Confidence', () => {

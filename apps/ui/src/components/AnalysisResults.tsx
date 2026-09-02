@@ -9,10 +9,17 @@ import {
   SpectralArtifacts,
   StemSummaryResult,
 } from '../types';
-import { FileJson, FileText } from 'lucide-react';
+import { Camera, FileJson, FileText } from 'lucide-react';
 import { motion } from 'motion/react';
 import { assertNever } from '../utils/assertNever';
-import { downloadFile, generateMarkdown } from '../utils/exportUtils';
+import {
+  buildExportFileName,
+  buildExportPayload,
+  downloadFile,
+  generateMarkdown,
+  type ExportSourceMeta,
+} from '../utils/exportUtils';
+
 import type { ValidationReport } from '../services/phase2Validator';
 import { Phase2ConsistencyReport } from './Phase2ConsistencyReport';
 import { isBrowserLoudnessConfigEnabled } from '../config';
@@ -111,6 +118,8 @@ export interface AnalysisResultsProps {
    * Pass `null`/`undefined` to disable the tracker (no checkboxes shown).
    */
   audioContentHash?: string | null;
+  /** Full source-audio size in bytes from the run snapshot (export identity). */
+  sourceSizeBytes?: number | null;
 }
 
 const LOW_CHORD_CONFIDENCE_THRESHOLD = 0.5;
@@ -207,7 +216,7 @@ function SourcesToggle({ sources, showSources, onToggle }: { sources?: string[];
         {showSources ? '▼' : '▶'} Sources
       </Button>
       <Collapsible isOpen={showSources}>
-        <div className="mt-2 text-xs text-text-secondary/70 font-mono">
+        <div data-text-role="meta" className={textRoleClassName('meta', 'mt-2 text-text-secondary/70 font-mono')}>
           <span className="text-meta uppercase tracking-wide text-text-secondary/50">Based on:</span>
           <ul className="mt-1 space-y-0.5">
             {sources.map((source, idx) => (
@@ -273,12 +282,16 @@ export function AnalysisResults({
   interpretationStatus = null,
   onReanalyzeWithStemAware,
   audioContentHash = null,
+  sourceSizeBytes = null,
 }: AnalysisResultsProps) {
   const [openArrangement, setOpenArrangement] = useState<Record<string, boolean>>({});
   const [openSonic, setOpenSonic] = useState<Set<string>>(new Set());
   const [openMix, setOpenMix] = useState<Record<string, boolean>>({});
   const [openPatch, setOpenPatch] = useState<Record<string, boolean>>({});
   const [showSources, setShowSources] = useState<Record<string, boolean>>({});
+  const [uiCaptureState, setUiCaptureState] = useState<'idle' | 'capturing' | 'error'>('idle');
+  const [uiCaptureError, setUiCaptureError] = useState<string | null>(null);
+  const [uiCaptureLabel, setUiCaptureLabel] = useState<string>('Download UI');
 
   // Audit Finding #14 + #15: applied-recommendation set, lazy-initialized
   // from localStorage on first render (keyed by the audio content hash).
@@ -309,18 +322,70 @@ export function AnalysisResults({
 
   if (!phase1) return null;
 
+  const exportSource: ExportSourceMeta = {
+    filename: sourceFileName,
+    contentSha256: audioContentHash,
+    sizeBytes: sourceSizeBytes,
+    durationSeconds:
+      typeof phase1.durationSeconds === 'number' ? phase1.durationSeconds : null,
+    analyzedAt: new Date().toISOString(),
+    phase1Version: phase1.phase1Version ?? null,
+  };
+
   const handleExportJSON = () => {
-    const data = {
-      phase1,
-      phase2,
-      exportedAt: new Date().toISOString(),
-    };
-    downloadFile(JSON.stringify(data, null, 2), 'track-analysis.json', 'application/json');
+    const data = buildExportPayload(phase1, phase2, exportSource);
+    downloadFile(
+      JSON.stringify(data, null, 2),
+      buildExportFileName('json', exportSource),
+      'application/json',
+    );
   };
 
   const handleExportMD = () => {
-    const markdown = generateMarkdown(phase1, phase2, phase2StatusMessage);
-    downloadFile(markdown, 'track-analysis.md', 'text/markdown');
+    const markdown = generateMarkdown(phase1, phase2, phase2StatusMessage, exportSource);
+    downloadFile(markdown, buildExportFileName('md', exportSource), 'text/markdown');
+  };
+
+  // Plain async handler (not useCallback) — lives after the phase1 early-return
+  // so it can close over exportSource without violating hooks order.
+  // Capture libs (html-to-image + jspdf) are dynamic-imported on click so the
+  // initial AnalysisResults chunk stays lean.
+  // Expected duration: a few seconds (section-by-section). Hard timeout 25s.
+  const handleExportUi = async () => {
+    if (uiCaptureState === 'capturing') return;
+    setUiCaptureState('capturing');
+    setUiCaptureError(null);
+    setUiCaptureLabel('Capturing…');
+    try {
+      const { captureAndDownloadResultsUi } = await import('../utils/uiCapture');
+      const result = await captureAndDownloadResultsUi({
+        source: exportSource,
+        format: 'pdf',
+        pixelRatio: 1,
+        timeoutMs: 25_000,
+        onProgress: (progress) => {
+          setUiCaptureLabel(progress.label);
+        },
+      });
+      setUiCaptureLabel(
+        result.elapsedMs < 1000
+          ? 'Download UI'
+          : `Download UI (${(result.elapsedMs / 1000).toFixed(1)}s)`,
+      );
+      setUiCaptureState('idle');
+      // Reset label after a beat so the timing hint doesn't stick forever.
+      window.setTimeout(() => setUiCaptureLabel('Download UI'), 4_000);
+    } catch (error) {
+      const message =
+        error && typeof error === 'object' && 'name' in error && (error as { name: string }).name === 'UiCaptureError'
+          ? (error as Error).message
+          : error instanceof Error
+            ? error.message
+            : 'UI capture failed.';
+      setUiCaptureError(message);
+      setUiCaptureState('error');
+      setUiCaptureLabel('Download UI');
+    }
   };
 
   const toggleArrangement = (id: string) => {
@@ -481,7 +546,7 @@ export function AnalysisResults({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
       data-testid="analysis-results-root"
-      className="space-y-12"
+      className="space-y-6"
     >
       <div className="flex flex-col gap-2 pb-6 border-b border-border relative">
         <SectionHeader
@@ -511,9 +576,30 @@ export function AnalysisResults({
               >
                 Download report
               </Button>
+              <Button
+                variant="secondary"
+                size="md"
+                leadingIcon={<Camera className="w-3 h-3" />}
+                onClick={() => {
+                  void handleExportUi();
+                }}
+                disabled={uiCaptureState === 'capturing'}
+                data-testid="analysis-export-ui"
+                title="Capture the on-screen results as a multi-page PDF (high-res, better than Print→PDF)"
+              >
+                {uiCaptureLabel}
+              </Button>
             </>
           }
         />
+        {uiCaptureError && (
+          <p
+            data-testid="analysis-export-ui-error"
+            className={textRoleClassName('meta', 'pl-4 text-error')}
+          >
+            UI capture failed: {uiCaptureError}
+          </p>
+        )}
         {headerSubtitle && (
           <p
             data-text-role="meta"
@@ -563,7 +649,7 @@ export function AnalysisResults({
             data-testid="consistency-report"
             className="space-y-3 rounded-sm border border-border bg-bg-card p-4"
           >
-            <h2 className="text-sm font-mono uppercase tracking-wider text-text-primary">
+            <h2 data-text-role="subsection-title" className={getTextRoleClassName('subsection-title')}>
               Chain-of-Custody Check
             </h2>
             <Phase2ConsistencyReport report={phase2ConsistencyReport} hideWhenClean />

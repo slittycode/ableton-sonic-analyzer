@@ -5,6 +5,21 @@
 .claude/worktrees/
 .superpowers/
 
+# Pi local runtime (keep .pi/settings.json, prompts, README tracked)
+.pi/sessions/
+.pi/npm/
+.pi/cache/
+
+# Agent sandbox junk (never product)
+agent-eval/
+.tmp-agent/
+asa-scratch/
+
+# Machine-local skill links (absolute or dependent on an absolute target)
+.agents/skills/hallmark
+.claude/skills/hallmark
+.factory/skills/hallmark
+
 apps/ui/node_modules/
 apps/ui/build/
 apps/ui/dist/

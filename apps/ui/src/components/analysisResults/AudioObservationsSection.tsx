@@ -1,7 +1,7 @@
 import type { Phase2Result } from '../../types';
 import { truncateAtSentenceBoundary } from '../analysisResultsViewModel';
 import { Panel, Pill } from '../ui';
-import { ResultsSectionHeader } from './shared';
+import { ResultsSectionHeader, textRoleClassName } from './shared';
 
 type AudioObservations = NonNullable<Phase2Result['audioObservations']>;
 
@@ -28,7 +28,7 @@ export function AudioObservationsSection({
         <p className="text-meta font-mono uppercase tracking-[0.18em] text-accent">
           Sound Design Fingerprint
         </p>
-        <p className="text-xs font-mono text-text-secondary leading-relaxed">
+        <p data-text-role="body" className={textRoleClassName('body')}>
           {truncateAtSentenceBoundary(audioObservations.soundDesignFingerprint, 320)}
         </p>
       </Panel>
@@ -45,7 +45,7 @@ export function AudioObservationsSection({
               <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
                 {item.element}
               </p>
-              <p className="text-xs font-mono text-text-secondary leading-relaxed">
+              <p data-text-role="body" className={textRoleClassName('body')}>
                 {truncateAtSentenceBoundary(item.description, 220)}
               </p>
             </Panel>
@@ -75,7 +75,7 @@ export function AudioObservationsSection({
         <p className="text-meta font-mono uppercase tracking-[0.18em] text-text-secondary">
           Mix Context
         </p>
-        <p className="text-xs font-mono text-text-secondary leading-relaxed">
+        <p data-text-role="body" className={textRoleClassName('body')}>
           {truncateAtSentenceBoundary(audioObservations.mixContext, 280)}
         </p>
       </Panel>

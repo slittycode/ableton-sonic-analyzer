@@ -3,7 +3,7 @@ import { buildReconstructionBrief } from '../../services/reconstructionBrief';
 import { ConfidenceBandBadge } from '../sessionMusician/ConfidenceBandBadge';
 import { PhaseSourceBadge } from '../PhaseSourceBadge';
 import { Pill } from '../ui';
-import { ResultsSectionHeader } from './shared';
+import { ResultsSectionHeader, textRoleClassName } from './shared';
 
 // Always-on plain-English summary of the measured fundamentals — deterministic
 // (DSP only), so it renders even when Phase 2 interpretation is disabled or
@@ -27,13 +27,10 @@ export function ReconstructionBriefSection({ phase1 }: { phase1: Phase1Result })
             <Pill tone="neutral" size="xs">
               {line.label}
             </Pill>
-            <span className="min-w-0 flex-1 text-xs text-text-primary">{line.text}</span>
+            <span data-text-role="body" className={textRoleClassName('body', 'min-w-0 flex-1 text-text-primary')}>{line.text}</span>
             {line.confidence !== null && (
               <ConfidenceBandBadge confidence={line.confidence} variant="compact" />
             )}
-            <span className="basis-full font-mono text-nano text-text-muted">
-              {line.phase1Fields.join(' · ')}
-            </span>
           </li>
         ))}
       </ul>

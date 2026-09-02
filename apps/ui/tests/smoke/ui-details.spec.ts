@@ -345,9 +345,9 @@ test('diagnostic log shows SUCCESS badge and model info after analysis', async (
   await expect(page.getByText('Analysis Results')).toBeVisible();
   await expect(page.getByText('System Diagnostics')).toBeVisible();
 
-  const diagnostics = page.locator('.mt-12.space-y-4');
-  const successBadge = diagnostics.locator('.bg-success\\/10').filter({ hasText: 'SUCCESS' }).first();
-  await expect(successBadge).toBeVisible();
+  // W1-05: DeviceRack shell + data-testid (legacy .mt-12.space-y-4 retired).
+  const diagnostics = page.getByTestId('system-diagnostics');
+  await expect(diagnostics.getByText('SUCCESS').first()).toBeVisible();
 
   await expect(page.getByText('local-dsp-engine')).toBeVisible();
 
@@ -356,7 +356,9 @@ test('diagnostic log shows SUCCESS badge and model info after analysis', async (
   await expect(diagnostics.getByText('audio/wav')).toBeVisible();
 });
 
-test('top metric cards show TEMPO, KEY SIG, METER, CHARACTER after analysis', async ({ page }) => {
+// Genre CHARACTER tile retired until calibrated (DESIGN_DIRECTION + analysisResultsUi).
+// Fourth hero tile is calibrated LOUDNESS (LUFS) instead.
+test('top metric cards show TEMPO, KEY SIG, METER, LOUDNESS after analysis', async ({ page }) => {
   await stubRoutes(page);
   await page.goto('/', { waitUntil: 'networkidle' });
   await page.setInputFiles('#audio-upload', fixturePath());
@@ -367,7 +369,7 @@ test('top metric cards show TEMPO, KEY SIG, METER, CHARACTER after analysis', as
   await expect(page.getByText('TEMPO', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('KEY SIG', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('METER', { exact: true }).first()).toBeVisible();
-  await expect(page.getByText('CHARACTER', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('LOUDNESS', { exact: true }).first()).toBeVisible();
 
   await expect(page.getByText('126', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('F minor', { exact: true }).first()).toBeVisible();
@@ -478,7 +480,7 @@ test('diagnostic log can be collapsed and expanded via toggle button', async ({ 
   await expect(toggleBtn).toHaveAttribute('aria-expanded', 'true');
 
   // Log content should be visible (expanded by default after analysis)
-  const logContent = page.locator('.mt-12.space-y-4 .bg-bg-surface-darker');
+  const logContent = page.getByTestId('system-diagnostics').locator('.bg-bg-surface-darker');
   await expect(logContent).toBeVisible();
 
   // Click to collapse

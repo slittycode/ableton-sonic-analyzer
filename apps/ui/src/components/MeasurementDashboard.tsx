@@ -31,7 +31,6 @@ import {
   MetricBar,
   MetricBarRow,
   MetricTile,
-  TokenBadgeList,
 } from './ui';
 import { Sparkline } from './Sparkline';
 import { SpectralCursorProvider } from '../hooks/useSpectralCursorBus';
@@ -313,70 +312,9 @@ export function MeasurementDashboard({
           />
         </div>
 
-        {/* Genre Banner */}
-        {phase1.genreDetail && (
-          <div className="bg-bg-surface-dark border border-border-light border-l-2 border-accent rounded-sm p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <div className={`w-2 h-2 rounded-full bg-accent ${phase1.genreDetail.confidence > 0.8 ? 'animate-pulse' : ''}`} />
-                  <span className="text-meta font-mono uppercase tracking-wide text-text-secondary">Genre Classification</span>
-                </div>
-                <span className="text-lg font-display font-bold text-text-primary capitalize block truncate">
-                  {phase1.genreDetail.genre}
-                </span>
-                <TokenBadgeList
-                  className="mt-2"
-                  items={[
-                    { label: phase1.genreDetail.genreFamily, tone: 'accent' },
-                    ...(phase1.genreDetail.secondaryGenre
-                      ? [{ label: phase1.genreDetail.secondaryGenre, tone: 'neutral' as const }]
-                      : []),
-                  ]}
-                />
-              </div>
-              <div className="shrink-0 text-right">
-                <span className="text-meta font-mono uppercase tracking-wide text-text-secondary">Conf</span>
-                <span className="text-sm font-display font-bold text-text-primary ml-1.5 tabular-nums">
-                  {Math.round(phase1.genreDetail.confidence * 100)}%
-                </span>
-              </div>
-            </div>
-
-            {/* Genre fingerprint — top scores as horizontal bars */}
-            {phase1.genreDetail.topScores && phase1.genreDetail.topScores.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-border/50 space-y-1.5">
-                <span className="text-meta font-mono uppercase tracking-wide text-text-secondary">Genre Fingerprint</span>
-                <div className="space-y-1">
-                  {phase1.genreDetail.topScores.slice(0, 5).map((score, i) => {
-                    const maxScore = phase1.genreDetail!.topScores[0]?.score || 1;
-                    const pct = (score.score / maxScore) * 100;
-                    const color = ['#ff6b00', '#fb923c', '#f59e0b', '#fdba74', '#fed7aa'][i] ?? '#fb923c';
-                    return (
-                      <div key={`${score.genre}-${i}`} className="flex items-center gap-2">
-                        <span className="text-nano font-mono text-text-secondary/70 w-20 truncate text-right capitalize">
-                          {score.genre}
-                        </span>
-                        <MetricBar
-                          value={score.score}
-                          min={0}
-                          max={maxScore}
-                          color={color}
-                          glow={i === 0}
-                          className="flex-1"
-                          heightClassName="h-2"
-                        />
-                        <span className="text-nano font-mono text-text-secondary/50 tabular-nums w-8 text-right">
-                          {(score.score * 100).toFixed(0)}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+        {/* Genre Classification banner + fingerprint intentionally hidden until
+            genre confidence is calibrated. genreDetail remains in the Phase 1
+            JSON contract and exports; do not re-enable raw CONF % display. */}
 
         {/* Tuning Detail */}
         {(phase1.tuningFrequency !== undefined && phase1.tuningFrequency !== null) && (
@@ -431,7 +369,7 @@ export function MeasurementDashboard({
               transition={{ duration: 0.3, delay: 0.5 }}
               className="absolute right-2 top-1/2 -translate-y-1/2 bg-bg-card/90 border border-border rounded-sm px-1.5 py-0.5 z-20"
             >
-              <span className="text-sm font-mono font-bold text-text-primary tabular-nums">
+              <span data-text-role="value" className={[getTextRoleClassName('value'), 'font-mono font-bold tabular-nums'].join(' ')}>
                 {formatNumber(phase1.lufsIntegrated, 1)}
               </span>
               <span className="text-pico font-mono text-text-secondary/50 ml-1">LUFS</span>
@@ -1207,7 +1145,7 @@ export function MeasurementDashboard({
                       <span className="text-meta font-mono uppercase tracking-[0.12em] text-text-secondary">
                         {phase1.rhythmDetail.swingDetail.direction === 'swung' ? 'Groove Pool' : 'Grid'}
                       </span>
-                      <span className="text-sm font-mono text-accent">
+                      <span data-text-role="value" className={[getTextRoleClassName('value'), 'font-mono text-accent'].join(' ')}>
                         {Math.round(phase1.rhythmDetail.swingDetail.swingPercent)}%
                       </span>
                     </div>
@@ -1232,7 +1170,7 @@ export function MeasurementDashboard({
                             {formatNumber(s.value, 2)}
                           </span>
                         </div>
-                        <div className="h-2 overflow-hidden rounded-sm border border-[#202020] bg-[#1a1a1a]">
+                        <div className="h-2 overflow-hidden rounded-sm border border-border bg-bg-app">
                           <motion.div
                             initial={{ width: 0 }}
                             animate={{ width: `${s.value * 100}%` }}
@@ -1256,19 +1194,19 @@ export function MeasurementDashboard({
                   <div className="mt-3 grid grid-cols-3 gap-3">
                     <div>
                       <span className="block text-meta font-mono text-text-secondary">Beat Count</span>
-                      <span className="text-sm font-display font-bold text-text-primary">
+                      <span data-text-role="value" className={[getTextRoleClassName('value'), 'font-display font-bold'].join(' ')}>
                         {formatNumber(phase1.beatsLoudness.beatCount, 0)}
                       </span>
                     </div>
                     <div>
                       <span className="block text-meta font-mono text-text-secondary">Mean Loud</span>
-                      <span className="text-sm font-display font-bold text-text-primary">
+                      <span data-text-role="value" className={[getTextRoleClassName('value'), 'font-display font-bold'].join(' ')}>
                         {formatNumber(phase1.beatsLoudness.meanBeatLoudness, 2)}
                       </span>
                     </div>
                     <div>
                       <span className="block text-meta font-mono text-text-secondary">Variation</span>
-                      <span className="text-sm font-display font-bold text-text-primary">
+                      <span data-text-role="value" className={[getTextRoleClassName('value'), 'font-display font-bold'].join(' ')}>
                         {formatNumber(phase1.beatsLoudness.beatLoudnessVariation, 2)}
                       </span>
                     </div>

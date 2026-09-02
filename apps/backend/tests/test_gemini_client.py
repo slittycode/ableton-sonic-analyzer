@@ -36,8 +36,8 @@ class GeminiClientBuilderMatrixTests(unittest.TestCase):
             call = mock_genai.Client.call_args
             self.assertTrue(call.kwargs.get("vertexai"))
             self.assertEqual(call.kwargs.get("project"), "asa-test-proj")
-            self.assertEqual(call.kwargs.get("location"), "us-central1")
-            self.assertEqual(flags, ["vertex:us-central1"])
+            self.assertEqual(call.kwargs.get("location"), "global")
+            self.assertEqual(flags, ["vertex:global"])
 
     def test_key_only_auto_selects_apistudio(self) -> None:
         env = {"GEMINI_API_KEY": "AIzaSy-test-key"}
@@ -65,7 +65,7 @@ class GeminiClientBuilderMatrixTests(unittest.TestCase):
         ):
             mock_genai.Client.return_value = mock.MagicMock()
             _, flags = server._build_gemini_client()
-            self.assertEqual(flags, ["vertex:us-central1"])
+            self.assertEqual(flags, ["vertex:global"])
 
     def test_explicit_vertex_forces_vertex(self) -> None:
         env = {
@@ -81,7 +81,7 @@ class GeminiClientBuilderMatrixTests(unittest.TestCase):
             _, flags = server._build_gemini_client()
             call = mock_genai.Client.call_args
             self.assertTrue(call.kwargs["vertexai"])
-            self.assertEqual(flags, ["vertex:us-central1"])
+            self.assertEqual(flags, ["vertex:global"])
 
     def test_explicit_apistudio_forces_apistudio(self) -> None:
         env = {
@@ -106,7 +106,7 @@ class GeminiClientBuilderMatrixTests(unittest.TestCase):
         ):
             mock_genai.Client.return_value = mock.MagicMock()
             _, flags = server._build_gemini_client()
-            self.assertEqual(flags, ["vertex:us-central1"])
+            self.assertEqual(flags, ["vertex:global"])
             call = mock_genai.Client.call_args
             self.assertEqual(call.kwargs.get("project"), "alias-proj")
 

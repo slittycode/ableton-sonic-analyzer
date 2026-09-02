@@ -1,9 +1,9 @@
-import { Activity, Clock, Disc, Music } from 'lucide-react';
+import { Activity, Clock, Gauge, Music } from 'lucide-react';
 
 import type { Phase1Result, Phase2Result } from '../../types';
 import { ConfidenceBandBadge } from '../sessionMusician/ConfidenceBandBadge';
 import { PhaseSourceBadge } from '../PhaseSourceBadge';
-import { DeviceRack, MetricBar, MetricTile, Pill, TokenBadgeList } from '../ui';
+import { DeviceRack, MetricBar, MetricTile, Pill } from '../ui';
 import { lowConfidenceIndicator } from './shared';
 
 // Helpers exclusive to the Measurement Summary tiles — moved verbatim out of the
@@ -135,54 +135,30 @@ export function MeasurementSummarySection({
           footer={<Pill tone="neutral" size="xs">{meterStatusLabel(phase1)}</Pill>}
         />
 
-        {/* CHARACTER — genre primary, characteristic pills secondary */}
-        {phase1.genreDetail ? (
-          <MetricTile
-            size="lg"
-            accent="accent"
-            icon={<Disc className="w-3.5 h-3.5 text-accent/60" />}
-            label="CHARACTER"
-            value={<span className="truncate block capitalize">{phase1.genreDetail.genre}</span>}
-            headerRight={<PhaseSourceBadge source="measured" />}
-            footer={
-              <div className="space-y-2">
-                <TokenBadgeList
-                  items={[
-                    { label: phase1.genreDetail.genreFamily, tone: 'accent' },
-                    ...(phase1.genreDetail.secondaryGenre
-                      ? [{ label: phase1.genreDetail.secondaryGenre, tone: 'neutral' as const }]
-                      : []),
-                  ]}
-                />
-                <MetricBar
-                  value={phase1.genreDetail.confidence}
-                  color="var(--color-accent)"
-                  glow
-                />
-                {/* Audit Finding #4: `CONF X%` replaced with the canonical
-                    band pill — same vocabulary across every confidence. */}
-                <ConfidenceBandBadge
-                  variant="compact"
-                  confidence={phase1.genreDetail.confidence}
-                />
-              </div>
-            }
-          />
-        ) : (
-          <MetricTile
-            size="lg"
-            accent="accent"
-            icon={<Disc className="w-3.5 h-3.5 text-accent/60" />}
-            label="CHARACTER"
-            value={
-              <span className="text-base font-mono uppercase tracking-wide text-text-secondary/60">
-                SCANNING...
-              </span>
-            }
-            footer={
-              characteristicPills.length > 0 ? (
+        {/* LOUDNESS — calibrated measurement. Genre/Character tile is hidden
+            until genre confidence is calibrated (DESIGN_DIRECTION). */}
+        <MetricTile
+          size="lg"
+          accent="accent"
+          icon={<Gauge className="w-3.5 h-3.5 text-accent/60" />}
+          label="LOUDNESS"
+          value={
+            typeof phase1.lufsIntegrated === 'number'
+              ? phase1.lufsIntegrated.toFixed(1)
+              : '—'
+          }
+          unit="LUFS"
+          headerRight={<PhaseSourceBadge source="measured" />}
+          footer={
+            <div className="space-y-2">
+              {typeof phase1.truePeak === 'number' && (
+                <span className="block text-nano font-mono uppercase tracking-wide text-text-secondary/70 tabular-nums">
+                  True peak {phase1.truePeak.toFixed(1)} dBTP
+                </span>
+              )}
+              {characteristicPills.length > 0 && (
                 <div className="w-full flex flex-wrap gap-1">
-                  {characteristicPills.map((item, idx) => (
+                  {characteristicPills.slice(0, 4).map((item, idx) => (
                     <span
                       key={`${item.name}-${idx}`}
                       className={`inline-flex items-center px-2 py-1 rounded-sm border text-micro font-mono uppercase tracking-wide ${characteristicPillClass(item.confidence)}`}
@@ -191,10 +167,10 @@ export function MeasurementSummarySection({
                     </span>
                   ))}
                 </div>
-              ) : undefined
-            }
-          />
-        )}
+              )}
+            </div>
+          }
+        />
       </div>
       {phase1.fundamentalsQuality && (
         <div

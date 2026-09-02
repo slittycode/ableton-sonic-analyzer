@@ -9,12 +9,16 @@
  *        text-body · text-value · text-value-lg · text-value-xl
  *   2. Raw color hex literals          →  #ff8800 / #1a1a1a
  *      Use the semantic color tokens / Tailwind color utilities instead.
+ *   3. Raw Tailwind type steps in results surfaces → text-xs|sm|base|lg|xl
+ *      Use text-role-* / data-text-role (see DESIGN_DIRECTION.md).
  *
  * Why this exists: a 2026-05-13 pass removed hardcoded hex, but it silently
  * returned because nothing enforced the rule. This guard is that enforcement.
  * Each rule's enforced roots (rule.dirs) are widened phase-by-phase as the UI
  * overhaul clears each area, so the guard can never regress what it cleaned.
  * Phase 1 widened arbitrary-text-size to all of src/; raw-hex stays at ui/.
+ * 2026-07 recovery: ban raw text-xs/sm/base/lg/xl in analysisResults +
+ * MeasurementDashboard after the type-role migration.
  *
  * Out of scope (allowlisted):
  *   - *.stories.tsx — dev-only Storybook artifacts, not shipped UI.
@@ -44,6 +48,10 @@ const ALLOWLIST = new Set([
   'PianoRollCanvas.tsx',
 ]);
 
+// Per-rule path allowlist (relative to uiRoot). Empty after type-role burn-down.
+const RAW_TYPE_STEP_ALLOWLIST = new Set([]);
+
+
 // Each rule names the roots it enforces; widen per-rule as cleanup lands.
 const RULES = [
   {
@@ -57,6 +65,21 @@ const RULES = [
     re: /#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b/g,
     dirs: [join(srcRoot, 'components', 'ui')],
     hint: 'use a semantic color token (var(--color-*) or a Tailwind color utility)',
+  },
+  {
+    id: 'raw-type-step',
+    // Word-boundary-ish: text-xs / text-sm / text-base / text-lg / text-xl
+    // (not text-value-xl, not text-role-*). Negative lookbehind avoids matching
+    // inside longer tokens that start with text- (none currently do for these).
+    re: /(?:^|[^A-Za-z0-9_-])text-(?:xs|sm|base|lg|xl)(?![A-Za-z0-9_-])/g,
+    dirs: [
+      join(srcRoot, 'components', 'analysisResults'),
+      // MeasurementDashboard is a single file; walk() only recurses dirs, so
+      // enforce via an explicit file list after the dir walk.
+    ],
+    files: [join(srcRoot, 'components', 'MeasurementDashboard.tsx')],
+    hint: 'use text-role-* / data-text-role (see DESIGN_DIRECTION.md)',
+    pathAllowlist: RAW_TYPE_STEP_ALLOWLIST,
   },
 ];
 
@@ -80,26 +103,35 @@ function walk(dir) {
 const violations = [];
 for (const rule of RULES) {
   const seen = new Set();
-  for (const dir of rule.dirs) {
-    for (const file of walk(dir)) {
-      if (ALLOWLIST.has(basename(file))) continue;
-      if (seen.has(file)) continue; // overlapping roots → scan each file once
-      seen.add(file);
-      const lines = readFileSync(file, 'utf8').split('\n');
-      lines.forEach((line, i) => {
-        rule.re.lastIndex = 0;
-        let m;
-        while ((m = rule.re.exec(line)) !== null) {
-          violations.push({
-            file: relative(uiRoot, file),
-            line: i + 1,
-            match: m[0],
-            rule: rule.id,
-            hint: rule.hint,
-          });
-        }
-      });
-    }
+  const files = [];
+  for (const dir of rule.dirs ?? []) {
+    files.push(...walk(dir));
+  }
+  for (const file of rule.files ?? []) {
+    files.push(file);
+  }
+  for (const file of files) {
+    if (ALLOWLIST.has(basename(file))) continue;
+    if (seen.has(file)) continue; // overlapping roots → scan each file once
+    seen.add(file);
+    const rel = relative(uiRoot, file);
+    if (rule.pathAllowlist?.has(rel)) continue;
+    const lines = readFileSync(file, 'utf8').split('\n');
+    lines.forEach((line, i) => {
+      rule.re.lastIndex = 0;
+      let m;
+      while ((m = rule.re.exec(line)) !== null) {
+        // re may capture a leading non-token char; report the text-* match only.
+        const match = m[0].match(/text-(?:xs|sm|base|lg|xl|\[)/)?.[0] ?? m[0].trim();
+        violations.push({
+          file: rel,
+          line: i + 1,
+          match: match.startsWith('text-') ? match : m[0].trim(),
+          rule: rule.id,
+          hint: rule.hint,
+        });
+      }
+    });
   }
 }
 
@@ -114,5 +146,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  '✓ style-discipline: no arbitrary text sizes or raw hex in enforced dirs',
+  '✓ style-discipline: no arbitrary text sizes, raw hex, or raw type steps in enforced dirs',
 );

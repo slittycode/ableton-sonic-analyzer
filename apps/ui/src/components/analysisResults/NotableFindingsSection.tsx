@@ -1,6 +1,8 @@
 import type { Phase1Result } from '../../types';
 import { collectNotableFindings, type FindingSeverity } from '../../services/notableFindings';
+import { getTextRoleClassName } from '../../utils/displayText';
 import { Pill } from '../ui';
+import { textRoleClassName } from './shared';
 
 const SEVERITY_TONE: Record<FindingSeverity, 'error' | 'warning' | 'neutral'> = {
   critical: 'error',
@@ -23,7 +25,7 @@ export function NotableFindingsSection({ phase1 }: { phase1: Phase1Result }) {
       data-testid="notable-findings"
       className="space-y-2 rounded-sm border border-warning/40 bg-bg-card p-4"
     >
-      <h2 className="text-sm font-mono uppercase tracking-wider text-text-primary">
+      <h2 data-text-role="subsection-title" className={getTextRoleClassName('subsection-title')}>
         Worth checking
       </h2>
       <ul className="space-y-1.5">
@@ -33,7 +35,7 @@ export function NotableFindingsSection({ phase1 }: { phase1: Phase1Result }) {
               {SEVERITY_LABEL[f.severity]}
             </Pill>
             <div className="min-w-0">
-              <span className="text-xs font-mono text-text-primary">
+              <span data-text-role="body" className={textRoleClassName('body')}>
                 {f.domain}: {f.title}
               </span>
               <p className="text-micro text-text-secondary">{f.detail}</p>

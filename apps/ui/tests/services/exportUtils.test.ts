@@ -1,4 +1,8 @@
-import { generateMarkdown } from '../../src/utils/exportUtils';
+import {
+  buildExportFileName,
+  buildExportPayload,
+  generateMarkdown,
+} from '../../src/utils/exportUtils';
 import { Phase1Result, Phase2Result } from '../../src/types';
 
 const basePhase1: Phase1Result = {
@@ -181,5 +185,61 @@ describe('generateMarkdown', () => {
         recommendations: { version: 'recommendations.v1', recommendations: [] },
       }),
     ).not.toContain('Validated Recommendations');
+  });
+
+  it('includes a Source block with track identity when provided', () => {
+    const markdown = generateMarkdown(basePhase1, basePhase2, null, {
+      filename: 'VTSS-Cant-Catch-Me.mp3',
+      contentSha256: 'abcdef0123456789ffff',
+      sizeBytes: 3_200_000,
+      durationSeconds: 125.8,
+      analyzedAt: '2026-07-18T12:00:00.000Z',
+      phase1Version: 'phase1.v2',
+    });
+
+    expect(markdown).toContain('## Source');
+    expect(markdown).toContain('**Filename**: VTSS-Cant-Catch-Me.mp3');
+    expect(markdown).toContain('**SHA-256**: `abcdef012345`');
+    expect(markdown).toContain('**Duration**: 125.8s');
+    expect(markdown).toContain('**Phase 1 version**: phase1.v2');
+  });
+});
+
+describe('buildExportFileName / buildExportPayload', () => {
+  it('names downloads track-analysis-<basename>-<date>', () => {
+    expect(
+      buildExportFileName('md', {
+        filename: 'VTSS Cant Catch Me.mp3',
+        analyzedAt: '2026-07-18T12:00:00.000Z',
+      }),
+    ).toBe('track-analysis-VTSS-Cant-Catch-Me-2026-07-18.md');
+    expect(
+      buildExportFileName('json', {
+        filename: 'mix.wav',
+        analyzedAt: '2026-01-02T00:00:00.000Z',
+      }),
+    ).toBe('track-analysis-mix-2026-01-02.json');
+  });
+
+  it('embeds full source identity in the JSON payload', () => {
+    const payload = buildExportPayload(basePhase1, basePhase2, {
+      filename: 'track.flac',
+      contentSha256: 'deadbeefcafebabe',
+      sizeBytes: 4096,
+      durationSeconds: 12.5,
+      analyzedAt: '2026-07-18T12:00:00.000Z',
+      phase1Version: 'phase1.v2',
+    });
+
+    expect(payload.source).toEqual({
+      filename: 'track.flac',
+      contentSha256: 'deadbeefcafebabe',
+      sizeBytes: 4096,
+      durationSeconds: 12.5,
+      analyzedAt: '2026-07-18T12:00:00.000Z',
+      phase1Version: 'phase1.v2',
+    });
+    expect(payload.phase1).toBe(basePhase1);
+    expect(payload.phase2).toBe(basePhase2);
   });
 });
