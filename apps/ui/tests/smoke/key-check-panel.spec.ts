@@ -159,10 +159,12 @@ test('Key Check panel shows the measured key and plays the keyboard + drone', as
   await expect(keyboard.locator('[data-midi="71"]')).toHaveAttribute('data-in-scale', 'false');
   await expect(keyboard.locator('[data-midi="65"]')).toHaveAttribute('aria-label', /tonic/);
 
-  // Pointer press lights the key while held.
+  // Pointer press lights the key while held. hover() (not raw boundingBox
+  // coordinates) scrolls the key into view, waits for layout to settle and
+  // checks the key itself receives the pointer there before we press.
   const f4 = keyboard.locator('[data-midi="65"]');
   const box = (await f4.boundingBox())!;
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height - 12);
+  await f4.hover({ position: { x: box.width / 2, y: box.height - 12 } });
   await page.mouse.down();
   await expect(f4).toHaveAttribute('aria-pressed', 'true');
   await page.mouse.up();
