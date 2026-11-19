@@ -21,6 +21,11 @@ export interface AppConfig {
    * Phase 1 key). Default OFF while it is a draft under owner review.
    */
   enableKeyCheck: boolean;
+  /**
+   * Opt-in for the Beat Check panel (click on the measured beat grid over the
+   * track). Default OFF while it is a draft under owner review.
+   */
+  enableBeatCheck: boolean;
   runtimeProfile: RuntimeProfile;
   requestHeaders: Record<string, string>;
 }
@@ -33,6 +38,7 @@ type AppConfigEnv = Partial<
     | 'VITE_ENABLE_MT3'
     | 'VITE_ENABLE_BROWSER_LOUDNESS'
     | 'VITE_ENABLE_KEY_CHECK'
+    | 'VITE_ENABLE_BEAT_CHECK'
     | 'VITE_RUNTIME_PROFILE'
     | 'VITE_API_REQUEST_HEADERS_JSON'
   >
@@ -73,6 +79,7 @@ function readRuntimeEnvOverrides(runtimeWindow?: Window): AppConfigEnv {
     VITE_ENABLE_PHASE2_GEMINI: runtimeWindow.__VITE_ENABLE_PHASE2_GEMINI_OVERRIDE__,
     VITE_ENABLE_MT3: runtimeWindow.__VITE_ENABLE_MT3_OVERRIDE__,
     VITE_ENABLE_KEY_CHECK: runtimeWindow.__VITE_ENABLE_KEY_CHECK_OVERRIDE__,
+    VITE_ENABLE_BEAT_CHECK: runtimeWindow.__VITE_ENABLE_BEAT_CHECK_OVERRIDE__,
     ...(runtimeWindow.__ASA_REQUEST_HEADERS_OVERRIDE__ !== undefined
       ? {
           VITE_API_REQUEST_HEADERS_JSON:
@@ -132,6 +139,10 @@ export function resolveAppConfig(
       overrides.VITE_ENABLE_KEY_CHECK ?? env.VITE_ENABLE_KEY_CHECK,
       false,
     ),
+    enableBeatCheck: parseBooleanFlag(
+      overrides.VITE_ENABLE_BEAT_CHECK ?? env.VITE_ENABLE_BEAT_CHECK,
+      false,
+    ),
     requestHeaders: parseRequestHeaders(
       overrides.VITE_API_REQUEST_HEADERS_JSON ?? env.VITE_API_REQUEST_HEADERS_JSON,
     ),
@@ -162,6 +173,10 @@ export function isBrowserLoudnessConfigEnabled(config: AppConfig = appConfig): b
 
 export function isKeyCheckConfigEnabled(config: AppConfig = appConfig): boolean {
   return config.enableKeyCheck;
+}
+
+export function isBeatCheckConfigEnabled(config: AppConfig = appConfig): boolean {
+  return config.enableBeatCheck;
 }
 
 export function buildConfiguredRequestInit(

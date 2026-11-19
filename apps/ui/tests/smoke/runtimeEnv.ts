@@ -23,3 +23,9 @@ export async function enableKeyCheckForTest(page: Page) {
     window.__VITE_ENABLE_KEY_CHECK_OVERRIDE__ = 'true';
   });
 }
+
+export async function enableBeatCheckForTest(page: Page) {
+  await page.addInitScript(() => {
+    window.__VITE_ENABLE_BEAT_CHECK_OVERRIDE__ = 'true';
+  });
+}

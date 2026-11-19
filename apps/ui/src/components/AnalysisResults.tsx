@@ -22,10 +22,11 @@ import {
 
 import type { ValidationReport } from '../services/phase2Validator';
 import { Phase2ConsistencyReport } from './Phase2ConsistencyReport';
-import { isBrowserLoudnessConfigEnabled, isKeyCheckConfigEnabled } from '../config';
+import { isBeatCheckConfigEnabled, isBrowserLoudnessConfigEnabled, isKeyCheckConfigEnabled } from '../config';
 import { BrowserLoudnessPanel } from './BrowserLoudnessPanel';
 import { MeasurementDashboard } from './MeasurementDashboard';
 import { ReconstructionContractPanel } from './ReconstructionContractPanel';
+import { BeatCheckPanel } from './beatCheck/BeatCheckPanel';
 import { KeyCheckPanel } from './keyCheck/KeyCheckPanel';
 import { PatchSmithPanel } from './PatchSmithPanel';
 import { SamplePlayback } from './SamplePlayback';
@@ -712,6 +713,7 @@ export function AnalysisResults({
           as a paired suite. The StickyNav anchor IDs stay on the inner divs. */}
       <div id="section-musician-suite" className="space-y-4">
         {isKeyCheckConfigEnabled() && <KeyCheckPanel phase1={phase1} />}
+        {isBeatCheckConfigEnabled() && <BeatCheckPanel phase1={phase1} audioFile={audioFile} />}
         <div id="section-session" className="scroll-mt-24">
           <SessionMusicianPanel
             phase1={phase1}
