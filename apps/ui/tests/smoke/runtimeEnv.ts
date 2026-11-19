@@ -17,9 +17,3 @@ export async function enableMt3ForTest(page: Page) {
     window.__VITE_ENABLE_MT3_OVERRIDE__ = 'true';
   });
 }
-
-export async function enableKeyCheckForTest(page: Page) {
-  await page.addInitScript(() => {
-    window.__VITE_ENABLE_KEY_CHECK_OVERRIDE__ = 'true';
-  });
-}

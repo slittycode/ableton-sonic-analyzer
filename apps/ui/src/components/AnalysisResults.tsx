@@ -22,11 +22,10 @@ import {
 
 import type { ValidationReport } from '../services/phase2Validator';
 import { Phase2ConsistencyReport } from './Phase2ConsistencyReport';
-import { isBrowserLoudnessConfigEnabled, isKeyCheckConfigEnabled } from '../config';
+import { isBrowserLoudnessConfigEnabled } from '../config';
 import { BrowserLoudnessPanel } from './BrowserLoudnessPanel';
 import { MeasurementDashboard } from './MeasurementDashboard';
 import { ReconstructionContractPanel } from './ReconstructionContractPanel';
-import { KeyCheckPanel } from './keyCheck/KeyCheckPanel';
 import { PatchSmithPanel } from './PatchSmithPanel';
 import { SamplePlayback } from './SamplePlayback';
 import { SessionMusicianPanel } from './SessionMusicianPanel';
@@ -711,7 +710,6 @@ export function AnalysisResults({
           tightens the gap between Session Musician and Stem Notes so they read
           as a paired suite. The StickyNav anchor IDs stay on the inner divs. */}
       <div id="section-musician-suite" className="space-y-4">
-        {isKeyCheckConfigEnabled() && <KeyCheckPanel phase1={phase1} />}
         <div id="section-session" className="scroll-mt-24">
           <SessionMusicianPanel
             phase1={phase1}

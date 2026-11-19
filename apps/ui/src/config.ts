@@ -16,11 +16,6 @@ export interface AppConfig {
    * covers WAV input, so it's an additive diagnostic, not a shipped feature.
    */
   enableBrowserLoudness: boolean;
-  /**
-   * Opt-in for the Key Check panel (play-along keyboard for ear-testing the
-   * Phase 1 key). Default OFF while it is a draft under owner review.
-   */
-  enableKeyCheck: boolean;
   runtimeProfile: RuntimeProfile;
   requestHeaders: Record<string, string>;
 }
@@ -32,7 +27,6 @@ type AppConfigEnv = Partial<
     | 'VITE_ENABLE_PHASE2_GEMINI'
     | 'VITE_ENABLE_MT3'
     | 'VITE_ENABLE_BROWSER_LOUDNESS'
-    | 'VITE_ENABLE_KEY_CHECK'
     | 'VITE_RUNTIME_PROFILE'
     | 'VITE_API_REQUEST_HEADERS_JSON'
   >
@@ -72,7 +66,6 @@ function readRuntimeEnvOverrides(runtimeWindow?: Window): AppConfigEnv {
     VITE_API_BASE_URL: runtimeWindow.__VITE_API_BASE_URL_OVERRIDE__,
     VITE_ENABLE_PHASE2_GEMINI: runtimeWindow.__VITE_ENABLE_PHASE2_GEMINI_OVERRIDE__,
     VITE_ENABLE_MT3: runtimeWindow.__VITE_ENABLE_MT3_OVERRIDE__,
-    VITE_ENABLE_KEY_CHECK: runtimeWindow.__VITE_ENABLE_KEY_CHECK_OVERRIDE__,
     ...(runtimeWindow.__ASA_REQUEST_HEADERS_OVERRIDE__ !== undefined
       ? {
           VITE_API_REQUEST_HEADERS_JSON:
@@ -128,10 +121,6 @@ export function resolveAppConfig(
       overrides.VITE_ENABLE_BROWSER_LOUDNESS ?? env.VITE_ENABLE_BROWSER_LOUDNESS,
       false,
     ),
-    enableKeyCheck: parseBooleanFlag(
-      overrides.VITE_ENABLE_KEY_CHECK ?? env.VITE_ENABLE_KEY_CHECK,
-      false,
-    ),
     requestHeaders: parseRequestHeaders(
       overrides.VITE_API_REQUEST_HEADERS_JSON ?? env.VITE_API_REQUEST_HEADERS_JSON,
     ),
@@ -158,10 +147,6 @@ export function isMt3ConfigEnabled(config: AppConfig = appConfig): boolean {
 
 export function isBrowserLoudnessConfigEnabled(config: AppConfig = appConfig): boolean {
   return config.enableBrowserLoudness;
-}
-
-export function isKeyCheckConfigEnabled(config: AppConfig = appConfig): boolean {
-  return config.enableKeyCheck;
 }
 
 export function buildConfiguredRequestInit(
