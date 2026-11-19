@@ -60,7 +60,7 @@ async function renderNote(
   }, options);
 }
 
-test.describe('KeySynth offline render', () => {
+test.describe('KeySynth (headless browser)', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
   });
@@ -149,6 +149,43 @@ test.describe('KeySynth offline render', () => {
     // A click or a hold-then-jump would show as a step between adjacent periods.
     expect(levels.after / levels.before).toBeGreaterThan(0.9);
     expect(levels.after / levels.before).toBeLessThan(1.0);
+  });
+
+  test('Session Musician previews play through the shared engine and end on time', async ({ page }) => {
+    await page.mouse.click(5, 5); // user activation so the AudioContext may resume
+    const result = await page.evaluate(async () => {
+      const { previewNotes } = await import('/src/services/midi/midiPreview.ts');
+      const { engine } = await import('/src/audio/engine.ts');
+      const notes = [
+        { midi: 60, name: 'C4', startTime: 0, duration: 0.15, velocity: 100, confidence: 1 },
+        { midi: 64, name: 'E4', startTime: 0.2, duration: 0.15, velocity: 100, confidence: 1 },
+      ];
+      const started = performance.now();
+      let voicesDuring = 0;
+      await new Promise<void>((resolve) => {
+        previewNotes(notes, () => resolve());
+        setTimeout(() => {
+          voicesDuring = engine.synth.activeVoiceCount;
+        }, 300);
+      });
+      const elapsedMs = performance.now() - started;
+
+      // A stopped preview reports not-playing immediately and fires onEnd once.
+      let endCalls = 0;
+      const handle = previewNotes(notes, () => {
+        endCalls += 1;
+      });
+      handle.stop();
+      handle.stop();
+      return { elapsedMs, voicesDuring, state: engine.core.state(), stoppedPlaying: handle.playing, endCalls };
+    });
+    expect(result.state).toBe('running');
+    expect(result.voicesDuring).toBeGreaterThan(0);
+    // 0.35 s of notes + 0.3 s default release + lead-in/slack.
+    expect(result.elapsedMs).toBeGreaterThan(600);
+    expect(result.elapsedMs).toBeLessThan(2500);
+    expect(result.stoppedPlaying).toBe(false);
+    expect(result.endCalls).toBe(1);
   });
 
   test('caps polyphony by fading the oldest voice', async ({ page }) => {
