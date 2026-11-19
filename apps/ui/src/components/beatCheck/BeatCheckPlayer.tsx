@@ -13,6 +13,7 @@ import type { EngineState } from '@audiorective/core';
 import { EngineProvider, useEngine } from '../../audio/engine';
 import type { BeatCheckTrackState, BeatCheckTransport } from '../../audio/beatChecker';
 import { beatIndexAt, formatTrackTime, type BeatCheckModel } from '../../services/beatCheck';
+import { claimPlaybackFocus, onPlaybackFocusClaimed } from '../../services/playbackFocus';
 import { getTextRoleClassName } from '../../utils/displayText';
 import { ChoiceButton, ParamSlider, formatPercent, isEditableTarget } from '../audioControls';
 import { Button, Panel } from '../ui';
@@ -54,8 +55,20 @@ function BeatCheckPlayerInner({ model, audioFile }: { model: BeatCheckModel; aud
     const target = model.regions.find((entry) => entry.id === nextRegionId);
     if (!target) return;
     void core.start(); // idempotent; covers the first press
+    // Pause the waveform player first: two unsynchronised copies of the track
+    // would sound like the very flamming this test listens for.
+    claimPlaybackFocus('beat-check');
     beatCheck.play({ start: target.start, end: target.end, loop: nextLoop });
   };
+
+  // And stop if the waveform player starts the track while Beat Check plays.
+  useEffect(
+    () =>
+      onPlaybackFocusClaimed((owner) => {
+        if (owner !== 'beat-check') beatCheck.stop();
+      }),
+    [beatCheck],
+  );
 
   // Changing region or loop while playing restarts from the new region.
   const selectRegion = (id: string) => {

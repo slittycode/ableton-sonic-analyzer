@@ -40,14 +40,14 @@ const domain = (status: string, plainEnglish: string) => ({
   evidence: {},
 });
 
-const MEASUREMENT_RESULT = {
+const measurementResult = (seconds: number) => ({
   bpm: 120,
   bpmConfidence: 0.95,
   key: 'A minor',
   keyConfidence: 0.9,
   timeSignature: '4/4',
   timeSignatureSource: 'assumed_four_four',
-  durationSeconds: TRACK_SECONDS,
+  durationSeconds: seconds,
   lufsIntegrated: -8,
   truePeak: -0.5,
   stereoWidth: 0.6,
@@ -78,7 +78,7 @@ const MEASUREMENT_RESULT = {
       meter: domain('ambiguous', 'Meter is a working assumption.'),
     },
   },
-};
+});
 
 const NOT_REQUESTED = {
   status: 'not_requested',
@@ -91,7 +91,7 @@ const NOT_REQUESTED = {
   error: null,
 };
 
-function runSnapshot(measurementStatus: 'queued' | 'completed') {
+function runSnapshot(measurementStatus: 'queued' | 'completed', seconds: number) {
   return {
     runId: RUN_ID,
     requestedStages: {
@@ -106,7 +106,7 @@ function runSnapshot(measurementStatus: 'queued' | 'completed') {
         artifactId: 'artifact_beat_check_001',
         filename: 'beat-check.wav',
         mimeType: 'audio/wav',
-        sizeBytes: 44 + TRACK_SECONDS * 22050 * 2,
+        sizeBytes: 44 + seconds * 22050 * 2,
         contentSha256: 'abc123',
         path: 'uploads/beat-check.wav',
       },
@@ -115,7 +115,7 @@ function runSnapshot(measurementStatus: 'queued' | 'completed') {
       measurement: {
         status: measurementStatus,
         authoritative: true,
-        result: measurementStatus === 'completed' ? MEASUREMENT_RESULT : null,
+        result: measurementStatus === 'completed' ? measurementResult(seconds) : null,
         provenance: null,
         diagnostics: null,
         error: null,
@@ -126,7 +126,7 @@ function runSnapshot(measurementStatus: 'queued' | 'completed') {
   };
 }
 
-async function runStubbedAnalysis(page: Page) {
+async function runStubbedAnalysis(page: Page, seconds = TRACK_SECONDS) {
   await page.route('**/api/analysis-runs/estimate', (route) =>
     route.fulfill({
       status: 200,
@@ -134,7 +134,7 @@ async function runStubbedAnalysis(page: Page) {
       body: JSON.stringify({
         requestId: 'req_beat_check_estimate',
         estimate: {
-          durationSeconds: TRACK_SECONDS,
+          durationSeconds: seconds,
           totalLowMs: 2000,
           totalHighMs: 4000,
           stages: [{ key: 'local_dsp', label: 'Local DSP analysis', lowMs: 2000, highMs: 4000 }],
@@ -144,18 +144,18 @@ async function runStubbedAnalysis(page: Page) {
   );
   await page.route('**/api/analysis-runs', (route) =>
     route.request().method() === 'POST'
-      ? route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(runSnapshot('queued')) })
+      ? route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(runSnapshot('queued', seconds)) })
       : route.fallback(),
   );
   await page.route(`**/api/analysis-runs/${RUN_ID}`, (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(runSnapshot('completed')) }),
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(runSnapshot('completed', seconds)) }),
   );
 
   await page.goto('/', { waitUntil: 'networkidle' });
   await page.setInputFiles('#audio-upload', {
     name: 'beat-check.wav',
     mimeType: 'audio/wav',
-    buffer: silentWav(TRACK_SECONDS),
+    buffer: silentWav(seconds),
   });
   await page.getByLabel('AI INTERPRETATION').uncheck(); // no Gemini stub needed
   await page.getByRole('button', { name: /Run Analysis/i }).click();
@@ -216,6 +216,43 @@ test('A non-looped play ends by itself at the end of the track', async ({ page }
   await expect(transport).toHaveText('Stop');
   await expect(transport).toHaveText('Play', { timeout: TRACK_SECONDS * 1000 + 3000 });
 });
+
+test('Beat Check and the waveform player never play the track at the same time', async ({ page }) => {
+  // Codex review on #219: two unsynchronised copies of the track would sound
+  // like the flamming Beat Check asks the producer to listen for.
+  await enableBeatCheckForTest(page);
+  // 20 s so neither player can simply reach the end inside an assertion's
+  // timeout — the stop/pause must come from the other player starting.
+  await runStubbedAnalysis(page, 20);
+  const waveformToggle = page.getByTestId('waveform-play-toggle');
+  const quick = { timeout: 1500 };
+  const panel = page.getByTestId('beat-check-panel');
+  await panel.getByTestId('beat-check-open').click();
+  await expect(panel.getByTestId('beat-check-track-status')).toContainText('Track ready');
+  const transport = panel.getByTestId('beat-check-transport');
+
+  // Waveform first, then Beat Check: the waveform pauses.
+  await waveformToggle.click();
+  await expect.poll(() => waveformIsPlaying(page)).toBe(true);
+  await transport.click();
+  await expect(transport).toHaveText('Stop');
+  await expect.poll(() => waveformIsPlaying(page), quick).toBe(false);
+
+  // Beat Check first, then the waveform: Beat Check stops.
+  await waveformToggle.click();
+  await expect.poll(() => waveformIsPlaying(page)).toBe(true);
+  await expect(transport).toHaveText('Play', quick);
+});
+
+/** True while the waveform player's media element is playing. */
+async function waveformIsPlaying(page: Page): Promise<boolean> {
+  return page.evaluate(() => {
+    const media = [...document.querySelectorAll('audio, video')] as HTMLMediaElement[];
+    const shadowMedia = [...document.querySelectorAll('[data-testid="waveform-track"] *')]
+      .flatMap((el) => [...((el as HTMLElement).shadowRoot?.querySelectorAll('audio, video') ?? [])]) as HTMLMediaElement[];
+    return [...media, ...shadowMedia].some((el) => !el.paused);
+  });
+}
 
 test('Beat Check panel stays hidden while the flag is off', async ({ page }) => {
   await runStubbedAnalysis(page);

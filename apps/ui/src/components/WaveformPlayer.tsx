@@ -3,6 +3,7 @@ import WaveSurfer from 'wavesurfer.js';
 import { Play, Pause, Loader2 } from 'lucide-react';
 
 import { RetroVisualizer } from './RetroVisualizer';
+import { claimPlaybackFocus, onPlaybackFocusClaimed } from '../services/playbackFocus';
 
 interface WaveformPlayerProps {
   audioUrl: string;
@@ -205,7 +206,14 @@ export function WaveformPlayer({ audioUrl, audioFile, onAudioElement }: Waveform
       setIsReady(true);
     });
 
+    // Only one full-track player at a time: pause when Beat Check starts the
+    // track, and tell it to stop when this one starts (services/playbackFocus).
+    const releasePlaybackFocus = onPlaybackFocusClaimed((owner) => {
+      if (owner !== 'waveform' && ws.isPlaying()) ws.pause();
+    });
+
     ws.on('play', () => {
+      claimPlaybackFocus('waveform');
       setIsPlaying(true);
       if (audioContextRef.current?.state === 'suspended') {
         void audioContextRef.current.resume();
@@ -227,6 +235,7 @@ export function WaveformPlayer({ audioUrl, audioFile, onAudioElement }: Waveform
     }
 
     return () => {
+      releasePlaybackFocus();
       if (beatTimeoutRef.current !== null) window.clearTimeout(beatTimeoutRef.current);
       if (sourceRef.current) {
         try { sourceRef.current.disconnect(); } catch (e) {}
