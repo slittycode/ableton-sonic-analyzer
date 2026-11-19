@@ -188,6 +188,33 @@ test.describe('KeySynth (headless browser)', () => {
     expect(result.endCalls).toBe(1);
   });
 
+  test('never steals a scheduled note that has not started yet', async ({ page }) => {
+    // Codex review on #218: a Session Musician preview queues every note up
+    // front. Pressing a key while 10+ notes are still in the future must not
+    // count them toward the polyphony limit or steal (delete) one of them.
+    const quietWindows = await page.evaluate(async () => {
+      const { KeySynth } = await import('/src/audio/keySynth.ts');
+      const sampleRate = 48000;
+      const ctx = new OfflineAudioContext(1, sampleRate * 3, sampleRate);
+      const synth = new KeySynth(ctx);
+      synth.output.connect(ctx.destination);
+      synth.params.waveform.value = 'sine';
+      synth.params.release.value = 0.02;
+      const notes = Array.from({ length: 12 }, (_, i) => ({ midi: 60 + i, startTime: 1.0 + i * 0.1, duration: 0.05, velocity: 1 }));
+      synth.playSequence(notes, 0.05);
+      synth.noteOn(48, 1, 0.1);
+      synth.noteOff(48, 0.5);
+      const data = (await ctx.startRendering()).getChannelData(0);
+      const rms = (from: number, to: number) => {
+        const part = data.subarray(Math.round(from * sampleRate), Math.round(to * sampleRate));
+        return Math.sqrt(part.reduce((sum, x) => sum + x * x, 0) / part.length);
+      };
+      // Each scheduled note sounds from 1.05 + i*0.1 for 50 ms.
+      return notes.map((_, i) => rms(1.06 + i * 0.1, 1.09 + i * 0.1)).filter((level) => level < 0.01).length;
+    });
+    expect(quietWindows).toBe(0);
+  });
+
   test('caps polyphony by fading the oldest voice', async ({ page }) => {
     const result = await page.evaluate(async () => {
       const { KeySynth, KEY_SYNTH_POLYPHONY } = await import('/src/audio/keySynth.ts');

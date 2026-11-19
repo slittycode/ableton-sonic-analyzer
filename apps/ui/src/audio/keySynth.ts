@@ -303,10 +303,14 @@ export class KeySynth extends AudioProcessor<KeySynthParams, KeySynthCells> {
    * the producer is listening against.
    */
   private _makeRoom(when: number): void {
-    // Count voices still held at `when`. Voices already in their release are
-    // on the way out; counting (or re-stealing) them would let held notes pile
-    // up past the limit.
-    const sounding = [...this._voices].filter((voice) => voice.releaseAt === null || voice.releaseAt > when);
+    // Count voices actually sounding at `when`: started by then and not yet
+    // released. Voices in their release are on the way out (re-stealing them
+    // would let held notes pile up past the limit), and voices scheduled for
+    // later — a Session Musician preview queues every note up front — must
+    // never be stolen: releasing one before its start deletes the note.
+    const sounding = [...this._voices].filter(
+      (voice) => voice.startTime <= when && (voice.releaseAt === null || voice.releaseAt > when),
+    );
     if (sounding.length < KEY_SYNTH_POLYPHONY) return;
     const candidates = sounding.filter((voice) => !this._drone.includes(voice));
     const pool = candidates.length ? candidates : sounding;
