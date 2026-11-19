@@ -12,7 +12,8 @@
  * Pure — no Web Audio — so it runs under the Node unit suite.
  */
 
-import type { FundamentalsQualityStatus, Phase1Result } from '../types';
+import type { Phase1Result } from '../types';
+import { fundamentalsTrust, type FundamentalsTrust, type FundamentalsTrustLabel } from './fundamentalsTrust';
 
 export type KeyMode = 'major' | 'minor';
 
@@ -122,26 +123,8 @@ export function midiToFrequency(midi: number, referenceA4 = 440): number {
 
 // ── Trust ────────────────────────────────────────────────────────────────────
 
-export type KeyTrustLabel = 'LOCAL' | 'CHECK' | 'FAILED' | 'NOT RUN';
-
-export interface KeyTrust {
-  status: FundamentalsQualityStatus | null;
-  /** Same vocabulary as the Measurement Summary fundamentals pills. */
-  label: KeyTrustLabel;
-  tone: 'success' | 'warning' | 'error' | 'neutral';
-  /** Phase 1's own plain-English trust sentence, when present. */
-  plainEnglish: string | null;
-}
-
-function keyTrustFrom(phase1: Phase1Result): KeyTrust {
-  const domain = phase1.fundamentalsQuality?.domains?.key;
-  const status = domain?.status ?? null;
-  const plainEnglish = domain?.plainEnglish?.trim() || null;
-  if (status === 'authoritative') return { status, label: 'LOCAL', tone: 'success', plainEnglish };
-  if (status === 'ambiguous') return { status, label: 'CHECK', tone: 'warning', plainEnglish };
-  if (status === 'failed') return { status, label: 'FAILED', tone: 'error', plainEnglish };
-  return { status, label: 'NOT RUN', tone: 'neutral', plainEnglish };
-}
+export type KeyTrustLabel = FundamentalsTrustLabel;
+export type KeyTrust = FundamentalsTrust;
 
 // ── Tuning ───────────────────────────────────────────────────────────────────
 
@@ -218,7 +201,7 @@ export function buildKeyCheckModel(phase1: Phase1Result): KeyCheckModel {
     measured,
     rawKeyLabel: typeof phase1.key === 'string' && phase1.key.trim() ? phase1.key.trim() : null,
     isApproximate: !finite(phase1.keyConfidence) || phase1.keyConfidence <= APPROXIMATE_KEY_CONFIDENCE,
-    trust: keyTrustFrom(phase1),
+    trust: fundamentalsTrust(phase1, 'key'),
     ensemble: ensembleRaw && total > 0 ? { agreeing: ensembleRaw.agreement, total } : null,
     alternates,
     tuning: resolveTuning(phase1),
